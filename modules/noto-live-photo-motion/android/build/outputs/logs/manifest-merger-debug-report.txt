@@ -1,16 +1,16 @@
 -- Merging decision tree log ---
 manifest
-ADDED from /Users/huyphan/Downloads/ACTE/modules/noto-live-photo-motion/android/build/intermediates/tmp/ProcessLibraryManifest/debug/tempAndroidManifest13834987849340803367.xml:2:13-83
-INJECTED from /Users/huyphan/Downloads/ACTE/modules/noto-live-photo-motion/android/build/intermediates/tmp/ProcessLibraryManifest/debug/tempAndroidManifest13834987849340803367.xml:2:13-83
+ADDED from /Users/huyphan/Downloads/ACTE/modules/noto-live-photo-motion/android/build/intermediates/tmp/ProcessLibraryManifest/debug/tempAndroidManifest14899434523022092083.xml:2:13-83
+INJECTED from /Users/huyphan/Downloads/ACTE/modules/noto-live-photo-motion/android/build/intermediates/tmp/ProcessLibraryManifest/debug/tempAndroidManifest14899434523022092083.xml:2:13-83
 	package
-		INJECTED from /Users/huyphan/Downloads/ACTE/modules/noto-live-photo-motion/android/build/intermediates/tmp/ProcessLibraryManifest/debug/tempAndroidManifest13834987849340803367.xml
+		INJECTED from /Users/huyphan/Downloads/ACTE/modules/noto-live-photo-motion/android/build/intermediates/tmp/ProcessLibraryManifest/debug/tempAndroidManifest14899434523022092083.xml
 	xmlns:android
-		ADDED from /Users/huyphan/Downloads/ACTE/modules/noto-live-photo-motion/android/build/intermediates/tmp/ProcessLibraryManifest/debug/tempAndroidManifest13834987849340803367.xml:2:23-81
+		ADDED from /Users/huyphan/Downloads/ACTE/modules/noto-live-photo-motion/android/build/intermediates/tmp/ProcessLibraryManifest/debug/tempAndroidManifest14899434523022092083.xml:2:23-81
 uses-sdk
-INJECTED from /Users/huyphan/Downloads/ACTE/modules/noto-live-photo-motion/android/build/intermediates/tmp/ProcessLibraryManifest/debug/tempAndroidManifest13834987849340803367.xml reason: use-sdk injection requested
-INJECTED from /Users/huyphan/Downloads/ACTE/modules/noto-live-photo-motion/android/build/intermediates/tmp/ProcessLibraryManifest/debug/tempAndroidManifest13834987849340803367.xml
-INJECTED from /Users/huyphan/Downloads/ACTE/modules/noto-live-photo-motion/android/build/intermediates/tmp/ProcessLibraryManifest/debug/tempAndroidManifest13834987849340803367.xml
+INJECTED from /Users/huyphan/Downloads/ACTE/modules/noto-live-photo-motion/android/build/intermediates/tmp/ProcessLibraryManifest/debug/tempAndroidManifest14899434523022092083.xml reason: use-sdk injection requested
+INJECTED from /Users/huyphan/Downloads/ACTE/modules/noto-live-photo-motion/android/build/intermediates/tmp/ProcessLibraryManifest/debug/tempAndroidManifest14899434523022092083.xml
+INJECTED from /Users/huyphan/Downloads/ACTE/modules/noto-live-photo-motion/android/build/intermediates/tmp/ProcessLibraryManifest/debug/tempAndroidManifest14899434523022092083.xml
 	android:targetSdkVersion
-		INJECTED from /Users/huyphan/Downloads/ACTE/modules/noto-live-photo-motion/android/build/intermediates/tmp/ProcessLibraryManifest/debug/tempAndroidManifest13834987849340803367.xml
+		INJECTED from /Users/huyphan/Downloads/ACTE/modules/noto-live-photo-motion/android/build/intermediates/tmp/ProcessLibraryManifest/debug/tempAndroidManifest14899434523022092083.xml
 	android:minSdkVersion
-		INJECTED from /Users/huyphan/Downloads/ACTE/modules/noto-live-photo-motion/android/build/intermediates/tmp/ProcessLibraryManifest/debug/tempAndroidManifest13834987849340803367.xml
+		INJECTED from /Users/huyphan/Downloads/ACTE/modules/noto-live-photo-motion/android/build/intermediates/tmp/ProcessLibraryManifest/debug/tempAndroidManifest14899434523022092083.xml

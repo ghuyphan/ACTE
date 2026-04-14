@@ -269,6 +269,7 @@ private struct LocketWidgetStickerPlacement: Identifiable {
     let zIndex: Int
     let opacity: Double
     let renderMode: String
+    let stampStyle: String
     let outlineEnabled: Bool
     let assetWidth: CGFloat
     let assetHeight: CGFloat
@@ -426,6 +427,7 @@ private func parseStickerPlacements(from stickerPlacementsJson: String?) -> [Loc
         let zIndex = (item["zIndex"] as? NSNumber)?.intValue ?? 0
         let opacity = (item["opacity"] as? NSNumber)?.doubleValue ?? 1
         let renderMode = (item["renderMode"] as? String) == "stamp" ? "stamp" : "default"
+        let stampStyle = (item["stampStyle"] as? String) == "circle" ? "circle" : "classic"
         let outlineEnabled = (item["outlineEnabled"] as? NSNumber)?.boolValue ?? true
 
         return LocketWidgetStickerPlacement(
@@ -437,6 +439,7 @@ private func parseStickerPlacements(from stickerPlacementsJson: String?) -> [Loc
             zIndex: zIndex,
             opacity: min(max(0, opacity), 1),
             renderMode: renderMode,
+            stampStyle: stampStyle,
             outlineEnabled: outlineEnabled,
             assetWidth: assetWidth,
             assetHeight: assetHeight,
@@ -446,6 +449,7 @@ private func parseStickerPlacements(from stickerPlacementsJson: String?) -> [Loc
 }
 
 private struct LocketWidgetStampMetrics {
+    let style: String
     let borderRadius: CGFloat
     let outerWidth: CGFloat
     let outerHeight: CGFloat
@@ -470,13 +474,38 @@ private func buildWidgetStampPerforationCenters(length: CGFloat, radius: CGFloat
     }
 }
 
-private func getWidgetStampMetrics(width: CGFloat, height: CGFloat) -> LocketWidgetStampMetrics {
+private func buildWidgetCircleStampAngles(count: Int) -> [CGFloat] {
+    let safeCount = max(10, count)
+    let step = (CGFloat.pi * 2) / CGFloat(safeCount)
+
+    return (0..<safeCount).map { index in
+        step * CGFloat(index)
+    }
+}
+
+private func getWidgetStampMetrics(width: CGFloat, height: CGFloat, stampStyle: String = "classic") -> LocketWidgetStampMetrics {
+    if stampStyle == "circle" {
+        let diameter = max(min(width, height), 1)
+        let perforationRadius = clampWidgetScalar(diameter * 0.043, min: 4, max: 6.4)
+        let perforationOffset = perforationRadius * 0.14
+
+        return LocketWidgetStampMetrics(
+            style: stampStyle,
+            borderRadius: diameter / 2,
+            outerWidth: diameter,
+            outerHeight: diameter,
+            perforationOffset: perforationOffset,
+            perforationRadius: perforationRadius
+        )
+    }
+
     let shortestEdge = max(min(width, height), 1)
     let perforationRadius = clampWidgetScalar(shortestEdge * 0.048, min: 4, max: 6.6)
     let perforationOffset = perforationRadius * 0.18
     let borderRadius = clampWidgetScalar(shortestEdge * 0.02, min: 1.5, max: 3.5)
 
     return LocketWidgetStampMetrics(
+        style: stampStyle,
         borderRadius: borderRadius,
         outerWidth: width,
         outerHeight: height,
@@ -485,7 +514,34 @@ private func getWidgetStampMetrics(width: CGFloat, height: CGFloat) -> LocketWid
     )
 }
 
+private func getWidgetCircleStampPerforationCount(rect: CGRect, metrics: LocketWidgetStampMetrics) -> Int {
+    let circumference = CGFloat.pi * max(min(rect.width, rect.height), 1)
+    let preferredSpacing = max(metrics.perforationRadius * 2.05, 10)
+    return max(10, Int(floor(circumference / preferredSpacing)))
+}
+
 private func createWidgetStampPath(in rect: CGRect, metrics: LocketWidgetStampMetrics) -> Path {
+    if metrics.style == "circle" {
+        var path = Path(ellipseIn: rect)
+        let radius = min(rect.width, rect.height) / 2
+        let center = CGPoint(x: rect.midX, y: rect.midY)
+        let perforationCenterRadius = radius + metrics.perforationOffset
+
+        for angle in buildWidgetCircleStampAngles(
+            count: getWidgetCircleStampPerforationCount(rect: rect, metrics: metrics)
+        ) {
+            let perforationRect = CGRect(
+                x: center.x + cos(angle) * perforationCenterRadius - metrics.perforationRadius,
+                y: center.y + sin(angle) * perforationCenterRadius - metrics.perforationRadius,
+                width: metrics.perforationRadius * 2,
+                height: metrics.perforationRadius * 2
+            )
+            path.addEllipse(in: perforationRect)
+        }
+
+        return path
+    }
+
     var path = Path(roundedRect: rect, cornerRadius: metrics.borderRadius)
 
     for centerX in buildWidgetStampPerforationCenters(length: rect.width, radius: metrics.perforationRadius) {
@@ -528,6 +584,28 @@ private func createWidgetStampPath(in rect: CGRect, metrics: LocketWidgetStampMe
 }
 
 private func createWidgetStampBezierPath(in rect: CGRect, metrics: LocketWidgetStampMetrics) -> UIBezierPath {
+    if metrics.style == "circle" {
+        let path = UIBezierPath(ovalIn: rect)
+        let radius = min(rect.width, rect.height) / 2
+        let center = CGPoint(x: rect.midX, y: rect.midY)
+        let perforationCenterRadius = radius + metrics.perforationOffset
+
+        for angle in buildWidgetCircleStampAngles(
+            count: getWidgetCircleStampPerforationCount(rect: rect, metrics: metrics)
+        ) {
+            let perforationRect = CGRect(
+                x: center.x + cos(angle) * perforationCenterRadius - metrics.perforationRadius,
+                y: center.y + sin(angle) * perforationCenterRadius - metrics.perforationRadius,
+                width: metrics.perforationRadius * 2,
+                height: metrics.perforationRadius * 2
+            )
+            path.append(UIBezierPath(ovalIn: perforationRect))
+        }
+
+        path.usesEvenOddFillRule = true
+        return path
+    }
+
     let path = UIBezierPath(roundedRect: rect, cornerRadius: metrics.borderRadius)
 
     for centerX in buildWidgetStampPerforationCenters(length: rect.width, radius: metrics.perforationRadius) {
@@ -585,12 +663,18 @@ private func getAspectFillRect(sourceSize: CGSize, destinationSize: CGSize) -> C
     )
 }
 
-private func renderWidgetStampImage(_ image: UIImage, width: CGFloat, height: CGFloat, opacity: Double) -> UIImage? {
+private func renderWidgetStampImage(
+    _ image: UIImage,
+    width: CGFloat,
+    height: CGFloat,
+    opacity: Double,
+    stampStyle: String = "classic"
+) -> UIImage? {
     guard width > 0, height > 0 else {
         return nil
     }
 
-    let metrics = getWidgetStampMetrics(width: width, height: height)
+    let metrics = getWidgetStampMetrics(width: width, height: height, stampStyle: stampStyle)
     let stampRect = CGRect(origin: .zero, size: CGSize(width: metrics.outerWidth, height: metrics.outerHeight))
     let stampPath = createWidgetStampBezierPath(in: stampRect, metrics: metrics)
     let normalizedOpacity = min(max(opacity, 0), 1)
@@ -655,9 +739,16 @@ private struct LocketWidgetStampStickerView: View {
     let width: CGFloat
     let height: CGFloat
     let opacity: Double
+    let stampStyle: String
 
     var body: some View {
-        if let renderedStamp = renderWidgetStampImage(image, width: width, height: height, opacity: opacity) {
+        if let renderedStamp = renderWidgetStampImage(
+            image,
+            width: width,
+            height: height,
+            opacity: opacity,
+            stampStyle: stampStyle
+        ) {
             Image(uiImage: renderedStamp)
                 .resizable()
                 .interpolation(.none)
@@ -695,9 +786,12 @@ private let locketWidgetDoodleOverlayOpacity: Double = 1
 private let locketWidgetStickerOverlayOpacity: Double = 1
 private let locketWidgetStickerOutlineOpacity: Double = 1
 private let locketWidgetStampOutlineOpacity: Double = 1
-private let locketWidgetDecorationInset: CGFloat = 6
-private let locketWidgetStickerMinimumBaseSize: CGFloat = 68
-private let locketWidgetStickerBaseSizeRatio: CGFloat = 0.30
+private let locketWidgetDecorationInsetSmall: CGFloat = 0
+private let locketWidgetDecorationInsetMedium: CGFloat = 6
+private let locketWidgetStickerMinimumBaseSizeSmall: CGFloat = 48
+private let locketWidgetStickerBaseSizeRatioSmall: CGFloat = 0.24
+private let locketWidgetStickerMinimumBaseSizeMedium: CGFloat = 68
+private let locketWidgetStickerBaseSizeRatioMedium: CGFloat = 0.30
 
 private func getWidgetStickerOutlineSize(width: CGFloat, height: CGFloat) -> CGFloat {
     max(2.5, min(6, min(width, height) * 0.032))
@@ -740,8 +834,16 @@ private struct LocketWidgetStickerOverlay: View {
                     if let image = loadWidgetImageFromPath(placement.assetLocalUri) {
                         let longestEdge = max(max(placement.assetWidth, placement.assetHeight), 1)
                         let baseScale = baseSize / longestEdge
-                        let stickerWidth = placement.assetWidth * baseScale * placement.scale
-                        let stickerHeight = placement.assetHeight * baseScale * placement.scale
+                        let baseStickerWidth = placement.assetWidth * baseScale * placement.scale
+                        let baseStickerHeight = placement.assetHeight * baseScale * placement.scale
+                        let stickerWidth =
+                            placement.renderMode == "stamp" && placement.stampStyle == "circle"
+                            ? min(baseStickerWidth, baseStickerHeight)
+                            : baseStickerWidth
+                        let stickerHeight =
+                            placement.renderMode == "stamp" && placement.stampStyle == "circle"
+                            ? min(baseStickerWidth, baseStickerHeight)
+                            : baseStickerHeight
                         let outlineSize = getWidgetStickerOutlineSize(width: stickerWidth, height: stickerHeight)
                         let renderedImage = image.withRenderingMode(.alwaysOriginal)
                         let outlineImage = image.withRenderingMode(.alwaysTemplate)
@@ -770,7 +872,8 @@ private struct LocketWidgetStickerOverlay: View {
                                     image: renderedImage,
                                     width: stickerWidth,
                                     height: stickerHeight,
-                                    opacity: placement.opacity * overlayOpacity
+                                    opacity: placement.opacity * overlayOpacity,
+                                    stampStyle: placement.stampStyle
                                 )
                             } else {
                                 Image(uiImage: renderedImage)
@@ -820,6 +923,70 @@ private func colorFromHex(_ value: String) -> Color {
     default:
         return Color.black
     }
+}
+
+private func uiColorFromHex(_ value: String) -> UIColor {
+    let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+    let hex = trimmed.hasPrefix("#") ? String(trimmed.dropFirst()) : trimmed
+    var number: UInt64 = 0
+
+    guard Scanner(string: hex).scanHexInt64(&number) else {
+        return .black
+    }
+
+    switch hex.count {
+    case 6:
+        let red = CGFloat((number & 0xFF0000) >> 16) / 255.0
+        let green = CGFloat((number & 0x00FF00) >> 8) / 255.0
+        let blue = CGFloat(number & 0x0000FF) / 255.0
+        return UIColor(red: red, green: green, blue: blue, alpha: 1)
+    case 8:
+        let alpha = CGFloat((number & 0xFF000000) >> 24) / 255.0
+        let red = CGFloat((number & 0x00FF0000) >> 16) / 255.0
+        let green = CGFloat((number & 0x0000FF00) >> 8) / 255.0
+        let blue = CGFloat(number & 0x000000FF) / 255.0
+        return UIColor(red: red, green: green, blue: blue, alpha: alpha)
+    default:
+        return .black
+    }
+}
+
+private func blendUIColors(_ startColor: UIColor, _ endColor: UIColor, amount: CGFloat) -> UIColor {
+    let normalizedAmount = min(max(amount, 0), 1)
+    let inverseAmount = 1 - normalizedAmount
+    var startRed: CGFloat = 0
+    var startGreen: CGFloat = 0
+    var startBlue: CGFloat = 0
+    var startAlpha: CGFloat = 0
+    var endRed: CGFloat = 0
+    var endGreen: CGFloat = 0
+    var endBlue: CGFloat = 0
+    var endAlpha: CGFloat = 0
+
+    guard startColor.getRed(&startRed, green: &startGreen, blue: &startBlue, alpha: &startAlpha),
+          endColor.getRed(&endRed, green: &endGreen, blue: &endBlue, alpha: &endAlpha) else {
+        return startColor
+    }
+
+    return UIColor(
+        red: (startRed * inverseAmount) + (endRed * normalizedAmount),
+        green: (startGreen * inverseAmount) + (endGreen * normalizedAmount),
+        blue: (startBlue * inverseAmount) + (endBlue * normalizedAmount),
+        alpha: (startAlpha * inverseAmount) + (endAlpha * normalizedAmount)
+    )
+}
+
+private func perceivedLuminance(_ color: UIColor) -> CGFloat {
+    var red: CGFloat = 0
+    var green: CGFloat = 0
+    var blue: CGFloat = 0
+    var alpha: CGFloat = 0
+
+    guard color.getRed(&red, green: &green, blue: &blue, alpha: &alpha) else {
+        return 0
+    }
+
+    return (red * 0.299) + (green * 0.587) + (blue * 0.114)
 }
 
 private func normalizeWidgetImageOrientation(_ image: UIImage) -> UIImage {
@@ -1462,7 +1629,56 @@ private struct LocketWidgetEntryView: View {
         if hasPhotoBackground || payload.isIdleState {
             return Color(red: 1.0, green: 0.969, blue: 0.910) // #FFF7E8 — app dark text token
         }
-        return Color(red: 0.169, green: 0.149, blue: 0.129)   // #2B2621 — app light text token
+        return textSurfacePrimaryTextColor
+    }
+
+    private var textSurfacePrimaryTextColor: Color {
+        switch payload.noteColorId {
+        case "sky-blue", "holo-foil":
+            return Color(red: 0.267, green: 0.345, blue: 0.451) // #445873
+        case "jade-pop", "olive-lime":
+            return Color(red: 0.267, green: 0.361, blue: 0.282) // #445C48
+        case "pool-teal":
+            return Color(red: 0.247, green: 0.388, blue: 0.408) // #3F6368
+        case "violet-bloom", "periwinkle-ink", "chrome-rare", "aurora-rgb":
+            return Color(red: 0.329, green: 0.294, blue: 0.439) // #544B70
+        case "sunset-coral", "raspberry-dusk":
+            return Color(red: 0.400, green: 0.302, blue: 0.361) // #664D5C
+        case "marigold-glow", "tangerine-clay":
+            return Color(red: 0.337, green: 0.271, blue: 0.231) // #56453B
+        default:
+            return gradientDerivedPrimaryTextColor
+        }
+    }
+
+    private var gradientDerivedPrimaryTextColor: Color {
+        guard let start = payload.backgroundGradientStartColor, !start.isEmpty,
+              let end = payload.backgroundGradientEndColor, !end.isEmpty else {
+            return Color(red: 0.302, green: 0.259, blue: 0.227) // #4D423A
+        }
+
+        let startColor = uiColorFromHex(start)
+        let endColor = uiColorFromHex(end)
+        let averageColor = blendUIColors(startColor, endColor, amount: 0.5)
+        var hue: CGFloat = 0
+        var saturation: CGFloat = 0
+        var brightness: CGFloat = 0
+        var alpha: CGFloat = 0
+        averageColor.getHue(&hue, saturation: &saturation, brightness: &brightness, alpha: &alpha)
+        let anchorColor: UIColor
+        switch (hue * 360, saturation) {
+        case (185...320, let s) where s >= 0.08:
+            anchorColor = uiColorFromHex("#445873")
+        case (8...55, let s) where s >= 0.08:
+            anchorColor = uiColorFromHex("#56453B")
+        default:
+            anchorColor = uiColorFromHex("#4D423A")
+        }
+        let adjustedColor = perceivedLuminance(averageColor) > 0.68
+            ? blendUIColors(anchorColor, uiColorFromHex("#2F2722"), amount: 0.18)
+            : anchorColor
+
+        return Color(uiColor: adjustedColor)
     }
 
     private var eyebrowTextColor: Color {
@@ -1726,15 +1942,15 @@ private struct LocketWidgetEntryView: View {
         if isLarge {
             let count = contentDisplayText.trimmingCharacters(in: .whitespacesAndNewlines).count
             if count > 160 {
-                baseSize = 18
+                baseSize = 21
             } else if count > 96 {
-                baseSize = 20
-            } else {
                 baseSize = 24
+            } else {
+                baseSize = 28
             }
         } else if isMedium {
             let count = contentDisplayText.trimmingCharacters(in: .whitespacesAndNewlines).count
-            baseSize = count > 110 ? 18 : 20
+            baseSize = count > 110 ? 19 : 21
         } else {
             let count = contentDisplayText.trimmingCharacters(in: .whitespacesAndNewlines).count
             baseSize = count > 110 ? 16 : 18
@@ -1833,9 +2049,15 @@ private struct LocketWidgetEntryView: View {
                 LocketWidgetStickerOverlay(
                     placements: stickerPlacements,
                     overlayOpacity: noteStickerOverlayOpacity,
-                    artboardInset: locketWidgetDecorationInset,
-                    minimumBaseSize: locketWidgetStickerMinimumBaseSize,
-                    baseSizeRatio: locketWidgetStickerBaseSizeRatio
+                    artboardInset: isSmall
+                        ? locketWidgetDecorationInsetSmall
+                        : locketWidgetDecorationInsetMedium,
+                    minimumBaseSize: isSmall
+                        ? locketWidgetStickerMinimumBaseSizeSmall
+                        : locketWidgetStickerMinimumBaseSizeMedium,
+                    baseSizeRatio: isSmall
+                        ? locketWidgetStickerBaseSizeRatioSmall
+                        : locketWidgetStickerBaseSizeRatioMedium
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
@@ -1845,7 +2067,9 @@ private struct LocketWidgetEntryView: View {
                     strokes: doodleStrokes,
                     isLarge: isExpanded,
                     overlayOpacity: noteOverlayOpacity,
-                    contentInset: locketWidgetDecorationInset
+                    contentInset: isSmall
+                        ? locketWidgetDecorationInsetSmall
+                        : locketWidgetDecorationInsetMedium
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .allowsHitTesting(false)

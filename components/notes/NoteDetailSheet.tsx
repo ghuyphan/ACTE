@@ -22,7 +22,7 @@ import {
     withTiming,
 } from 'react-native-reanimated';
 import { ENABLE_PHOTO_STICKERS } from '../../constants/experiments';
-import { Layout, Sheet } from '../../constants/theme';
+import { Layout } from '../../constants/theme';
 import { useAuth } from '../../hooks/useAuth';
 import { useActiveNote } from '../../hooks/useActiveNote';
 import { useNotes } from '../../hooks/useNotes';
@@ -54,6 +54,7 @@ import {
     setStickerPlacementOutlineEnabled,
     type NoteStickerPlacement,
     type StickerImportSource,
+    type StickerStampStyle,
     updateStickerPlacementTransform,
 } from '../../services/noteStickers';
 import {
@@ -922,6 +923,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
         intent: StickerImportIntent,
         options?: {
             apply?: boolean;
+            stampStyle?: StickerStampStyle;
         }
     ): Promise<NoteStickerPlacement> => {
         let preparedSource = source;
@@ -955,7 +957,12 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
             const nextPlacement = createStickerPlacement(
                 importedAsset,
                 editStickerPlacements,
-                intent === 'stamp' ? { renderMode: 'stamp' } : undefined
+                intent === 'stamp'
+                    ? {
+                        renderMode: 'stamp',
+                        stampStyle: options?.stampStyle,
+                    }
+                    : undefined
             );
             if (options?.apply !== false) {
                 applyImportedSticker(nextPlacement);
@@ -1799,6 +1806,8 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                         )}
                         cancelLabel={t('common.cancel', 'Cancel')}
                         confirmLabel={t('capture.stampCutterConfirm', 'Cut stamp')}
+                        classicStyleLabel={t('capture.stampStyleClassic', 'Classic')}
+                        circleStyleLabel={t('capture.stampStyleCircle', 'Circle')}
                         onClose={handleCloseStampCutterEditor}
                         onCompletePlacement={handleCompleteStickerCreationPlacement}
                         onConfirm={handleConfirmStampCutter}
@@ -1816,6 +1825,8 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                         )}
                         cancelLabel={t('common.cancel', 'Cancel')}
                         confirmLabel={t('capture.stampPreviewConfirm', 'Add stamp')}
+                        classicStyleLabel={t('capture.stampStyleClassic', 'Classic')}
+                        circleStyleLabel={t('capture.stampStyleCircle', 'Circle')}
                         onClose={handleCloseStampPreviewEditor}
                         onCompletePlacement={handleCompleteStickerCreationPlacement}
                         onConfirm={handleConfirmStampPreview}
@@ -1869,6 +1880,8 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                     )}
                     cancelLabel={t('common.cancel', 'Cancel')}
                     confirmLabel={t('capture.stampCutterConfirm', 'Cut stamp')}
+                    classicStyleLabel={t('capture.stampStyleClassic', 'Classic')}
+                    circleStyleLabel={t('capture.stampStyleCircle', 'Circle')}
                     onClose={handleCloseStampCutterEditor}
                     onCompletePlacement={handleCompleteStickerCreationPlacement}
                     onConfirm={handleConfirmStampCutter}
@@ -1886,6 +1899,8 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                     )}
                     cancelLabel={t('common.cancel', 'Cancel')}
                     confirmLabel={t('capture.stampPreviewConfirm', 'Add stamp')}
+                    classicStyleLabel={t('capture.stampStyleClassic', 'Classic')}
+                    circleStyleLabel={t('capture.stampStyleCircle', 'Circle')}
                     onClose={handleCloseStampPreviewEditor}
                     onCompletePlacement={handleCompleteStickerCreationPlacement}
                     onConfirm={handleConfirmStampPreview}

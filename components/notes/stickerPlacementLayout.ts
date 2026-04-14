@@ -61,7 +61,11 @@ export function getStickerPlacementFrame(
   );
   const stampMetrics =
     placement.renderMode === 'stamp'
-      ? getStampFrameMetrics(baseDimensions.width, baseDimensions.height)
+      ? getStampFrameMetrics(
+          baseDimensions.width,
+          baseDimensions.height,
+          placement.stampStyle ?? 'classic'
+        )
       : null;
   const frameWidth = stampMetrics
     ? stampMetrics.outerWidth

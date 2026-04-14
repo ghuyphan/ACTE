@@ -149,6 +149,11 @@ const config = {
     package: 'com.acte.app',
     icon: './assets/images/icon/icon-small-default.png',
     googleServicesFile: androidGoogleServicesFile,
+    permissions: [
+      'android.permission.ACCESS_COARSE_LOCATION',
+      'android.permission.ACCESS_FINE_LOCATION',
+      'android.permission.ACCESS_BACKGROUND_LOCATION',
+    ],
     adaptiveIcon: {
       backgroundColor: '#F7F2EB',
       foregroundImage: './assets/images/icon/icon-small-default.png',
@@ -189,6 +194,12 @@ const config = {
       },
     ],
     [
+      'react-native-maps',
+      {
+        androidGoogleMapsApiKey: googleMapsAndroidApiKey,
+      },
+    ],
+    [
       'expo-splash-screen',
       {
         image: './assets/images/icon/icon-default.png',
@@ -218,6 +229,7 @@ const config = {
       },
     ],
     './plugins/withExpoWidgetsBundleFix.js',
+    './plugins/withAndroidAdaptiveIconColor.js',
     './plugins/withAndroidReleaseHardening.js',
     './plugins/withAndroidWindowBehavior.js',
     './plugins/withAndroidWidgetTypography.js',

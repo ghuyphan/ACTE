@@ -162,6 +162,8 @@
         "stampPreviewTitle": "Create stamp",
         "stampPreviewHint": "Preview the full photo as a perforated stamp before adding it to your note.",
         "stampPreviewConfirm": "Add stamp",
+        "stampStyleClassic": "Classic",
+        "stampStyleCircle": "Circle",
         "stickerCutoutPreviewTitle": "Create sticker",
         "stickerCutoutPreviewHint": "Keep the lifted subject, then choose whether the sticker starts with an outline.",
         "stickerCutoutPreviewConfirm": "Add sticker",

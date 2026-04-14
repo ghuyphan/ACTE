@@ -17,6 +17,7 @@ import {
   shouldImportSourceDirectlyAsSticker,
   type NoteStickerPlacement,
   type StickerImportSource,
+  type StickerStampStyle,
 } from '../../services/noteStickers';
 import {
   cleanupStickerTempUri,
@@ -55,6 +56,7 @@ interface UseStickerCreationFlowOptions {
     intent: 'sticker' | 'stamp',
     options?: {
       apply?: boolean;
+      stampStyle?: StickerStampStyle;
     }
   ) => Promise<NoteStickerPlacement>;
   importingSticker: boolean;
@@ -362,10 +364,12 @@ export function useStickerCreationFlow({
       viewportSize,
       selectionRect,
       transform,
+      stampStyle,
     }: {
       viewportSize: { width: number; height: number };
       selectionRect: { x: number; y: number; width: number; height: number };
       transform: StampCutterTransform;
+      stampStyle: StickerStampStyle;
     }): Promise<NoteStickerPlacement | null> => {
       if (!stampCutterDraft) {
         return null;
@@ -386,6 +390,7 @@ export function useStickerCreationFlow({
           intermediateCleanupUri = exported.intermediateCleanupUri ?? null;
           return await importStickerFromSource(exported.source, 'stamp', {
             apply: false,
+            stampStyle,
           });
         } catch (error) {
           console.warn('[stickers] stamp cutter export failed', error);
@@ -408,7 +413,11 @@ export function useStickerCreationFlow({
     ]
   );
 
-  const handleConfirmStampPreview = useCallback(async (): Promise<NoteStickerPlacement | null> => {
+  const handleConfirmStampPreview = useCallback(async ({
+    stampStyle,
+  }: {
+    stampStyle: StickerStampStyle;
+  }): Promise<NoteStickerPlacement | null> => {
     if (!stampPreviewDraft) {
       return null;
     }
@@ -417,6 +426,7 @@ export function useStickerCreationFlow({
       try {
         return await importStickerFromSource(stampPreviewDraft.source, 'stamp', {
           apply: false,
+          stampStyle,
         });
       } catch (error) {
         console.warn('[stickers] stamp preview import failed', error);

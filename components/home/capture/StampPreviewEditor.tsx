@@ -6,12 +6,13 @@ import {
 } from 'react-native';
 import Reanimated from 'react-native-reanimated';
 import { useTheme } from '../../../hooks/useTheme';
-import type { NoteStickerPlacement } from '../../../services/noteStickers';
+import type { NoteStickerPlacement, StickerStampStyle } from '../../../services/noteStickers';
 import type { StampCutterDraft } from '../../../services/stampCutter';
 import StampStickerArtwork from '../../notes/StampStickerArtwork';
 import {
   getStampFrameMetrics,
 } from '../../notes/stampFrameMetrics';
+import StampStylePicker from './StampStylePicker';
 import StickerCreationOverlay from './StickerCreationOverlay';
 import type {
   StickerCreationAnimatedStyle,
@@ -34,12 +35,16 @@ interface StampPreviewEditorProps {
   subtitle: string;
   cancelLabel: string;
   confirmLabel: string;
+  classicStyleLabel: string;
+  circleStyleLabel: string;
   onClose: () => void;
   onCompletePlacement: (payload: {
     placement: NoteStickerPlacement;
     sourceRect: WindowRect;
   }) => void;
-  onConfirm: () => NoteStickerPlacement | null | Promise<NoteStickerPlacement | null>;
+  onConfirm: (payload: {
+    stampStyle: StickerStampStyle;
+  }) => NoteStickerPlacement | null | Promise<NoteStickerPlacement | null>;
 }
 
 function measureWindowRect(node: MeasurableView | null): Promise<WindowRect | null> {
@@ -83,6 +88,8 @@ function StampPreviewEditor({
   subtitle,
   cancelLabel,
   confirmLabel,
+  classicStyleLabel,
+  circleStyleLabel,
   onClose,
   onCompletePlacement,
   onConfirm,
@@ -91,6 +98,7 @@ function StampPreviewEditor({
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const previewRef = useRef<View | null>(null);
   const [previewWindowRect, setPreviewWindowRect] = useState<WindowRect | null>(null);
+  const [stampStyle, setStampStyle] = useState<StickerStampStyle>('classic');
   const previewUri = draft?.source.uri ?? null;
   const sourceSize = useMemo(
     () => ({
@@ -117,8 +125,8 @@ function StampPreviewEditor({
     };
   }, [sourceSize.height, sourceSize.width, windowHeight, windowWidth]);
   const stampMetrics = useMemo(
-    () => getStampFrameMetrics(previewSize.width, previewSize.height),
-    [previewSize.height, previewSize.width]
+    () => getStampFrameMetrics(previewSize.width, previewSize.height, stampStyle),
+    [previewSize.height, previewSize.width, stampStyle]
   );
 
   const resolvePreviewFallbackRect = useCallback(() => ({
@@ -164,7 +172,7 @@ function StampPreviewEditor({
   }, [measurePreviewInWindow]);
 
   const handleConfirmCreation = useCallback(async () => {
-    const placement = await onConfirm();
+    const placement = await onConfirm({ stampStyle });
     if (!placement) {
       return null;
     }
@@ -174,7 +182,15 @@ function StampPreviewEditor({
       placement,
       sourceRect: latestRect ?? previewWindowRect ?? resolvePreviewFallbackRect(),
     };
-  }, [measurePreviewInWindow, onConfirm, previewWindowRect, resolvePreviewFallbackRect]);
+  }, [measurePreviewInWindow, onConfirm, previewWindowRect, resolvePreviewFallbackRect, stampStyle]);
+
+  useEffect(() => {
+    if (!visible) {
+      return;
+    }
+
+    setStampStyle('classic');
+  }, [draft?.source.uri, visible]);
 
   useEffect(() => {
     if (!visible) {
@@ -191,6 +207,7 @@ function StampPreviewEditor({
   const stampArtwork = (
     <StampStickerArtwork
       localUri={previewUri}
+      style={stampStyle}
       metrics={stampMetrics}
       shadowEnabled={false}
       width={previewSize.width}
@@ -209,21 +226,30 @@ function StampPreviewEditor({
     focusAnimatedStyle: StickerCreationAnimatedStyle;
   }) => (
     <View style={styles.stageArea}>
-      <Reanimated.View
-        ref={previewRef}
-        collapsable={false}
-        pointerEvents={busy ? 'none' : 'auto'}
-        onLayout={schedulePreviewMeasurement}
-        style={[
-          styles.previewWrap,
-          contentAnimatedStyle,
-          {
-            shadowColor: isDark ? '#000000' : 'rgba(76,57,31,0.42)',
-          },
-        ]}
-      >
-        {stampArtwork}
-      </Reanimated.View>
+      <View style={styles.stageStack}>
+        <Reanimated.View
+          ref={previewRef}
+          collapsable={false}
+          pointerEvents={busy ? 'none' : 'auto'}
+          onLayout={schedulePreviewMeasurement}
+          style={[
+            styles.previewWrap,
+            contentAnimatedStyle,
+            {
+              shadowColor: isDark ? '#000000' : 'rgba(76,57,31,0.42)',
+            },
+          ]}
+        >
+          {stampArtwork}
+        </Reanimated.View>
+        <StampStylePicker
+          value={stampStyle}
+          disabled={busy}
+          classicLabel={classicStyleLabel}
+          circleLabel={circleStyleLabel}
+          onChange={setStampStyle}
+        />
+      </View>
     </View>
   );
 
@@ -253,6 +279,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 24,
+  },
+  stageStack: {
+    alignItems: 'center',
+    gap: 10,
   },
   previewWrap: {
     shadowOffset: { width: 0, height: 10 },

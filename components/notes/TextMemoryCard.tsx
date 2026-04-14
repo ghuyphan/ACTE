@@ -5,6 +5,7 @@ import { STICKER_ARTBOARD_FRAME } from '../../constants/doodleLayout';
 import { Layout, Shadows } from '../../constants/theme';
 import {
     getGradientStickerMotionVariant,
+    getNoteCardTextPalette,
     getNoteColorStickerMotion,
     getTextNoteCardGradient,
     type StickerMotionVariant,
@@ -58,6 +59,10 @@ function TextMemoryCard({
         () => parseNoteDoodleStrokes(doodleStrokesJson),
         [doodleStrokesJson]
     );
+    const textPalette = useMemo(
+        () => getNoteCardTextPalette(gradient),
+        [gradient]
+    );
     const stickerPlacements = useMemo(
         () => parseNoteStickerPlacements(stickerPlacementsJson),
         [stickerPlacementsJson]
@@ -96,6 +101,10 @@ function TextMemoryCard({
                         style={[
                             noteCardTextStyles.memoryText,
                             getNoteCardTextSizeStyle(displayText),
+                            {
+                                color: textPalette.color,
+                                textShadowColor: textPalette.shadowColor,
+                            },
                         ]} 
                         numberOfLines={8}
                     >
@@ -132,7 +141,7 @@ const styles = StyleSheet.create({
     doodleOverlay: {
         position: 'absolute',
         ...STICKER_ARTBOARD_FRAME,
-        opacity: 0.5,
+        opacity: 1,
     },
     stickerOverlay: {
         position: 'absolute',

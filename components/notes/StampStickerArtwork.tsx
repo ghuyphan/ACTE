@@ -7,6 +7,7 @@ import {
 } from '@shopify/react-native-skia';
 import { memo, useMemo } from 'react';
 import { StyleSheet, View } from 'react-native';
+import type { StickerStampStyle } from '../../services/noteStickers';
 import {
   createStampFramePath,
   getStampFrameMetrics,
@@ -20,6 +21,7 @@ interface StampStickerArtworkProps {
   localUri: string;
   width: number;
   height: number;
+  style?: StickerStampStyle;
   metrics?: StampFrameMetrics | null;
   shadowEnabled?: boolean;
   artworkTestID?: string;
@@ -30,14 +32,15 @@ function StampStickerArtwork({
   localUri,
   width,
   height,
+  style = 'classic',
   metrics = null,
   shadowEnabled = true,
   artworkTestID,
   paperTestID,
 }: StampStickerArtworkProps) {
   const stampMetrics = useMemo(
-    () => metrics ?? getStampFrameMetrics(width, height),
-    [height, metrics, width]
+    () => metrics ?? getStampFrameMetrics(width, height, style),
+    [height, metrics, style, width]
   );
   const stampPath = useMemo(
     () => createStampFramePath(stampMetrics),

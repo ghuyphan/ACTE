@@ -2,6 +2,7 @@ import type { Note } from './database';
 import {
   parseStoredStickerPlacements,
   type StickerRenderMode,
+  type StickerStampStyle,
 } from './stickerPlacementPayload';
 import { normalizePlaceName } from './textNormalization';
 
@@ -94,6 +95,7 @@ export interface MonthlyRecapStickerUsage {
   assetHeight: number;
   outlineEnabled: boolean;
   renderMode: StickerRenderMode;
+  stampStyle?: StickerStampStyle;
 }
 
 export interface MonthlyRecap {
@@ -659,6 +661,7 @@ function getMonthStickerUsageFromScopedNotes(scopedNotes: Note[]): MonthlyRecapS
     string,
     MonthlyRecapStickerUsage & {
       stampCount: number;
+      circleStampCount: number;
     }
   >();
 
@@ -673,6 +676,8 @@ function getMonthStickerUsageFromScopedNotes(scopedNotes: Note[]): MonthlyRecapS
       if (existing) {
         existing.count += 1;
         existing.stampCount += placement.renderMode === 'stamp' ? 1 : 0;
+        existing.circleStampCount +=
+          placement.renderMode === 'stamp' && placement.stampStyle === 'circle' ? 1 : 0;
         existing.outlineEnabled = existing.outlineEnabled || placement.outlineEnabled !== false;
         continue;
       }
@@ -686,16 +691,34 @@ function getMonthStickerUsageFromScopedNotes(scopedNotes: Note[]): MonthlyRecapS
         assetHeight: Math.max(placement.asset.height ?? 100, 1),
         outlineEnabled: placement.outlineEnabled !== false,
         renderMode: placement.renderMode === 'stamp' ? 'stamp' : 'default',
+        stampStyle: placement.renderMode === 'stamp'
+          ? placement.stampStyle === 'circle'
+            ? 'circle'
+            : 'classic'
+          : undefined,
         stampCount: placement.renderMode === 'stamp' ? 1 : 0,
+        circleStampCount:
+          placement.renderMode === 'stamp' && placement.stampStyle === 'circle' ? 1 : 0,
       });
     }
   }
 
   return Array.from(usageByAssetId.values())
-    .map(({ stampCount, ...usage }) => ({
-      ...usage,
-      renderMode: (stampCount >= usage.count / 2 ? 'stamp' : 'default') as StickerRenderMode,
-    }))
+    .map(({ stampCount, circleStampCount, ...usage }) => {
+      const renderMode = (stampCount >= usage.count / 2 ? 'stamp' : 'default') as StickerRenderMode;
+      const stampStyle: StickerStampStyle | undefined =
+        renderMode === 'stamp'
+          ? circleStampCount >= stampCount / 2
+            ? 'circle'
+            : 'classic'
+          : undefined;
+
+      return {
+        ...usage,
+        renderMode,
+        stampStyle,
+      };
+    })
     .sort((left, right) => {
       const countDelta = right.count - left.count;
       if (countDelta !== 0) {

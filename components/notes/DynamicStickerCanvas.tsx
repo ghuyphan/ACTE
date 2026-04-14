@@ -88,7 +88,9 @@ function StickerSprite({
 }: StickerSpriteProps) {
   const image = useImage(placement.asset.localUri);
   const stampMetrics =
-    placement.renderMode === 'stamp' ? getStampFrameMetrics(width, height) : null;
+    placement.renderMode === 'stamp'
+      ? getStampFrameMetrics(width, height, placement.stampStyle ?? 'classic')
+      : null;
   const stampPath = useMemo(
     () => (stampMetrics ? createStampFramePath(stampMetrics) : null),
     [stampMetrics]

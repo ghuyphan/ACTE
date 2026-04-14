@@ -34,16 +34,45 @@ export function arePlaceRemindersEnabled() {
   return configuredValue !== false && configuredValue !== 'false';
 }
 
-function isBackgroundLocationAuthorizationError(error: unknown) {
-  if (!(error instanceof Error)) {
-    return false;
+function getErrorMessage(error: unknown) {
+  if (error instanceof Error) {
+    return error.message.toLowerCase();
   }
 
-  const message = error.message.toLowerCase();
+  if (typeof error === 'object' && error && 'message' in error) {
+    return String((error as { message?: unknown }).message ?? '').toLowerCase();
+  }
+
+  return '';
+}
+
+function isBackgroundLocationAuthorizationError(error: unknown) {
+  const message = getErrorMessage(error);
   return (
-    (message.includes('background location') || message.includes('location services')) &&
-    (message.includes('not authorized') || message.includes('not authorised'))
+    (
+      message.includes('background location') ||
+      message.includes('location services') ||
+      message.includes('access_background_location')
+    ) &&
+    (
+      message.includes('not authorized') ||
+      message.includes('not authorised') ||
+      message.includes('need to add') ||
+      message.includes('androidmanifest')
+    )
   );
+}
+
+async function getBackgroundPermissionStatusSafely() {
+  try {
+    return await Location.getBackgroundPermissionsAsync();
+  } catch (error) {
+    if (isBackgroundLocationAuthorizationError(error)) {
+      return null;
+    }
+
+    throw error;
+  }
 }
 
 async function hasStartedGeofencingSafely() {
@@ -103,16 +132,16 @@ export async function getReminderPermissionState(): Promise<ReminderPermissionSt
     };
   }
 
-  const [foregroundStatus, backgroundStatus, notificationStatus] = await Promise.all([
+  const [foregroundStatus, notificationStatus] = await Promise.all([
     Location.getForegroundPermissionsAsync(),
-    Location.getBackgroundPermissionsAsync(),
     Notifications.getPermissionsAsync(),
   ]);
+  const backgroundStatus = await getBackgroundPermissionStatusSafely();
 
   return {
     foregroundGranted: foregroundStatus.status === 'granted',
     remindersEnabled:
-      backgroundStatus.status === 'granted' && notificationStatus.status === 'granted',
+      backgroundStatus?.status === 'granted' && notificationStatus.status === 'granted',
   };
 }
 

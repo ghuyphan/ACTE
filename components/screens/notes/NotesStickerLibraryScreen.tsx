@@ -105,7 +105,9 @@ function getPreviewMetrics(item: CreatedStickerLibraryItem, cardWidth: number, p
       (item.renderMode === 'stamp' ? cardWidth * 0.72 : cardWidth * 0.72) * pose.scale,
   });
   const stampMetrics =
-    item.renderMode === 'stamp' ? getStampFrameMetrics(fitted.width, fitted.height) : null;
+    item.renderMode === 'stamp'
+      ? getStampFrameMetrics(fitted.width, fitted.height, item.stampStyle ?? 'classic')
+      : null;
   const previewFrameWidth = stampMetrics?.outerWidth ?? fitted.width;
   const previewFrameHeight = stampMetrics?.outerHeight ?? fitted.height;
 
@@ -143,6 +145,7 @@ function StickerPreview({
         localUri={item.asset.localUri}
         width={previewWidth}
         height={previewHeight}
+        style={item.stampStyle ?? 'classic'}
         shadowEnabled={false}
       />
     );

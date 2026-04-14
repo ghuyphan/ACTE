@@ -116,7 +116,7 @@ const styles = StyleSheet.create({
   doodleOverlay: {
     position: 'absolute',
     ...STICKER_ARTBOARD_FRAME,
-    opacity: 0.82,
+    opacity: 1,
   },
   stickerOverlay: {
     position: 'absolute',

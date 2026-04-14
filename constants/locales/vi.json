@@ -162,6 +162,8 @@
         "stampPreviewTitle": "Tạo tem ảnh",
         "stampPreviewHint": "Xem trước toàn bộ ảnh dưới dạng tem viền răng cưa trước khi thêm vào ghi chú.",
         "stampPreviewConfirm": "Thêm tem",
+        "stampStyleClassic": "Cổ điển",
+        "stampStyleCircle": "Tròn",
         "stickerCutoutPreviewTitle": "Tạo sticker",
         "stickerCutoutPreviewHint": "Giữ chủ thể đã tách nền, rồi chọn sticker có bắt đầu với viền hay không.",
         "stickerCutoutPreviewConfirm": "Thêm sticker",

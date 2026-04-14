@@ -70,6 +70,14 @@ export function getStickerDimensions(
   const baseScale = baseSize / longestEdge;
   const scaledWidth = placement.asset.width * baseScale * clampStickerScale(placement.scale);
   const scaledHeight = placement.asset.height * baseScale * clampStickerScale(placement.scale);
+  const circleStampSize = Math.max(Math.min(scaledWidth, scaledHeight), 1);
+
+  if (placement.renderMode === 'stamp' && placement.stampStyle === 'circle') {
+    return {
+      width: circleStampSize,
+      height: circleStampSize,
+    };
+  }
 
   return {
     width: scaledWidth,

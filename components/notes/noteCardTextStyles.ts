@@ -15,14 +15,14 @@ export function getNoteCardTextSizeStyle(text: string) {
 
 export const noteCardTextStyles = StyleSheet.create({
   memoryText: {
-    color: '#FFFFFF',
+    color: '#FFF7E8',
     fontSize: 24,
     fontWeight: '700',
     letterSpacing: -0.5,
     lineHeight: 32,
     textAlign: 'center',
     fontFamily: Typography.body.fontFamily,
-    textShadowColor: 'rgba(0,0,0,0.2)',
+    textShadowColor: 'rgba(0,0,0,0.24)',
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 4,
     zIndex: 1,

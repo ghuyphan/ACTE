@@ -11,6 +11,11 @@ import {
 
 type GradientPair = [string, string];
 export type StickerMotionVariant = 'physics' | 'water';
+export type NoteCardTextPalette = {
+  color: string;
+  shadowColor: string;
+  placeholderColor: string;
+};
 
 type NotePalette = {
   capture: GradientPair;
@@ -212,6 +217,31 @@ function rgbToHex(red: number, green: number, blue: number) {
     .join('')}`;
 }
 
+function srgbChannelToLinear(channel: number) {
+  const normalized = channel / 255;
+  return normalized <= 0.04045
+    ? normalized / 12.92
+    : ((normalized + 0.055) / 1.055) ** 2.4;
+}
+
+function getRelativeLuminance(color: string) {
+  const { red, green, blue } = hexToRgb(color);
+  const linearRed = srgbChannelToLinear(red);
+  const linearGreen = srgbChannelToLinear(green);
+  const linearBlue = srgbChannelToLinear(blue);
+
+  return linearRed * 0.2126 + linearGreen * 0.7152 + linearBlue * 0.0722;
+}
+
+function getContrastRatio(foreground: string, background: string) {
+  const foregroundLuminance = getRelativeLuminance(foreground);
+  const backgroundLuminance = getRelativeLuminance(background);
+  const lighter = Math.max(foregroundLuminance, backgroundLuminance);
+  const darker = Math.min(foregroundLuminance, backgroundLuminance);
+
+  return (lighter + 0.05) / (darker + 0.05);
+}
+
 function softenGradientColor(color: string, amount: number) {
   const { red, green, blue } = hexToRgb(color);
   return rgbToHex(
@@ -345,4 +375,35 @@ export function getTextNoteCardGradient(options: {
     blendedGradient,
     `${options.noteId ?? options.text}:${options.emoji ?? ''}`
   );
+}
+
+const NOTE_CARD_TEXT_LIGHT = '#FFF7E8';
+const NOTE_CARD_TEXT_DARK = '#2B2621';
+
+export function getNoteCardTextPalette(
+  gradient: readonly [string, string]
+): NoteCardTextPalette {
+  const candidates: NoteCardTextPalette[] = [
+    {
+      color: NOTE_CARD_TEXT_LIGHT,
+      shadowColor: 'rgba(0,0,0,0.24)',
+      placeholderColor: 'rgba(255,247,232,0.56)',
+    },
+    {
+      color: NOTE_CARD_TEXT_DARK,
+      shadowColor: 'rgba(0,0,0,0.08)',
+      placeholderColor: 'rgba(43,38,33,0.42)',
+    },
+  ];
+
+  return candidates.reduce<NoteCardTextPalette>((bestCandidate, candidate) => {
+    const bestScore = Math.min(
+      ...gradient.map((backgroundColor) => getContrastRatio(bestCandidate.color, backgroundColor))
+    );
+    const candidateScore = Math.min(
+      ...gradient.map((backgroundColor) => getContrastRatio(candidate.color, backgroundColor))
+    );
+
+    return candidateScore > bestScore ? candidate : bestCandidate;
+  }, candidates[0]);
 }

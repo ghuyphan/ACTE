@@ -5,6 +5,7 @@ const path = require('path');
 const WIDGET_LAYOUT_RELATIVE_PATHS = [
   'app/src/main/res/layout/noto_widget_small.xml',
   'app/src/main/res/layout/noto_widget_medium.xml',
+  'app/src/main/res/layout/noto_widget_large.xml',
 ];
 
 function patchWidgetLayoutTypography(filePath) {

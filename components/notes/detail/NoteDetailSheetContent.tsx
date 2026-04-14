@@ -30,6 +30,7 @@ import type { Note } from '../../../services/database';
 import type { NoteStickerPlacement } from '../../../services/noteStickers';
 import {
     getGradientStickerMotionVariant,
+    getNoteCardTextPalette,
     getNoteColorStickerMotion,
     getTextNoteCardGradient,
 } from '../../../services/noteAppearance';
@@ -284,6 +285,10 @@ export default function NoteDetailSheetContent({
     const textStickerMotionVariant = useMemo(
         () => getNoteColorStickerMotion(displayedNoteColor) ?? getGradientStickerMotionVariant(gradient),
         [displayedNoteColor, gradient]
+    );
+    const textPalette = useMemo(
+        () => getNoteCardTextPalette(gradient),
+        [gradient]
     );
     const displayedDoodleStrokes = useMemo(
         () => (
@@ -664,6 +669,10 @@ export default function NoteDetailSheetContent({
                                 styles.editTextInput,
                                 noteCardTextStyles.memoryText,
                                 getNoteCardTextSizeStyle(displayedText),
+                                {
+                                    color: textPalette.color,
+                                    textShadowColor: textPalette.shadowColor,
+                                },
                                 styles.editTextInputActive,
                                 stickerModeEnabled ? styles.editTextInputInactive : null,
                             ]}
@@ -675,9 +684,9 @@ export default function NoteDetailSheetContent({
                             autoCorrect={false}
                             spellCheck={false}
                             placeholder={t('noteDetail.editContent', 'Edit note content...')}
-                            placeholderTextColor="rgba(255,255,255,0.5)"
+                            placeholderTextColor={textPalette.placeholderColor}
                             maxLength={300}
-                            selectionColor="#FFFFFF"
+                            selectionColor={textPalette.color}
                         />
                     ) : (
                         <Text
@@ -686,6 +695,10 @@ export default function NoteDetailSheetContent({
                             style={[
                                 noteCardTextStyles.memoryText,
                                 getNoteCardTextSizeStyle(displayedText),
+                                {
+                                    color: textPalette.color,
+                                    textShadowColor: textPalette.shadowColor,
+                                },
                             ]}
                         >
                             {displayedText}
@@ -1101,7 +1114,7 @@ const styles = StyleSheet.create({
     doodleOverlay: {
         position: 'absolute',
         ...STICKER_ARTBOARD_FRAME,
-        opacity: 0.5,
+        opacity: 1,
     },
     stickerOverlay: {
         position: 'absolute',
@@ -1114,7 +1127,7 @@ const styles = StyleSheet.create({
         opacity: 0.72,
     },
     photoDoodleOverlay: {
-        opacity: 0.92,
+        opacity: 1,
     },
     doodleOverlayActive: {
         opacity: 1,

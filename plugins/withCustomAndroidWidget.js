@@ -15,6 +15,7 @@ const RESOURCE_MAPPINGS = [
   ['widgets/android/xml/noto_widget_info.xml', 'app/src/main/res/xml/noto_widget_info.xml'],
   ['widgets/android/layout/noto_widget_small.xml', 'app/src/main/res/layout/noto_widget_small.xml'],
   ['widgets/android/layout/noto_widget_medium.xml', 'app/src/main/res/layout/noto_widget_medium.xml'],
+  ['widgets/android/layout/noto_widget_large.xml', 'app/src/main/res/layout/noto_widget_large.xml'],
   ['widgets/android/drawable/noto_widget_outer_surface.xml', 'app/src/main/res/drawable/noto_widget_outer_surface.xml'],
   ['widgets/android/drawable/noto_widget_card_shell_small.xml', 'app/src/main/res/drawable/noto_widget_card_shell_small.xml'],
   ['widgets/android/drawable/noto_widget_card_shell_medium.xml', 'app/src/main/res/drawable/noto_widget_card_shell_medium.xml'],
@@ -23,9 +24,18 @@ const RESOURCE_MAPPINGS = [
   ['widgets/android/drawable/noto_widget_photo_scrim_small.xml', 'app/src/main/res/drawable/noto_widget_photo_scrim_small.xml'],
   ['widgets/android/drawable/noto_widget_photo_scrim_medium.xml', 'app/src/main/res/drawable/noto_widget_photo_scrim_medium.xml'],
   ['widgets/android/drawable/noto_widget_badge_light.xml', 'app/src/main/res/drawable/noto_widget_badge_light.xml'],
+  ['widgets/android/drawable/noto_widget_badge_light_blue.xml', 'app/src/main/res/drawable/noto_widget_badge_light_blue.xml'],
+  ['widgets/android/drawable/noto_widget_badge_light_cool.xml', 'app/src/main/res/drawable/noto_widget_badge_light_cool.xml'],
+  ['widgets/android/drawable/noto_widget_badge_light_green.xml', 'app/src/main/res/drawable/noto_widget_badge_light_green.xml'],
+  ['widgets/android/drawable/noto_widget_badge_light_lavender.xml', 'app/src/main/res/drawable/noto_widget_badge_light_lavender.xml'],
+  ['widgets/android/drawable/noto_widget_badge_light_neutral.xml', 'app/src/main/res/drawable/noto_widget_badge_light_neutral.xml'],
+  ['widgets/android/drawable/noto_widget_badge_light_pink.xml', 'app/src/main/res/drawable/noto_widget_badge_light_pink.xml'],
+  ['widgets/android/drawable/noto_widget_badge_light_teal.xml', 'app/src/main/res/drawable/noto_widget_badge_light_teal.xml'],
+  ['widgets/android/drawable/noto_widget_badge_light_warm.xml', 'app/src/main/res/drawable/noto_widget_badge_light_warm.xml'],
   ['widgets/android/drawable/noto_widget_overlay_chip_dark.xml', 'app/src/main/res/drawable/noto_widget_overlay_chip_dark.xml'],
   ['widgets/android/drawable/noto_widget_count_badge_dark.xml', 'app/src/main/res/drawable/noto_widget_count_badge_dark.xml'],
   ['widgets/android/drawable/noto_widget_pin_icon.xml', 'app/src/main/res/drawable/noto_widget_pin_icon.xml'],
+  ['widgets/android/drawable/noto_widget_live_photo_icon.xml', 'app/src/main/res/drawable/noto_widget_live_photo_icon.xml'],
 ];
 
 function copyFileIfPresent(projectRoot, androidRoot, sourceRelativePath, targetRelativePath) {
@@ -105,7 +115,8 @@ function ensureWidgetStringResources(androidRoot) {
   let patched = original;
   const strings = [
     ['noto_widget_description', 'See your nearby memory from your Home Screen.'],
-    ['noto_widget_idle_fallback', 'The right note will appear when you\\\'re nearby.'],
+    ['noto_widget_idle_fallback', 'The right note will appear when you are nearby.'],
+    ['noto_widget_memory_fallback', 'A memory from this place.'],
   ];
 
   for (const [name, value] of strings) {
@@ -116,6 +127,19 @@ function ensureWidgetStringResources(androidRoot) {
     patched = patched.replace(
       /(\s*<\/resources>)/,
       `  <string name="${name}">${value}</string>\n$1`
+    );
+  }
+
+  if (!patched.includes('name="noto_widget_count_fallback"')) {
+    patched = patched.replace(
+      /(\s*<\/resources>)/,
+      [
+        '  <plurals name="noto_widget_count_fallback">',
+        '    <item quantity="one">%d memory</item>',
+        '    <item quantity="other">%d memories</item>',
+        '  </plurals>',
+        '$1',
+      ].join('\n')
     );
   }
 

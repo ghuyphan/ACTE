@@ -9,7 +9,7 @@ import { STICKER_ARTBOARD_FRAME, DOODLE_ARTBOARD_FRAME } from '../../../constant
 import i18n from '../../../constants/i18n';
 import { Fonts, Layout, Typography } from '../../../constants/theme';
 import type { Note } from '../../../services/database';
-import { getTextNoteCardGradient } from '../../../services/noteAppearance';
+import { getNoteCardTextPalette, getTextNoteCardGradient } from '../../../services/noteAppearance';
 import { parseNoteDoodleStrokes } from '../../../services/noteDoodles';
 import { parseNoteStickerPlacements } from '../../../services/noteStickers';
 import { formatNoteTextWithEmoji } from '../../../services/noteTextPresentation';
@@ -85,6 +85,10 @@ function PolaroidExportViewInner(
   const doodleStrokes = useMemo(
     () => parseNoteDoodleStrokes(note.doodleStrokesJson),
     [note.doodleStrokesJson]
+  );
+  const textPalette = useMemo(
+    () => getNoteCardTextPalette(gradient),
+    [gradient]
   );
   const stickerPlacements = useMemo(
     () => parseNoteStickerPlacements(note.stickerPlacementsJson),
@@ -194,6 +198,10 @@ function PolaroidExportViewInner(
                   style={[
                     noteCardTextStyles.memoryText,
                     getNoteCardTextSizeStyle(displayedText),
+                    {
+                      color: textPalette.color,
+                      textShadowColor: textPalette.shadowColor,
+                    },
                     styles.exportText,
                     displayedText.length > 100 ? styles.exportTextMedium : null,
                     displayedText.length > 200 ? styles.exportTextSmall : null,

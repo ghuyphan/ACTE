@@ -1,11 +1,17 @@
 import type { Note } from '../../../services/database';
-import { parseNoteStickerPlacements, type StickerAsset, type StickerRenderMode } from '../../../services/noteStickers';
+import {
+  parseNoteStickerPlacements,
+  type StickerAsset,
+  type StickerRenderMode,
+  type StickerStampStyle,
+} from '../../../services/noteStickers';
 
 export interface CreatedStickerLibraryItem {
   id: string;
   asset: StickerAsset;
   assetId: string;
   renderMode: StickerRenderMode;
+  stampStyle?: StickerStampStyle;
   usageCount: number;
   lastUsedAt: string;
 }
@@ -62,7 +68,11 @@ function buildCreatedStickerLibraryItemsForNote(note: Note): CachedCreatedSticke
 
   for (const placement of placements) {
     const renderMode = placement.renderMode === 'stamp' ? 'stamp' : 'default';
-    const itemId = `${placement.asset.id}:${renderMode}`;
+    const stampStyle = renderMode === 'stamp' && placement.stampStyle === 'circle' ? 'circle' : 'classic';
+    const itemId =
+      renderMode === 'stamp'
+        ? `${placement.asset.id}:${renderMode}:${stampStyle}`
+        : `${placement.asset.id}:${renderMode}`;
     const assetCreatedAtMs = getTimestampMs(placement.asset.createdAt);
     const existing = itemsById.get(itemId);
 
@@ -72,6 +82,7 @@ function buildCreatedStickerLibraryItemsForNote(note: Note): CachedCreatedSticke
         asset: placement.asset,
         assetId: placement.asset.id,
         renderMode,
+        stampStyle: renderMode === 'stamp' ? stampStyle : undefined,
         usageCount: 1,
         lastUsedAt,
         lastUsedAtMs,

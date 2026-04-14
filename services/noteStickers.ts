@@ -11,6 +11,7 @@ import {
 import {
   parseStoredStickerPlacements,
   type StickerRenderMode,
+  type StickerStampStyle,
 } from './stickerPlacementPayload';
 import {
   getCurrentSupabaseSession,
@@ -30,6 +31,7 @@ import { cleanupStickerTempUris } from './stickerTempFiles';
 
 export type StickerSource = 'import';
 export type { StickerRenderMode } from './stickerPlacementPayload';
+export type { StickerStampStyle } from './stickerPlacementPayload';
 export type StickerImportErrorCode =
   | 'unsupported-format'
   | 'file-unavailable'
@@ -65,6 +67,7 @@ export interface StickerPlacement {
   outlineEnabled?: boolean;
   motionLocked?: boolean;
   renderMode?: StickerRenderMode;
+  stampStyle?: StickerStampStyle;
 }
 
 export interface NoteStickerPlacement extends StickerPlacement {
@@ -83,6 +86,7 @@ export interface StickerImportOptions {
 
 export interface CreateStickerPlacementOptions {
   renderMode?: StickerRenderMode;
+  stampStyle?: StickerStampStyle;
 }
 
 export class StickerImportError extends Error {
@@ -927,6 +931,8 @@ export function createStickerPlacement(
     ...placementAsset
   } = asset;
   const renderMode = options.renderMode ?? (suggestedRenderMode === 'stamp' ? 'stamp' : 'default');
+  const stampStyle =
+    renderMode === 'stamp' ? (options.stampStyle === 'circle' ? 'circle' : 'classic') : undefined;
 
   return {
     id: generateStickerPlacementId(),
@@ -940,6 +946,7 @@ export function createStickerPlacement(
     outlineEnabled: true,
     motionLocked: false,
     renderMode,
+    stampStyle,
     asset: placementAsset,
   };
 }
@@ -960,6 +967,12 @@ export function normalizeStickerPlacements(
       outlineEnabled: placement.outlineEnabled !== false,
       motionLocked: placement.motionLocked === true,
       renderMode: placement.renderMode === 'stamp' ? 'stamp' : 'default',
+      stampStyle:
+        placement.renderMode === 'stamp'
+          ? placement.stampStyle === 'circle'
+            ? 'circle'
+            : 'classic'
+          : undefined,
     }));
 }
 

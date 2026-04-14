@@ -1,4 +1,5 @@
 import { PathOp, Skia, type SkPath } from '@shopify/react-native-skia';
+import type { StickerStampStyle } from '../../services/noteStickers';
 
 const STAMP_TEMPLATE_WIDTH = 272;
 const STAMP_TEMPLATE_HEIGHT = 309;
@@ -7,6 +8,10 @@ const STAMP_TEMPLATE_PERFORATION_OFFSET = STAMP_TEMPLATE_PERFORATION_RADIUS * 0.
 const STAMP_TEMPLATE_BORDER_RADIUS = 11;
 const STAMP_TEMPLATE_TOP_COUNT = 9;
 const STAMP_TEMPLATE_SIDE_COUNT = 10;
+const CIRCLE_STAMP_TEMPLATE_DIAMETER = 272;
+const CIRCLE_STAMP_TEMPLATE_PERFORATION_RADIUS = 14;
+const CIRCLE_STAMP_TEMPLATE_PERFORATION_OFFSET = CIRCLE_STAMP_TEMPLATE_PERFORATION_RADIUS * 0.14;
+const CIRCLE_STAMP_TEMPLATE_COUNT = 22;
 
 function buildPerforationCenters(length: number, radius: number, count: number) {
   const safeCount = Math.max(5, Math.round(count));
@@ -26,6 +31,7 @@ function getTemplatePerforationCount(
 }
 
 export interface StampFrameMetrics {
+  style: StickerStampStyle;
   borderRadius: number;
   captionFontSize: number;
   captionWidth: number;
@@ -72,7 +78,62 @@ export const STAMP_IMAGE_BORDER_COLOR = 'rgba(96, 74, 45, 0.08)';
 export const STAMP_DROP_SHADOW_COLOR = 'rgba(76, 57, 31, 0.16)';
 export const STAMP_TEXT_COLOR = '#6F5C44';
 
-export function getStampFrameMetrics(contentWidth: number, contentHeight: number): StampFrameMetrics {
+function getCirclePerforationCount(normalizedDiameter: number) {
+  return Math.max(
+    10,
+    Math.round(
+      (normalizedDiameter / Math.max(CIRCLE_STAMP_TEMPLATE_DIAMETER, 1)) * CIRCLE_STAMP_TEMPLATE_COUNT
+    )
+  );
+}
+
+function buildCirclePerforationAngles(count: number) {
+  const safeCount = Math.max(10, Math.round(count));
+  const step = (Math.PI * 2) / safeCount;
+  return Array.from({ length: safeCount }, (_, index) => index * step);
+}
+
+export function getStampFrameMetrics(
+  contentWidth: number,
+  contentHeight: number,
+  style: StickerStampStyle = 'classic'
+): StampFrameMetrics {
+  if (style === 'circle') {
+    const diameter = Math.max(Math.min(contentWidth, contentHeight), 1);
+    const renderScale = diameter / CIRCLE_STAMP_TEMPLATE_DIAMETER;
+    const safeRenderScale = Math.max(renderScale, 1 / CIRCLE_STAMP_TEMPLATE_DIAMETER);
+    const perforationRadius = CIRCLE_STAMP_TEMPLATE_PERFORATION_RADIUS * safeRenderScale;
+    const perforationOffset = CIRCLE_STAMP_TEMPLATE_PERFORATION_OFFSET * safeRenderScale;
+    const topCount = getCirclePerforationCount(diameter);
+
+    return {
+      style,
+      borderRadius: diameter / 2,
+      captionFontSize: 0,
+      captionWidth: diameter,
+      captionX: 0,
+      captionY: 0,
+      footerHeight: 0,
+      imageHeight: diameter,
+      imageBorderRadius: diameter / 2,
+      imageWidth: diameter,
+      imageX: 0,
+      imageY: 0,
+      outerHeight: diameter,
+      outerWidth: diameter,
+      paperHeight: diameter,
+      paperInset: 0,
+      paperPadding: 0,
+      paperWidth: diameter,
+      perforationOffset,
+      perforationRadius,
+      bottomCenters: buildCirclePerforationAngles(topCount),
+      leftCenters: [],
+      rightCenters: [],
+      topCenters: [],
+    };
+  }
+
   const safeWidth = Math.max(contentWidth, 1);
   const safeHeight = Math.max(contentHeight, 1);
   const renderScale = Math.min(safeWidth / STAMP_TEMPLATE_WIDTH, safeHeight / STAMP_TEMPLATE_HEIGHT);
@@ -108,6 +169,7 @@ export function getStampFrameMetrics(contentWidth: number, contentHeight: number
   );
 
   return {
+    style,
     borderRadius,
     captionFontSize,
     captionWidth: Math.max(paperWidth - captionX * 2, 1),
@@ -135,6 +197,10 @@ export function getStampFrameMetrics(contentWidth: number, contentHeight: number
 }
 
 export function createStampFramePath(metrics: StampFrameMetrics): SkPath {
+  if (metrics.style === 'circle') {
+    return createCircleStampCutoutPath(metrics);
+  }
+
   return createStampCutoutPath({
     x: 0,
     y: 0,
@@ -148,6 +214,43 @@ export function createStampFramePath(metrics: StampFrameMetrics): SkPath {
     leftCenters: metrics.leftCenters,
     rightCenters: metrics.rightCenters,
   });
+}
+
+function createCirclePath(cx: number, cy: number, radius: number): SkPath {
+  const path = Skia.Path.Make();
+  if (typeof path.addCircle === 'function') {
+    path.addCircle(cx, cy, radius);
+  }
+  return path;
+}
+
+function createCircleStampCutoutPath(metrics: StampFrameMetrics): SkPath {
+  const diameter = Math.max(Math.min(metrics.outerWidth, metrics.outerHeight), 1);
+  const radius = diameter / 2;
+  const centerX = metrics.outerWidth / 2;
+  const centerY = metrics.outerHeight / 2;
+  const path = createCirclePath(centerX, centerY, radius);
+
+  if (metrics.perforationRadius <= 0 || typeof path.op !== 'function') {
+    return path;
+  }
+
+  const perforationCenterRadius = Math.max(radius + metrics.perforationOffset, metrics.perforationRadius);
+  const angles =
+    metrics.bottomCenters.length > 0
+      ? metrics.bottomCenters
+      : buildCirclePerforationAngles(getCirclePerforationCount(diameter));
+
+  angles.forEach((angle) => {
+    const cutoutPath = createCirclePath(
+      centerX + Math.cos(angle) * perforationCenterRadius,
+      centerY + Math.sin(angle) * perforationCenterRadius,
+      metrics.perforationRadius
+    );
+    path.op(cutoutPath, PathOp.Difference);
+  });
+
+  return path;
 }
 
 export function createRoundedRectPath(

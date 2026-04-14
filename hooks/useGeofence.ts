@@ -26,6 +26,21 @@ function getLocationErrorMessage(error: unknown) {
     return '';
 }
 
+function isBackgroundLocationManifestError(error: unknown) {
+    const message = getLocationErrorMessage(error);
+    return (
+        (
+            message.includes('background location') ||
+            message.includes('access_background_location')
+        ) &&
+        (
+            message.includes('need to add') ||
+            message.includes('androidmanifest') ||
+            message.includes('rejected')
+        )
+    );
+}
+
 export interface ForegroundLocationRequestResult {
     location: Location.LocationObject | null;
     requiresSettings: boolean;
@@ -315,9 +330,34 @@ export function useGeofence() {
             };
         }
 
-        let backgroundStatus = await Location.getBackgroundPermissionsAsync();
+        let backgroundStatus: Awaited<ReturnType<typeof Location.getBackgroundPermissionsAsync>>;
+        try {
+            backgroundStatus = await Location.getBackgroundPermissionsAsync();
+        } catch (error) {
+            if (isBackgroundLocationManifestError(error)) {
+                setRemindersEnabled(false);
+                return {
+                    enabled: false,
+                    requiresSettings: false,
+                };
+            }
+
+            throw error;
+        }
         if (backgroundStatus.status !== 'granted') {
-            backgroundStatus = await Location.requestBackgroundPermissionsAsync();
+            try {
+                backgroundStatus = await Location.requestBackgroundPermissionsAsync();
+            } catch (error) {
+                if (isBackgroundLocationManifestError(error)) {
+                    setRemindersEnabled(false);
+                    return {
+                        enabled: false,
+                        requiresSettings: false,
+                    };
+                }
+
+                throw error;
+            }
         }
 
         let notificationStatus = await Notifications.getPermissionsAsync();

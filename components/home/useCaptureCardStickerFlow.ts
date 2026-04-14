@@ -9,6 +9,7 @@ import {
   shouldImportSourceDirectlyAsSticker,
   type StickerImportSource,
   StickerImportError,
+  type StickerStampStyle,
 } from '../../services/noteStickers';
 import {
   cleanupSubjectCutoutImportSource,
@@ -36,6 +37,7 @@ export type { StickerAction, StickerSourceAction } from '../../hooks/ui/stickerF
 
 interface ImportStickerFromSourceOptions {
   apply?: boolean;
+  stampStyle?: StickerStampStyle;
 }
 
 interface UseCaptureCardStickerFlowOptions {
@@ -245,7 +247,12 @@ export function useCaptureCardStickerFlow({
         const nextPlacement = createStickerPlacement(
           importedAsset,
           stickerPlacements,
-          intent === 'stamp' ? { renderMode: 'stamp' } : undefined
+          intent === 'stamp'
+            ? {
+                renderMode: 'stamp',
+                stampStyle: options.stampStyle,
+              }
+            : undefined
         );
         if (options.apply !== false) {
           applyImportedSticker(nextPlacement);

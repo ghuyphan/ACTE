@@ -4,7 +4,7 @@ import {
   inferImageMimeTypeFromName,
   normalizeImageMimeType,
 } from './mediaTypeUtils';
-import type { StickerImportSource } from './noteStickers';
+import type { StickerImportSource, StickerStampStyle } from './noteStickers';
 
 function clamp(value: number, minValue: number, maxValue: number) {
   'worklet';
@@ -64,14 +64,30 @@ export const STAMP_CUTTER_PREVIEW_ASPECT_RATIO =
   (STAMP_CUTTER_WINDOW.width * STAMP_CUTTER_OVERLAY_SOURCE_WIDTH)
   / (STAMP_CUTTER_WINDOW.height * STAMP_CUTTER_OVERLAY_SOURCE_HEIGHT);
 
-export function getStampCutterWindowRect(overlaySize: StampCutterSize): StampCutterRect {
+export function getStampCutterWindowRect(
+  overlaySize: StampCutterSize,
+  stampStyle: StickerStampStyle = 'classic'
+): StampCutterRect {
   'worklet';
 
-  return {
+  const classicRect = {
     x: overlaySize.width * STAMP_CUTTER_WINDOW.x,
     y: overlaySize.height * STAMP_CUTTER_WINDOW.y,
     width: overlaySize.width * STAMP_CUTTER_WINDOW.width,
     height: overlaySize.height * STAMP_CUTTER_WINDOW.height,
+  };
+
+  if (stampStyle !== 'circle') {
+    return classicRect;
+  }
+
+  const diameter = Math.min(classicRect.width, classicRect.height);
+
+  return {
+    x: classicRect.x + (classicRect.width - diameter) / 2,
+    y: classicRect.y + (classicRect.height - diameter) / 2,
+    width: diameter,
+    height: diameter,
   };
 }
 

@@ -573,6 +573,8 @@ export function useStickerPhysics({
       sortStickerPlacements(placements).map((placement) => {
         const dimensions = getStickerDimensions(placement, layout, sizeMultiplier, minimumBaseSize);
         const isStamp = placement.renderMode === 'stamp';
+        const stampCollisionShape =
+          placement.stampStyle === 'circle' ? 'ellipse' : 'rect';
         const collisionGeometry = getStickerCollisionGeometry(
           dimensions.width,
           dimensions.height,
@@ -592,7 +594,7 @@ export function useStickerPhysics({
           id: placement.id,
           anchorX: placement.x * layout.width,
           anchorY: placement.y * layout.height,
-          collisionShape: isStamp ? 'rect' : 'ellipse',
+          collisionShape: isStamp ? stampCollisionShape : 'ellipse',
           width: dimensions.width,
           height: dimensions.height,
           collisionRadius: collisionGeometry.collisionRadius,

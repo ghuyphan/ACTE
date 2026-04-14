@@ -17,7 +17,7 @@ import Reanimated, {
 } from 'react-native-reanimated';
 import { useReducedMotion } from '../../../hooks/useReducedMotion';
 import { useTheme } from '../../../hooks/useTheme';
-import type { NoteStickerPlacement } from '../../../services/noteStickers';
+import type { NoteStickerPlacement, StickerStampStyle } from '../../../services/noteStickers';
 import {
   getStampCutterBaseScale,
   getStampCutterWindowRect,
@@ -34,6 +34,7 @@ import {
   STAMP_PAPER_BORDER_COLOR,
 } from '../../notes/stampFrameMetrics';
 import { triggerCaptureCardHaptic } from './captureMotion';
+import StampStylePicker from './StampStylePicker';
 import StickerCreationOverlay from './StickerCreationOverlay';
 import type {
   StickerCreationAnimatedStyle,
@@ -60,15 +61,18 @@ interface StampCutterEditorProps {
   subtitle: string;
   cancelLabel: string;
   confirmLabel: string;
+  classicStyleLabel: string;
+  circleStyleLabel: string;
   onClose: () => void;
   onCompletePlacement: (payload: {
     placement: NoteStickerPlacement;
     sourceRect: WindowRect;
   }) => void;
   onConfirm: (payload: {
-    viewportSize: { width: number; height: number };
-    selectionRect: { x: number; y: number; width: number; height: number };
-    transform: StampCutterTransform;
+      viewportSize: { width: number; height: number };
+      selectionRect: { x: number; y: number; width: number; height: number };
+      transform: StampCutterTransform;
+      stampStyle: StickerStampStyle;
   }) => NoteStickerPlacement | null | Promise<NoteStickerPlacement | null>;
 }
 
@@ -113,14 +117,17 @@ function StampCutterEditor({
   subtitle,
   cancelLabel,
   confirmLabel,
+  classicStyleLabel,
+  circleStyleLabel,
   onClose,
   onCompletePlacement,
   onConfirm,
 }: StampCutterEditorProps) {
-  const { isDark } = useTheme();
+  const { colors, isDark } = useTheme();
   const reduceMotionEnabled = useReducedMotion();
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const [stageAreaWindowRect, setStageAreaWindowRect] = useState<WindowRect | null>(null);
+  const [stampStyle, setStampStyle] = useState<StickerStampStyle>('classic');
   const stageAreaRef = useRef<View | null>(null);
   const zoomValue = useSharedValue(1);
   const offsetXValue = useSharedValue(0);
@@ -149,8 +156,8 @@ function StampCutterEditor({
   const stageWidth = Math.min(windowWidth - 8, EDITOR_STAGE_MAX_WIDTH);
   const stageHeight = stageWidth / STAMP_CUTTER_OVERLAY_ASPECT_RATIO;
   const cropRect = useMemo(
-    () => getStampCutterWindowRect({ width: stageWidth, height: stageHeight }),
-    [stageHeight, stageWidth]
+    () => getStampCutterWindowRect({ width: stageWidth, height: stageHeight }, stampStyle),
+    [stageHeight, stageWidth, stampStyle]
   );
   const cropRectCenterX = cropRect.x + cropRect.width / 2;
   const cropRectCenterY = cropRect.y + cropRect.height / 2;
@@ -181,13 +188,21 @@ function StampCutterEditor({
     };
   }, [sourceSize, viewportSize]);
   const stampMetrics = useMemo(
-    () => getStampFrameMetrics(cropRect.width, cropRect.height),
-    [cropRect.height, cropRect.width]
+    () => getStampFrameMetrics(cropRect.width, cropRect.height, stampStyle),
+    [cropRect.height, cropRect.width, stampStyle]
   );
   const stampPath = useMemo(() => createStampFramePath(stampMetrics), [stampMetrics]);
   const stampGuideBorderWidth = Math.max(1, stampMetrics.perforationRadius * 0.16);
   const stampGuideOutlineWidth = Math.max(2.2, stampMetrics.perforationRadius * 0.62);
   const interactionsDisabled = loading;
+
+  useEffect(() => {
+    if (!visible) {
+      return;
+    }
+
+    setStampStyle('classic');
+  }, [draft?.source.uri, visible]);
 
   const resolveSelectionWindowRect = useCallback(
     (nextStageAreaWindowRect: WindowRect | null | undefined) => {
@@ -461,6 +476,7 @@ function StampCutterEditor({
         offsetY: offsetYValue.value,
         rotation: 0,
       }),
+      stampStyle,
     };
 
     const placement = await onConfirm(payload);
@@ -487,6 +503,7 @@ function StampCutterEditor({
     stageAreaWindowRect,
     viewportSize,
     zoomValue,
+    stampStyle,
   ]);
 
   const stagePreviewImageAnimatedStyle = useAnimatedStyle(() => {
@@ -556,100 +573,109 @@ function StampCutterEditor({
     focusAnimatedStyle: StickerCreationAnimatedStyle;
   }) => (
     <View ref={stageAreaRef} style={styles.stageArea} onLayout={scheduleStageAreaMeasurement}>
-      <Reanimated.View
-        style={[
-          styles.stageShell,
-          {
-            width: stageWidth,
-          },
-        ]}
-      >
-        <View
+      <View style={styles.stageStack}>
+        <Reanimated.View
           style={[
-            styles.overlayFrame,
+            styles.stageShell,
             {
               width: stageWidth,
-              height: stageHeight,
             },
           ]}
         >
-          <GestureDetector gesture={gesture}>
-            <Reanimated.View
-              collapsable={false}
-              pointerEvents={busy ? 'none' : 'auto'}
-              style={[styles.gestureStage, contentAnimatedStyle]}
-            >
-              <View
-                pointerEvents="none"
-                style={[
-                  styles.previewSurfaceBackground,
-                  {
-                    backgroundColor: isDark
-                      ? 'rgba(255,255,255,0.04)'
-                      : 'rgba(255,255,255,0.35)',
-                  },
-                ]}
-              />
+          <View
+            style={[
+              styles.overlayFrame,
+              {
+                width: stageWidth,
+                height: stageHeight,
+              },
+            ]}
+          >
+            <GestureDetector gesture={gesture}>
               <Reanimated.View
-                style={[
-                  styles.previewImage,
-                  stagePreviewImageAnimatedStyle,
-                ]}
+                collapsable={false}
+                pointerEvents={busy ? 'none' : 'auto'}
+                style={[styles.gestureStage, contentAnimatedStyle]}
               >
-                <ExpoImage
-                  source={previewSource}
-                  style={styles.previewImageFill}
-                  contentFit="cover"
-                  transition={0}
+                <View
+                  pointerEvents="none"
+                  style={[
+                    styles.previewSurfaceBackground,
+                    {
+                      backgroundColor:
+                        colors.background ??
+                        (isDark ? 'rgba(15,12,10,0.96)' : 'rgba(250,245,236,0.96)'),
+                    },
+                  ]}
                 />
-              </Reanimated.View>
-              <Reanimated.View
-                pointerEvents="none"
-                style={[
-                  styles.stampGuide,
-                  {
-                    left: cropRect.x,
-                    top: cropRect.y,
-                    width: cropRect.width,
-                    height: cropRect.height,
-                  },
-                  focusAnimatedStyle,
-                ]}
-              >
-                <View style={styles.stampGuideViewport}>
-                  <Reanimated.View
-                    style={[
-                      styles.previewImage,
-                      cutPreviewImageAnimatedStyle,
-                    ]}
-                  >
-                    <ExpoImage
-                      source={previewSource}
-                      style={styles.previewImageFill}
-                      contentFit="cover"
-                      transition={0}
+                <Reanimated.View
+                  style={[
+                    styles.previewImage,
+                    stagePreviewImageAnimatedStyle,
+                  ]}
+                >
+                  <ExpoImage
+                    source={previewSource}
+                    style={styles.previewImageFill}
+                    contentFit="cover"
+                    transition={0}
+                  />
+                </Reanimated.View>
+                <Reanimated.View
+                  pointerEvents="none"
+                  style={[
+                    styles.stampGuide,
+                    {
+                      left: cropRect.x,
+                      top: cropRect.y,
+                      width: cropRect.width,
+                      height: cropRect.height,
+                    },
+                    focusAnimatedStyle,
+                  ]}
+                >
+                  <View style={styles.stampGuideViewport}>
+                    <Reanimated.View
+                      style={[
+                        styles.previewImage,
+                        cutPreviewImageAnimatedStyle,
+                      ]}
+                    >
+                      <ExpoImage
+                        source={previewSource}
+                        style={styles.previewImageFill}
+                        contentFit="cover"
+                        transition={0}
+                      />
+                    </Reanimated.View>
+                  </View>
+                  <Canvas style={styles.stampGuideCanvas} testID="stamp-cutter-live-outline">
+                    <SkiaPath
+                      path={stampPath}
+                      color={STAMP_OUTLINE_COLOR}
+                      style="stroke"
+                      strokeWidth={stampGuideOutlineWidth}
                     />
-                  </Reanimated.View>
-                </View>
-                <Canvas style={styles.stampGuideCanvas} testID="stamp-cutter-live-outline">
-                  <SkiaPath
-                    path={stampPath}
-                    color={STAMP_OUTLINE_COLOR}
-                    style="stroke"
-                    strokeWidth={stampGuideOutlineWidth}
-                  />
-                  <SkiaPath
-                    path={stampPath}
-                    color={STAMP_PAPER_BORDER_COLOR}
-                    style="stroke"
-                    strokeWidth={stampGuideBorderWidth}
-                  />
-                </Canvas>
+                    <SkiaPath
+                      path={stampPath}
+                      color={STAMP_PAPER_BORDER_COLOR}
+                      style="stroke"
+                      strokeWidth={stampGuideBorderWidth}
+                    />
+                  </Canvas>
+                </Reanimated.View>
               </Reanimated.View>
-            </Reanimated.View>
-          </GestureDetector>
-        </View>
-      </Reanimated.View>
+            </GestureDetector>
+          </View>
+        </Reanimated.View>
+        <StampStylePicker
+          value={stampStyle}
+          disabled={busy}
+          classicLabel={classicStyleLabel}
+          circleLabel={circleStyleLabel}
+          onChange={setStampStyle}
+        />
+      </View>
     </View>
   );
 
@@ -680,6 +706,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 4,
+  },
+  stageStack: {
+    alignItems: 'center',
+    gap: 10,
   },
   stageShell: {
     alignItems: 'center',

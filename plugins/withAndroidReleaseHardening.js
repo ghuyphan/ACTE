@@ -18,6 +18,7 @@ def uploadKeyAlias = readEnv('ACTE_UPLOAD_KEY_ALIAS')
 def uploadKeyPassword = readEnv('ACTE_UPLOAD_KEY_PASSWORD')
 def allowDebugSignedRelease = (readEnv('ACTE_ALLOW_DEBUG_SIGNED_RELEASE') ?: 'false').toBoolean()
 def isEasBuild = (readEnv('EAS_BUILD') ?: 'false').toBoolean()
+def isReleaseTaskRequested = gradle.startParameter.taskNames.any { it.toLowerCase().contains('release') }
 def releaseStoreFile = uploadStoreFilePath ? file(uploadStoreFilePath) : null
 
 if (uploadStoreFilePath && !releaseStoreFile.exists()) {
@@ -26,12 +27,9 @@ if (uploadStoreFilePath && !releaseStoreFile.exists()) {
 `;
 
 const BUILD_GRADLE_DEFAULT_CONFIG_SNIPPET = [
-  '        versionName "1.0.0"',
   '        manifestPlaceholders = [',
   '            GOOGLE_MAPS_API_KEY: googleMapsApiKey,',
   '        ]',
-  '',
-  '        buildConfigField "String", "REACT_NATIVE_RELEASE_LEVEL", "\\"${findProperty(\'reactNativeReleaseLevel\') ?: \'stable\'}\\""',
 ].join('\n');
 
 const BUILD_GRADLE_SIGNING_CONFIG_SNIPPET = `    signingConfigs {
@@ -58,6 +56,8 @@ const BUILD_GRADLE_RELEASE_SNIPPET = `        release {
                 signingConfig signingConfigs.debug
             } else if (isEasBuild) {
                 logger.lifecycle("Using EAS-managed Android signing credentials for release build.")
+            } else if (!isReleaseTaskRequested) {
+                logger.lifecycle("Skipping release signing enforcement because no release task was requested.")
             } else {
                 throw new GradleException(
                     "Release signing credentials are missing. Set ACTE_UPLOAD_STORE_FILE, ACTE_UPLOAD_STORE_PASSWORD, ACTE_UPLOAD_KEY_ALIAS, and ACTE_UPLOAD_KEY_PASSWORD, use EAS remote credentials, or set ACTE_ALLOW_DEBUG_SIGNED_RELEASE=true for local smoke tests."
@@ -95,8 +95,8 @@ function patchBuildGradle(contents) {
 
   if (!nextContents.includes('GOOGLE_MAPS_API_KEY: googleMapsApiKey')) {
     replaceOrThrow(
-      /        versionName "1\.0\.0"\n\n        buildConfigField "String", "REACT_NATIVE_RELEASE_LEVEL", "\\"\\\$\{findProperty\('reactNativeReleaseLevel'\) \?: 'stable'\}\\""/,
-      BUILD_GRADLE_DEFAULT_CONFIG_SNIPPET,
+      /(        versionName "[^"]+"\n)(\n        buildConfigField "String", "REACT_NATIVE_RELEASE_LEVEL", [^\n]+)/,
+      `$1${BUILD_GRADLE_DEFAULT_CONFIG_SNIPPET}\n$2`,
       'defaultConfig block'
     );
   }
@@ -123,21 +123,30 @@ function patchBuildGradle(contents) {
 }
 
 function patchManifest(contents) {
-  const nextContents = contents.replace(
-    /<meta-data android:name="com\.google\.android\.geo\.API_KEY" android:value="[^"]*"\/>/,
-    '<meta-data android:name="com.google.android.geo.API_KEY" android:value="${GOOGLE_MAPS_API_KEY}"/>'
-  );
+  const desiredTag =
+    '<meta-data android:name="com.google.android.geo.API_KEY" android:value="${GOOGLE_MAPS_API_KEY}"/>';
 
-  if (
-    nextContents === contents &&
-    !contents.includes('android:name="com.google.android.geo.API_KEY" android:value="${GOOGLE_MAPS_API_KEY}"')
-  ) {
-    throw new Error(
-      '[withAndroidReleaseHardening] Could not find Google Maps meta-data tag in android/app/src/main/AndroidManifest.xml'
+  if (contents.includes(desiredTag)) {
+    return contents;
+  }
+
+  if (contents.includes('android:name="com.google.android.geo.API_KEY"')) {
+    return contents.replace(
+      /<meta-data android:name="com\.google\.android\.geo\.API_KEY" android:value="[^"]*"\/>/,
+      desiredTag
     );
   }
 
-  return nextContents;
+  if (!contents.includes('<application ')) {
+    throw new Error(
+      '[withAndroidReleaseHardening] Could not find application tag in android/app/src/main/AndroidManifest.xml'
+    );
+  }
+
+  return contents.replace(
+    /(<application\b[^>]*>)/,
+    `$1\n    ${desiredTag}`
+  );
 }
 
 function withAndroidReleaseHardening(config) {

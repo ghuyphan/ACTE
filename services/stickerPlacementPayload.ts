@@ -1,4 +1,5 @@
 export type StickerRenderMode = 'default' | 'stamp';
+export type StickerStampStyle = 'classic' | 'circle';
 
 export interface ParsedStickerPlacementAsset {
   id: string;
@@ -20,6 +21,7 @@ export interface ParsedStickerPlacement {
   outlineEnabled?: boolean;
   motionLocked?: boolean;
   renderMode?: StickerRenderMode;
+  stampStyle?: StickerStampStyle;
   asset: ParsedStickerPlacementAsset;
 }
 
@@ -58,6 +60,9 @@ export function parseStoredStickerPlacements(
         (typeof maybePlacement.renderMode === 'undefined' ||
           maybePlacement.renderMode === 'default' ||
           maybePlacement.renderMode === 'stamp') &&
+        (typeof maybePlacement.stampStyle === 'undefined' ||
+          maybePlacement.stampStyle === 'classic' ||
+          maybePlacement.stampStyle === 'circle') &&
         Boolean(
           maybePlacement.asset &&
             typeof maybePlacement.asset === 'object' &&

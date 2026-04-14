@@ -1397,6 +1397,8 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
         )}
         cancelLabel={t('common.cancel', 'Cancel')}
         confirmLabel={t('capture.stampCutterConfirm', 'Cut stamp')}
+        classicStyleLabel={t('capture.stampStyleClassic', 'Classic')}
+        circleStyleLabel={t('capture.stampStyleCircle', 'Circle')}
         onClose={handleCloseStampCutterEditor}
         onCompletePlacement={handleCompleteStampCutterPlacement}
         onConfirm={handleConfirmStampCutter}
@@ -1412,6 +1414,8 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
         )}
         cancelLabel={t('common.cancel', 'Cancel')}
         confirmLabel={t('capture.stampPreviewConfirm', 'Add stamp')}
+        classicStyleLabel={t('capture.stampStyleClassic', 'Classic')}
+        circleStyleLabel={t('capture.stampStyleCircle', 'Circle')}
         onClose={handleCloseStampPreviewEditor}
         onCompletePlacement={handleCompleteStampCutterPlacement}
         onConfirm={handleConfirmStampPreview}

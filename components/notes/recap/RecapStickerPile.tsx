@@ -40,6 +40,7 @@ export interface RecapStickerPileItem {
   assetHeight?: number;
   outlineEnabled?: boolean;
   renderMode?: 'default' | 'stamp';
+  stampStyle?: 'classic' | 'circle';
   isLivePhoto?: boolean;
   pairedVideoUri?: string | null;
 }
@@ -429,6 +430,12 @@ function buildPlacement(
     outlineEnabled: item.kind === 'photo' ? false : item.outlineEnabled !== false,
     motionLocked: false,
     renderMode: item.kind === 'photo' ? 'default' : item.renderMode === 'stamp' ? 'stamp' : 'default',
+    stampStyle:
+      item.kind === 'sticker' && item.renderMode === 'stamp'
+        ? item.stampStyle === 'circle'
+          ? 'circle'
+          : 'classic'
+        : undefined,
     asset: {
       id: `${item.key}:asset`,
       ownerUid: 'recap',
@@ -466,7 +473,7 @@ const RecapBubble = memo(function RecapBubble({
   const stampImage = useImage(item.previewUri);
   const stampMetrics =
     item.kind === 'sticker' && item.renderMode === 'stamp'
-      ? getStampFrameMetrics(metrics.width, metrics.height)
+      ? getStampFrameMetrics(metrics.width, metrics.height, item.stampStyle ?? 'classic')
       : null;
   const stampPath = useMemo(
     () => (stampMetrics ? createStampFramePath(stampMetrics) : null),
