@@ -162,6 +162,14 @@ jest.mock('../components/ui/StickerIcon', () => {
   };
 });
 
+jest.mock('../components/ui/PeekingCatIcon', () => {
+  const React = require('react');
+  const { View } = require('react-native');
+  return function MockPeekingCatIcon() {
+    return <View testID="peeking-cat-empty-icon" />;
+  };
+});
+
 jest.mock('expo-haptics', () => ({
   impactAsync: jest.fn(),
   selectionAsync: jest.fn(),
@@ -231,6 +239,13 @@ jest.mock('../hooks/useSharedFeed', () => ({
   useSharedFeedStore: () => ({
     loading: false,
     sharedPosts: mockSharedPosts,
+  }),
+}));
+
+jest.mock('../hooks/useSyncStatus', () => ({
+  useSyncStatus: () => ({
+    isInitialSyncPending: false,
+    status: 'idle',
   }),
 }));
 
@@ -319,7 +334,7 @@ describe('NotesIndexScreen', () => {
     const { getByTestId, getByText } = render(<NotesIndexScreen />);
 
     expect(getByTestId('notes-empty-state')).toBeTruthy();
-    expect(getByText('document-text-outline')).toBeTruthy();
+    expect(getByTestId('peeking-cat-empty-icon')).toBeTruthy();
     expect(getByText('No notes yet')).toBeTruthy();
   });
 

@@ -30,6 +30,10 @@
         "feedFilterAll": "All",
         "feedFilterFriends": "Friends",
         "feedFilterHint": "Choose what kind of posts you want to see in Home.",
+        "syncingEmptyTitle": "Syncing your memories",
+        "syncingEmptyBody": "We are pulling in your notes and shared memories now. This usually takes just a moment.",
+        "firstNoteEmptyTitle": "Your journal is waiting",
+        "firstNoteEmptyBody": "Save your first note or photo to start filling this space.",
         "friendsFilterInactive": "Filter by friends",
         "friendsFilterActive": "Friends filter on"
     },
@@ -513,6 +517,7 @@
         "syncQueueSummary": "Pending: {{pending}} · Retrying: {{failed}} · Blocked: {{blocked}}",
         "syncNow": "Back up now",
         "syncing": "Backing up...",
+        "initialSyncLoadingHint": "Keep Noto open a little longer so your first backup can finish safely.",
         "syncDiagnosticsTitle": "Sync Health",
         "syncDiagnosticsHealthy": "Cloud backup is running smoothly.",
         "syncDiagnosticsIdle": "No recent hiccups.",

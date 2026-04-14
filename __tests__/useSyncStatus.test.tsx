@@ -7,11 +7,13 @@ import { SyncStatusProvider, useSyncStatus } from '../hooks/useSyncStatus';
 
 const mockSyncNotes = jest.fn<Promise<unknown>, [unknown, unknown, unknown?]>();
 const mockRefreshNotes = jest.fn<Promise<void>, [boolean?]>(async () => undefined);
+const mockIsInitialSyncPendingForUser = jest.fn<Promise<boolean>, [string]>(async () => true);
 const mockQueueStats = {
   pendingCount: 0,
   failedCount: 0,
   blockedCount: 0,
 };
+const mockStorage = new Map<string, string>();
 
 let appStateListener: ((state: AppStateStatus) => void) | null = null;
 
@@ -66,6 +68,7 @@ jest.mock('../hooks/useNotes', () => ({
 jest.mock('../services/syncService', () => ({
   syncNotes: (user: unknown, notes: unknown, options?: unknown) =>
     mockSyncNotes(user, notes, options),
+  isInitialSyncPendingForUser: (userUid: string) => mockIsInitialSyncPendingForUser(userUid),
   getSyncRepository: () => ({
     getStats: async () => ({
       pendingCount: mockQueueStats.pendingCount,
@@ -110,8 +113,15 @@ function createDeferred<T>() {
 beforeEach(() => {
   jest.useFakeTimers();
   jest.clearAllMocks();
-  (AsyncStorage.getItem as jest.Mock).mockResolvedValue('true');
-  (AsyncStorage.setItem as jest.Mock).mockResolvedValue(undefined);
+  mockStorage.clear();
+  mockStorage.set('settings.syncEnabled', 'true');
+  (AsyncStorage.getItem as jest.Mock).mockImplementation(async (key: string) => mockStorage.get(key) ?? null);
+  (AsyncStorage.setItem as jest.Mock).mockImplementation(async (key: string, value: string) => {
+    mockStorage.set(key, value);
+  });
+  (AsyncStorage.removeItem as jest.Mock).mockImplementation(async (key: string) => {
+    mockStorage.delete(key);
+  });
   mockAuthState.user = null;
   mockAuthState.isReady = true;
   mockAuthState.isAuthAvailable = true;
@@ -124,12 +134,14 @@ beforeEach(() => {
   mockQueueStats.pendingCount = 0;
   mockQueueStats.failedCount = 0;
   mockQueueStats.blockedCount = 0;
+  mockIsInitialSyncPendingForUser.mockResolvedValue(true);
   mockSyncNotes.mockResolvedValue({
     status: 'success',
     syncedCount: 0,
     importedCount: 0,
     uploadedCount: 0,
     failedCount: 0,
+    bootstrapCompleted: true,
   });
   jest.spyOn(AppState, 'addEventListener').mockImplementation((_type, listener: (state: AppStateStatus) => void) => {
     appStateListener = listener;
@@ -289,6 +301,7 @@ describe('useSyncStatus', () => {
         importedCount: 0,
         uploadedCount: 1,
         failedCount: 0,
+        bootstrapCompleted: true,
       });
       await Promise.resolve();
     });
@@ -312,6 +325,7 @@ describe('useSyncStatus', () => {
       importedCount: number;
       uploadedCount: number;
       failedCount: number;
+      bootstrapCompleted?: boolean;
     }>();
     mockSyncNotes.mockImplementation(() => deferredSync.promise);
 
@@ -338,6 +352,7 @@ describe('useSyncStatus', () => {
         importedCount: 0,
         uploadedCount: 1,
         failedCount: 0,
+        bootstrapCompleted: true,
       });
       await Promise.resolve();
     });
@@ -362,6 +377,7 @@ describe('useSyncStatus', () => {
       importedCount: 0,
       uploadedCount: 1,
       failedCount: 0,
+      bootstrapCompleted: true,
     });
 
     const { result } = renderHook(() => useSyncStatus(), { wrapper });
@@ -407,5 +423,82 @@ describe('useSyncStatus', () => {
       );
     });
     expect(mockSyncNotes).not.toHaveBeenCalled();
+  });
+
+  it('keeps retrying the first account sync as a full sync until one succeeds', async () => {
+    mockAuthState.user = {
+      uid: 'user-1',
+      displayName: 'Huy',
+      email: 'huy@example.com',
+      photoURL: null,
+    };
+
+    const deferredFirstSync = createDeferred<{
+      status: 'error';
+      message: string;
+    }>();
+    mockSyncNotes
+      .mockImplementationOnce(() => deferredFirstSync.promise)
+      .mockResolvedValueOnce({
+        status: 'success',
+        syncedCount: 1,
+        importedCount: 0,
+        uploadedCount: 1,
+        failedCount: 0,
+        bootstrapCompleted: true,
+      })
+      .mockResolvedValueOnce({
+        status: 'success',
+        syncedCount: 0,
+        importedCount: 0,
+        uploadedCount: 0,
+        failedCount: 0,
+        bootstrapCompleted: true,
+      });
+
+    const { result } = renderHook(() => useSyncStatus(), { wrapper });
+    await flushSyncPref();
+
+    await waitFor(() => {
+      expect(mockSyncNotes).toHaveBeenCalledTimes(1);
+    });
+    expect(mockSyncNotes.mock.calls[0]?.[2]).toEqual({ mode: 'full' });
+
+    await act(async () => {
+      appStateListener?.('active');
+      await Promise.resolve();
+    });
+
+    expect(mockSyncNotes).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      deferredFirstSync.resolve({
+        status: 'error',
+        message: 'sync interrupted',
+      });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(mockSyncNotes).toHaveBeenCalledTimes(2);
+    });
+    expect(mockSyncNotes.mock.calls[1]?.[2]).toEqual({ mode: 'full' });
+
+    await waitFor(() => {
+      expect(result.current.isInitialSyncPending).toBe(false);
+    });
+
+    mockSyncNotes.mockClear();
+
+    await act(async () => {
+      appStateListener?.('active');
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(mockSyncNotes).toHaveBeenCalledTimes(1);
+    });
+    expect(mockSyncNotes.mock.calls[0]?.[2]).toEqual({ mode: 'incremental' });
   });
 });

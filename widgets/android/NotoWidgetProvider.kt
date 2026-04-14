@@ -1988,10 +1988,10 @@ class NotoWidgetProvider : AppWidgetProvider() {
     private fun getWidgetOverlayRenderSpec(layoutStage: WidgetLayoutStage): WidgetOverlayRenderSpec {
       return when (layoutStage) {
         WidgetLayoutStage.SMALL -> WidgetOverlayRenderSpec(
-          doodleInsetDp = 0f,
-          stickerInsetDp = 0f,
-          stickerMinimumBaseSizeDp = 48f,
-          stickerBaseSizeRatio = 0.24f
+          doodleInsetDp = 6f,
+          stickerInsetDp = 6f,
+          stickerMinimumBaseSizeDp = 38f,
+          stickerBaseSizeRatio = 0.19f
         )
 
         WidgetLayoutStage.MEDIUM -> WidgetOverlayRenderSpec(

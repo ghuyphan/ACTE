@@ -167,8 +167,8 @@ export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [hasAcceptedPrivacyPolicy, setHasAcceptedPrivacyPolicy] = useState(false);
-  const [hasAcceptedLandingPolicy, setHasAcceptedLandingPolicy] = useState(false);
+  const [hasAcceptedPrivacyPolicy, setHasAcceptedPrivacyPolicy] = useState(true);
+  const [hasAcceptedLandingPolicy, setHasAcceptedLandingPolicy] = useState(true);
   const [authMessage, setAuthMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [activeAction, setActiveAction] = useState<'google' | 'signIn' | 'register' | 'reset' | null>(null);
@@ -204,7 +204,7 @@ export default function LoginScreen() {
   const openForm = useCallback(
     (mode: Exclude<AuthScreenMode, 'landing'>) => {
       resetMessages();
-      setHasAcceptedPrivacyPolicy(false);
+      setHasAcceptedPrivacyPolicy(true);
       setScreenMode(mode);
     },
     [resetMessages]
@@ -212,7 +212,7 @@ export default function LoginScreen() {
 
   const goBackInFlow = useCallback(() => {
     resetMessages();
-    setHasAcceptedPrivacyPolicy(false);
+    setHasAcceptedPrivacyPolicy(true);
     setScreenMode((currentMode) => {
       if (currentMode === 'register' || currentMode === 'resetPassword') {
         return 'signIn';
@@ -224,7 +224,7 @@ export default function LoginScreen() {
 
   const dismissForm = useCallback(() => {
     resetMessages();
-    setHasAcceptedPrivacyPolicy(false);
+    setHasAcceptedPrivacyPolicy(true);
     setScreenMode('landing');
   }, [resetMessages]);
 
@@ -935,13 +935,13 @@ export default function LoginScreen() {
         </Pressable>
 
         {canOpenPrivacyPolicy || canOpenSupport ? (
-          <Pressable
-            accessibilityRole="checkbox"
-            accessibilityState={{ checked: hasAcceptedLandingPolicy }}
-            onPress={() => setHasAcceptedLandingPolicy((currentValue) => !currentValue)}
-            style={styles.landingConsentRow}
-            testID="auth-landing-policy-consent"
-          >
+        <Pressable
+          accessibilityRole="checkbox"
+          accessibilityState={{ checked: hasAcceptedLandingPolicy }}
+          onPress={() => setHasAcceptedLandingPolicy((currentValue) => !currentValue)}
+          style={styles.landingConsentRow}
+          testID="auth-landing-policy-consent"
+        >
             <View style={styles.landingConsentControlSlot}>
               <ConsentCheckbox
                 value={hasAcceptedLandingPolicy}

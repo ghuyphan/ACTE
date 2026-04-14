@@ -20,6 +20,7 @@ import {
   getStickerOutlineSize,
 } from '../../notes/stickerCanvasMetrics';
 import { getStampFrameMetrics } from '../../notes/stampFrameMetrics';
+import SittingCatIcon from '../../ui/SittingCatIcon';
 import {
   buildCreatedStickerLibrary,
   groupCreatedStickerLibrary,
@@ -338,7 +339,7 @@ export function NotesStickerLibraryContent({
       >
         <View style={styles.emptyState}>
           <View style={styles.emptyIconWrap}>
-            <Ionicons name="sparkles-outline" size={44} color={colors.secondaryText} />
+            <SittingCatIcon size={54} color={colors.secondaryText} />
           </View>
           <Text style={[styles.emptyTitle, { color: colors.text }]}>
             {t('notes.stickerLibrary.emptyTitle', 'No stamps yet')}

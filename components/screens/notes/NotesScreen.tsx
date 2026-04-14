@@ -1,5 +1,4 @@
 import { FlashList } from '@shopify/flash-list';
-import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from '../../../hooks/useHaptics';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Image } from 'expo-image';
@@ -24,6 +23,7 @@ import { useAuth } from '../../../hooks/useAuth';
 import { useFeedFocus } from '../../../hooks/useFeedFocus';
 import { useNotesStore } from '../../../hooks/useNotes';
 import { useSharedFeedStore } from '../../../hooks/useSharedFeed';
+import { useSyncStatus } from '../../../hooks/useSyncStatus';
 import { useTheme } from '../../../hooks/useTheme';
 import DynamicStickerCanvas from '../../notes/DynamicStickerCanvas';
 import NoteDoodleCanvas from '../../notes/NoteDoodleCanvas';
@@ -31,6 +31,7 @@ import NotesRecapView from '../../notes/recap/NotesRecapView';
 import RecapModeSwitch, {
   type RecapMode,
 } from '../../notes/recap/RecapModeSwitch';
+import PeekingCatIcon from '../../ui/PeekingCatIcon';
 import StickerIcon from '../../ui/StickerIcon';
 import { SHARED_POST_MEDIA_BUCKET } from '../../../services/remoteMedia';
 import {
@@ -244,6 +245,7 @@ export default function NotesIndexScreen() {
   const { requestFeedFocus } = useFeedFocus();
   const { notes, loading } = useNotesStore();
   const { sharedPosts, loading: sharedLoading } = useSharedFeedStore();
+  const { isInitialSyncPending, status: syncStatus } = useSyncStatus();
   const [mode, setMode] = useState<RecapMode>('all');
   const [hasPreparedRecap, setHasPreparedRecap] = useState(process.env.NODE_ENV === 'test');
   const [showGridDecorations, setShowGridDecorations] = useState(process.env.NODE_ENV === 'test');
@@ -308,7 +310,8 @@ export default function NotesIndexScreen() {
 
   const gridGap = 10;
   const gridSize = Math.floor((width - Layout.screenPadding * 2 - gridGap * 2) / 3);
-  const isLoading = (loading || sharedLoading) && items.length === 0;
+  const isBootstrapSyncing = syncStatus === 'syncing' && isInitialSyncPending && items.length === 0;
+  const isLoading = ((loading || sharedLoading) && items.length === 0) || isBootstrapSyncing;
   const hasRecapNotes = notes.length > 0;
   const shouldRenderRecap = hasRecapNotes && (hasPreparedRecap || mode === 'recap');
   useEffect(() => {
@@ -499,6 +502,19 @@ export default function NotesIndexScreen() {
         {isLoading ? (
           <View style={styles.center}>
             <ActivityIndicator size="large" color={colors.primary} />
+            {isBootstrapSyncing ? (
+              <View style={styles.loadingCopy}>
+                <Text style={[styles.loadingTitle, { color: colors.text }]}>
+                  {t('settings.syncingNow', 'Syncing your journal.')}
+                </Text>
+                <Text style={[styles.loadingBody, { color: colors.secondaryText }]}>
+                  {t(
+                    'settings.initialSyncLoadingHint',
+                    'Keep Noto open a little longer so your first backup can finish safely.'
+                  )}
+                </Text>
+              </View>
+            ) : null}
           </View>
         ) : (
           <>
@@ -520,7 +536,7 @@ export default function NotesIndexScreen() {
                     >
                       <View style={styles.emptyState}>
                         <View style={styles.emptyIconWrap}>
-                          <Ionicons name="document-text-outline" size={44} color={colors.secondaryText} />
+                          <PeekingCatIcon size={54} color={colors.secondaryText} />
                         </View>
                         <Text style={[styles.emptyTitle, { color: colors.text }]}>
                           {t('home.emptyTitle', 'No notes yet')}
@@ -595,6 +611,26 @@ const styles = StyleSheet.create({
   },
   emptyScreen: {
     paddingHorizontal: Layout.screenPadding,
+  },
+  loadingCopy: {
+    marginTop: 14,
+    paddingHorizontal: 28,
+    gap: 6,
+    alignItems: 'center',
+  },
+  loadingTitle: {
+    fontSize: 16,
+    lineHeight: 20,
+    fontWeight: '700',
+    textAlign: 'center',
+    fontFamily: 'Noto Sans',
+  },
+  loadingBody: {
+    fontSize: 13,
+    lineHeight: 18,
+    textAlign: 'center',
+    fontFamily: 'Noto Sans',
+    maxWidth: 260,
   },
   modeSwitchWrap: {
     paddingTop: 4,

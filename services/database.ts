@@ -150,7 +150,7 @@ let db: SQLite.SQLiteDatabase | null = null;
 let dbInitPromise: Promise<SQLite.SQLiteDatabase> | null = null;
 let transactionQueue: Promise<void> = Promise.resolve();
 let androidDatabaseQueue: Promise<void> = Promise.resolve();
-const APP_SCHEMA_VERSION = 15;
+const APP_SCHEMA_VERSION = 16;
 const DATABASE_NAME = 'acte_notes.db';
 export const LOCAL_NOTES_SCOPE = '__local__';
 const ACTIVE_NOTES_SCOPE_STORAGE_KEY = 'notes.activeScope';
@@ -298,6 +298,13 @@ interface NoteDecorationState {
     stickerPlacementsJson: string | null;
 }
 
+interface ExistingSyncQueueRow {
+    id: number;
+    operation: 'create' | 'update' | 'delete' | 'deleteAll';
+    status: 'pending' | 'processing' | 'failed';
+    created_at: string;
+}
+
 interface ReminderSelectionRow {
     id: string;
     type: NoteType;
@@ -368,7 +375,7 @@ async function persistNoteDecorationRows(
 }
 
 async function enqueueSyncChange(
-    executor: Pick<SQLite.SQLiteDatabase, 'runAsync'>,
+    executor: Pick<SQLite.SQLiteDatabase, 'runAsync' | 'getFirstAsync'>,
     ownerScope: string,
     change: DatabaseSyncChange | undefined,
     fallbackEntityId?: string
@@ -379,12 +386,64 @@ async function enqueueSyncChange(
 
     const serializedPayload =
         change.payload === undefined ? null : JSON.stringify(change.payload);
+    const entityId = change.entityId ?? fallbackEntityId ?? null;
+    const coalesceKey =
+        change.type === 'deleteAll'
+            ? `scope:${ownerScope}:deleteAll`
+            : entityId
+                ? `${change.entity}:${entityId}`
+                : null;
+
+    if (change.type === 'deleteAll') {
+        await executor.runAsync('DELETE FROM sync_queue WHERE owner_uid = ?', ownerScope);
+    } else if (coalesceKey) {
+        const existing = await executor.getFirstAsync<ExistingSyncQueueRow>(
+            `SELECT id, operation, status, created_at
+             FROM sync_queue
+             WHERE owner_uid = ? AND coalesce_key = ?
+             ORDER BY created_at ASC
+             LIMIT 1`,
+            ownerScope,
+            coalesceKey
+        );
+
+        if (existing) {
+            const nextOperation =
+                change.type === 'delete'
+                    ? 'delete'
+                    : existing.operation === 'create' || change.type === 'create'
+                        ? 'create'
+                        : 'update';
+
+            await executor.runAsync(
+                `UPDATE sync_queue
+                 SET entity = ?,
+                     entity_id = ?,
+                     operation = ?,
+                     payload = ?,
+                     status = 'pending',
+                     last_error = NULL,
+                     next_retry_at = NULL,
+                     terminal = 0,
+                     blocked_reason = NULL,
+                     lease_token = NULL
+                 WHERE id = ?`,
+                change.entity,
+                entityId,
+                nextOperation,
+                serializedPayload,
+                existing.id
+            );
+            return;
+        }
+    }
 
     await executor.runAsync(
         `INSERT INTO sync_queue (
             owner_uid,
             entity,
             entity_id,
+            coalesce_key,
             operation,
             payload,
             status,
@@ -393,12 +452,14 @@ async function enqueueSyncChange(
             next_retry_at,
             terminal,
             blocked_reason,
+            lease_token,
             created_at
         )
-         VALUES (?, ?, ?, ?, ?, 'pending', 0, NULL, NULL, 0, NULL, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?, 'pending', 0, NULL, NULL, 0, NULL, NULL, ?)`,
         ownerScope,
         change.entity,
-        change.entityId ?? fallbackEntityId ?? null,
+        entityId,
+        coalesceKey,
         change.type,
         serializedPayload,
         change.timestamp
@@ -421,6 +482,16 @@ export async function migrateNotesScope(sourceScope: string, targetScope: string
         );
         await txn.runAsync(
             'UPDATE sync_queue SET owner_uid = ? WHERE owner_uid = ?',
+            normalizedTargetScope,
+            normalizedSourceScope
+        );
+        await txn.runAsync(
+            'UPDATE sync_state SET owner_uid = ? WHERE owner_uid = ?',
+            normalizedTargetScope,
+            normalizedSourceScope
+        );
+        await txn.runAsync(
+            'UPDATE sync_runs SET owner_uid = ? WHERE owner_uid = ?',
             normalizedTargetScope,
             normalizedSourceScope
         );
@@ -557,6 +628,7 @@ export async function getDB(): Promise<SQLite.SQLiteDatabase> {
         owner_uid TEXT NOT NULL DEFAULT '__local__',
         entity TEXT NOT NULL CHECK(entity IN ('note')),
         entity_id TEXT,
+        coalesce_key TEXT,
         operation TEXT NOT NULL CHECK(operation IN ('create', 'update', 'delete', 'deleteAll')),
         payload TEXT,
         status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'processing', 'failed')),
@@ -565,9 +637,32 @@ export async function getDB(): Promise<SQLite.SQLiteDatabase> {
         next_retry_at TEXT,
         terminal INTEGER NOT NULL DEFAULT 0,
         blocked_reason TEXT,
+        lease_token TEXT,
         created_at TEXT NOT NULL
       );
       CREATE INDEX IF NOT EXISTS idx_sync_queue_status_created ON sync_queue(status, created_at ASC);
+      CREATE TABLE IF NOT EXISTS sync_state (
+        owner_uid TEXT PRIMARY KEY NOT NULL,
+        user_uid TEXT,
+        initial_sync_status TEXT NOT NULL DEFAULT 'pending',
+        last_note_cursor_json TEXT,
+        last_tombstone_cursor_json TEXT,
+        last_sync_started_at TEXT,
+        last_sync_finished_at TEXT,
+        last_sync_status TEXT,
+        last_sync_error TEXT,
+        updated_at TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS sync_runs (
+        owner_uid TEXT PRIMARY KEY NOT NULL,
+        run_id TEXT NOT NULL,
+        mode TEXT NOT NULL,
+        status TEXT NOT NULL,
+        user_uid TEXT,
+        started_at TEXT NOT NULL,
+        heartbeat_at TEXT NOT NULL,
+        completed_at TEXT
+      );
       CREATE TABLE IF NOT EXISTS shared_friends_cache (
         user_uid TEXT NOT NULL,
         friend_uid TEXT NOT NULL,
@@ -834,11 +929,17 @@ export async function getDB(): Promise<SQLite.SQLiteDatabase> {
             if (!syncQueueColumns.includes('owner_uid')) {
                 await database.execAsync(`ALTER TABLE sync_queue ADD COLUMN owner_uid TEXT NOT NULL DEFAULT '${LOCAL_NOTES_SCOPE}'`);
             }
+            if (!syncQueueColumns.includes('coalesce_key')) {
+                await database.execAsync(`ALTER TABLE sync_queue ADD COLUMN coalesce_key TEXT`);
+            }
             if (!syncQueueColumns.includes('terminal')) {
                 await database.execAsync(`ALTER TABLE sync_queue ADD COLUMN terminal INTEGER NOT NULL DEFAULT 0`);
             }
             if (!syncQueueColumns.includes('blocked_reason')) {
                 await database.execAsync(`ALTER TABLE sync_queue ADD COLUMN blocked_reason TEXT`);
+            }
+            if (!syncQueueColumns.includes('lease_token')) {
+                await database.execAsync(`ALTER TABLE sync_queue ADD COLUMN lease_token TEXT`);
             }
 
             await database.execAsync(
@@ -846,6 +947,35 @@ export async function getDB(): Promise<SQLite.SQLiteDatabase> {
             );
             await database.execAsync(
                 `CREATE INDEX IF NOT EXISTS idx_sync_queue_owner_status_created ON sync_queue(owner_uid, status, created_at ASC)`
+            );
+            await database.execAsync(
+                `CREATE INDEX IF NOT EXISTS idx_sync_queue_owner_coalesce ON sync_queue(owner_uid, coalesce_key)`
+            );
+            await database.execAsync(
+                `CREATE TABLE IF NOT EXISTS sync_state (
+                    owner_uid TEXT PRIMARY KEY NOT NULL,
+                    user_uid TEXT,
+                    initial_sync_status TEXT NOT NULL DEFAULT 'pending',
+                    last_note_cursor_json TEXT,
+                    last_tombstone_cursor_json TEXT,
+                    last_sync_started_at TEXT,
+                    last_sync_finished_at TEXT,
+                    last_sync_status TEXT,
+                    last_sync_error TEXT,
+                    updated_at TEXT NOT NULL
+                )`
+            );
+            await database.execAsync(
+                `CREATE TABLE IF NOT EXISTS sync_runs (
+                    owner_uid TEXT PRIMARY KEY NOT NULL,
+                    run_id TEXT NOT NULL,
+                    mode TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    user_uid TEXT,
+                    started_at TEXT NOT NULL,
+                    heartbeat_at TEXT NOT NULL,
+                    completed_at TEXT
+                )`
             );
 
             if (currentUserVersion < APP_SCHEMA_VERSION) {

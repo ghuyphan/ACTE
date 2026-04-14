@@ -5,12 +5,19 @@ let mockCaptureCardProps: any = null;
 let mockCaptureCardHandle: any = null;
 const mockNotes: any[] = [];
 let mockNotesLoading = false;
+let mockNotesInitialLoadComplete = true;
+let mockUser: any = null;
+let mockSharedLoading = false;
+let mockSharedReady = true;
+const mockSharedPosts: any[] = [];
+const mockFriends: any[] = [];
 const mockOpenAppSettings = jest.fn(async () => undefined);
 const mockRequestPermission = jest.fn(async () => ({ granted: true, canAskAgain: true }));
 const mockShowAlert = jest.fn();
 const mockUseCaptureFlow = jest.fn();
 const mockGetPersistentItem = jest.fn(async (_key: string) => null);
 const mockSetPersistentItem = jest.fn(async (_key: string, _value: string) => undefined);
+const mockScrollToOffset = jest.fn();
 const originalRequestAnimationFrame = global.requestAnimationFrame;
 const originalRequestIdleCallback = (global as any).requestIdleCallback;
 const originalCancelIdleCallback = (global as any).cancelIdleCallback;
@@ -55,7 +62,7 @@ jest.mock('expo-haptics', () => ({
 
 jest.mock('../hooks/useAuth', () => ({
   useAuth: () => ({
-    user: null,
+    user: mockUser,
     isAuthAvailable: true,
   }),
 }));
@@ -155,7 +162,7 @@ jest.mock('../hooks/useNotes', () => ({
     refreshNotes: jest.fn(async () => undefined),
     createNote: jest.fn(async () => undefined),
     searchNotes: jest.fn(async () => mockNotes),
-    initialLoadComplete: true,
+    initialLoadComplete: mockNotesInitialLoadComplete,
   }),
 }));
 
@@ -177,10 +184,10 @@ jest.mock('../hooks/useSubscription', () => ({
 jest.mock('../hooks/useSharedFeed', () => ({
   useSharedFeedStore: () => ({
     enabled: true,
-    loading: false,
-    ready: true,
-    friends: [],
-    sharedPosts: [],
+    loading: mockSharedLoading,
+    ready: mockSharedReady,
+    friends: mockFriends,
+    sharedPosts: mockSharedPosts,
     activeInvite: null,
     refreshSharedFeed: jest.fn(async () => undefined),
     createFriendInvite: jest.fn(async () => undefined),
@@ -221,6 +228,14 @@ jest.mock('../components/home/CaptureCard', () => {
   };
 });
 
+jest.mock('../components/ui/CatBoxIcon', () => {
+  const React = require('react');
+  const { View } = require('react-native');
+  return function MockCatBoxIcon() {
+    return <View testID="cat-box-empty-icon" />;
+  };
+});
+
 jest.mock('../components/home/HomeHeaderSearch', () => {
   const React = require('react');
   const { Pressable, View } = require('react-native');
@@ -238,11 +253,18 @@ jest.mock('../components/home/NotesFeed', () => {
   const React = require('react');
   const { Pressable, Text, View } = require('react-native');
   return function MockNotesFeed(props: any) {
+    if (props.flatListRef) {
+      props.flatListRef.current = {
+        scrollToOffset: mockScrollToOffset,
+      };
+    }
+
     return (
       <View>
         {props.captureHeader}
         <Text testID="capture-scroll-enabled">{String(props.scrollEnabled)}</Text>
         <Text testID="notes-feed-has-empty-state">{String(Boolean(props.emptyState))}</Text>
+        {props.emptyState}
         <Pressable testID="hide-capture" onPress={() => props.onCaptureVisibilityChange?.(false)} />
         <Pressable testID="show-capture" onPress={() => props.onCaptureVisibilityChange?.(true)} />
         <Pressable
@@ -291,6 +313,13 @@ describe('HomeScreen camera lifecycle', () => {
     }) as typeof requestAnimationFrame;
     AppState.currentState = 'active';
     mockNotesLoading = false;
+    mockNotesInitialLoadComplete = true;
+    mockUser = null;
+    mockSharedLoading = false;
+    mockSharedReady = true;
+    mockNotes.splice(0, mockNotes.length);
+    mockSharedPosts.splice(0, mockSharedPosts.length);
+    mockFriends.splice(0, mockFriends.length);
     mockCaptureCardProps = null;
     mockCaptureCardHandle = null;
     mockOpenAppSettings.mockClear();
@@ -298,6 +327,7 @@ describe('HomeScreen camera lifecycle', () => {
     mockShowAlert.mockClear();
     mockGetPersistentItem.mockReset();
     mockSetPersistentItem.mockClear();
+    mockScrollToOffset.mockClear();
     mockRequestPermission.mockResolvedValue({ granted: true, canAskAgain: true });
     mockGetPersistentItem.mockResolvedValue(null);
     mockUseCaptureFlow.mockImplementation(() => {
@@ -505,6 +535,36 @@ describe('HomeScreen camera lifecycle', () => {
     const { getByTestId } = render(<HomeScreen />);
 
     expect(getByTestId('notes-feed-has-empty-state')).toHaveTextContent('false');
+  });
+
+  it('shows a polished first-note empty state once loading finishes with no content', () => {
+    const { getByTestId, getByText } = render(<HomeScreen />);
+
+    expect(getByTestId('notes-feed-has-empty-state')).toHaveTextContent('true');
+    expect(getByText('Your journal is waiting')).toBeTruthy();
+    expect(getByText('Save your first note or photo to start filling this space.')).toBeTruthy();
+    expect(getByText('Save your first memory')).toBeTruthy();
+  });
+
+  it('scrolls back to the capture page from the first-note empty state CTA', () => {
+    const { getByText } = render(<HomeScreen />);
+
+    fireEvent.press(getByText('Save your first memory'));
+
+    expect(mockScrollToOffset).toHaveBeenCalledWith({ offset: 0, animated: true });
+  });
+
+  it('shows a syncing empty state after login while content is still hydrating', () => {
+    mockUser = { uid: 'me' };
+    mockNotesLoading = true;
+    mockNotesInitialLoadComplete = false;
+    mockSharedLoading = true;
+    mockSharedReady = false;
+
+    const { getByTestId, getByText } = render(<HomeScreen />);
+
+    expect(getByTestId('notes-feed-has-empty-state')).toHaveTextContent('true');
+    expect(getByText('Syncing your memories')).toBeTruthy();
   });
 
   it('keeps the first-time live photo hint visible until a capture exists', async () => {

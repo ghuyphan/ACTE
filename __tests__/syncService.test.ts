@@ -5,6 +5,7 @@ type QueueRow = {
   owner_uid: string;
   entity: 'note';
   entity_id: string | null;
+  coalesce_key?: string | null;
   operation: 'create' | 'update' | 'delete' | 'deleteAll';
   payload: string | null;
   status: 'pending' | 'processing' | 'failed';
@@ -13,6 +14,7 @@ type QueueRow = {
   next_retry_at: string | null;
   terminal: number;
   blocked_reason: string | null;
+  lease_token?: string | null;
   created_at: string;
 };
 
@@ -94,12 +96,13 @@ const mockGetAllNotes = jest.fn(async () => localNotesStore);
 
 const mockRunAsync = jest.fn(async (sql: string, ...args: any[]) => {
   if (sql.includes('INSERT INTO sync_queue')) {
-    const [ownerUid, entity, entityId, operation, payload, createdAt] = args;
+    const [ownerUid, entity, entityId, coalesceKey, operation, payload, createdAt] = args;
     queueRows.push({
       id: queueId++,
       owner_uid: ownerUid,
       entity,
       entity_id: entityId,
+      coalesce_key: coalesceKey,
       operation,
       payload,
       status: 'pending',
@@ -108,16 +111,46 @@ const mockRunAsync = jest.fn(async (sql: string, ...args: any[]) => {
       next_retry_at: null,
       terminal: 0,
       blocked_reason: null,
+      lease_token: null,
       created_at: createdAt,
     });
     return;
   }
 
-  if (sql.includes("SET status = 'processing'")) {
-    const [id, ownerUid] = args;
+  if (sql.includes('SET entity = ?')) {
+    const [entity, entityId, operation, payload, id, ownerUid] = args;
     queueRows = queueRows.map((row) =>
       row.id === id && row.owner_uid === ownerUid
-        ? { ...row, status: 'processing', attempts: row.attempts + 1, last_error: null, blocked_reason: null }
+        ? {
+            ...row,
+            entity,
+            entity_id: entityId,
+            operation,
+            payload,
+            status: 'pending',
+            last_error: null,
+            next_retry_at: null,
+            terminal: 0,
+            blocked_reason: null,
+            lease_token: null,
+          }
+        : row
+    );
+    return;
+  }
+
+  if (sql.includes("SET status = 'processing'")) {
+    const [leaseToken, id, ownerUid] = args;
+    queueRows = queueRows.map((row) =>
+      row.id === id && row.owner_uid === ownerUid
+        ? {
+            ...row,
+            status: 'processing',
+            attempts: row.attempts + 1,
+            last_error: null,
+            blocked_reason: null,
+            lease_token: leaseToken,
+          }
         : row
     );
     return;
@@ -127,16 +160,23 @@ const mockRunAsync = jest.fn(async (sql: string, ...args: any[]) => {
     const [ownerUid] = args;
     queueRows = queueRows.map((row) =>
       row.owner_uid === ownerUid && row.status === 'processing'
-        ? { ...row, status: 'pending', last_error: null, next_retry_at: null, blocked_reason: null }
+        ? {
+            ...row,
+            status: 'pending',
+            last_error: null,
+            next_retry_at: null,
+            blocked_reason: null,
+            lease_token: null,
+          }
         : row
     );
     return;
   }
 
   if (sql.includes("SET status = 'failed'")) {
-    const [lastError, nextRetryAt, terminal, blockedReason, id, ownerUid] = args;
+    const [lastError, nextRetryAt, terminal, blockedReason, id, ownerUid, leaseToken] = args;
     queueRows = queueRows.map((row) =>
-      row.id === id && row.owner_uid === ownerUid
+      row.id === id && row.owner_uid === ownerUid && row.lease_token === leaseToken
         ? {
             ...row,
             status: 'failed',
@@ -144,15 +184,18 @@ const mockRunAsync = jest.fn(async (sql: string, ...args: any[]) => {
             next_retry_at: nextRetryAt,
             terminal,
             blocked_reason: blockedReason,
+            lease_token: null,
           }
         : row
     );
     return;
   }
 
-  if (sql.includes('DELETE FROM sync_queue WHERE id = ? AND owner_uid = ?')) {
-    const [id, ownerUid] = args;
-    queueRows = queueRows.filter((row) => !(row.id === id && row.owner_uid === ownerUid));
+  if (sql.includes('DELETE FROM sync_queue WHERE id = ? AND owner_uid = ? AND lease_token = ?')) {
+    const [id, ownerUid, leaseToken] = args;
+    queueRows = queueRows.filter(
+      (row) => !(row.id === id && row.owner_uid === ownerUid && row.lease_token === leaseToken)
+    );
     return;
   }
 
@@ -162,27 +205,51 @@ const mockRunAsync = jest.fn(async (sql: string, ...args: any[]) => {
   }
 });
 
-const mockGetAllAsync = jest.fn(async (_sql: string, ownerUid: string, now: string, limit: number) =>
-  queueRows
+const mockGetAllAsync = jest.fn(async (sql: string, ...args: any[]) => {
+  if (sql.includes('ORDER BY created_at DESC')) {
+    const [ownerUid, limit] = args;
+    return queueRows
+      .filter((row) => row.owner_uid === ownerUid)
+      .sort((a, b) => b.created_at.localeCompare(a.created_at))
+      .slice(0, limit);
+  }
+
+  const [ownerUid, now, limit] = args;
+  return queueRows
     .filter((row) => row.owner_uid === ownerUid)
     .filter((row) => (row.status === 'pending' || row.status === 'failed') && row.terminal === 0)
     .filter((row) => !row.next_retry_at || row.next_retry_at <= now)
     .sort((a, b) => a.created_at.localeCompare(b.created_at))
-    .slice(0, limit)
-);
+    .slice(0, limit);
+});
 
-const mockGetFirstAsync = jest.fn(async (_sql: string, ownerUid: string) => ({
-  pending_count: queueRows.filter((row) => row.owner_uid === ownerUid && row.status === 'pending').length,
-  failed_count: queueRows.filter((row) => row.owner_uid === ownerUid && row.status === 'failed' && row.terminal === 0).length,
-  blocked_count: queueRows.filter((row) => row.owner_uid === ownerUid && row.terminal === 1).length,
-}));
+const mockGetFirstAsync = jest.fn(async (sql: string, ...args: any[]) => {
+  if (sql.includes('FROM sync_queue') && sql.includes('coalesce_key')) {
+    const [ownerUid, coalesceKey] = args;
+    return (
+      queueRows
+        .filter((row) => row.owner_uid === ownerUid && row.coalesce_key === coalesceKey)
+        .sort((a, b) => a.created_at.localeCompare(b.created_at))[0] ?? null
+    );
+  }
+
+  if (sql.includes('FROM sync_state')) {
+    return null;
+  }
+
+  const [ownerUid] = args;
+  return {
+    pending_count: queueRows.filter((row) => row.owner_uid === ownerUid && row.status === 'pending').length,
+    failed_count: queueRows.filter((row) => row.owner_uid === ownerUid && row.status === 'failed' && row.terminal === 0).length,
+    blocked_count: queueRows.filter((row) => row.owner_uid === ownerUid && row.terminal === 1).length,
+  };
+});
 
 jest.mock('../services/database', () => ({
   getDB: async () => ({
     runAsync: (sql: string, ...args: any[]) => mockRunAsync(sql, ...args),
-    getAllAsync: (sql: string, ownerUid: string, now: string, limit: number) =>
-      mockGetAllAsync(sql, ownerUid, now, limit),
-    getFirstAsync: (sql: string, ownerUid: string) => mockGetFirstAsync(sql, ownerUid),
+    getAllAsync: (sql: string, ...args: any[]) => mockGetAllAsync(sql, ...args),
+    getFirstAsync: (sql: string, ...args: any[]) => mockGetFirstAsync(sql, ...args),
   }),
   getActiveNotesScope: () => mockActiveNotesScope,
   getAllNotes: () => mockGetAllNotes(),
@@ -1113,6 +1180,57 @@ describe('syncService', () => {
     );
     expect(mockRemoteNoteTombstones.has('note-1')).toBe(false);
     expect(mockUpsertPublicProfile).toHaveBeenCalled();
+  });
+
+  it('drains queued note changes across multiple queue batches in one sync run', async () => {
+    const queuedNoteCount = 5001;
+    await AsyncStorage.setItem(
+      'sync.lastRemoteCursor.user-1',
+      JSON.stringify({
+        notes: {
+          syncedAt: '2026-03-09T00:00:00.000Z',
+          id: 'cursor-note',
+        },
+        tombstones: null,
+      })
+    );
+    localNotesStore = Array.from({ length: queuedNoteCount }, (_value, index) =>
+      createTextNote(`queued-note-${index}`)
+    );
+    queueRows = localNotesStore.map((note, index) => ({
+      id: index + 1,
+      owner_uid: mockActiveNotesScope,
+      entity: 'note' as const,
+      entity_id: note.id,
+      operation: 'create' as const,
+      payload: null,
+      status: 'pending' as const,
+      attempts: 0,
+      last_error: null,
+      next_retry_at: null,
+      terminal: 0,
+      blocked_reason: null,
+      created_at: new Date(Date.UTC(2026, 2, 10, 0, 0, index)).toISOString(),
+    }));
+    queueId = queuedNoteCount + 1;
+
+    const result = await syncNotes(syncUser, localNotesStore, { mode: 'incremental' });
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        status: 'success',
+        syncedCount: queuedNoteCount,
+      })
+    );
+    expect(queueRows).toHaveLength(0);
+    expect(mockRemoteNotes.size).toBe(queuedNoteCount);
+    expect(mockRemoteNotes.get('queued-note-5000')).toEqual(
+      expect.objectContaining({
+        id: 'queued-note-5000',
+        user_id: 'user-1',
+        content: 'note queued-note-5000',
+      })
+    );
   });
 
   it('preserves the paired motion clip extension when syncing a live photo note', async () => {

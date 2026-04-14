@@ -30,6 +30,10 @@
         "feedFilterAll": "Tất cả",
         "feedFilterFriends": "Chỉ bạn bè",
         "feedFilterHint": "Chọn bài bạn muốn xem trong Nhật ký.",
+        "syncingEmptyTitle": "Đang đồng bộ kỷ niệm của bạn",
+        "syncingEmptyBody": "Noto đang kéo về ghi chú và kỷ niệm đã chia sẻ của bạn. Thường chỉ mất một lát thôi.",
+        "firstNoteEmptyTitle": "Trang nhật ký đang chờ bạn",
+        "firstNoteEmptyBody": "Lưu ghi chú hoặc tấm ảnh đầu tiên để bắt đầu lấp đầy nơi này nhé.",
         "friendsFilterInactive": "Lọc theo bạn bè",
         "friendsFilterActive": "Đang lọc theo bạn bè"
     },
@@ -513,6 +517,7 @@
         "syncQueueSummary": "Đang chờ: {{pending}} · Thử lại: {{failed}} · Kẹt lại: {{blocked}}",
         "syncNow": "Đồng bộ ngay",
         "syncing": "Đang đồng bộ...",
+        "initialSyncLoadingHint": "Giữ Noto mở thêm một chút để lần sao lưu đầu tiên hoàn tất an toàn.",
         "syncDiagnosticsTitle": "Tình trạng đồng bộ",
         "syncDiagnosticsHealthy": "Mọi thứ đang đồng bộ bình thường.",
         "syncDiagnosticsIdle": "Không có rối rắm nào gần đây.",

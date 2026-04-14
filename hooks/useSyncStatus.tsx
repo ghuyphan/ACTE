@@ -2,7 +2,13 @@ import { AppState } from 'react-native';
 import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import i18n from '../constants/i18n';
 import { useConnectivity } from './useConnectivity';
-import { getSyncRepository, SyncMode, SyncQueueItem, syncNotes } from '../services/syncService';
+import {
+  getSyncRepository,
+  isInitialSyncPendingForUser,
+  SyncMode,
+  SyncQueueItem,
+  syncNotes,
+} from '../services/syncService';
 import { useAuth } from './useAuth';
 import { useNotes } from './useNotes';
 import { getPersistentItem, setPersistentItem } from '../utils/appStorage';
@@ -11,6 +17,7 @@ type SyncState = 'idle' | 'syncing' | 'success' | 'error';
 
 interface SyncStatusContextValue {
   status: SyncState;
+  isInitialSyncPending: boolean;
   lastSyncedAt: string | null;
   lastMessage: string | null;
   pendingCount: number;
@@ -39,6 +46,7 @@ export function SyncStatusProvider({ children }: { children: ReactNode }) {
   const { notes, refreshNotes, loading } = useNotes();
   const { isOnline, status: connectivityStatus } = useConnectivity();
   const [status, setStatus] = useState<SyncState>('idle');
+  const [isInitialSyncPending, setIsInitialSyncPending] = useState(false);
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
   const [lastMessage, setLastMessage] = useState<string | null>(null);
   const [pendingCount, setPendingCount] = useState(0);
@@ -47,8 +55,11 @@ export function SyncStatusProvider({ children }: { children: ReactNode }) {
   const [recentQueueItems, setRecentQueueItems] = useState<SyncQueueItem[]>([]);
   const [syncEnabledState, setSyncEnabledState] = useState<boolean>(true);
   const [isSyncPrefReady, setIsSyncPrefReady] = useState(false);
+  const [isInitialSyncStateReady, setIsInitialSyncStateReady] = useState(false);
   const currentUserUidRef = useRef<string | null>(user?.uid ?? null);
   currentUserUidRef.current = user?.uid ?? null;
+  const initialSyncPendingRef = useRef(isInitialSyncPending);
+  initialSyncPendingRef.current = isInitialSyncPending;
 
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const syncInFlightRef = useRef<Promise<void> | null>(null);
@@ -128,9 +139,58 @@ export function SyncStatusProvider({ children }: { children: ReactNode }) {
     []
   );
 
+  const getPreferredSyncMode = useCallback(
+    (requestedMode: SyncMode = 'incremental'): SyncMode =>
+      requestedMode === 'full' || initialSyncPendingRef.current ? 'full' : 'incremental',
+    []
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!isReady || !isAuthAvailable || !user) {
+      setIsInitialSyncPending(false);
+      setIsInitialSyncStateReady(true);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    setIsInitialSyncStateReady(false);
+
+    void (async () => {
+      try {
+        const pending = await isInitialSyncPendingForUser(user.uid);
+
+        if (!cancelled && currentUserUidRef.current === user.uid) {
+          setIsInitialSyncPending(pending);
+          setIsInitialSyncStateReady(true);
+        }
+      } catch (error) {
+        console.warn('[syncStatus] Failed to load initial sync state:', error);
+        if (!cancelled && currentUserUidRef.current === user.uid) {
+          setIsInitialSyncPending(true);
+          setIsInitialSyncStateReady(true);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isAuthAvailable, isReady, user]);
+
   runSyncNowRef.current = async (mode: SyncMode = 'incremental') => {
     const requestUserUid = currentUserUidRef.current;
-    if (!isReady || !isAuthAvailable || !requestUserUid || loading || !syncEnabledState || !isSyncPrefReady) {
+    if (
+      !isReady ||
+      !isAuthAvailable ||
+      !requestUserUid ||
+      loading ||
+      !syncEnabledState ||
+      !isSyncPrefReady ||
+      !isInitialSyncStateReady
+    ) {
       await refreshQueueStats();
       return;
     }
@@ -152,6 +212,7 @@ export function SyncStatusProvider({ children }: { children: ReactNode }) {
     }
 
     clearDebounceTimer();
+    const effectiveMode = getPreferredSyncMode(mode);
 
     const currentUser = {
       uid: requestUserUid,
@@ -165,7 +226,7 @@ export function SyncStatusProvider({ children }: { children: ReactNode }) {
       setStatus('syncing');
       setLastMessage(null);
 
-      const result = await syncNotes(currentUser, notes, { mode });
+      const result = await syncNotes(currentUser, notes, { mode: effectiveMode });
       const queueStats = await refreshQueueStats();
       if (!isCurrentSyncRequest(requestId, requestUserUid)) {
         return;
@@ -173,6 +234,17 @@ export function SyncStatusProvider({ children }: { children: ReactNode }) {
       const hasPendingChanges = (queueStats?.pendingCount ?? pendingCount) > 0;
 
       if (result.status === 'success') {
+        if (effectiveMode === 'full' && initialSyncPendingRef.current && result.bootstrapCompleted) {
+          setIsInitialSyncPending(false);
+          initialSyncPendingRef.current = false;
+          if (!isCurrentSyncRequest(requestId, requestUserUid)) {
+            return;
+          }
+        } else if (effectiveMode === 'full' && initialSyncPendingRef.current && !result.bootstrapCompleted) {
+          setIsInitialSyncPending(true);
+          initialSyncPendingRef.current = true;
+        }
+
         setStatus('success');
         setLastSyncedAt(new Date().toISOString());
         setLastMessage(
@@ -202,7 +274,7 @@ export function SyncStatusProvider({ children }: { children: ReactNode }) {
 
       if (pendingRunRef.current) {
         pendingRunRef.current = false;
-        void runSyncNowRef.current(mode);
+        void runSyncNowRef.current(getPreferredSyncMode('incremental'));
       }
     });
 
@@ -212,7 +284,15 @@ export function SyncStatusProvider({ children }: { children: ReactNode }) {
 
   const queueSync = useCallback(
     (immediate = false, mode: SyncMode = 'incremental') => {
-      if (!isReady || !isAuthAvailable || !user || loading || !syncEnabledState || !isSyncPrefReady) {
+      if (
+        !isReady ||
+        !isAuthAvailable ||
+        !user ||
+        loading ||
+        !syncEnabledState ||
+        !isSyncPrefReady ||
+        !isInitialSyncStateReady
+      ) {
         return;
       }
 
@@ -221,18 +301,30 @@ export function SyncStatusProvider({ children }: { children: ReactNode }) {
       }
 
       clearDebounceTimer();
+      const preferredMode = getPreferredSyncMode(mode);
 
       if (immediate) {
-        void runSyncNowRef.current(mode);
+        void runSyncNowRef.current(preferredMode);
         return;
       }
 
       debounceTimerRef.current = setTimeout(() => {
         debounceTimerRef.current = null;
-        void runSyncNowRef.current(mode);
+        void runSyncNowRef.current(preferredMode);
       }, AUTO_SYNC_DEBOUNCE_MS);
     },
-    [clearDebounceTimer, isAuthAvailable, isOnline, isReady, isSyncPrefReady, loading, syncEnabledState, user]
+    [
+      clearDebounceTimer,
+      getPreferredSyncMode,
+      isAuthAvailable,
+      isInitialSyncStateReady,
+      isOnline,
+      isReady,
+      isSyncPrefReady,
+      loading,
+      syncEnabledState,
+      user,
+    ]
   );
 
   useEffect(() => {
@@ -246,6 +338,9 @@ export function SyncStatusProvider({ children }: { children: ReactNode }) {
       skipNextNotesEffectRef.current = false;
       suppressNextNotesEffectRef.current = false;
       previousUserUidRef.current = user?.uid ?? null;
+      initialSyncPendingRef.current = false;
+      setIsInitialSyncPending(false);
+      setIsInitialSyncStateReady(true);
       setStatus('idle');
       setLastMessage(null);
       setLastSyncedAt(null);
@@ -254,7 +349,7 @@ export function SyncStatusProvider({ children }: { children: ReactNode }) {
     }
 
     if (previousUserUidRef.current !== user.uid) {
-      if (!isSyncPrefReady || !syncEnabledState) {
+      if (!isSyncPrefReady || !syncEnabledState || !isInitialSyncStateReady) {
         return;
       }
 
@@ -262,12 +357,24 @@ export function SyncStatusProvider({ children }: { children: ReactNode }) {
       skipNextNotesEffectRef.current = true;
       setLastMessage(null);
       setLastSyncedAt(null);
-      queueSync(true, 'full');
+      queueSync(true, getPreferredSyncMode('incremental'));
     }
-  }, [clearDebounceTimer, isAuthAvailable, isReady, isSyncPrefReady, loading, queueSync, refreshQueueStats, syncEnabledState, user]);
+  }, [
+    clearDebounceTimer,
+    getPreferredSyncMode,
+    isAuthAvailable,
+    isInitialSyncStateReady,
+    isReady,
+    isSyncPrefReady,
+    loading,
+    queueSync,
+    refreshQueueStats,
+    syncEnabledState,
+    user,
+  ]);
 
   useEffect(() => {
-    if (!isReady || loading || !user || !isAuthAvailable) {
+    if (!isReady || loading || !user || !isAuthAvailable || !isInitialSyncStateReady) {
       return;
     }
 
@@ -282,8 +389,18 @@ export function SyncStatusProvider({ children }: { children: ReactNode }) {
     }
 
     void refreshQueueStats();
-    queueSync(false, 'incremental');
-  }, [isAuthAvailable, isReady, loading, notes, queueSync, refreshQueueStats, user]);
+    queueSync(false, getPreferredSyncMode('incremental'));
+  }, [
+    getPreferredSyncMode,
+    isAuthAvailable,
+    isInitialSyncStateReady,
+    isReady,
+    loading,
+    notes,
+    queueSync,
+    refreshQueueStats,
+    user,
+  ]);
 
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (nextState) => {
@@ -325,6 +442,7 @@ export function SyncStatusProvider({ children }: { children: ReactNode }) {
   const value = useMemo<SyncStatusContextValue>(
     () => ({
       status,
+      isInitialSyncPending,
       lastSyncedAt,
       lastMessage,
       pendingCount,
@@ -337,7 +455,19 @@ export function SyncStatusProvider({ children }: { children: ReactNode }) {
         queueSync(true, 'full');
       },
     }),
-    [blockedCount, failedCount, lastMessage, lastSyncedAt, pendingCount, queueSync, recentQueueItems, setSyncEnabled, status, syncEnabledState]
+    [
+      blockedCount,
+      failedCount,
+      isInitialSyncPending,
+      lastMessage,
+      lastSyncedAt,
+      pendingCount,
+      queueSync,
+      recentQueueItems,
+      setSyncEnabled,
+      status,
+      syncEnabledState,
+    ]
   );
 
   return <SyncStatusContext.Provider value={value}>{children}</SyncStatusContext.Provider>;

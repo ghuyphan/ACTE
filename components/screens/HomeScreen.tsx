@@ -7,6 +7,7 @@ import { Href, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
+  ActivityIndicator,
   AppState,
   Keyboard,
   Platform,
@@ -21,6 +22,7 @@ import { useSharedValue } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AppSheetAlert from '../sheets/AppSheetAlert';
 import CaptureCard, { type CaptureCardHandle } from '../home/CaptureCard';
+import CatBoxIcon from '../ui/CatBoxIcon';
 import {
   buildHomeFeedItems,
   findHomeFeedItemIndex,
@@ -110,6 +112,7 @@ export default function HomeScreen() {
   const {
     enabled: sharedEnabled,
     loading: sharedLoading,
+    ready: sharedReady,
     friends,
     sharedPosts,
     activeInvite,
@@ -181,6 +184,7 @@ export default function HomeScreen() {
   const [pendingSavedNoteScrollTargetId, setPendingSavedNoteScrollTargetId] = useState<string | null>(null);
   const [hasSeenLivePhotoCameraHint, setHasSeenLivePhotoCameraHint] = useState<boolean | null>(null);
   const [showLivePhotoCameraHint, setShowLivePhotoCameraHint] = useState(false);
+  const previousUserUidRef = useRef<string | null>(user?.uid ?? null);
 
   const searchAnim = useSharedValue(0);
   const flatListRef = useRef<any>(null);
@@ -427,6 +431,57 @@ export default function HomeScreen() {
     },
     [homeFeedItems, isFriendsFilterActive, suppressedHomeNoteIdSet]
   );
+  const currentUserUid = user?.uid ?? null;
+  const authUserChanged = previousUserUidRef.current !== currentUserUid;
+  const shouldHoldSignedInEmptyState = useMemo(
+    () => (
+      Boolean(currentUserUid) &&
+      (authUserChanged || !notesInitialLoadComplete || loading || sharedLoading || !sharedReady)
+    ),
+    [
+      authUserChanged,
+      currentUserUid,
+      loading,
+      notesInitialLoadComplete,
+      sharedLoading,
+      sharedReady,
+    ]
+  );
+  const isPostLoginSyncingEmpty = useMemo(
+    () => (
+      Boolean(currentUserUid) &&
+      notes.length === 0 &&
+      sharedPosts.length === 0 &&
+      shouldHoldSignedInEmptyState
+    ),
+    [currentUserUid, notes.length, sharedPosts.length, shouldHoldSignedInEmptyState]
+  );
+  const isFirstNoteEmpty = useMemo(
+    () => (
+      visibleFeedItems.length === 0 &&
+      !isFriendsFilterActive &&
+      !isPostLoginSyncingEmpty &&
+      !authUserChanged &&
+      notesInitialLoadComplete &&
+      !loading &&
+      !sharedLoading &&
+      (!currentUserUid || sharedReady)
+    ),
+    [
+      authUserChanged,
+      currentUserUid,
+      isFriendsFilterActive,
+      isPostLoginSyncingEmpty,
+      loading,
+      notesInitialLoadComplete,
+      sharedLoading,
+      sharedReady,
+      visibleFeedItems.length,
+    ]
+  );
+  useEffect(() => {
+    previousUserUidRef.current = currentUserUid;
+  }, [currentUserUid]);
   useEffect(() => {
     if (!notesInitialLoadComplete) {
       resetHomeFeedReady();
@@ -461,49 +516,113 @@ export default function HomeScreen() {
     visibleFeedItems.length,
   ]);
 
-  const friendsFilterEmptyState = useMemo(() => {
-    if (!isFriendsFilterActive) {
+  const homeFeedEmptyState = useMemo(() => {
+    if (!(isFriendsFilterActive || isPostLoginSyncingEmpty || isFirstNoteEmpty)) {
       return null;
     }
 
     return (
-      <View style={styles.friendsFilterEmptyState}>
+      <View style={styles.friendsFilterEmptyState} testID="home-feed-empty-state">
         <View style={styles.friendsFilterEmptyIconWrap}>
-          <Ionicons name="people-outline" size={44} color={colors.secondaryText} />
+          {isPostLoginSyncingEmpty ? (
+            <ActivityIndicator size="small" color={colors.primary} />
+          ) : isFriendsFilterActive ? (
+            <Ionicons name="people-outline" size={44} color={colors.secondaryText} />
+          ) : (
+            <CatBoxIcon size={50} color={colors.secondaryText} />
+          )}
         </View>
         <Text style={[styles.friendsFilterEmptyTitle, { color: colors.text }]}>
-          {t('shared.emptyFriendPostsTitle', 'No friend posts yet')}
+          {isPostLoginSyncingEmpty
+            ? t('home.syncingEmptyTitle', 'Syncing your memories')
+            : isFriendsFilterActive
+              ? t('shared.emptyFriendPostsTitle', 'No friend posts yet')
+              : t('home.firstNoteEmptyTitle', 'Your journal is waiting')}
         </Text>
         <Text style={[styles.friendsFilterEmptyBody, { color: colors.secondaryText }]}>
-          {t(
-            'shared.emptyFriendPostsBody',
-            'When friends share a memory, it will appear here. Switch back to All to see your notes.'
-          )}
+          {isPostLoginSyncingEmpty
+            ? t(
+                'home.syncingEmptyBody',
+                'We are pulling in your notes and shared memories now. This usually takes just a moment.'
+              )
+            : isFriendsFilterActive
+              ? t(
+                  'shared.emptyFriendPostsBody',
+                  'When friends share a memory, it will appear here. Switch back to All to see your notes.'
+                )
+              : t(
+                  'home.firstNoteEmptyBody',
+                  'Save your first note or photo to start filling this space.'
+                )}
         </Text>
-        <Pressable
-          accessibilityRole="button"
-          onPress={() => {
-            void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            setIsFriendsFilterEnabled(false);
-          }}
-          style={({ pressed }) => [
-            styles.friendsFilterEmptyButton,
-            {
-              opacity: pressed ? 0.72 : 1,
-            },
-          ]}
-        >
-          <Text style={[styles.friendsFilterEmptyButtonText, { color: colors.primary }]}>
-            {t('home.feedFilterAll', 'All')}
-          </Text>
-        </Pressable>
+        {isFriendsFilterActive ? (
+          <View style={styles.friendsFilterEmptyActions}>
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => {
+                void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                setIsFriendsFilterEnabled(false);
+              }}
+              style={({ pressed }) => [
+                styles.friendsFilterEmptyButton,
+                {
+                  opacity: pressed ? 0.72 : 1,
+                },
+              ]}
+            >
+              <Text style={[styles.friendsFilterEmptyButtonText, { color: colors.primary }]}>
+                {t('home.feedFilterAll', 'All')}
+              </Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => {
+                void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                presentSharedManageSheet();
+              }}
+              style={({ pressed }) => [
+                styles.friendsFilterEmptyButton,
+                {
+                  opacity: pressed ? 0.72 : 1,
+                },
+              ]}
+            >
+              <Text style={[styles.friendsFilterEmptyButtonText, { color: colors.primary }]}>
+                {t('shared.manageTitle', 'Friends')}
+              </Text>
+            </Pressable>
+          </View>
+        ) : isFirstNoteEmpty ? (
+          <View style={styles.friendsFilterEmptyActions}>
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => {
+                void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
+              }}
+              style={({ pressed }) => [
+                styles.friendsFilterEmptyButton,
+                {
+                  opacity: pressed ? 0.72 : 1,
+                },
+              ]}
+            >
+              <Text style={[styles.friendsFilterEmptyButtonText, { color: colors.primary }]}>
+                {t('home.createFirst', 'Save your first memory')}
+              </Text>
+            </Pressable>
+          </View>
+        ) : null}
       </View>
     );
   }, [
     colors.primary,
     colors.secondaryText,
     colors.text,
+    isFirstNoteEmpty,
     isFriendsFilterActive,
+    isPostLoginSyncingEmpty,
+    presentSharedManageSheet,
     t,
   ]);
 
@@ -1925,7 +2044,7 @@ export default function HomeScreen() {
         <NotesFeed
           flatListRef={flatListRef}
           captureHeader={captureHeader}
-          emptyState={friendsFilterEmptyState}
+          emptyState={homeFeedEmptyState}
           captureMode={captureMode}
           screenActive={isScreenFocused}
           items={visibleFeedItems}
@@ -2061,6 +2180,13 @@ const styles = StyleSheet.create({
     minHeight: 32,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  friendsFilterEmptyActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 18,
+    marginTop: 4,
   },
   friendsFilterEmptyButtonText: {
     fontSize: 14,

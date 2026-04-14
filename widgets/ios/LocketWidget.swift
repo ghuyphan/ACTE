@@ -786,10 +786,10 @@ private let locketWidgetDoodleOverlayOpacity: Double = 1
 private let locketWidgetStickerOverlayOpacity: Double = 1
 private let locketWidgetStickerOutlineOpacity: Double = 1
 private let locketWidgetStampOutlineOpacity: Double = 1
-private let locketWidgetDecorationInsetSmall: CGFloat = 0
+private let locketWidgetDecorationInsetSmall: CGFloat = 6
 private let locketWidgetDecorationInsetMedium: CGFloat = 6
-private let locketWidgetStickerMinimumBaseSizeSmall: CGFloat = 48
-private let locketWidgetStickerBaseSizeRatioSmall: CGFloat = 0.24
+private let locketWidgetStickerMinimumBaseSizeSmall: CGFloat = 38
+private let locketWidgetStickerBaseSizeRatioSmall: CGFloat = 0.19
 private let locketWidgetStickerMinimumBaseSizeMedium: CGFloat = 68
 private let locketWidgetStickerBaseSizeRatioMedium: CGFloat = 0.30
 

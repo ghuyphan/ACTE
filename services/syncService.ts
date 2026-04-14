@@ -95,9 +95,10 @@ export interface SyncRepository {
     blockedCount: number;
   }>;
   recoverProcessing: () => Promise<void>;
-  markProcessing: (id: number) => Promise<void>;
+  markProcessing: (id: number, leaseToken: string) => Promise<void>;
   markFailed: (
     id: number,
+    leaseToken: string,
     details?:
       | string
       | {
@@ -107,7 +108,7 @@ export interface SyncRepository {
           blockedReason?: string | null;
         }
   ) => Promise<void>;
-  markDone: (id: number) => Promise<void>;
+  markDone: (id: number, leaseToken: string) => Promise<void>;
   clearAll: () => Promise<void>;
 }
 
@@ -132,6 +133,7 @@ export interface SyncResult {
   uploadedCount?: number;
   importedCount?: number;
   failedCount?: number;
+  bootstrapCompleted?: boolean;
 }
 
 export interface SyncOptions {
@@ -220,6 +222,7 @@ interface QueueRow {
   owner_uid?: string;
   entity: 'note';
   entity_id: string | null;
+  coalesce_key?: string | null;
   operation: SyncChangeType;
   payload: string | null;
   status: SyncQueueStatus;
@@ -228,7 +231,21 @@ interface QueueRow {
   next_retry_at: string | null;
   terminal: number;
   blocked_reason: string | null;
+  lease_token?: string | null;
   created_at: string;
+}
+
+interface SyncStateRow {
+  owner_uid: string;
+  user_uid: string | null;
+  initial_sync_status: string;
+  last_note_cursor_json: string | null;
+  last_tombstone_cursor_json: string | null;
+  last_sync_started_at: string | null;
+  last_sync_finished_at: string | null;
+  last_sync_status: string | null;
+  last_sync_error: string | null;
+  updated_at: string;
 }
 
 interface RemoteArtifactSnapshot {
@@ -241,6 +258,7 @@ const MAX_SYNC_ATTEMPTS = 5;
 const REMOTE_SYNC_PAGE_SIZE = 200;
 const REMOTE_ARTIFACT_FETCH_BATCH_SIZE = 200;
 const FULL_SNAPSHOT_UPLOAD_CONCURRENCY = 3;
+const QUEUE_FLUSH_BATCH_SIZE = 5000;
 const RETRY_DELAYS_MS = [
   5 * 60 * 1000,
   15 * 60 * 1000,
@@ -250,9 +268,11 @@ const RETRY_DELAYS_MS = [
 ];
 const REMOTE_SYNC_CURSOR_KEY_PREFIX = 'sync.lastRemoteCursor.';
 const REMOTE_SYNCED_NOTE_IDS_KEY_PREFIX = 'sync.syncedNoteIds.';
+const INITIAL_SYNC_PENDING_KEY_PREFIX = 'settings.initialSyncPending.';
 const EXPIRED_SESSION_SYNC_ERROR = 'Server session unavailable. Sign in again to resume sync.';
 const MISMATCHED_SESSION_SYNC_ERROR =
   'Signed-in session does not match this account. Sign out and sign in again.';
+const syncRunsInFlight = new Map<string, Promise<SyncResult>>();
 
 function rowToQueueItem(row: QueueRow): SyncQueueItem {
   return {
@@ -790,13 +810,148 @@ function getRemoteSyncCursorKey(userUid: string) {
   return `${REMOTE_SYNC_CURSOR_KEY_PREFIX}${userUid}`;
 }
 
-async function getLastRemoteSyncCursor(userUid: string) {
-  const rawValue = await getPersistentItem(getRemoteSyncCursorKey(userUid));
-  return parseStoredRemoteSyncCursor(rawValue);
+function getInitialSyncPendingKey(userUid: string) {
+  return `${INITIAL_SYNC_PENDING_KEY_PREFIX}${userUid}`;
 }
 
-async function setLastRemoteSyncCursor(userUid: string, cursor: RemoteSyncCursor) {
-  await setPersistentItem(getRemoteSyncCursorKey(userUid), JSON.stringify(cursor));
+function safeParseJson(value: string | null | undefined) {
+  if (typeof value !== 'string' || !value.trim()) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(value);
+  } catch {
+    return null;
+  }
+}
+
+async function getSyncStateRow(ownerScope: string): Promise<SyncStateRow | null> {
+  try {
+    const db = await getDB();
+    const row = await db.getFirstAsync<SyncStateRow>(
+      `SELECT
+         owner_uid,
+         user_uid,
+         initial_sync_status,
+         last_note_cursor_json,
+         last_tombstone_cursor_json,
+         last_sync_started_at,
+         last_sync_finished_at,
+         last_sync_status,
+         last_sync_error,
+         updated_at
+       FROM sync_state
+       WHERE owner_uid = ?`,
+      ownerScope
+    );
+
+    if (!row || typeof row.owner_uid !== 'string') {
+      return null;
+    }
+
+    return row;
+  } catch {
+    return null;
+  }
+}
+
+async function upsertSyncState(
+  ownerScope: string,
+  userUid: string,
+  input: Partial<Pick<
+    SyncStateRow,
+    | 'initial_sync_status'
+    | 'last_note_cursor_json'
+    | 'last_tombstone_cursor_json'
+    | 'last_sync_started_at'
+    | 'last_sync_finished_at'
+    | 'last_sync_status'
+    | 'last_sync_error'
+  >>
+) {
+  try {
+    const db = await getDB();
+    const existing = await getSyncStateRow(ownerScope);
+    const updatedAt = new Date().toISOString();
+    await db.runAsync(
+      `INSERT INTO sync_state (
+         owner_uid,
+         user_uid,
+         initial_sync_status,
+         last_note_cursor_json,
+         last_tombstone_cursor_json,
+         last_sync_started_at,
+         last_sync_finished_at,
+         last_sync_status,
+         last_sync_error,
+         updated_at
+       )
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(owner_uid) DO UPDATE SET
+         user_uid = excluded.user_uid,
+         initial_sync_status = excluded.initial_sync_status,
+         last_note_cursor_json = excluded.last_note_cursor_json,
+         last_tombstone_cursor_json = excluded.last_tombstone_cursor_json,
+         last_sync_started_at = excluded.last_sync_started_at,
+         last_sync_finished_at = excluded.last_sync_finished_at,
+         last_sync_status = excluded.last_sync_status,
+         last_sync_error = excluded.last_sync_error,
+         updated_at = excluded.updated_at`,
+      ownerScope,
+      userUid,
+      input.initial_sync_status ?? existing?.initial_sync_status ?? 'pending',
+      input.last_note_cursor_json ?? existing?.last_note_cursor_json ?? null,
+      input.last_tombstone_cursor_json ?? existing?.last_tombstone_cursor_json ?? null,
+      input.last_sync_started_at ?? existing?.last_sync_started_at ?? null,
+      input.last_sync_finished_at ?? existing?.last_sync_finished_at ?? null,
+      input.last_sync_status ?? existing?.last_sync_status ?? null,
+      input.last_sync_error ?? existing?.last_sync_error ?? null,
+      updatedAt
+    );
+  } catch (error) {
+    console.warn('[syncService] Failed to persist sync state:', error);
+  }
+}
+
+async function getLastRemoteSyncCursor(ownerScope: string, userUid: string) {
+  const stateRow = await getSyncStateRow(ownerScope);
+  const stateCursor =
+    stateRow?.last_note_cursor_json || stateRow?.last_tombstone_cursor_json
+      ? {
+          notes: normalizeRemoteNoteCursor(
+            safeParseJson(stateRow?.last_note_cursor_json)
+          ),
+          tombstones: normalizeRemoteTombstoneCursor(
+            safeParseJson(stateRow?.last_tombstone_cursor_json)
+          ),
+        }
+      : null;
+
+  if (stateCursor?.notes || stateCursor?.tombstones) {
+    return stateCursor;
+  }
+
+  const rawValue = await getPersistentItem(getRemoteSyncCursorKey(userUid));
+  const legacyCursor = parseStoredRemoteSyncCursor(rawValue);
+  if (legacyCursor) {
+    await upsertSyncState(ownerScope, userUid, {
+      last_note_cursor_json: legacyCursor.notes ? JSON.stringify(legacyCursor.notes) : null,
+      last_tombstone_cursor_json: legacyCursor.tombstones ? JSON.stringify(legacyCursor.tombstones) : null,
+    });
+  }
+
+  return legacyCursor;
+}
+
+async function setLastRemoteSyncCursor(ownerScope: string, userUid: string, cursor: RemoteSyncCursor) {
+  await Promise.all([
+    upsertSyncState(ownerScope, userUid, {
+      last_note_cursor_json: cursor.notes ? JSON.stringify(cursor.notes) : null,
+      last_tombstone_cursor_json: cursor.tombstones ? JSON.stringify(cursor.tombstones) : null,
+    }),
+    setPersistentItem(getRemoteSyncCursorKey(userUid), JSON.stringify(cursor)),
+  ]);
 }
 
 function getSyncedNoteIdsKey(userUid: string) {
@@ -835,6 +990,117 @@ async function setPreviouslySyncedNoteIds(userUid: string, noteIds: Iterable<str
   ).sort();
 
   await setPersistentItem(getSyncedNoteIdsKey(userUid), JSON.stringify(serializedIds));
+}
+
+export async function isInitialSyncPendingForUser(userUid: string): Promise<boolean> {
+  const stateRow = await getSyncStateRow(userUid);
+  if (stateRow?.initial_sync_status) {
+    return stateRow.initial_sync_status !== 'complete';
+  }
+
+  const storedValue = await getPersistentItem(getInitialSyncPendingKey(userUid));
+  if (storedValue === 'true' || storedValue === 'false') {
+    return storedValue === 'true';
+  }
+
+  return !(await getLastRemoteSyncCursor(userUid, userUid));
+}
+
+async function setInitialSyncStatusForUser(
+  ownerScope: string,
+  userUid: string,
+  status: 'pending' | 'running' | 'complete' | 'blocked'
+) {
+  await Promise.all([
+    upsertSyncState(ownerScope, userUid, {
+      initial_sync_status: status,
+    }),
+    setPersistentItem(getInitialSyncPendingKey(userUid), status === 'complete' ? 'false' : 'true'),
+  ]);
+}
+
+function createSyncLeaseToken(itemId: number) {
+  return `${itemId}:${Date.now().toString(36)}:${Math.random().toString(36).slice(2, 10)}`;
+}
+
+async function beginSyncRun(ownerScope: string, userUid: string, mode: SyncMode) {
+  const startedAt = new Date().toISOString();
+  const runId = `run:${startedAt}:${Math.random().toString(36).slice(2, 10)}`;
+
+  try {
+    const db = await getDB();
+    await db.runAsync(
+      `INSERT INTO sync_runs (
+         owner_uid,
+         run_id,
+         mode,
+         status,
+         user_uid,
+         started_at,
+         heartbeat_at,
+         completed_at
+       )
+       VALUES (?, ?, ?, 'running', ?, ?, ?, NULL)
+       ON CONFLICT(owner_uid) DO UPDATE SET
+         run_id = excluded.run_id,
+         mode = excluded.mode,
+         status = excluded.status,
+         user_uid = excluded.user_uid,
+         started_at = excluded.started_at,
+         heartbeat_at = excluded.heartbeat_at,
+         completed_at = NULL`,
+      ownerScope,
+      runId,
+      mode,
+      userUid,
+      startedAt,
+      startedAt
+    );
+  } catch (error) {
+    console.warn('[syncService] Failed to persist sync run start:', error);
+  }
+
+  await upsertSyncState(ownerScope, userUid, {
+    last_sync_started_at: startedAt,
+    last_sync_status: 'running',
+    last_sync_error: null,
+  });
+
+  return { runId, startedAt };
+}
+
+async function finishSyncRun(
+  ownerScope: string,
+  userUid: string,
+  runId: string,
+  status: 'success' | 'error',
+  errorMessage?: string | null
+) {
+  const completedAt = new Date().toISOString();
+
+  try {
+    const db = await getDB();
+    await db.runAsync(
+      `UPDATE sync_runs
+       SET status = ?,
+           heartbeat_at = ?,
+           completed_at = ?
+       WHERE owner_uid = ? AND run_id = ?`,
+      status,
+      completedAt,
+      completedAt,
+      ownerScope,
+      runId
+    );
+  } catch (error) {
+    console.warn('[syncService] Failed to persist sync run completion:', error);
+  }
+
+  await upsertSyncState(ownerScope, userUid, {
+    last_sync_finished_at: completedAt,
+    last_sync_status: status,
+    last_sync_error: errorMessage ?? null,
+  });
 }
 
 async function ensureSupabaseSessionMatchesUser(userId: string) {
@@ -1203,10 +1469,11 @@ function shouldIgnoreRemoteTombstone(
 async function markItemFailed(
   syncRepository: SyncRepository,
   item: SyncQueueItem,
+  leaseToken: string,
   error: unknown
 ): Promise<QueueFlushFailure> {
   const retryMetadata = getRetryMetadata(item, error);
-  await syncRepository.markFailed(item.id, retryMetadata);
+  await syncRepository.markFailed(item.id, leaseToken, retryMetadata);
   return {
     itemId: item.id,
     error: retryMetadata.error,
@@ -1612,21 +1879,12 @@ async function upsertRemoteNote(
 async function flushPendingQueueToSupabase(
   user: SyncUser,
   syncRepository: SyncRepository,
-  notes: Note[],
+  _notes: Note[],
   syncMarker: string,
   syncedNoteIds: Set<string>,
   ownerScope: string
 ): Promise<FlushQueueResult> {
-  const pendingChanges = await syncRepository.listPending(5000);
-  const noteMap = new Map(notes.map((note) => [note.id, note]));
   const userId = getSyncUserId(user);
-  const remoteArtifactSnapshots = await fetchRemoteArtifactSnapshots(
-    userId,
-    pendingChanges
-      .filter((change) => change.operation !== 'delete' && change.operation !== 'deleteAll')
-      .map((change) => change.entityId)
-      .filter((entityId): entityId is string => Boolean(entityId && noteMap.has(entityId)))
-  );
 
   let processedCount = 0;
   let failedCount = 0;
@@ -1634,57 +1892,73 @@ async function flushPendingQueueToSupabase(
   let lastBlockedReason: string | null = null;
   let hadLocalWrites = false;
 
-  for (const change of pendingChanges) {
-    await syncRepository.markProcessing(change.id);
+  while (true) {
+    const pendingChanges = await syncRepository.listPending(QUEUE_FLUSH_BATCH_SIZE);
+    if (pendingChanges.length === 0) {
+      break;
+    }
 
-    try {
-      if (change.operation === 'deleteAll') {
-        await deleteAllRemoteNotesForUser(userId);
-        syncedNoteIds.clear();
-        await syncRepository.markDone(change.id);
-        processedCount += 1;
-        hadLocalWrites = true;
-        continue;
-      }
+    const remoteArtifactSnapshots = await fetchRemoteArtifactSnapshots(
+      userId,
+      pendingChanges
+        .filter((change) => change.operation !== 'delete' && change.operation !== 'deleteAll')
+        .map((change) => change.entityId)
+        .filter((entityId): entityId is string => Boolean(entityId))
+    );
 
-      if (!change.entityId) {
-        await syncRepository.markDone(change.id);
-        processedCount += 1;
-        continue;
-      }
+    for (const change of pendingChanges) {
+      const leaseToken = createSyncLeaseToken(change.id);
+      await syncRepository.markProcessing(change.id, leaseToken);
 
-      if (change.operation === 'delete') {
-        await deleteRemoteNote(userId, change.entityId);
-      } else {
-        const note = noteMap.get(change.entityId);
-        if (!note) {
+      try {
+        if (change.operation === 'deleteAll') {
+          await deleteAllRemoteNotesForUser(userId);
+          syncedNoteIds.clear();
+          await syncRepository.markDone(change.id, leaseToken);
+          processedCount += 1;
+          hadLocalWrites = true;
+          continue;
+        }
+
+        if (!change.entityId) {
+          await syncRepository.markDone(change.id, leaseToken);
+          processedCount += 1;
+          continue;
+        }
+
+        if (change.operation === 'delete') {
           await deleteRemoteNote(userId, change.entityId);
         } else {
-          await upsertRemoteNote(
-            userId,
-            note,
-            syncMarker,
-            remoteArtifactSnapshots.has(note.id)
-              ? (remoteArtifactSnapshots.get(note.id) ?? null)
-              : null,
-            ownerScope
-          );
-          syncedNoteIds.add(note.id);
+          const note = await getNoteByIdForScope(change.entityId, ownerScope);
+          if (!note) {
+            await deleteRemoteNote(userId, change.entityId);
+          } else {
+            await upsertRemoteNote(
+              userId,
+              note,
+              syncMarker,
+              remoteArtifactSnapshots.has(note.id)
+                ? (remoteArtifactSnapshots.get(note.id) ?? null)
+                : null,
+              ownerScope
+            );
+            syncedNoteIds.add(note.id);
+          }
         }
-      }
 
-      if (change.operation === 'delete') {
-        syncedNoteIds.delete(change.entityId);
-      }
+        if (change.operation === 'delete') {
+          syncedNoteIds.delete(change.entityId);
+        }
 
-      await syncRepository.markDone(change.id);
-      processedCount += 1;
-      hadLocalWrites = true;
-    } catch (error) {
-      const failure = await markItemFailed(syncRepository, change, error);
-      failedCount += 1;
-      lastError = failure.error;
-      lastBlockedReason = failure.blockedReason ?? lastBlockedReason;
+        await syncRepository.markDone(change.id, leaseToken);
+        processedCount += 1;
+        hadLocalWrites = true;
+      } catch (error) {
+        const failure = await markItemFailed(syncRepository, change, leaseToken, error);
+        failedCount += 1;
+        lastError = failure.error;
+        lastBlockedReason = failure.blockedReason ?? lastBlockedReason;
+      }
     }
   }
 
@@ -1876,11 +2150,65 @@ function createSqliteSyncRepository(resolveScope: () => string): SyncRepository 
     const scope = resolveScope();
     const serializedPayload =
       change.payload === undefined ? null : JSON.stringify(change.payload);
+    const entityId = change.entityId ?? null;
+    const coalesceKey =
+      change.type === 'deleteAll'
+        ? `scope:${scope}:deleteAll`
+        : entityId
+          ? `${change.entity}:${entityId}`
+          : null;
+
+    if (change.type === 'deleteAll') {
+      await db.runAsync('DELETE FROM sync_queue WHERE owner_uid = ?', scope);
+    } else if (coalesceKey) {
+      const existing = await db.getFirstAsync<QueueRow>(
+        `SELECT *
+         FROM sync_queue
+         WHERE owner_uid = ? AND coalesce_key = ?
+         ORDER BY created_at ASC
+         LIMIT 1`,
+        scope,
+        coalesceKey
+      );
+
+      if (existing?.id) {
+        const nextOperation =
+          change.type === 'delete'
+            ? 'delete'
+            : existing.operation === 'create' || change.type === 'create'
+              ? 'create'
+              : 'update';
+
+        await db.runAsync(
+          `UPDATE sync_queue
+           SET entity = ?,
+               entity_id = ?,
+               operation = ?,
+               payload = ?,
+               status = 'pending',
+               last_error = NULL,
+               next_retry_at = NULL,
+               terminal = 0,
+               blocked_reason = NULL,
+               lease_token = NULL
+           WHERE id = ? AND owner_uid = ?`,
+          change.entity,
+          entityId,
+          nextOperation,
+          serializedPayload,
+          existing.id,
+          scope
+        );
+        return;
+      }
+    }
+
     await db.runAsync(
       `INSERT INTO sync_queue (
         owner_uid,
         entity,
         entity_id,
+        coalesce_key,
         operation,
         payload,
         status,
@@ -1889,12 +2217,14 @@ function createSqliteSyncRepository(resolveScope: () => string): SyncRepository 
         next_retry_at,
         terminal,
         blocked_reason,
+        lease_token,
         created_at
       )
-       VALUES (?, ?, ?, ?, ?, 'pending', 0, NULL, NULL, 0, NULL, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, 'pending', 0, NULL, NULL, 0, NULL, NULL, ?)`,
       scope,
       change.entity,
-      change.entityId ?? null,
+      entityId,
+      coalesceKey,
       change.type,
       serializedPayload,
       change.timestamp
@@ -1929,13 +2259,14 @@ function createSqliteSyncRepository(resolveScope: () => string): SyncRepository 
        SET status = 'pending',
            last_error = NULL,
            next_retry_at = NULL,
-           blocked_reason = NULL
+           blocked_reason = NULL,
+           lease_token = NULL
        WHERE owner_uid = ? AND status = 'processing'`,
       scope
     );
   },
 
-  async markProcessing(id) {
+  async markProcessing(id, leaseToken) {
     const db = await getDB();
     const scope = resolveScope();
     await db.runAsync(
@@ -1943,8 +2274,10 @@ function createSqliteSyncRepository(resolveScope: () => string): SyncRepository 
        SET status = 'processing',
            attempts = attempts + 1,
            last_error = NULL,
-           blocked_reason = NULL
+           blocked_reason = NULL,
+           lease_token = ?
        WHERE id = ? AND owner_uid = ?`,
+      leaseToken,
       id,
       scope
     );
@@ -1958,7 +2291,8 @@ function createSqliteSyncRepository(resolveScope: () => string): SyncRepository 
        SET status = 'pending',
            last_error = NULL,
            next_retry_at = NULL,
-           blocked_reason = NULL
+           blocked_reason = NULL,
+           lease_token = NULL
        WHERE owner_uid = ? AND status = 'processing'`,
       scope
     );
@@ -1985,7 +2319,7 @@ function createSqliteSyncRepository(resolveScope: () => string): SyncRepository 
     return rows.map(rowToQueueItem);
   },
 
-  async markFailed(id, details) {
+  async markFailed(id, leaseToken, details) {
     const db = await getDB();
     const scope = resolveScope();
     const normalizedDetails =
@@ -1998,21 +2332,28 @@ function createSqliteSyncRepository(resolveScope: () => string): SyncRepository 
            last_error = ?,
            next_retry_at = ?,
            terminal = ?,
-           blocked_reason = ?
-       WHERE id = ? AND owner_uid = ?`,
+           blocked_reason = ?,
+           lease_token = NULL
+       WHERE id = ? AND owner_uid = ? AND lease_token = ?`,
       normalizedDetails?.error ?? null,
       normalizedDetails?.nextRetryAt ?? null,
       normalizedDetails?.terminal ? 1 : 0,
       normalizedDetails?.blockedReason ?? null,
       id,
-      scope
+      scope,
+      leaseToken
     );
   },
 
-  async markDone(id) {
+  async markDone(id, leaseToken) {
     const db = await getDB();
     const scope = resolveScope();
-    await db.runAsync('DELETE FROM sync_queue WHERE id = ? AND owner_uid = ?', id, scope);
+    await db.runAsync(
+      'DELETE FROM sync_queue WHERE id = ? AND owner_uid = ? AND lease_token = ?',
+      id,
+      scope,
+      leaseToken
+    );
   },
 
   async clearAll() {
@@ -2065,170 +2406,244 @@ export async function syncNotes(
   const userId = getSyncUserId(user);
   const ownerScope = getActiveNotesScope();
 
-  try {
-    await ensureSupabaseSessionMatchesUser(userId);
+  const inFlightRun = syncRunsInFlight.get(ownerScope);
+  if (inFlightRun) {
+    return inFlightRun;
+  }
 
-    const syncRepository = getScopedSyncRepository(ownerScope);
-    const syncMarker = new Date().toISOString();
-    const lastRemoteCursor = await getLastRemoteSyncCursor(userId);
-    const syncedNoteIds = await getPreviouslySyncedNoteIds(userId);
-    const mode: SyncMode =
-      requestedMode === 'full' || !lastRemoteCursor ? 'full' : 'incremental';
+  const syncTask = (async (): Promise<SyncResult> => {
+    let runId: string | null = null;
 
-    await syncRepository.recoverProcessing();
+    try {
+      await ensureSupabaseSessionMatchesUser(userId);
 
-    const queueResult = await flushPendingQueueToSupabase(
-      user,
-      syncRepository,
-      notes,
-      syncMarker,
-      syncedNoteIds,
-      ownerScope
-    );
-    if (queueResult.failedCount > 0) {
-      return {
-        status: 'error',
-        syncedCount: queueResult.processedCount,
-        uploadedCount: 0,
-        importedCount: 0,
-        failedCount: queueResult.failedCount,
-        message:
-          queueResult.lastBlockedReason ??
-          queueResult.lastError ??
-          i18n.t(
-            'settings.syncQueueFailureMsg',
-            'Some notes could not be synced. Please try again after checking your photo sizes and connection.'
-          ),
-      };
-    }
+      const syncRepository = getScopedSyncRepository(ownerScope);
+      const syncMarker = new Date().toISOString();
+      const lastRemoteCursor = await getLastRemoteSyncCursor(ownerScope, userId);
+      const syncedNoteIds = await getPreviouslySyncedNoteIds(userId);
+      const mode: SyncMode =
+        requestedMode === 'full' || !lastRemoteCursor ? 'full' : 'incremental';
+      const wasInitialSyncPending = await isInitialSyncPendingForUser(userId);
+      const currentLocalNotes = await getAllNotesForScope(ownerScope);
 
-    let uploadedSnapshotCount = 0;
-    let importedCount = 0;
-    let nextCursor: RemoteSyncCursor = lastRemoteCursor ?? {
-      notes: null,
-      tombstones: null,
-    };
-    let finalNoteCount = notes.length;
-    let finalPhotoNoteCount = countPhotoNotes(notes);
-    let finalDailyPhotoNoteCount = countPhotoNotesCreatedToday(notes);
-    let finalDailyPhotoNoteDate = getLocalPhotoUsageDateKey();
+      const run = await beginSyncRun(ownerScope, userId, mode);
+      runId = run.runId;
 
-    if (mode === 'full') {
-      const remoteMergeResult = await mergeRemoteNotesFromSupabase(userId, ownerScope, notes, { since: null });
-      const tombstoneMergeResult = await mergeRemoteNoteTombstonesFromSupabase(
-        userId,
-        ownerScope,
-        syncedNoteIds,
-        remoteMergeResult.remoteNoteSyncMarks,
-        { since: null }
-      );
-      importedCount = remoteMergeResult.importedCount + tombstoneMergeResult.deletedCount;
-      if (remoteMergeResult.scanCompleted) {
-        await reconcileLocallyDeletedNotes(
-          ownerScope,
-          remoteMergeResult.remoteNoteIds,
-          syncedNoteIds,
-          lastRemoteCursor?.notes ?? null
-        );
+      if (mode === 'full' && wasInitialSyncPending) {
+        await setInitialSyncStatusForUser(ownerScope, userId, 'running');
       }
-      const latestLocalNotes = await getAllNotesForScope(ownerScope);
-      finalNoteCount = latestLocalNotes.length;
-      finalPhotoNoteCount = countPhotoNotes(latestLocalNotes);
-      for (const note of latestLocalNotes) {
-        syncedNoteIds.add(note.id);
-      }
-      uploadedSnapshotCount = await uploadLocalSnapshotToSupabase(
-        userId,
-        latestLocalNotes,
+
+      await syncRepository.recoverProcessing();
+
+      const queueResult = await flushPendingQueueToSupabase(
+        user,
+        syncRepository,
+        currentLocalNotes,
         syncMarker,
+        syncedNoteIds,
         ownerScope
       );
-      nextCursor = {
-        notes: remoteMergeResult.noteCursor,
-        tombstones: tombstoneMergeResult.tombstoneCursor,
-      };
-    } else {
-      const remoteMergeResult = await mergeRemoteNotesFromSupabase(userId, ownerScope, notes, {
-        since: lastRemoteCursor?.notes ?? null,
-      });
-      const tombstoneMergeResult = await mergeRemoteNoteTombstonesFromSupabase(
-        userId,
-        ownerScope,
-        syncedNoteIds,
-        remoteMergeResult.remoteNoteSyncMarks,
-        { since: lastRemoteCursor?.tombstones ?? null }
-      );
-      importedCount = remoteMergeResult.importedCount + tombstoneMergeResult.deletedCount;
-      for (const remoteNoteId of remoteMergeResult.remoteNoteIds) {
-        syncedNoteIds.add(remoteNoteId);
+      if (queueResult.failedCount > 0) {
+        const result = {
+          status: 'error' as const,
+          syncedCount: queueResult.processedCount,
+          uploadedCount: 0,
+          importedCount: 0,
+          failedCount: queueResult.failedCount,
+          bootstrapCompleted: false,
+          message:
+            queueResult.lastBlockedReason ??
+            queueResult.lastError ??
+            i18n.t(
+              'settings.syncQueueFailureMsg',
+              'Some notes could not be synced. Please try again after checking your photo sizes and connection.'
+            ),
+        };
+        if (runId) {
+          await finishSyncRun(ownerScope, userId, runId, 'error', result.message ?? null);
+        }
+        if (mode === 'full' && wasInitialSyncPending) {
+          await setInitialSyncStatusForUser(ownerScope, userId, 'pending');
+        }
+        return result;
       }
-      nextCursor = {
-        notes: remoteMergeResult.noteCursor ?? lastRemoteCursor?.notes ?? null,
-        tombstones: tombstoneMergeResult.tombstoneCursor ?? lastRemoteCursor?.tombstones ?? null,
+
+      let uploadedSnapshotCount = 0;
+      let importedCount = 0;
+      let nextCursor: RemoteSyncCursor = lastRemoteCursor ?? {
+        notes: null,
+        tombstones: null,
       };
-      if (importedCount > 0) {
+      let finalNoteCount = currentLocalNotes.length;
+      let finalPhotoNoteCount = countPhotoNotes(currentLocalNotes);
+      let finalDailyPhotoNoteCount = countPhotoNotesCreatedToday(currentLocalNotes);
+      let finalDailyPhotoNoteDate = getLocalPhotoUsageDateKey();
+      let bootstrapCompleted = !wasInitialSyncPending;
+
+      if (mode === 'full') {
+        const remoteMergeResult = await mergeRemoteNotesFromSupabase(userId, ownerScope, currentLocalNotes, { since: null });
+        const tombstoneMergeResult = await mergeRemoteNoteTombstonesFromSupabase(
+          userId,
+          ownerScope,
+          syncedNoteIds,
+          remoteMergeResult.remoteNoteSyncMarks,
+          { since: null }
+        );
+        importedCount = remoteMergeResult.importedCount + tombstoneMergeResult.deletedCount;
+        if (remoteMergeResult.scanCompleted) {
+          await reconcileLocallyDeletedNotes(
+            ownerScope,
+            remoteMergeResult.remoteNoteIds,
+            syncedNoteIds,
+            lastRemoteCursor?.notes ?? null
+          );
+        }
+
         const latestLocalNotes = await getAllNotesForScope(ownerScope);
         finalNoteCount = latestLocalNotes.length;
         finalPhotoNoteCount = countPhotoNotes(latestLocalNotes);
         finalDailyPhotoNoteCount = countPhotoNotesCreatedToday(latestLocalNotes);
         finalDailyPhotoNoteDate = getLocalPhotoUsageDateKey();
+
+        if (remoteMergeResult.scanCompleted) {
+          for (const note of latestLocalNotes) {
+            syncedNoteIds.add(note.id);
+          }
+          uploadedSnapshotCount = await uploadLocalSnapshotToSupabase(
+            userId,
+            latestLocalNotes,
+            syncMarker,
+            ownerScope
+          );
+          nextCursor = {
+            notes: remoteMergeResult.noteCursor,
+            tombstones: tombstoneMergeResult.tombstoneCursor,
+          };
+          bootstrapCompleted = true;
+          await setInitialSyncStatusForUser(ownerScope, userId, 'complete');
+        } else {
+          nextCursor = lastRemoteCursor ?? nextCursor;
+          bootstrapCompleted = false;
+          if (wasInitialSyncPending) {
+            await setInitialSyncStatusForUser(ownerScope, userId, 'pending');
+          }
+        }
+      } else {
+        const remoteMergeResult = await mergeRemoteNotesFromSupabase(userId, ownerScope, currentLocalNotes, {
+          since: lastRemoteCursor?.notes ?? null,
+        });
+        const tombstoneMergeResult = await mergeRemoteNoteTombstonesFromSupabase(
+          userId,
+          ownerScope,
+          syncedNoteIds,
+          remoteMergeResult.remoteNoteSyncMarks,
+          { since: lastRemoteCursor?.tombstones ?? null }
+        );
+        importedCount = remoteMergeResult.importedCount + tombstoneMergeResult.deletedCount;
+        for (const remoteNoteId of remoteMergeResult.remoteNoteIds) {
+          syncedNoteIds.add(remoteNoteId);
+        }
+        nextCursor = {
+          notes: remoteMergeResult.noteCursor ?? lastRemoteCursor?.notes ?? null,
+          tombstones: tombstoneMergeResult.tombstoneCursor ?? lastRemoteCursor?.tombstones ?? null,
+        };
+        if (importedCount > 0) {
+          const latestLocalNotes = await getAllNotesForScope(ownerScope);
+          finalNoteCount = latestLocalNotes.length;
+          finalPhotoNoteCount = countPhotoNotes(latestLocalNotes);
+          finalDailyPhotoNoteCount = countPhotoNotesCreatedToday(latestLocalNotes);
+          finalDailyPhotoNoteDate = getLocalPhotoUsageDateKey();
+        }
       }
-    }
 
-    const { error: usageError } = await supabase.from('user_usage').upsert(
-      {
-        user_id: userId,
-        note_count: finalNoteCount,
-        photo_note_count: finalPhotoNoteCount,
-        photo_note_daily_count: finalDailyPhotoNoteCount,
-        photo_note_daily_date: finalDailyPhotoNoteDate,
-        last_synced_at: syncMarker,
-      },
-      { onConflict: 'user_id' }
-    );
-    if (usageError) {
-      throw usageError;
-    }
+      await Promise.all([
+        setLastRemoteSyncCursor(ownerScope, userId, nextCursor),
+        setPreviouslySyncedNoteIds(userId, syncedNoteIds),
+      ]);
 
-    await Promise.all([
-      upsertPublicUserProfile({
+      const syncedCount = queueResult.processedCount + uploadedSnapshotCount + importedCount;
+      const result: SyncResult = {
+        status: 'success',
+        syncedCount,
+        uploadedCount: uploadedSnapshotCount,
+        importedCount,
+        failedCount: 0,
+        bootstrapCompleted,
+        message:
+          syncedCount === 1
+            ? i18n.t('settings.syncSuccessMsgOne')
+            : i18n.t('settings.syncSuccessMsgOther', { count: syncedCount }),
+      };
+
+      if (runId) {
+        await finishSyncRun(ownerScope, userId, runId, 'success');
+      }
+
+      void (async () => {
+        try {
+          const { error: usageError } = await supabase.from('user_usage').upsert(
+            {
+              user_id: userId,
+              note_count: finalNoteCount,
+              photo_note_count: finalPhotoNoteCount,
+              photo_note_daily_count: finalDailyPhotoNoteCount,
+              photo_note_daily_date: finalDailyPhotoNoteDate,
+              last_synced_at: syncMarker,
+            },
+            { onConflict: 'user_id' }
+          );
+
+          if (usageError) {
+            console.warn('[syncService] Failed to persist user usage after sync:', usageError);
+          }
+        } catch (error) {
+          console.warn('[syncService] Failed to persist user usage after sync:', error);
+        }
+      })();
+
+      void upsertPublicUserProfile({
         userUid: userId,
         displayName: user.displayName,
         username: user.username,
         email: user.email,
         photoURL: user.photoURL,
-      }),
-      setLastRemoteSyncCursor(userId, nextCursor),
-      setPreviouslySyncedNoteIds(userId, syncedNoteIds),
-    ]);
+      }).catch((error) => {
+        console.warn('[syncService] Failed to persist public profile after sync:', error);
+      });
 
-    const syncedCount = queueResult.processedCount + uploadedSnapshotCount + importedCount;
-    return {
-      status: 'success',
-      syncedCount,
-      uploadedCount: uploadedSnapshotCount,
-      importedCount,
-      failedCount: 0,
-      message:
-        syncedCount === 1
-          ? i18n.t('settings.syncSuccessMsgOne')
-          : i18n.t('settings.syncSuccessMsgOther', { count: syncedCount }),
-    };
-  } catch (error) {
-    if (shouldLogSyncWarning(error)) {
-      console.warn('[syncService] Supabase sync failed:', error);
+      return result;
+    } catch (error) {
+      if (runId) {
+        await finishSyncRun(ownerScope, userId, runId, 'error', getErrorMessage(error));
+      }
+      if (requestedMode === 'full' || (await isInitialSyncPendingForUser(userId))) {
+        await setInitialSyncStatusForUser(ownerScope, userId, 'pending');
+      }
+      if (shouldLogSyncWarning(error)) {
+        console.warn('[syncService] Supabase sync failed:', error);
+      }
+
+      return {
+        status: 'error',
+        bootstrapCompleted: false,
+        message: getSyncFailureMessage(error),
+      };
     }
+  })();
 
-    return {
-      status: 'error',
-      message: getSyncFailureMessage(error),
-    };
-  }
+  syncRunsInFlight.set(ownerScope, syncTask);
+  return syncTask.finally(() => {
+    syncRunsInFlight.delete(ownerScope);
+  });
 }
 
 
 export function getSyncRepository(): SyncRepository {
   return sqliteSyncRepository;
+}
+
+export async function hasStoredRemoteSyncCursor(userUid: string): Promise<boolean> {
+  return Boolean(await getLastRemoteSyncCursor(userUid, userUid));
 }
 
 export function getSyncService(): SyncService {
