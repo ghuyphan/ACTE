@@ -803,6 +803,10 @@ export function getSharedFeedErrorMessage(error: unknown) {
     return 'Shared moments are not available for this account right now. Please sign in again and try once more.';
   }
 
+  if (isSupabaseSchemaMismatchError(error)) {
+    return 'Shared moments need the latest server update right now. Apply the latest Supabase migrations, then try again.';
+  }
+
   if (isSupabaseNetworkError(error)) {
     return 'The server is unavailable right now. Check your connection and try again.';
   }

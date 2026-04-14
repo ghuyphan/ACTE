@@ -49,6 +49,10 @@ describe('supabase migration hardening', () => {
     resolve(__dirname, '../supabase/migrations/20260402113000_harden_profile_visibility_and_invite_tokens.sql'),
     'utf8'
   );
+  const inviteDigestLookupFixMigration = readFileSync(
+    resolve(__dirname, '../supabase/migrations/20260414101500_fix_invite_hash_digest_lookup.sql'),
+    'utf8'
+  );
   const normalizedRemoveStorageCleanupTriggersMigration =
     removeStorageCleanupTriggersMigration.toLowerCase();
 
@@ -144,6 +148,12 @@ describe('supabase migration hardening', () => {
     expect(profileInviteHardeningMigration).toContain('set created_by_invite_token = null');
     expect(profileInviteHardeningMigration).toContain('create or replace function public.accept_friend_invite');
     expect(profileInviteHardeningMigration).toContain('token_hash = invite_token_hash');
+  });
+
+  it('qualifies invite hashing through the extensions schema for invite RPCs', () => {
+    expect(inviteDigestLookupFixMigration).toContain('create or replace function public.accept_friend_invite');
+    expect(inviteDigestLookupFixMigration).toContain("extensions.digest(normalized_invite_token, 'sha256'::text)");
+    expect(inviteDigestLookupFixMigration).not.toContain('public.room_members');
   });
 
   it('removes unsupported storage cleanup triggers that delete from storage.objects directly', () => {

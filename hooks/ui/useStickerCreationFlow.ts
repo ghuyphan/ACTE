@@ -322,7 +322,7 @@ export function useStickerCreationFlow({
             height: preparedDraft.height,
             cleanupUri: preparedDraft.cleanupUri,
             cutoutCleanupUri: cutoutSource.cleanupUri,
-            backgroundVisible: true,
+            backgroundVisible: false,
           },
         });
       } catch (error) {
