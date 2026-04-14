@@ -100,4 +100,31 @@ describe('useAppNotificationRouting', () => {
       expect(mockClearLastNotificationResponseAsync).toHaveBeenCalledTimes(1);
     });
   });
+
+  it('routes friend accepted notifications to the home shared-manage flow', async () => {
+    const notificationResponse = {
+      notification: {
+        request: {
+          identifier: 'friend-accepted-1',
+          content: {
+            data: {
+              notificationType: 'friend-accepted',
+              route: '/shared',
+              friendUserId: 'friend-42',
+            },
+          },
+        },
+      },
+    } as unknown as Notifications.NotificationResponse;
+
+    mockGetLastNotificationResponseAsync.mockResolvedValue(notificationResponse);
+    mockRootNavigationState = { key: 'root-ready' };
+
+    renderHook(() => useAppNotificationRouting());
+
+    await waitFor(() => {
+      expect(mockPush).toHaveBeenCalledWith('/(tabs)?openSharedManageAt=friend-accepted-1');
+      expect(mockClearLastNotificationResponseAsync).toHaveBeenCalledTimes(1);
+    });
+  });
 });

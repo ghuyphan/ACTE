@@ -18,6 +18,8 @@ interface ImageMemoryCardProps {
   isLivePhoto?: boolean;
   pairedVideoUri?: string | null;
   showLiveBadge?: boolean;
+  enablePlayback?: boolean;
+  autoPreviewOnceOnEnable?: boolean;
   doodleStrokesJson?: string | null;
   stickerPlacementsJson?: string | null;
   remoteBucket?: string;
@@ -31,6 +33,8 @@ function ImageMemoryCard({
   isLivePhoto = false,
   pairedVideoUri = null,
   showLiveBadge = true,
+  enablePlayback = true,
+  autoPreviewOnceOnEnable = false,
   doodleStrokesJson = null,
   stickerPlacementsJson = null,
   remoteBucket,
@@ -58,7 +62,8 @@ function ImageMemoryCard({
           showLiveBadge={showLiveBadge}
           style={styles.image}
           imageStyle={styles.image}
-          enablePlayback
+          enablePlayback={enablePlayback}
+          autoPreviewOnceOnEnable={autoPreviewOnceOnEnable}
         />
         {stickerPlacements.length > 0 ? (
           <View

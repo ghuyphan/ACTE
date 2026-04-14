@@ -42,6 +42,9 @@ private const val SMALL_WIDGET_MAX_RENDER_EDGE_PX = 760
 private const val MEDIUM_WIDGET_MAX_RENDER_EDGE_PX = 960
 private const val SMALL_WIDGET_MAX_RENDER_PIXELS = 440_000
 private const val MEDIUM_WIDGET_MAX_RENDER_PIXELS = 600_000
+private const val MEDIUM_WIDGET_MIN_WIDTH_DP = 220
+private const val MEDIUM_WIDGET_MAX_HEIGHT_DP = 170
+private const val MEDIUM_WIDGET_MIN_ASPECT_RATIO = 1.32f
 private const val STICKER_OUTLINE_COLOR = "#FAFAFA"
 private const val STICKER_OUTLINE_OPACITY = 1f
 private const val STAMP_OUTLINE_COLOR = "#FFFAF0"
@@ -411,7 +414,7 @@ class NotoWidgetProvider : AppWidgetProvider() {
       bindPhotoState(context, views, snapshot, showIdle, geometry)
       bindStickerState(context, views, snapshot, options, isMedium, showIdle)
       bindDoodleState(context, views, snapshot, options, isMedium, usesTextSurface, showIdle)
-      val showAuthorChip = bindAuthorState(context, views, snapshot, showIdle, usesTextSurface)
+      val showAuthorChip = bindAuthorState(context, views, snapshot, showIdle, usesTextSurface, isMedium)
       bindLivePhotoBadge(views, showLivePhotoBadge)
 
       views.setTextViewText(R.id.widget_idle_body, idleBodyText)
@@ -423,10 +426,19 @@ class NotoWidgetProvider : AppWidgetProvider() {
       if (showPhotoTitle) {
         views.setTextViewText(R.id.widget_photo_title, photoTitleText)
         views.setTextColor(R.id.widget_photo_title, Color.parseColor("#FFFFFF"))
+        if (!isMedium) {
+          views.setInt(R.id.widget_photo_title, "setMaxLines", 1)
+          views.setTextViewTextSize(R.id.widget_photo_title, TypedValue.COMPLEX_UNIT_SP, 20f)
+        }
       }
 
       val locationBadgeText = getLocationBadgeText(snapshot.locationName, isMedium)
-      val showLocationChip = !showIdle && !showAuthorChip && locationBadgeText.isNotBlank()
+      val allowsPhotoHeaderLocation = isMedium && snapshot.noteType == "photo" && hasImage
+      val showLocationChip =
+        !showIdle &&
+        locationBadgeText.isNotBlank() &&
+        (!showAuthorChip || allowsPhotoHeaderLocation) &&
+        !(snapshot.noteType == "photo" && hasImage && !isMedium)
       val showTrailingPhotoLocationChip =
         showLocationChip &&
         isMedium &&
@@ -821,10 +833,11 @@ class NotoWidgetProvider : AppWidgetProvider() {
       views: RemoteViews,
       snapshot: NotoWidgetSnapshot,
       showIdle: Boolean,
-      usesTextSurface: Boolean
+      usesTextSurface: Boolean,
+      isMedium: Boolean
     ): Boolean {
       val compactAuthorName = getCompactAuthorName(snapshot)
-      val showAuthorChip = shouldShowAuthorChip(snapshot, showIdle)
+      val showAuthorChip = shouldShowAuthorChip(snapshot, showIdle, isMedium)
 
       if (!showAuthorChip) {
         views.setViewVisibility(R.id.widget_author_chip, View.GONE)
@@ -1069,8 +1082,8 @@ class NotoWidgetProvider : AppWidgetProvider() {
         .orEmpty()
     }
 
-    private fun shouldShowAuthorChip(snapshot: NotoWidgetSnapshot, showIdle: Boolean): Boolean {
-      if (showIdle || !snapshot.isSharedContent) {
+    private fun shouldShowAuthorChip(snapshot: NotoWidgetSnapshot, showIdle: Boolean, isMedium: Boolean): Boolean {
+      if (showIdle || !snapshot.isSharedContent || !isMedium) {
         return false
       }
 
@@ -1878,8 +1891,31 @@ class NotoWidgetProvider : AppWidgetProvider() {
     }
 
     private fun isMediumWidget(options: Bundle): Boolean {
-      val minWidthDp = options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH, 160)
-      return minWidthDp >= 180
+      val exactSizes = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        options.getParcelableArrayList<SizeF>(AppWidgetManager.OPTION_APPWIDGET_SIZES)
+          ?.filter { it.width > 0f && it.height > 0f }
+          .orEmpty()
+      } else {
+        emptyList()
+      }
+
+      if (exactSizes.isNotEmpty()) {
+        return exactSizes.any { size ->
+          val width = size.width
+          val height = size.height
+          val aspectRatio = width / max(height, 1f)
+          width >= MEDIUM_WIDGET_MIN_WIDTH_DP &&
+            height <= MEDIUM_WIDGET_MAX_HEIGHT_DP &&
+            aspectRatio >= MEDIUM_WIDGET_MIN_ASPECT_RATIO
+        }
+      }
+
+      val minWidthDp = options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH, 160).toFloat()
+      val minHeightDp = options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, 160).toFloat()
+      val aspectRatio = minWidthDp / max(minHeightDp, 1f)
+      return minWidthDp >= MEDIUM_WIDGET_MIN_WIDTH_DP &&
+        minHeightDp <= MEDIUM_WIDGET_MAX_HEIGHT_DP &&
+        aspectRatio >= MEDIUM_WIDGET_MIN_ASPECT_RATIO
     }
 
     private fun createWidgetPendingIntent(

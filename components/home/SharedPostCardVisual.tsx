@@ -43,6 +43,8 @@ export default function SharedPostCardVisual({
           isLivePhoto={post.isLivePhoto}
           pairedVideoUri={pairedVideoUri}
           showLiveBadge={false}
+          enablePlayback={isActive}
+          autoPreviewOnceOnEnable={isActive}
           doodleStrokesJson={post.doodleStrokesJson}
           stickerPlacementsJson={post.stickerPlacementsJson}
           remoteBucket={SHARED_POST_MEDIA_BUCKET}

@@ -3,6 +3,7 @@ import * as Haptics from '../../hooks/useHaptics';
 import { VideoView, useVideoPlayer } from 'expo-video';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useReducedMotion } from '../../hooks/useReducedMotion';
 import {
   type ImageStyle,
   type GestureResponderEvent,
@@ -22,8 +23,13 @@ type PhotoMediaViewProps = {
   imageStyle?: StyleProp<ImageStyle>;
   showLiveBadge?: boolean;
   enablePlayback?: boolean;
+  autoPreviewOnceOnEnable?: boolean;
   badgeStyle?: StyleProp<ViewStyle>;
   onImageReady?: () => void;
+};
+
+type ExpoVideoPlayerSubscription = {
+  remove: () => void;
 };
 
 type ExpoVideoPlayer = {
@@ -33,6 +39,7 @@ type ExpoVideoPlayer = {
   currentTime: number;
   play: () => void;
   pause: () => void;
+  addListener?: (eventName: 'playToEnd', listener: () => void) => ExpoVideoPlayerSubscription;
 };
 
 type ExpoVideoModule = {
@@ -44,6 +51,7 @@ type ExpoVideoModule = {
 };
 
 const LIVE_PHOTO_PREVIEW_HOLD_MS = 170;
+const LIVE_PHOTO_AUTO_PREVIEW_DELAY_MS = 420;
 
 function hasExpoVideoNativeModule() {
   if (process.env.NODE_ENV === 'test') {
@@ -109,51 +117,6 @@ function StaticPhotoView({
   );
 }
 
-function NativeLivePhotoPreview({
-  imageUrl,
-  pairedVideoUri,
-  style,
-  imageStyle,
-  showLiveBadge = true,
-  enablePlayback = true,
-  badgeStyle,
-  onImageReady,
-}: Required<Pick<PhotoMediaViewProps, 'imageUrl' | 'showLiveBadge' | 'enablePlayback'>> &
-  Pick<PhotoMediaViewProps, 'style' | 'imageStyle' | 'badgeStyle' | 'onImageReady'> & {
-    pairedVideoUri: string;
-  }) {
-  const { t } = useTranslation();
-  const expoVideo = getExpoVideoModule();
-  if (!expoVideo) {
-    return (
-      <StaticPhotoView
-        imageUrl={imageUrl}
-        isLivePhoto
-        style={style}
-        imageStyle={imageStyle}
-        showLiveBadge={showLiveBadge}
-        badgeStyle={badgeStyle}
-        onImageReady={onImageReady}
-      />
-    );
-  }
-
-  return (
-    <VideoLivePhotoPreview
-      imageUrl={imageUrl}
-      pairedVideoUri={pairedVideoUri}
-      style={style}
-      imageStyle={imageStyle}
-      showLiveBadge={showLiveBadge}
-      enablePlayback={enablePlayback}
-      badgeStyle={badgeStyle}
-      onImageReady={onImageReady}
-      t={t}
-      expoVideo={expoVideo}
-    />
-  );
-}
-
 function VideoLivePhotoPreview({
   imageUrl,
   pairedVideoUri,
@@ -161,17 +124,24 @@ function VideoLivePhotoPreview({
   imageStyle,
   showLiveBadge,
   enablePlayback,
+  autoPreviewOnceOnEnable,
   badgeStyle,
   onImageReady,
   t,
   expoVideo,
-}: Required<Pick<PhotoMediaViewProps, 'imageUrl' | 'showLiveBadge' | 'enablePlayback'>> &
+}: Required<
+  Pick<
+    PhotoMediaViewProps,
+    'imageUrl' | 'showLiveBadge' | 'enablePlayback' | 'autoPreviewOnceOnEnable'
+  >
+> &
   Pick<PhotoMediaViewProps, 'style' | 'imageStyle' | 'badgeStyle' | 'onImageReady'> & {
     pairedVideoUri: string;
     t: ReturnType<typeof useTranslation>['t'];
     expoVideo: ExpoVideoModule;
   }) {
   const { VideoView, useVideoPlayer } = expoVideo;
+  const reduceMotionEnabled = useReducedMotion();
   const [isPreviewing, setIsPreviewing] = useState(false);
   const [hasRenderedFirstFrame, setHasRenderedFirstFrame] = useState(false);
   const player = useVideoPlayer({ uri: pairedVideoUri }, (nextPlayer) => {
@@ -180,8 +150,10 @@ function VideoLivePhotoPreview({
     nextPlayer.volume = 0;
   });
   const activePlayerRef = useRef<ExpoVideoPlayer | null>(player);
-  const previewActiveRef = useRef(false);
+  const previewModeRef = useRef<'auto' | 'manual' | null>(null);
   const previewHoldTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const autoPreviewTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hasAutoPreviewedRef = useRef(false);
 
   const clearPreviewHold = useCallback(() => {
     if (previewHoldTimeoutRef.current) {
@@ -190,9 +162,16 @@ function VideoLivePhotoPreview({
     }
   }, []);
 
+  const clearAutoPreview = useCallback(() => {
+    if (autoPreviewTimeoutRef.current) {
+      clearTimeout(autoPreviewTimeoutRef.current);
+      autoPreviewTimeoutRef.current = null;
+    }
+  }, []);
+
   const stopPlayer = useCallback(() => {
     const activePlayer = activePlayerRef.current;
-    if (activePlayer === player && previewActiveRef.current) {
+    if (activePlayer === player && previewModeRef.current) {
       activePlayer.pause();
       activePlayer.currentTime = 0;
     }
@@ -210,42 +189,44 @@ function VideoLivePhotoPreview({
 
   useEffect(() => {
     clearPreviewHold();
+    clearAutoPreview();
     stopPlayer();
-    previewActiveRef.current = false;
+    previewModeRef.current = null;
     setHasRenderedFirstFrame(false);
     setIsPreviewing(false);
-  }, [clearPreviewHold, pairedVideoUri, stopPlayer]);
+    hasAutoPreviewedRef.current = false;
+  }, [clearAutoPreview, clearPreviewHold, pairedVideoUri, stopPlayer]);
 
   useEffect(() => clearPreviewHold, [clearPreviewHold]);
+  useEffect(() => clearAutoPreview, [clearAutoPreview]);
 
   useEffect(() => {
     const activePlayer = activePlayerRef.current;
-    if (activePlayer !== player) {
-      return;
-    }
-
-    if (!isPreviewing) {
+    if (activePlayer !== player || !isPreviewing) {
       return;
     }
 
     activePlayer.currentTime = 0;
     activePlayer.play();
-    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    if (previewModeRef.current === 'manual') {
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
   }, [isPreviewing, player]);
 
   const stopPreview = useCallback(() => {
     clearPreviewHold();
+    clearAutoPreview();
     stopPlayer();
-    previewActiveRef.current = false;
+    previewModeRef.current = null;
     setIsPreviewing(false);
-  }, [clearPreviewHold, stopPlayer]);
+  }, [clearAutoPreview, clearPreviewHold, stopPlayer]);
 
-  const startPreview = useCallback(() => {
+  const startPreview = useCallback((mode: 'auto' | 'manual') => {
     if (!enablePlayback) {
       return;
     }
 
-    previewActiveRef.current = true;
+    previewModeRef.current = mode;
     setIsPreviewing(true);
   }, [enablePlayback]);
 
@@ -254,30 +235,72 @@ function VideoLivePhotoPreview({
       return;
     }
 
-    // Recover if a prior touch sequence never delivered a clean press-out.
     stopPreview();
 
     previewHoldTimeoutRef.current = setTimeout(() => {
       previewHoldTimeoutRef.current = null;
-      startPreview();
+      startPreview('manual');
     }, LIVE_PHOTO_PREVIEW_HOLD_MS);
   }, [enablePlayback, startPreview, stopPreview]);
+
+  useEffect(() => {
+    if (
+      !enablePlayback ||
+      !autoPreviewOnceOnEnable ||
+      reduceMotionEnabled ||
+      hasAutoPreviewedRef.current
+    ) {
+      return;
+    }
+
+    autoPreviewTimeoutRef.current = setTimeout(() => {
+      autoPreviewTimeoutRef.current = null;
+      if (!previewModeRef.current && !hasAutoPreviewedRef.current) {
+        hasAutoPreviewedRef.current = true;
+        startPreview('auto');
+      }
+    }, LIVE_PHOTO_AUTO_PREVIEW_DELAY_MS);
+
+    return clearAutoPreview;
+  }, [
+    autoPreviewOnceOnEnable,
+    clearAutoPreview,
+    enablePlayback,
+    reduceMotionEnabled,
+    startPreview,
+  ]);
+
+  useEffect(() => {
+    const activePlayer = activePlayerRef.current;
+    if (activePlayer !== player || !activePlayer.addListener) {
+      return;
+    }
+
+    const subscription = activePlayer.addListener('playToEnd', () => {
+      stopPreview();
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, [player, stopPreview]);
 
   const shouldShowVideo = isPreviewing && hasRenderedFirstFrame;
 
   return (
     <View style={style}>
       <VideoView
-        player={isPreviewing ? player : null}
+        // Keep the native player attached for the life of the view. Toggling
+        // the `player` prop on Android can trip an expo-video detach race.
+        player={player}
         style={[
           StyleSheet.absoluteFill,
           imageStyle,
-          isPreviewing ? styles.previewVisible : styles.previewHidden,
+          shouldShowVideo ? styles.previewVisible : styles.previewHidden,
         ]}
         contentFit="cover"
         nativeControls={false}
         pointerEvents="none"
-        surfaceType="textureView"
         useExoShutter={false}
         onFirstFrameRender={() => {
           setHasRenderedFirstFrame(true);
@@ -318,9 +341,12 @@ export default function PhotoMediaView({
   imageStyle,
   showLiveBadge = true,
   enablePlayback = true,
+  autoPreviewOnceOnEnable = false,
   badgeStyle,
   onImageReady,
 }: PhotoMediaViewProps) {
+  const { t } = useTranslation();
+
   if (!isLivePhoto || !pairedVideoUri) {
     return (
       <StaticPhotoView
@@ -335,16 +361,34 @@ export default function PhotoMediaView({
     );
   }
 
+  const expoVideo = getExpoVideoModule();
+  if (!expoVideo) {
+    return (
+      <StaticPhotoView
+        imageUrl={imageUrl}
+        isLivePhoto
+        style={style}
+        imageStyle={imageStyle}
+        showLiveBadge={showLiveBadge}
+        badgeStyle={badgeStyle}
+        onImageReady={onImageReady}
+      />
+    );
+  }
+
   return (
-    <NativeLivePhotoPreview
+    <VideoLivePhotoPreview
       imageUrl={imageUrl}
       pairedVideoUri={pairedVideoUri}
       style={style}
       imageStyle={imageStyle}
       showLiveBadge={showLiveBadge}
       enablePlayback={enablePlayback}
+      autoPreviewOnceOnEnable={autoPreviewOnceOnEnable}
       badgeStyle={badgeStyle}
       onImageReady={onImageReady}
+      t={t}
+      expoVideo={expoVideo}
     />
   );
 }

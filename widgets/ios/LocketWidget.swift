@@ -919,6 +919,10 @@ private struct LocketWidgetEntryView: View {
         family == .systemMedium
     }
 
+    private var isSmall: Bool {
+        family == .systemSmall
+    }
+
     private var isAccessoryInline: Bool {
         family == .accessoryInline
     }
@@ -1058,6 +1062,7 @@ private struct LocketWidgetEntryView: View {
 
     private var shouldShowAuthorChip: Bool {
         !isAccessoryFamily &&
+        !isSmall &&
         !payload.isIdleState &&
         payload.isSharedContent &&
         (
@@ -1511,6 +1516,8 @@ private struct LocketWidgetEntryView: View {
                 .font(.custom("Noto Sans Medium", size: 10))
                 .foregroundStyle(eyebrowTextColor)
                 .lineLimit(1)
+                .minimumScaleFactor(0.84)
+                .frame(maxWidth: isLarge ? 170 : (isMedium ? 144 : 124), alignment: .leading)
         }
         .padding(.horizontal, 11)
         .padding(.vertical, 6)
@@ -1553,6 +1560,8 @@ private struct LocketWidgetEntryView: View {
                     .font(.custom("Noto Sans Medium", size: 10))
                     .foregroundStyle(authorChipForegroundColor)
                     .lineLimit(1)
+                    .minimumScaleFactor(0.84)
+                    .frame(maxWidth: isLarge ? 112 : 90, alignment: .leading)
             }
         }
         .padding(.horizontal, 8)
@@ -1573,6 +1582,7 @@ private struct LocketWidgetEntryView: View {
                     .font(.custom("Noto Sans SemiBold", size: 10))
                     .foregroundStyle(authorChipForegroundColor)
                     .lineLimit(1)
+                    .minimumScaleFactor(0.85)
             }
         }
         .padding(.horizontal, 9)
@@ -1624,11 +1634,19 @@ private struct LocketWidgetEntryView: View {
     }
 
     private var shouldShowTopLocationChip: Bool {
-        !payload.isIdleState && !shouldShowAuthorChip && !compactLocationName.isEmpty
+        let allowsPhotoHeaderLocation = hasPhotoBackground && !isSmall
+        return !payload.isIdleState &&
+            !compactLocationName.isEmpty &&
+            (!shouldShowAuthorChip || allowsPhotoHeaderLocation) &&
+            !(isSmall && hasPhotoBackground)
     }
 
     private var shouldShowBottomMetaChip: Bool {
         !payload.isIdleState && shouldShowAuthorChip
+    }
+
+    private var shouldUseSplitPhotoHeader: Bool {
+        hasPhotoBackground && !isSmall && (shouldShowLivePhotoBadge || shouldShowTopLocationChip)
     }
 
     private var textBodyLineLimit: Int {
@@ -1665,7 +1683,7 @@ private struct LocketWidgetEntryView: View {
         if isMedium {
             return .custom("Noto Sans ExtraBold", size: 22)
         }
-        return .custom("Noto Sans ExtraBold", size: compactPhotoCaptionText.count > 28 ? 18 : 20)
+        return .custom("Noto Sans ExtraBold", size: compactPhotoCaptionText.count > 28 ? 16 : 17)
     }
 
     @ViewBuilder
@@ -1675,7 +1693,7 @@ private struct LocketWidgetEntryView: View {
                 .font(photoTitleFont)
                 .foregroundStyle(Color(red: 1.0, green: 0.969, blue: 0.910))
                 .multilineTextAlignment(.leading)
-                .lineLimit(isLarge ? 3 : 2)
+                .lineLimit(isLarge ? 3 : (isMedium ? 2 : 1))
                 .lineSpacing(isLarge ? 2 : 1)
                 .tracking(-0.45)
                 .shadow(color: Color.black.opacity(0.30), radius: 10, x: 0, y: 2)
@@ -1808,7 +1826,7 @@ private struct LocketWidgetEntryView: View {
         let cornerRadius: CGFloat = isExpanded ? 30 : 26
         let cardShape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
 
-        ZStack(alignment: .bottomLeading) {
+        return ZStack(alignment: .bottomLeading) {
             cardInnerBackground
 
             if shouldShowStickerOverlay {
@@ -1834,19 +1852,35 @@ private struct LocketWidgetEntryView: View {
             }
 
             VStack(spacing: 0) {
-                ZStack(alignment: .top) {
-                    HStack(alignment: .top) {
-                        Spacer(minLength: 0)
+                Group {
+                    if shouldUseSplitPhotoHeader {
+                        HStack(alignment: .top) {
+                            if shouldShowLivePhotoBadge {
+                                livePhotoBadge
+                            }
 
-                        if shouldShowLivePhotoBadge {
-                            livePhotoBadge
-                        } else if shouldShowCountBadge {
-                            countBadge
+                            Spacer(minLength: 0)
+
+                            if shouldShowTopLocationChip {
+                                floatingLocationChip
+                            }
                         }
-                    }
+                    } else {
+                        ZStack(alignment: .top) {
+                            HStack(alignment: .top) {
+                                Spacer(minLength: 0)
 
-                    if shouldShowTopLocationChip {
-                        floatingLocationChip
+                                if shouldShowLivePhotoBadge {
+                                    livePhotoBadge
+                                } else if shouldShowCountBadge {
+                                    countBadge
+                                }
+                            }
+
+                            if shouldShowTopLocationChip {
+                                floatingLocationChip
+                            }
+                        }
                     }
                 }
 

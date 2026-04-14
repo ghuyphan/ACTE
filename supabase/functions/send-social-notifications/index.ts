@@ -146,7 +146,7 @@ async function loadFriendAcceptedPayload(
     title: `${actorDisplayName} accepted your invite`,
     body: 'You can now start sharing memories together in Noto.',
     data: {
-      route: '/shared',
+      route: `/(tabs)?openSharedManageAt=${Date.now()}`,
       notificationType: 'friend-accepted',
       friendUserId: actorUserId,
     },

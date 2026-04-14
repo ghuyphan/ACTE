@@ -28,8 +28,12 @@ export function useAppNotificationRouting() {
 
       const noteId = response.notification.request.content.data?.noteId;
       const sharedPostId = response.notification.request.content.data?.sharedPostId;
+      const notificationType = response.notification.request.content.data?.notificationType;
       const route = response.notification.request.content.data?.route;
-      if (noteId && typeof noteId === 'string') {
+      if (notificationType === 'friend-accepted') {
+        prepareForExternalNavigation();
+        router.push(`/(tabs)?openSharedManageAt=${encodeURIComponent(notificationId)}` as any);
+      } else if (noteId && typeof noteId === 'string') {
         focusFeedTargetFromExternalEntry({ kind: 'note', id: noteId });
       } else if (sharedPostId && typeof sharedPostId === 'string') {
         focusFeedTargetFromExternalEntry({ kind: 'shared-post', id: sharedPostId });

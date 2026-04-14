@@ -153,6 +153,8 @@ export function NoteMemoryCard({
               isLivePhoto={note.isLivePhoto}
               pairedVideoUri={getNotePairedVideoUri(note)}
               showLiveBadge={false}
+              enablePlayback={isActive}
+              autoPreviewOnceOnEnable={isActive}
               doodleStrokesJson={note.doodleStrokesJson}
               stickerPlacementsJson={note.stickerPlacementsJson}
               isActive={isActive}

@@ -29,8 +29,6 @@ type ProviderComponent = ComponentType<AppProvidersProps>;
 const providerChain: ProviderComponent[] = [
   ({ children }) => <I18nextProvider i18n={i18n}>{children}</I18nextProvider>,
   ThemeProvider,
-  BottomSheetModalProvider,
-  AppAlertProvider,
   HapticsProvider,
   ConnectivityProvider,
   AuthProvider,
@@ -42,8 +40,12 @@ const providerChain: ProviderComponent[] = [
   NotesProvider,
   SyncStatusProvider,
   SharedFeedProvider,
-  NoteDetailSheetProvider,
   SavedNoteRevealUiProvider,
+  // Android bottom-sheet modals portal through this provider. Keep any context
+  // sheet content reads above it, and any provider that renders sheet content below it.
+  BottomSheetModalProvider,
+  AppAlertProvider,
+  NoteDetailSheetProvider,
 ];
 
 export default function AppProviders({ children }: AppProvidersProps) {

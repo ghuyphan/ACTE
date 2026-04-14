@@ -110,6 +110,31 @@
             </LinearLayout>
 
             <LinearLayout
+                android:id="@+id/widget_live_photo_badge"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_alignParentTop="true"
+                android:layout_alignParentStart="true"
+                android:layout_marginTop="16dp"
+                android:layout_marginStart="16dp"
+                android:background="@drawable/noto_widget_overlay_chip_dark"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingLeft="9dp"
+                android:paddingTop="6dp"
+                android:paddingRight="9dp"
+                android:paddingBottom="6dp"
+                android:visibility="gone">
+
+                <ImageView
+                    android:id="@+id/widget_live_photo_icon"
+                    android:layout_width="12dp"
+                    android:layout_height="12dp"
+                    android:contentDescription="@null"
+                    android:src="@drawable/noto_widget_live_photo_icon" />
+            </LinearLayout>
+
+            <LinearLayout
                 android:id="@+id/widget_top_right_stack"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
@@ -153,27 +178,6 @@
                         android:paddingLeft="5dp"
                         android:textColor="#FFF7E8"
                         android:textSize="11sp" />
-                </LinearLayout>
-
-                <LinearLayout
-                    android:id="@+id/widget_live_photo_badge"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:background="@drawable/noto_widget_overlay_chip_dark"
-                    android:gravity="center_vertical"
-                    android:orientation="horizontal"
-                    android:paddingLeft="9dp"
-                    android:paddingTop="6dp"
-                    android:paddingRight="9dp"
-                    android:paddingBottom="6dp"
-                    android:visibility="gone">
-
-                    <ImageView
-                        android:id="@+id/widget_live_photo_icon"
-                        android:layout_width="12dp"
-                        android:layout_height="12dp"
-                        android:contentDescription="@null"
-                        android:src="@drawable/noto_widget_live_photo_icon" />
                 </LinearLayout>
 
                 <TextView
