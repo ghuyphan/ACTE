@@ -788,7 +788,10 @@ describe('NoteDetailSheet', () => {
       await waitFor(() => {
         expect(mockGetNoteById).toHaveBeenCalledWith('note-1');
         expect(latestAppBottomSheetProps?.androidDynamicSizing).toBe(false);
-        expect(latestAppBottomSheetProps?.androidSnapPoints).toEqual(['92%']);
+        expect(latestAppBottomSheetProps?.androidSnapPoints?.[0]).toEqual(expect.any(Number));
+        expect(latestAppBottomSheetProps?.contentContainerStyle).toEqual({
+          height: latestAppBottomSheetProps?.androidSnapPoints?.[0],
+        });
       });
 
       fireEvent.press(getByTestId('note-detail-edit'));

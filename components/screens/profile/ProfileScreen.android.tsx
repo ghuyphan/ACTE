@@ -5,7 +5,12 @@ import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from
 import { Layout } from '../../../constants/theme';
 import type { ThemeColors } from '../../../hooks/useTheme';
 import ProfileAvatar from './ProfileAvatar';
-import { buildProfileSections, type ProfileIconKey, type ProfileRowModel } from './profileScreenSections';
+import {
+  buildProfileSections,
+  type ProfileIconKey,
+  type ProfileRowModel,
+  type ProfileTrailingActionIconKey,
+} from './profileScreenSections';
 import { useProfileScreenModel } from './useProfileScreenModel';
 import UsernameEditSheet from './UsernameEditSheet';
 
@@ -23,6 +28,15 @@ function getAndroidIconName(icon: ProfileIconKey): React.ComponentProps<typeof I
       return 'log-out-outline';
     case 'deleteAccount':
       return 'trash-outline';
+  }
+}
+
+function getAndroidTrailingActionIconName(icon: ProfileTrailingActionIconKey): React.ComponentProps<typeof Ionicons>['name'] {
+  switch (icon) {
+    case 'copy':
+      return 'copy-outline';
+    case 'check':
+      return 'checkmark-outline';
   }
 }
 
@@ -85,7 +99,7 @@ function ProfileListItem({
         ) : null}
       </View>
 
-      {row.value || row.onPress || row.loading ? (
+      {row.value || row.onPress || row.loading || row.trailingAction ? (
         <View style={styles.rowTrailing}>
           {row.value ? (
             <Text numberOfLines={1} style={[styles.rowValue, { color: colors.secondaryText }]}>
@@ -101,6 +115,32 @@ function ProfileListItem({
               size={18}
               color={row.destructive ? colors.danger : colors.secondaryText}
             />
+          ) : null}
+          {row.trailingAction ? (
+            <Pressable
+              accessibilityLabel={row.trailingAction.accessibilityLabel}
+              accessibilityRole="button"
+              android_ripple={{ color: `${colors.primary}14`, borderless: true }}
+              hitSlop={8}
+              onPress={(event) => {
+                event.stopPropagation();
+                row.trailingAction?.onPress();
+              }}
+              style={({ pressed }) => [
+                styles.trailingAction,
+                {
+                  backgroundColor:
+                    row.trailingAction?.icon === 'check' ? colors.primarySoft : 'transparent',
+                },
+                pressed ? styles.trailingActionPressed : null,
+              ]}
+            >
+              <Ionicons
+                name={getAndroidTrailingActionIconName(row.trailingAction.icon)}
+                size={18}
+                color={row.trailingAction.icon === 'check' ? colors.primary : colors.secondaryText}
+              />
+            </Pressable>
           ) : null}
         </View>
       ) : null}
@@ -396,7 +436,7 @@ const styles = StyleSheet.create({
     fontFamily: 'Noto Sans',
   },
   rowTrailing: {
-    maxWidth: 132,
+    maxWidth: 172,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'flex-end',
@@ -409,6 +449,16 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     textAlign: 'right',
     fontFamily: 'Noto Sans',
+  },
+  trailingAction: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  trailingActionPressed: {
+    opacity: 0.72,
   },
   cardDivider: {
     height: StyleSheet.hairlineWidth,

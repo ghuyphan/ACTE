@@ -27,8 +27,8 @@
         "noteStatusLivePhotoA11y": "Live Photo memory",
         "noteStatusFavoriteA11y": "Marked as favorite",
         "noteStatusShowHint": "Shows what this badge means",
-        "feedFilterAll": "All posts",
-        "feedFilterFriends": "Friends only",
+        "feedFilterAll": "All",
+        "feedFilterFriends": "Friends",
         "feedFilterHint": "Choose what kind of posts you want to see in Home.",
         "friendsFilterInactive": "Filter by friends",
         "friendsFilterActive": "Friends filter on"
@@ -365,6 +365,8 @@
         "emptyFriendsBody": "Send an invite link, and your friends' memories will start showing up here.",
         "emptyPostsTitle": "You're connected!",
         "emptyPostsBody": "Shared memories will safely rest here as soon as either of you drops one.",
+        "emptyFriendPostsTitle": "No friend posts yet",
+        "emptyFriendPostsBody": "When friends share a memory, it will appear here. Switch back to All to see your notes.",
         "viewAllTitle": "Shared moments",
         "viewAllButton": "View all shared",
         "friendsCount": "{{count}} friends",
@@ -579,6 +581,10 @@
         "usernameLocked": "You can only change your Noto ID once.",
         "usernameSaveFailed": "We could not update your Noto ID right now.",
         "usernameUnavailable": "Sign in to update your Noto ID.",
+        "copyUsername": "Copy Noto ID",
+        "usernameCopied": "Noto ID copied",
+        "usernameCopyFailedTitle": "Could not copy Noto ID",
+        "usernameCopyFailed": "Please try again in a moment.",
         "avatarChangeA11y": "Change avatar",
         "avatarUnavailable": "Sign in to update your avatar.",
         "avatarSaveFailedTitle": "Could not update avatar",
@@ -869,7 +875,6 @@
         "go_home": "Go to home screen!"
     },
     "search": {
-        "discoveryTitle": "Recent & favorite memories",
         "errorTitle": "Search is unavailable",
         "errorBody": "We could not search your notes right now. Please try again in a moment."
     },

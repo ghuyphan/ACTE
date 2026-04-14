@@ -150,7 +150,7 @@ let db: SQLite.SQLiteDatabase | null = null;
 let dbInitPromise: Promise<SQLite.SQLiteDatabase> | null = null;
 let transactionQueue: Promise<void> = Promise.resolve();
 let androidDatabaseQueue: Promise<void> = Promise.resolve();
-const APP_SCHEMA_VERSION = 14;
+const APP_SCHEMA_VERSION = 15;
 const DATABASE_NAME = 'acte_notes.db';
 export const LOCAL_NOTES_SCOPE = '__local__';
 const ACTIVE_NOTES_SCOPE_STORAGE_KEY = 'notes.activeScope';
@@ -571,6 +571,7 @@ export async function getDB(): Promise<SQLite.SQLiteDatabase> {
       CREATE TABLE IF NOT EXISTS shared_friends_cache (
         user_uid TEXT NOT NULL,
         friend_uid TEXT NOT NULL,
+        username_snapshot TEXT,
         display_name_snapshot TEXT,
         photo_url_snapshot TEXT,
         friended_at TEXT NOT NULL,
@@ -866,6 +867,7 @@ export async function getDB(): Promise<SQLite.SQLiteDatabase> {
                 `CREATE TABLE IF NOT EXISTS shared_friends_cache (
                     user_uid TEXT NOT NULL,
                     friend_uid TEXT NOT NULL,
+                    username_snapshot TEXT,
                     display_name_snapshot TEXT,
                     photo_url_snapshot TEXT,
                     friended_at TEXT NOT NULL,
@@ -877,6 +879,13 @@ export async function getDB(): Promise<SQLite.SQLiteDatabase> {
             await database.execAsync(
                 `CREATE INDEX IF NOT EXISTS idx_shared_friends_cache_user ON shared_friends_cache(user_uid, friended_at ASC)`
             );
+            const sharedFriendsCacheInfo = await database.getAllAsync<{ name: string }>(
+                `PRAGMA table_info(shared_friends_cache)`
+            );
+            const sharedFriendsCacheColumns = sharedFriendsCacheInfo.map((col) => col.name);
+            if (!sharedFriendsCacheColumns.includes('username_snapshot')) {
+                await database.execAsync(`ALTER TABLE shared_friends_cache ADD COLUMN username_snapshot TEXT`);
+            }
             await database.execAsync(
                 `CREATE TABLE IF NOT EXISTS shared_posts_cache (
                     user_uid TEXT NOT NULL,

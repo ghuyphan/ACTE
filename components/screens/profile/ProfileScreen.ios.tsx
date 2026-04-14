@@ -23,7 +23,12 @@ import {
 import React from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import ProfileAvatar from './ProfileAvatar';
-import { buildProfileSections, type ProfileIconKey, type ProfileRowModel } from './profileScreenSections';
+import {
+  buildProfileSections,
+  type ProfileIconKey,
+  type ProfileRowModel,
+  type ProfileTrailingActionIconKey,
+} from './profileScreenSections';
 import { useProfileScreenModel } from './useProfileScreenModel';
 import UsernameEditSheet from './UsernameEditSheet';
 
@@ -41,6 +46,15 @@ function getIOSSymbolName(icon: ProfileIconKey) {
       return 'rectangle.portrait.and.arrow.right';
     case 'deleteAccount':
       return 'trash';
+  }
+}
+
+function getIOSTrailingActionSymbolName(icon: ProfileTrailingActionIconKey) {
+  switch (icon) {
+    case 'copy':
+      return 'doc.on.doc';
+    case 'check':
+      return 'checkmark';
   }
 }
 
@@ -86,6 +100,25 @@ function KeyValueRow({
           color={row.destructive ? colors.danger : colors.secondaryText}
           size={14}
         />
+      ) : null}
+      {row.trailingAction ? (
+        <Button onPress={row.trailingAction.onPress}>
+          <HStack
+            modifiers={[
+              frame({ width: 28, height: 28, alignment: 'center' }),
+              backgroundOverlay({
+                color: row.trailingAction.icon === 'check' ? `${colors.primary}18` : 'transparent',
+              }),
+              cornerRadius(8),
+            ]}
+          >
+            <SwiftUIImage
+              systemName={getIOSTrailingActionSymbolName(row.trailingAction.icon)}
+              color={row.trailingAction.icon === 'check' ? colors.primary : colors.secondaryText}
+              size={14}
+            />
+          </HStack>
+        </Button>
       ) : null}
     </HStack>
   );

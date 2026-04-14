@@ -1,3 +1,4 @@
+import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useIsFocused, useScrollToTop } from '@react-navigation/native';
 import * as FileSystem from '../../utils/fileSystem';
 import * as Haptics from '../../hooks/useHaptics';
@@ -9,7 +10,9 @@ import {
   AppState,
   Keyboard,
   Platform,
+  Pressable,
   StyleSheet,
+  Text,
   useWindowDimensions,
   View,
 } from 'react-native';
@@ -457,11 +460,52 @@ export default function HomeScreen() {
     user?.uid,
     visibleFeedItems.length,
   ]);
-  useEffect(() => {
-    if (friendPosts.length === 0 && isFriendsFilterEnabled) {
-      setIsFriendsFilterEnabled(false);
+
+  const friendsFilterEmptyState = useMemo(() => {
+    if (!isFriendsFilterActive) {
+      return null;
     }
-  }, [friendPosts.length, isFriendsFilterEnabled]);
+
+    return (
+      <View style={styles.friendsFilterEmptyState}>
+        <View style={styles.friendsFilterEmptyIconWrap}>
+          <Ionicons name="people-outline" size={44} color={colors.secondaryText} />
+        </View>
+        <Text style={[styles.friendsFilterEmptyTitle, { color: colors.text }]}>
+          {t('shared.emptyFriendPostsTitle', 'No friend posts yet')}
+        </Text>
+        <Text style={[styles.friendsFilterEmptyBody, { color: colors.secondaryText }]}>
+          {t(
+            'shared.emptyFriendPostsBody',
+            'When friends share a memory, it will appear here. Switch back to All to see your notes.'
+          )}
+        </Text>
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => {
+            void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            setIsFriendsFilterEnabled(false);
+          }}
+          style={({ pressed }) => [
+            styles.friendsFilterEmptyButton,
+            {
+              opacity: pressed ? 0.72 : 1,
+            },
+          ]}
+        >
+          <Text style={[styles.friendsFilterEmptyButtonText, { color: colors.primary }]}>
+            {t('home.feedFilterAll', 'All')}
+          </Text>
+        </Pressable>
+      </View>
+    );
+  }, [
+    colors.primary,
+    colors.secondaryText,
+    colors.text,
+    isFriendsFilterActive,
+    t,
+  ]);
 
   const handleRequestCameraPermission = useCallback(async () => {
     showAlert({
@@ -1881,6 +1925,7 @@ export default function HomeScreen() {
         <NotesFeed
           flatListRef={flatListRef}
           captureHeader={captureHeader}
+          emptyState={friendsFilterEmptyState}
           captureMode={captureMode}
           screenActive={isScreenFocused}
           items={visibleFeedItems}
@@ -1985,5 +2030,42 @@ const styles = StyleSheet.create({
   },
   captureItemWrapper: {
     width: '100%',
+  },
+  friendsFilterEmptyState: {
+    width: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+  },
+  friendsFilterEmptyIconWrap: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+  },
+  friendsFilterEmptyTitle: {
+    fontSize: 22,
+    fontWeight: '600',
+    textAlign: 'center',
+    fontFamily: 'Noto Sans',
+  },
+  friendsFilterEmptyBody: {
+    marginTop: 8,
+    fontSize: 14,
+    lineHeight: 20,
+    textAlign: 'center',
+    fontFamily: 'Noto Sans',
+    maxWidth: 240,
+  },
+  friendsFilterEmptyButton: {
+    marginTop: 16,
+    minHeight: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  friendsFilterEmptyButtonText: {
+    fontSize: 14,
+    lineHeight: 18,
+    fontWeight: '800',
+    fontFamily: 'Noto Sans',
   },
 });

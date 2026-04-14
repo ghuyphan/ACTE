@@ -1,6 +1,7 @@
 import { useRouter } from 'expo-router';
+import * as Clipboard from 'expo-clipboard';
 import * as Haptics from '../../../hooks/useHaptics';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { pickCompressedProfileAvatarDataUri } from '../../../services/profileAvatar';
 import { normalizeUsernameInput, validateUsernameInput } from '../../../services/publicProfileService';
@@ -27,10 +28,20 @@ export function useProfileScreenModel() {
   const [isUsernameSheetVisible, setIsUsernameSheetVisible] = useState(false);
   const [isSavingUsername, setIsSavingUsername] = useState(false);
   const [isUpdatingAvatar, setIsUpdatingAvatar] = useState(false);
+  const [isUsernameCopied, setIsUsernameCopied] = useState(false);
   const [usernameDraft, setUsernameDraft] = useState('');
   const [usernameErrorMessage, setUsernameErrorMessage] = useState<string | null>(null);
   const [transitionUser, setTransitionUser] = useState(user);
+  const usernameCopiedResetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isTransitioningAccount = isSigningOut || isDeletingAccount;
+
+  useEffect(() => {
+    return () => {
+      if (usernameCopiedResetTimerRef.current) {
+        clearTimeout(usernameCopiedResetTimerRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (user) {
@@ -116,6 +127,34 @@ export function useProfileScreenModel() {
     setUsernameErrorMessage(null);
     setUsernameDraft(displayUser?.username ?? '');
   };
+
+  const copyUsername = useCallback(async () => {
+    const username = displayUser?.username?.trim();
+    if (!username) {
+      return;
+    }
+
+    try {
+      await Clipboard.setStringAsync(username);
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setIsUsernameCopied(true);
+
+      if (usernameCopiedResetTimerRef.current) {
+        clearTimeout(usernameCopiedResetTimerRef.current);
+      }
+
+      usernameCopiedResetTimerRef.current = setTimeout(() => {
+        setIsUsernameCopied(false);
+        usernameCopiedResetTimerRef.current = null;
+      }, 1600);
+    } catch (error) {
+      console.warn('Copy Noto ID failed:', error);
+      showAppAlert(
+        t('profile.usernameCopyFailedTitle', 'Could not copy Noto ID'),
+        t('profile.usernameCopyFailed', 'Please try again in a moment.')
+      );
+    }
+  }, [displayUser?.username, t]);
 
   const saveUsername = async () => {
     if (!canEditUsername || !canSubmitUsername) {
@@ -328,6 +367,7 @@ export function useProfileScreenModel() {
     colors,
     closeUsernameEditor,
     canEditAvatar,
+    copyUsername,
     handleChangeAvatar,
     insets,
     isAuthAvailable,
@@ -336,6 +376,7 @@ export function useProfileScreenModel() {
     isSigningOut,
     isSavingUsername,
     isUpdatingAvatar,
+    isUsernameCopied,
     isUsernameSheetVisible,
     membershipLabel,
     openSignIn,

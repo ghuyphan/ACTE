@@ -10,6 +10,7 @@ import { getUniqueNormalizedStrings } from './normalizedStrings';
 
 interface FriendRow {
   friend_uid: string;
+  username_snapshot: string | null;
   display_name_snapshot: string | null;
   photo_url_snapshot: string | null;
   friended_at: string;
@@ -48,6 +49,7 @@ interface MetaRow {
 function rowToFriend(row: FriendRow): FriendConnection {
   return {
     userId: row.friend_uid,
+    username: row.username_snapshot,
     displayNameSnapshot: row.display_name_snapshot,
     photoURLSnapshot: row.photo_url_snapshot,
     friendedAt: row.friended_at,
@@ -116,15 +118,17 @@ export async function replaceCachedSharedFriends(userUid: string, friends: Frien
         `INSERT INTO shared_friends_cache (
           user_uid,
           friend_uid,
+          username_snapshot,
           display_name_snapshot,
           photo_url_snapshot,
           friended_at,
           last_shared_at,
           created_by_invite_id
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
         userUid,
         friend.userId,
+        friend.username ?? null,
         friend.displayNameSnapshot,
         friend.photoURLSnapshot,
         friend.friendedAt,
@@ -418,15 +422,17 @@ export async function cacheSharedFeedSnapshot(
         `INSERT INTO shared_friends_cache (
           user_uid,
           friend_uid,
+          username_snapshot,
           display_name_snapshot,
           photo_url_snapshot,
           friended_at,
           last_shared_at,
           created_by_invite_id
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
         userUid,
         friend.userId,
+        friend.username ?? null,
         friend.displayNameSnapshot,
         friend.photoURLSnapshot,
         friend.friendedAt,

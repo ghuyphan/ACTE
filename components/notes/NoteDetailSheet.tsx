@@ -22,7 +22,7 @@ import {
     withTiming,
 } from 'react-native-reanimated';
 import { ENABLE_PHOTO_STICKERS } from '../../constants/experiments';
-import { Layout } from '../../constants/theme';
+import { Layout, Sheet } from '../../constants/theme';
 import { useAuth } from '../../hooks/useAuth';
 import { useActiveNote } from '../../hooks/useActiveNote';
 import { useNotes } from '../../hooks/useNotes';
@@ -93,9 +93,17 @@ import type { StickerEntryAnimation } from './NoteStickerCanvas';
 import NoteDetailSheetContent from './detail/NoteDetailSheetContent';
 import type { WindowRect } from '../home/capture/stickerCreationTypes';
 
-const { width } = Dimensions.get('window');
+const { width, height } = Dimensions.get('window');
 const CARD_SIZE = width - Layout.screenPadding * 2;
-const NOTE_DETAIL_ANDROID_SNAP_POINTS = ['92%'];
+const NOTE_DETAIL_ANDROID_MAX_HEIGHT = 780;
+const NOTE_DETAIL_ANDROID_SHEET_HEIGHT = Math.min(
+    NOTE_DETAIL_ANDROID_MAX_HEIGHT,
+    Math.round(height * 0.92)
+);
+const NOTE_DETAIL_ANDROID_SNAP_POINTS = [NOTE_DETAIL_ANDROID_SHEET_HEIGHT];
+const NOTE_DETAIL_ANDROID_CONTENT_CONTAINER_STYLE = {
+    height: NOTE_DETAIL_ANDROID_SHEET_HEIGHT,
+};
 
 type StickerPastePromptState = {
     visible: boolean;
@@ -1764,8 +1772,8 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                     visible={visible}
                     onClose={handleSheetDismiss}
                     dismissible={!isEditing}
-                    androidScrollable
                     androidDynamicSizing={false}
+                    androidContentContainerStyle={NOTE_DETAIL_ANDROID_CONTENT_CONTAINER_STYLE}
                     androidKeyboardInputMode="adjustPan"
                     androidSnapPoints={NOTE_DETAIL_ANDROID_SNAP_POINTS}
                 >

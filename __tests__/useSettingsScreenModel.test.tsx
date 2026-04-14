@@ -185,6 +185,9 @@ describe('useSettingsScreenModel', () => {
 
     expect(result.current.showSyncEntry).toBe(false);
     expect(result.current.syncValue).toBe('Not signed in');
+    expect(result.current.accountHint).toBe(
+      'Sign in to back up your notes and keep them synced across your devices.'
+    );
   });
 
   it('opens auth instead of the sync sheet when signed out', () => {
@@ -287,7 +290,7 @@ describe('useSettingsScreenModel', () => {
     expect(result.current.accountValue).toBe('@huyphan');
   });
 
-  it('shows pending sync while offline with queued changes', () => {
+  it('shows pending sync status without a signed-in account subtitle', () => {
     mockAuthState.user = {
       id: 'user-1',
       uid: 'user-1',
@@ -300,12 +303,10 @@ describe('useSettingsScreenModel', () => {
     const { result } = renderHook(() => useSettingsScreenModel());
 
     expect(result.current.syncValue).toBe('Pending');
-    expect(result.current.accountHint).toBe(
-      'Your notes are saved locally and will sync when you are back online.'
-    );
+    expect(result.current.accountHint).toBeNull();
   });
 
-  it('surfaces the latest sync error message when sync fails', () => {
+  it('keeps sync error details out of the signed-in account row', () => {
     mockAuthState.user = {
       id: 'user-1',
       uid: 'user-1',
@@ -317,10 +318,25 @@ describe('useSettingsScreenModel', () => {
 
     const { result } = renderHook(() => useSettingsScreenModel());
 
-    expect(result.current.accountHint).toBe('Token expired. Sign in again.');
+    expect(result.current.accountHint).toBeNull();
   });
 
-  it('describes blocked and retrying sync states when there is no success or error banner', () => {
+  it('does not show last synced timestamps in the account row', () => {
+    mockAuthState.user = {
+      id: 'user-1',
+      uid: 'user-1',
+      displayName: 'Huy',
+      email: 'huy@example.com',
+    };
+    mockSyncState.status = 'success';
+    mockSyncState.lastSyncedAt = '2026-04-14T05:12:00.000Z';
+
+    const { result } = renderHook(() => useSettingsScreenModel());
+
+    expect(result.current.accountHint).toBeNull();
+  });
+
+  it('keeps blocked and retrying sync details out of the signed-in account row', () => {
     mockAuthState.user = {
       id: 'user-1',
       uid: 'user-1',
@@ -330,18 +346,14 @@ describe('useSettingsScreenModel', () => {
     mockSyncState.blockedCount = 1;
 
     const blockedResult = renderHook(() => useSettingsScreenModel());
-    expect(blockedResult.result.current.accountHint).toBe(
-      'Some notes need your attention before they can finish syncing.'
-    );
+    expect(blockedResult.result.current.accountHint).toBeNull();
 
     blockedResult.unmount();
     mockSyncState.blockedCount = 0;
     mockSyncState.failedCount = 2;
 
     const retryResult = renderHook(() => useSettingsScreenModel());
-    expect(retryResult.result.current.accountHint).toBe(
-      'Some notes are queued to retry syncing automatically.'
-    );
+    expect(retryResult.result.current.accountHint).toBeNull();
   });
 
   it('updates the plus hint for unlimited and capped free plans', () => {

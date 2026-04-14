@@ -920,12 +920,14 @@ const styles = StyleSheet.create({
     sheetSurface: {
         borderTopLeftRadius: 24,
         borderTopRightRadius: 24,
+        flex: Platform.OS === 'android' ? 1 : undefined,
         overflow: 'visible',
         position: 'relative',
     },
     scrollClip: {
         borderTopLeftRadius: 24,
         borderTopRightRadius: 24,
+        flex: Platform.OS === 'android' ? 1 : undefined,
         overflow: 'hidden',
     },
     center: {

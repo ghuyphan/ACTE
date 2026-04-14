@@ -27,7 +27,7 @@
         "noteStatusLivePhotoA11y": "Kỷ niệm dạng Live Photo",
         "noteStatusFavoriteA11y": "Đã đánh dấu yêu thích",
         "noteStatusShowHint": "Hiển thị ý nghĩa của huy hiệu này",
-        "feedFilterAll": "Tất cả bài chia sẻ",
+        "feedFilterAll": "Tất cả",
         "feedFilterFriends": "Chỉ bạn bè",
         "feedFilterHint": "Chọn bài bạn muốn xem trong Nhật ký.",
         "friendsFilterInactive": "Lọc theo bạn bè",
@@ -365,6 +365,8 @@
         "emptyFriendsBody": "Bạn gửi một lời mời nhé, rồi kỷ niệm của bạn bè sẽ bắt đầu xuất hiện ở đây.",
         "emptyPostsTitle": "Đã kết nối thành công!",
         "emptyPostsBody": "Khi một trong hai người gửi bài chia sẻ đầu tiên, nó sẽ nằm ngoan ở đây.",
+        "emptyFriendPostsTitle": "Chưa có bài từ bạn bè",
+        "emptyFriendPostsBody": "Khi bạn bè chia sẻ kỷ niệm, nó sẽ xuất hiện ở đây. Chuyển về Tất cả để xem ghi chú của bạn.",
         "viewAllTitle": "Khoảnh khắc chia sẻ",
         "viewAllButton": "Xem tất cả",
         "friendsCount": "{{count}} bạn bè",
@@ -579,6 +581,10 @@
         "usernameLocked": "Bạn chỉ có thể đổi Noto ID một lần.",
         "usernameSaveFailed": "Hiện chưa thể cập nhật Noto ID.",
         "usernameUnavailable": "Hãy đăng nhập để cập nhật Noto ID.",
+        "copyUsername": "Sao chép Noto ID",
+        "usernameCopied": "Đã sao chép Noto ID",
+        "usernameCopyFailedTitle": "Không thể sao chép Noto ID",
+        "usernameCopyFailed": "Vui lòng thử lại sau ít phút.",
         "avatarChangeA11y": "Đổi ảnh đại diện",
         "avatarUnavailable": "Hãy đăng nhập để cập nhật ảnh đại diện.",
         "avatarSaveFailedTitle": "Không thể cập nhật ảnh đại diện",
@@ -869,7 +875,6 @@
         "go_home": "Về trang chính"
     },
     "search": {
-        "discoveryTitle": "Kỷ niệm gần đây và yêu thích",
         "errorTitle": "Tìm kiếm tạm thời chưa khả dụng",
         "errorBody": "Noto chưa thể tìm trong ghi chú lúc này. Hãy thử lại sau ít phút nhé."
     },

@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { TFunction } from 'i18next';
 import { Image } from 'expo-image';
-import { type ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
+import { type ReactNode, useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleProp, StyleSheet, Text, useWindowDimensions, View, ViewStyle } from 'react-native';
 import Animated, {
   Easing,
@@ -138,13 +138,8 @@ function ExpandableStatusBadge({
   side: 'left' | 'right';
   testID: string;
 }) {
-  const [labelWidth, setLabelWidth] = useState(0);
   const progress = useSharedValue(expanded ? 1 : 0);
-  const estimatedLabelWidth = useMemo(() => estimateBadgeLabelWidth(label), [label]);
-
-  useEffect(() => {
-    setLabelWidth(0);
-  }, [label]);
+  const labelWidth = useMemo(() => estimateBadgeLabelWidth(label), [label]);
 
   useEffect(() => {
     progress.value = withTiming(expanded ? 1 : 0, {
@@ -153,16 +148,10 @@ function ExpandableStatusBadge({
     });
   }, [expanded, progress]);
 
-  const resolvedLabelWidth = labelWidth > 0 ? labelWidth : estimatedLabelWidth;
-
   const targetExpandedWidth = Math.max(
     BADGE_COLLAPSED_SIZE,
-    BADGE_HORIZONTAL_PADDING * 2 + BADGE_GLYPH_BOX + BADGE_LABEL_GAP + resolvedLabelWidth
+    BADGE_HORIZONTAL_PADDING * 2 + BADGE_GLYPH_BOX + BADGE_LABEL_GAP + labelWidth
   );
-  const handleMeasureLabel = useCallback((event: { nativeEvent: { layout: { width: number } } }) => {
-    const nextWidth = Math.ceil(event.nativeEvent.layout.width);
-    setLabelWidth((currentWidth) => (nextWidth > currentWidth ? nextWidth : currentWidth));
-  }, []);
 
   const animatedContainerStyle = useAnimatedStyle(() => ({
     width:
@@ -172,7 +161,7 @@ function ExpandableStatusBadge({
 
   const animatedLabelStyle = useAnimatedStyle(() => ({
     opacity: progress.value,
-    width: resolvedLabelWidth * progress.value,
+    width: labelWidth * progress.value,
     marginLeft: side === 'left' ? BADGE_LABEL_GAP * progress.value : 0,
     marginRight: side === 'right' ? BADGE_LABEL_GAP * progress.value : 0,
     transform: [
@@ -226,16 +215,6 @@ function ExpandableStatusBadge({
           </>
         )}
       </Animated.View>
-      <View
-        accessible={false}
-        importantForAccessibility="no-hide-descendants"
-        pointerEvents="none"
-        style={styles.badgeMeasure}
-      >
-        <Text onLayout={handleMeasureLabel} style={styles.expandableBadgeText}>
-          {label}
-        </Text>
-      </View>
     </Pressable>
   );
 }
@@ -577,12 +556,6 @@ const styles = StyleSheet.create({
   badgeLabelWrap: {
     overflow: 'hidden',
     flexShrink: 1,
-  },
-  badgeMeasure: {
-    position: 'absolute',
-    opacity: 0,
-    left: -9999,
-    top: -9999,
   },
   expandableBadgeText: {
     fontSize: 12,

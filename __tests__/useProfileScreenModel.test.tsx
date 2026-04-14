@@ -1,7 +1,29 @@
 import { act, renderHook } from '@testing-library/react-native';
+import { buildProfileSections } from '../components/screens/profile/profileScreenSections';
 import { useProfileScreenModel } from '../components/screens/profile/useProfileScreenModel';
 
 const mockRouterReplace = jest.fn();
+const mockClipboardSetStringAsync = jest.fn(async (_value: string) => undefined);
+const mockAuthState = {
+  user: null as null | {
+    id: string;
+    uid: string;
+    displayName: string | null;
+    username: string | null;
+    usernameSetAt: string | null;
+    email: string | null;
+    photoURL: string | null;
+  },
+  isAuthAvailable: true,
+  deleteAccount: jest.fn(async () => ({ status: 'success' })),
+  signOut: jest.fn(async () => undefined),
+  updateAvatar: jest.fn(async () => ({ status: 'success' })),
+  updateUsername: jest.fn(async () => ({ status: 'success' })),
+};
+
+jest.mock('expo-clipboard', () => ({
+  setStringAsync: (value: string) => mockClipboardSetStringAsync(value),
+}));
 
 jest.mock('expo-router', () => ({
   useRouter: () => ({
@@ -42,14 +64,7 @@ jest.mock('../hooks/useTheme', () => ({
 }));
 
 jest.mock('../hooks/useAuth', () => ({
-  useAuth: () => ({
-    user: null,
-    isAuthAvailable: true,
-    deleteAccount: jest.fn(async () => ({ status: 'success' })),
-    signOut: jest.fn(async () => undefined),
-    updateAvatar: jest.fn(async () => ({ status: 'success' })),
-    updateUsername: jest.fn(async () => ({ status: 'success' })),
-  }),
+  useAuth: () => mockAuthState,
 }));
 
 jest.mock('../hooks/useNotes', () => ({
@@ -102,6 +117,12 @@ jest.mock('../services/legalLinks', () => ({
 describe('useProfileScreenModel', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockAuthState.user = null;
+    mockAuthState.isAuthAvailable = true;
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
   });
 
   it('routes signed-out profile auth back to the profile screen', () => {
@@ -117,5 +138,45 @@ describe('useProfileScreenModel', () => {
         returnTo: '/auth/profile',
       },
     });
+  });
+
+  it('copies the signed-in Noto ID from the profile row action', async () => {
+    jest.useFakeTimers();
+    mockAuthState.user = {
+      id: 'user-1',
+      uid: 'user-1',
+      displayName: 'Huy',
+      username: 'huyphan',
+      usernameSetAt: '2026-04-11T08:00:00.000Z',
+      email: 'huy@example.com',
+      photoURL: null,
+    };
+
+    const { result } = renderHook(() => useProfileScreenModel());
+    const { signedInSections } = buildProfileSections(result.current);
+    const usernameRow = signedInSections
+      .flatMap((section) => section.items)
+      .find((row) => row.key === 'username');
+
+    expect(usernameRow?.trailingAction?.icon).toBe('copy');
+
+    await act(async () => {
+      await usernameRow?.trailingAction?.onPress();
+    });
+
+    expect(mockClipboardSetStringAsync).toHaveBeenCalledWith('huyphan');
+    expect(result.current.isUsernameCopied).toBe(true);
+
+    const copiedSections = buildProfileSections(result.current).signedInSections;
+    const copiedUsernameRow = copiedSections
+      .flatMap((section) => section.items)
+      .find((row) => row.key === 'username');
+
+    expect(copiedUsernameRow?.trailingAction?.icon).toBe('check');
+
+    act(() => {
+      jest.advanceTimersByTime(1600);
+    });
+    expect(result.current.isUsernameCopied).toBe(false);
   });
 });

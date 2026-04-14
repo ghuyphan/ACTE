@@ -8,6 +8,8 @@ export type ProfileIconKey =
   | 'signOut'
   | 'deleteAccount';
 
+export type ProfileTrailingActionIconKey = 'copy' | 'check';
+
 export type ProfileRowModel = {
   key: string;
   icon: ProfileIconKey;
@@ -15,6 +17,11 @@ export type ProfileRowModel = {
   subtitle?: string | null;
   value?: string | null;
   onPress?: () => void;
+  trailingAction?: {
+    accessibilityLabel: string;
+    icon: ProfileTrailingActionIconKey;
+    onPress: () => void;
+  };
   destructive?: boolean;
   loading?: boolean;
 };
@@ -49,6 +56,13 @@ export function buildProfileSections(model: ProfileScreenModel): {
         icon: 'username',
         title: model.t('profile.username', 'Username'),
         value: `@${model.user.username}`,
+        trailingAction: {
+          accessibilityLabel: model.isUsernameCopied
+            ? model.t('profile.usernameCopied', 'Noto ID copied')
+            : model.t('profile.copyUsername', 'Copy Noto ID'),
+          icon: model.isUsernameCopied ? 'check' : 'copy',
+          onPress: model.copyUsername,
+        },
         subtitle: model.canEditUsername
           ? model.t('profile.usernameEditCta', 'Choose your permanent username')
           : undefined,

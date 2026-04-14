@@ -3,6 +3,7 @@ import { act, render, waitFor } from '@testing-library/react-native';
 import { FeedFocusProvider } from '../hooks/useFeedFocus';
 
 const mockSearchBarProps: { onChangeText?: (event: { nativeEvent: { text: string } }) => void } = {};
+const mockStackScreenOptions: any[] = [];
 type MockNote = {
   id: string;
   type: 'photo' | 'text';
@@ -73,9 +74,13 @@ jest.mock('expo-router', () => {
   return {
     useRouter: () => ({
       push: jest.fn(),
+      replace: jest.fn(),
     }),
     Stack: {
-      Screen: () => null,
+      Screen: (props: any) => {
+        mockStackScreenOptions.push(props.options);
+        return null;
+      },
       SearchBar: (props: any) => {
         mockSearchBarProps.onChangeText = props.onChangeText;
         return <TextInput testID="search-bar" />;
@@ -170,18 +175,25 @@ import SearchScreen from '../app/(tabs)/search/index';
 describe('SearchScreen', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockStackScreenOptions.length = 0;
   });
 
-  it('shows recent and favorite notes before a query is entered', () => {
-    const { getByTestId, getByText } = render(
+  it('shows the search header and discovery notes before a query is entered', () => {
+    const { getByTestId, getByText, queryByTestId } = render(
       <FeedFocusProvider>
         <SearchScreen />
       </FeedFocusProvider>
     );
 
     expect(getByTestId('search-bar')).toBeTruthy();
-    expect(getByTestId('search-discovery-header')).toBeTruthy();
-    expect(getByText('Recent & favorite memories')).toBeTruthy();
+    expect(mockStackScreenOptions.at(-1)).toEqual(
+      expect.objectContaining({
+        headerTransparent: false,
+        headerShadowVisible: false,
+        title: 'Search',
+      })
+    );
+    expect(queryByTestId('search-discovery-header')).toBeNull();
     expect(getByText('District 3')).toBeTruthy();
     expect(getByText('District 1')).toBeTruthy();
   });

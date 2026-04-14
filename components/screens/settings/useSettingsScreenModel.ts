@@ -30,11 +30,7 @@ export function useSettingsScreenModel() {
   const { user, isAuthAvailable } = useAuth();
   const {
     status: syncStatus,
-    lastSyncedAt,
-    lastMessage,
     pendingCount,
-    failedCount,
-    blockedCount,
     isEnabled: syncEnabled,
   } = useSyncStatus();
   const { tier, isPurchaseAvailable, plusPriceLabel, photoNoteLimit } = useSubscription();
@@ -169,52 +165,8 @@ export function useSettingsScreenModel() {
       );
     }
 
-    if (!syncEnabled) {
-      return null;
-    }
-
-    if (!isOnline && pendingCount > 0) {
-      return t('settings.syncPendingOffline', 'Your notes are saved locally and will sync when you are back online.');
-    }
-
-    if (syncStatus === 'syncing') {
-      return t('settings.autoSyncing', 'Syncing your notes now.');
-    }
-
-    if (syncStatus === 'success' && lastSyncedAt) {
-      return t('settings.lastSynced', 'Last synced {{date}}', {
-        date: new Date(lastSyncedAt).toLocaleString(i18n.language, {
-          day: 'numeric',
-          month: 'short',
-          hour: 'numeric',
-          minute: '2-digit',
-        }),
-      });
-    }
-
-    if (syncStatus === 'error') {
-      return (
-        lastMessage ??
-        t(
-          'settings.autoSyncRetry',
-          'We could not sync right now. We will try again when the app is active.'
-        )
-      );
-    }
-
-    if (blockedCount > 0) {
-      return t(
-        'settings.syncBlockedDetail',
-        'Some notes need your attention before they can finish syncing.'
-      );
-    }
-
-    if (failedCount > 0) {
-      return t('settings.syncRetryQueued', 'Some notes are queued to retry syncing automatically.');
-    }
-
-    return t('settings.autoSyncOnDetail', 'Your notes sync automatically while you are signed in.');
-  }, [blockedCount, failedCount, i18n.language, isAuthAvailable, isOnline, lastMessage, lastSyncedAt, pendingCount, syncEnabled, syncStatus, t, user]);
+    return null;
+  }, [isAuthAvailable, t, user]);
 
   const promptClearAll = () => {
     showAlert({

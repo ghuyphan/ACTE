@@ -52,6 +52,7 @@ import {
 
 export interface FriendConnection {
   userId: string;
+  username: string | null;
   displayNameSnapshot: string | null;
   photoURLSnapshot: string | null;
   friendedAt: string;
@@ -528,6 +529,7 @@ function mapInvite(record: FriendInviteRow, token: string): FriendInvite {
 function mapFriend(row: FriendshipRow): FriendConnection {
   return {
     userId: row.friend_user_id,
+    username: null,
     displayNameSnapshot: row.display_name_snapshot ?? null,
     photoURLSnapshot: row.photo_url_snapshot ?? null,
     friendedAt: row.friended_at,
@@ -786,7 +788,26 @@ async function getFriendsForUser(userUid: string) {
     throw error;
   }
 
-  return ((data ?? []) as FriendshipRow[]).map(mapFriend);
+  const friendships = ((data ?? []) as FriendshipRow[]).map(mapFriend);
+  if (friendships.length === 0) {
+    return friendships;
+  }
+
+  return Promise.all(
+    friendships.map(async (friendship) => {
+      try {
+        const profile = await getUserProfileSnapshot(friendship.userId);
+        return {
+          ...friendship,
+          username: profile.username ?? null,
+          displayNameSnapshot: profile.displayNameSnapshot ?? friendship.displayNameSnapshot,
+          photoURLSnapshot: profile.photoURLSnapshot ?? friendship.photoURLSnapshot,
+        };
+      } catch {
+        return friendship;
+      }
+    })
+  );
 }
 
 export function getSharedFeedErrorMessage(error: unknown) {
@@ -1153,6 +1174,7 @@ export async function acceptFriendInvite(
 
   const resolvedConnection = {
     ...connection,
+    username: inviterProfile.username ?? connection.username,
     displayNameSnapshot: inviterProfile.displayNameSnapshot ?? connection.displayNameSnapshot,
     photoURLSnapshot: inviterProfile.photoURLSnapshot ?? connection.photoURLSnapshot,
   };
@@ -1216,6 +1238,7 @@ export async function addFriendByUsername(
 
   return {
     ...connection,
+    username: profile.username ?? connection.username,
     displayNameSnapshot: profile.displayNameSnapshot ?? connection.displayNameSnapshot,
     photoURLSnapshot: profile.photoURLSnapshot ?? connection.photoURLSnapshot,
   };

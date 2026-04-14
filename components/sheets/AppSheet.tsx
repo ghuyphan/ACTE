@@ -20,6 +20,7 @@ export interface AppSheetProps {
   androidKeyboardBehavior?: 'interactive' | 'extend' | 'fillParent';
   androidKeyboardInputMode?: 'adjustPan' | 'adjustResize';
   androidMaxDynamicContentSize?: number;
+  androidContentContainerStyle?: StyleProp<ViewStyle>;
   children: ReactNode;
   visible: boolean;
   onClose: () => void;
@@ -41,6 +42,7 @@ export default function AppSheet({
   androidKeyboardBehavior = 'interactive',
   androidKeyboardInputMode = 'adjustResize',
   androidMaxDynamicContentSize,
+  androidContentContainerStyle,
   children,
   visible,
   onClose,
@@ -67,6 +69,7 @@ export default function AppSheet({
         androidKeyboardInputMode={androidKeyboardInputMode}
         androidMaxDynamicContentSize={androidMaxDynamicContentSize}
         androidSnapPoints={androidSnapPoints}
+        contentContainerStyle={androidContentContainerStyle}
         visible={visible}
         onClose={onClose}
         dismissible={dismissible}

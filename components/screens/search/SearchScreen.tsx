@@ -214,9 +214,13 @@ export default function SearchScreen() {
       <Stack.Screen
         options={{
           headerShown: Platform.OS !== 'android',
-          title: '',
+          title: t('tabs.search', 'Search'),
           headerShadowVisible: false,
-          headerTransparent: true,
+          headerTransparent: false,
+          headerStyle: {
+            backgroundColor: colors.background,
+          },
+          headerTintColor: colors.text,
         }}
       />
       {Platform.OS === 'ios' ? (
@@ -238,7 +242,7 @@ export default function SearchScreen() {
             styles.centerWrap,
             styles.emptyScreen,
             {
-              paddingTop: Platform.OS === 'android' ? insets.top + Layout.screenPadding : insets.top + 10,
+              paddingTop: Platform.OS === 'android' ? insets.top + Layout.screenPadding : 10,
               paddingBottom: insets.bottom + 20 + bottomTabOverlayInset,
             },
           ]}
@@ -267,7 +271,7 @@ export default function SearchScreen() {
             styles.centerWrap,
             styles.emptyScreen,
             {
-              paddingTop: Platform.OS === 'android' ? insets.top + Layout.screenPadding : insets.top + 10,
+              paddingTop: Platform.OS === 'android' ? insets.top + Layout.screenPadding : 10,
               paddingBottom: insets.bottom + 20 + bottomTabOverlayInset,
             },
           ]}
@@ -300,15 +304,6 @@ export default function SearchScreen() {
           drawDistance={440}
           renderItem={renderNote}
           ItemSeparatorComponent={renderSeparator}
-          ListHeaderComponent={
-            !hasQuery ? (
-              <View style={styles.discoveryHeader} testID="search-discovery-header">
-                <Text style={[styles.discoveryTitle, { color: colors.text }]}>
-                  {t('search.discoveryTitle', 'Recent & favorite memories')}
-                </Text>
-              </View>
-            ) : null
-          }
           contentInsetAdjustmentBehavior="never"
           automaticallyAdjustContentInsets={false}
           automaticallyAdjustsScrollIndicatorInsets={false}
@@ -316,7 +311,7 @@ export default function SearchScreen() {
           contentContainerStyle={[
             styles.listContent,
             {
-              paddingTop: Platform.OS === 'android' ? insets.top + Layout.screenPadding : insets.top + 10,
+              paddingTop: Platform.OS === 'android' ? insets.top + Layout.screenPadding : 10,
               paddingBottom: insets.bottom + 20 + bottomTabOverlayInset,
             },
           ]}
@@ -337,15 +332,6 @@ const styles = StyleSheet.create({
   listContent: {
     paddingTop: 16,
     paddingHorizontal: Layout.screenPadding,
-  },
-  discoveryHeader: {
-    gap: 4,
-    marginBottom: 18,
-  },
-  discoveryTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    fontFamily: 'Noto Sans',
   },
   resultPress: {
     width: '100%',
