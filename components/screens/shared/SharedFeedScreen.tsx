@@ -7,6 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { SharedPostMemoryCard } from '../../home/MemoryCardPrimitives';
 import { Layout } from '../../../constants/theme';
 import { useAuth } from '../../../hooks/useAuth';
+import { useSocialPushPermission } from '../../../hooks/useSocialPushPermission';
 import { useSharedFeedStore } from '../../../hooks/useSharedFeed';
 import { useTheme } from '../../../hooks/useTheme';
 import { SharedPost } from '../../../services/sharedFeedService';
@@ -22,6 +23,8 @@ export default function SharedIndexScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { user } = useAuth();
+  const { enableFromPrompt, isLoading: isSocialPushLoading, status: socialPushStatus } =
+    useSocialPushPermission();
   const { dataSource, enabled, lastUpdatedAt, loading, sharedPosts } = useSharedFeedStore();
 
   const sortedPosts = useMemo(
@@ -57,6 +60,55 @@ export default function SharedIndexScreen() {
         </Text>
       </View>
     ) : null;
+  const showSocialPushBanner =
+    enabled &&
+    Boolean(user) &&
+    !isSocialPushLoading &&
+    (socialPushStatus === 'denied' || socialPushStatus === 'blocked');
+  const socialPushBanner = showSocialPushBanner ? (
+    <View
+      testID="shared-feed-social-push-banner"
+      style={[
+        styles.socialPushBanner,
+        {
+          backgroundColor: colors.surface,
+          borderColor: colors.border,
+        },
+      ]}
+    >
+      <Text style={[styles.socialPushBannerTitle, { color: colors.text }]}>
+        {t('shared.pushBlockedTitle', 'Turn on friend activity notifications')}
+      </Text>
+      <Text style={[styles.socialPushBannerBody, { color: colors.secondaryText }]}>
+        {socialPushStatus === 'blocked'
+          ? t(
+              'shared.pushBlockedBody',
+              'Notifications are off for Noto. Open Settings if you want alerts when friends accept invites or share memories.'
+            )
+          : t(
+              'shared.pushDeferredBody',
+              'Turn notifications on so Noto can tell you when friends accept invites or share moments with you.'
+            )}
+      </Text>
+      <Pressable
+        accessibilityRole="button"
+        onPress={() => {
+          void enableFromPrompt();
+        }}
+        style={({ pressed }) => [
+          styles.socialPushBannerButton,
+          { backgroundColor: colors.primary },
+          pressed ? styles.socialPushBannerButtonPressed : null,
+        ]}
+      >
+        <Text style={styles.socialPushBannerButtonLabel}>
+          {socialPushStatus === 'blocked'
+            ? t('common.openSettings', 'Open Settings')
+            : t('onboarding.allowNotifications', 'Allow notifications')}
+        </Text>
+      </Pressable>
+    </View>
+  ) : null;
 
   const contentTopInset = insets.top + 72;
 
@@ -109,7 +161,12 @@ export default function SharedIndexScreen() {
         </View>
       ) : loading && sortedPosts.length === 0 ? (
         <View style={styles.flexFill}>
-          {cacheBanner ? <View style={styles.bannerShell}>{cacheBanner}</View> : null}
+          {cacheBanner || socialPushBanner ? (
+            <View style={styles.bannerShell}>
+              {cacheBanner}
+              {socialPushBanner}
+            </View>
+          ) : null}
           <View style={styles.center}>
             <ActivityIndicator size="large" color={colors.primary} />
           </View>
@@ -133,7 +190,14 @@ export default function SharedIndexScreen() {
             />
           )}
           showsVerticalScrollIndicator={false}
-          ListHeaderComponent={cacheBanner ? <View style={styles.bannerListHeader}>{cacheBanner}</View> : null}
+          ListHeaderComponent={
+            cacheBanner || socialPushBanner ? (
+              <View style={styles.bannerListHeader}>
+                {cacheBanner}
+                {socialPushBanner}
+              </View>
+            ) : null
+          }
           contentContainerStyle={{
             paddingTop: contentTopInset,
             paddingBottom: insets.bottom + 32,
@@ -175,9 +239,11 @@ const styles = StyleSheet.create({
   bannerShell: {
     paddingHorizontal: Layout.screenPadding,
     paddingTop: 12,
+    gap: 12,
   },
   bannerListHeader: {
     paddingBottom: 18,
+    gap: 12,
   },
   cacheBanner: {
     borderRadius: 18,
@@ -194,6 +260,40 @@ const styles = StyleSheet.create({
   cacheBannerBody: {
     fontSize: 13,
     lineHeight: 18,
+    fontFamily: 'Noto Sans',
+  },
+  socialPushBanner: {
+    borderRadius: 18,
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    gap: 10,
+  },
+  socialPushBannerTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    fontFamily: 'Noto Sans',
+  },
+  socialPushBannerBody: {
+    fontSize: 13,
+    lineHeight: 18,
+    fontFamily: 'Noto Sans',
+  },
+  socialPushBannerButton: {
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    borderRadius: 14,
+    justifyContent: 'center',
+    minHeight: 40,
+    paddingHorizontal: 14,
+  },
+  socialPushBannerButtonPressed: {
+    opacity: 0.82,
+  },
+  socialPushBannerButtonLabel: {
+    color: '#1C1C1E',
+    fontSize: 14,
+    fontWeight: '700',
     fontFamily: 'Noto Sans',
   },
   emptyTitle: {

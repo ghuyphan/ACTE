@@ -26,6 +26,8 @@ function getAndroidIconName(icon: SettingsIconKey): React.ComponentProps<typeof 
       return 'person-circle-outline';
     case 'sync':
       return 'sync-outline';
+    case 'notifications':
+      return 'notifications-outline';
     case 'plus':
       return 'sparkles-outline';
     case 'language':

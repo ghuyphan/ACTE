@@ -8,6 +8,7 @@ import { useAuth } from '../../../hooks/useAuth';
 import { useConnectivity } from '../../../hooks/useConnectivity';
 import { useNotes } from '../../../hooks/useNotes';
 import { useSharedFeedStore } from '../../../hooks/useSharedFeed';
+import { useSocialPushPermission } from '../../../hooks/useSocialPushPermission';
 import { useSubscription } from '../../../hooks/useSubscription';
 import { useSyncStatus } from '../../../hooks/useSyncStatus';
 import { useHaptics } from '../../../hooks/useHaptics';
@@ -26,8 +27,9 @@ export function useSettingsScreenModel() {
   const { isEnabled: hapticsEnabled } = useHaptics();
   const { isOnline } = useConnectivity();
   const { notes, deleteAllNotes } = useNotes();
-  const { deleteSharedNotes } = useSharedFeedStore();
+  const { deleteSharedNotes, enabled: sharedFeedEnabled } = useSharedFeedStore();
   const { user, isAuthAvailable } = useAuth();
+  const { enableFromPrompt, openSystemSettings, status: socialPushStatus } = useSocialPushPermission();
   const {
     status: syncStatus,
     pendingCount,
@@ -150,6 +152,42 @@ export function useSettingsScreenModel() {
     );
   }, [photoNoteLimit, t, tier]);
 
+  const socialPushValue = useMemo(() => {
+    if (socialPushStatus === 'granted') {
+      return t('settings.friendActivityNotificationsOn', 'On');
+    }
+
+    return t('settings.friendActivityNotificationsOff', 'Off');
+  }, [socialPushStatus, t]);
+
+  const socialPushHint = useMemo(() => {
+    if (socialPushStatus === 'granted') {
+      return t(
+        'settings.friendActivityNotificationsEnabledHint',
+        'Get alerts when friends accept invites or share moments with you.'
+      );
+    }
+
+    return socialPushStatus === 'blocked'
+      ? t(
+          'settings.friendActivityNotificationsSettingsHint',
+          'Notifications are off for Noto. Open system settings to turn friend activity alerts back on.'
+        )
+      : t(
+          'settings.friendActivityNotificationsHint',
+          'Turn this on so Noto can let you know when friends accept invites or share moments with you.'
+        );
+  }, [socialPushStatus, t]);
+
+  const openSocialPushSettings = useCallback(() => {
+    if (socialPushStatus === 'blocked') {
+      void openSystemSettings();
+      return;
+    }
+
+    void enableFromPrompt();
+  }, [enableFromPrompt, openSystemSettings, socialPushStatus]);
+
   const accountHint = useMemo(() => {
     if (!isAuthAvailable) {
       return t(
@@ -227,6 +265,7 @@ export function useSettingsScreenModel() {
     notes,
     openAccountScreen,
     openPlusScreen,
+    openSocialPushSettings,
     openSyncScreen,
     plusHint,
     plusValue,
@@ -237,9 +276,12 @@ export function useSettingsScreenModel() {
     setShowTheme,
     showHaptics,
     showLanguage,
+    showSocialPushEntry: Boolean(user && sharedFeedEnabled),
     showSyncEntry: Boolean(user),
     showSync,
     showTheme,
+    socialPushHint,
+    socialPushValue,
     syncValue,
     t,
     themeLabel,

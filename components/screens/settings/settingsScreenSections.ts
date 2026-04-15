@@ -3,6 +3,7 @@ import type { useSettingsScreenModel } from './useSettingsScreenModel';
 export type SettingsIconKey =
   | 'account'
   | 'sync'
+  | 'notifications'
   | 'plus'
   | 'language'
   | 'theme'
@@ -71,6 +72,18 @@ export function buildSettingsSections(model: SettingsScreenModel): {
                 title: model.t('settings.autoSync', 'Auto sync'),
                 value: model.syncValue,
                 onPress: model.openSyncScreen,
+              } satisfies SettingsRowModel,
+            ]
+          : []),
+        ...(model.showSocialPushEntry
+          ? [
+              {
+                key: 'friend-activity-notifications',
+                icon: 'notifications',
+                title: model.t('settings.friendActivityNotifications', 'Friend activity notifications'),
+                subtitle: model.socialPushHint,
+                value: model.socialPushValue,
+                onPress: model.openSocialPushSettings,
               } satisfies SettingsRowModel,
             ]
           : []),

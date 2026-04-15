@@ -31,6 +31,12 @@ export type SocialPushPermissionStatus =
   | 'blocked'
   | 'skipped';
 
+export type SocialPushPermissionState = {
+  canAskAgain: boolean;
+  isGranted: boolean;
+  status: SocialPushPermissionStatus;
+};
+
 export type SocialPushRegistrationStatus =
   | 'registered'
   | 'denied'
@@ -216,17 +222,36 @@ async function getSocialPushPermissions(options: { requestPermission?: boolean }
 }
 
 export async function requestSocialPushPermission(): Promise<SocialPushPermissionStatus> {
-  const permissions = await getSocialPushPermissions({ requestPermission: true });
+  const permissionState = await getSocialPushPermissionState({ requestPermission: true });
+  return permissionState.status;
+}
+
+export async function getSocialPushPermissionState(
+  options: { requestPermission?: boolean } = {}
+): Promise<SocialPushPermissionState> {
+  const permissions = await getSocialPushPermissions(options);
 
   if (!permissions) {
-    return 'skipped';
+    return {
+      canAskAgain: false,
+      isGranted: false,
+      status: 'skipped',
+    };
   }
 
   if (permissions.status === 'granted') {
-    return 'granted';
+    return {
+      canAskAgain: Boolean(permissions.canAskAgain),
+      isGranted: true,
+      status: 'granted',
+    };
   }
 
-  return permissions.canAskAgain === false ? 'blocked' : 'denied';
+  return {
+    canAskAgain: Boolean(permissions.canAskAgain),
+    isGranted: false,
+    status: permissions.canAskAgain === false ? 'blocked' : 'denied',
+  };
 }
 
 async function unregisterPushToken(token: string) {

@@ -37,6 +37,8 @@ function getIOSSymbolName(icon: SettingsIconKey, isDark: boolean) {
       return 'person';
     case 'sync':
       return 'arrow.triangle.2.circlepath';
+    case 'notifications':
+      return 'bell.badge';
     case 'plus':
       return 'sparkles';
     case 'language':
