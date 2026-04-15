@@ -41,9 +41,7 @@ export default function SettingsSyncSheetAndroid({
         <View style={styles.row}>
           <View style={styles.copy}>
             <Text style={[styles.label, { color: colors.text }]}>{t('settings.autoSync', 'Auto sync')}</Text>
-            {!canManageSync ? (
-              <Text style={[styles.hint, { color: colors.secondaryText }]}>{statusLabel}</Text>
-            ) : null}
+            <Text style={[styles.hint, { color: colors.secondaryText }]}>{statusLabel}</Text>
           </View>
           {canManageSync ? (
             <Switch

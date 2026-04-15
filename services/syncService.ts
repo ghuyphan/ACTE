@@ -1404,9 +1404,13 @@ async function deserializeRemoteNote(
   }
 
   if (record.type === 'photo' && !photoLocalUri) {
+    console.warn('[syncService] Skipping remote photo note with missing media:', {
+      noteId: record.id,
+      photoPath: record.photo_path ?? null,
+    });
     return {
       note: existingLocalNote?.type === 'photo' ? existingLocalNote : null,
-      advanceCursor: false,
+      advanceCursor: true,
     };
   }
 

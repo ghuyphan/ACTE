@@ -1,7 +1,7 @@
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 import type { Session } from '@supabase/supabase-js';
 import { ReactNode } from 'react';
-import { Platform } from 'react-native';
+import { AppState, AppStateStatus, Platform } from 'react-native';
 
 const mockAuthState = {
   hasSupabaseConfig: true,
@@ -58,6 +58,16 @@ const mockUpdateOwnUsername = jest.fn<
   photoURL: 'https://example.com/avatar.jpg',
   updatedAt: '2026-04-11T00:00:00.000Z',
 }));
+const mockUpdateOwnPhotoURL = jest.fn<
+  Promise<{ displayName: string | null; username: string | null; usernameSetAt: string | null; photoURL: string | null; updatedAt: string }>,
+  [any]
+>(async (input) => ({
+  displayName: 'Huy',
+  username: 'huy',
+  usernameSetAt: '2026-04-11T08:00:00.000Z',
+  photoURL: input?.photoURL ?? null,
+  updatedAt: '2026-04-11T00:00:00.000Z',
+}));
 const mockClearSharedFeedCache = jest.fn<Promise<void>, [string | null | undefined]>(async () => undefined);
 const mockUnregisterCurrentSocialPushToken = jest.fn<Promise<void>, []>(async () => undefined);
 const mockPurgeLocalAccountScope = jest.fn<Promise<void>, [string | null | undefined]>(async () => undefined);
@@ -65,6 +75,7 @@ const mockMigrateLocalNotesScopeToUser = jest.fn<Promise<void>, [string]>(async 
 const mockSetActiveNotesScope = jest.fn<void, [string | null | undefined]>();
 const mockGetPersistedActiveNotesScopeSync = jest.fn<string | null | undefined, []>(() => null);
 let authStateChangeCallback: ((event: string, session: Session | null) => void) | null = null;
+let appStateListener: ((state: AppStateStatus) => void) | null = null;
 const mockGetSession = jest.fn(async () => ({
   data: { session: mockAuthState.initialSession },
   error: null,
@@ -141,7 +152,9 @@ const mockResetPasswordForEmail = jest.fn(async (_email?: string, _options?: unk
 
   return { error: null };
 });
-const mockSupabaseSignOut = jest.fn(async () => ({ error: null }));
+const mockSupabaseSignOut = jest.fn<Promise<{ error: Error | null }>, []>(
+  async () => ({ error: null })
+);
 const mockInvokeFunction = jest.fn<
   Promise<{
     data: { success: boolean } | null;
@@ -188,6 +201,7 @@ jest.mock('../constants/auth', () => ({
 jest.mock('../services/publicProfileService', () => ({
   upsertPublicUserProfile: (input: unknown) => mockUpsertPublicUserProfile(input),
   updateOwnUsername: (input: unknown) => mockUpdateOwnUsername(input),
+  updateOwnPhotoURL: (input: unknown) => mockUpdateOwnPhotoURL(input),
 }));
 
 jest.mock('../services/sharedFeedCache', () => ({
@@ -270,6 +284,7 @@ describe('useAuth', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     authStateChangeCallback = null;
+    appStateListener = null;
     setPlatformOS('ios');
     mockAuthState.hasSupabaseConfig = true;
     mockAuthState.googleConfigured = true;
@@ -283,9 +298,20 @@ describe('useAuth', () => {
     mockAuthState.iosClientId = 'ios-client-id.apps.googleusercontent.com';
     mockInvokeFunction.mockResolvedValue({ data: { success: true }, error: null });
     mockUpdateOwnUsername.mockClear();
+    mockUpdateOwnPhotoURL.mockClear();
     mockMigrateLocalNotesScopeToUser.mockClear();
     mockGetPersistedActiveNotesScopeSync.mockReturnValue(null);
     mockSetActiveNotesScope.mockClear();
+    jest.spyOn(AppState, 'addEventListener').mockImplementation((_type, listener: (state: AppStateStatus) => void) => {
+      appStateListener = listener;
+      return {
+        remove: jest.fn(() => {
+          if (appStateListener === listener) {
+            appStateListener = null;
+          }
+        }),
+      } as ReturnType<typeof AppState.addEventListener>;
+    });
   });
 
   it('exposes email auth even when Google sign-in is not configured', async () => {
@@ -349,6 +375,27 @@ describe('useAuth', () => {
     expect(mockMigrateLocalNotesScopeToUser).toHaveBeenCalledWith('user-1');
     expect(mockSetActiveNotesScope).toHaveBeenCalledWith('user-1');
     expect(mockUpsertPublicUserProfile).toHaveBeenCalled();
+  });
+
+  it('hydrates the latest profile avatar during session bootstrap', async () => {
+    mockAuthState.initialSession = buildSession();
+    mockUpsertPublicUserProfile.mockResolvedValueOnce({
+      displayName: 'Huy',
+      username: 'huy',
+      usernameSetAt: '2026-04-11T08:00:00.000Z',
+      photoURL: 'data:image/jpeg;base64,new-avatar',
+      updatedAt: '2026-04-11T00:00:00.000Z',
+    });
+
+    const hook = renderHook(() => useAuth(), { wrapper });
+
+    await waitFor(() => {
+      expect(hook.result.current.isReady).toBe(true);
+      expect(hook.result.current.user?.uid).toBe('user-1');
+    });
+
+    expect(hook.result.current.user?.photoURL).toBe('data:image/jpeg;base64,new-avatar');
+    expect(hook.result.current.user?.username).toBe('huy');
   });
 
   it('creates an email account and stores the display name and username metadata', async () => {
@@ -508,7 +555,7 @@ describe('useAuth', () => {
     );
   });
 
-  it('purges local account data when signing out', async () => {
+  it('keeps local account data on disk when signing out and clears in-memory auth state', async () => {
     mockAuthState.initialSession = buildSession();
 
     const hook = renderHook(() => useAuth(), { wrapper });
@@ -524,8 +571,34 @@ describe('useAuth', () => {
 
     expect(mockUnregisterCurrentSocialPushToken).toHaveBeenCalled();
     expect(mockSupabaseSignOut).toHaveBeenCalled();
-    expect(mockPurgeLocalAccountScope).toHaveBeenCalledWith('user-1');
+    expect(mockPurgeLocalAccountScope).not.toHaveBeenCalled();
+    expect(mockSetActiveNotesScope).toHaveBeenLastCalledWith('__local__');
     expect(hook.result.current.user).toBeNull();
+  });
+
+  it('keeps the app signed out when local note migration fails during email sign-in', async () => {
+    mockMigrateLocalNotesScopeToUser.mockRejectedValueOnce(new Error('sqlite busy'));
+
+    const hook = renderHook(() => useAuth(), { wrapper });
+
+    await waitFor(() => {
+      expect(hook.result.current.isReady).toBe(true);
+    });
+
+    let result!: { status: string; message?: string };
+    await act(async () => {
+      result = await hook.result.current.signInWithEmail('huy@example.com', 'secret123');
+    });
+
+    expect(result).toEqual({
+      status: 'error',
+      message:
+        'We could not move your local notes into this account right now. Your notes are still on this device. Please try signing in again.',
+    });
+    expect(mockMigrateLocalNotesScopeToUser).toHaveBeenCalledWith('user-1');
+    expect(mockSetActiveNotesScope).toHaveBeenLastCalledWith('__local__');
+    expect(hook.result.current.user).toBeNull();
+    expect(mockUpsertPublicUserProfile).not.toHaveBeenCalled();
   });
 
   it('ignores a stale initial session result after a newer signed-out auth event', async () => {
@@ -594,7 +667,7 @@ describe('useAuth', () => {
     expect(hook.result.current.user?.email).toBe('new@example.com');
   });
 
-  it('keeps the persisted notes scope when restoring the Supabase session fails', async () => {
+  it('falls back to the local notes scope when restoring the Supabase session fails', async () => {
     mockGetPersistedActiveNotesScopeSync.mockReturnValue('user-42');
     mockGetSession.mockRejectedValueOnce(new Error('network down'));
 
@@ -605,8 +678,61 @@ describe('useAuth', () => {
       expect(hook.result.current.user).toBeNull();
     });
 
-    expect(mockSetActiveNotesScope).toHaveBeenCalledWith('user-42');
-    expect(mockSetActiveNotesScope).not.toHaveBeenCalledWith('__local__');
+    expect(mockSetActiveNotesScope).toHaveBeenLastCalledWith('__local__');
+    expect(mockSetActiveNotesScope).not.toHaveBeenCalledWith('user-42');
+  });
+
+  it('clears local auth state even when Supabase sign-out fails', async () => {
+    mockAuthState.initialSession = buildSession();
+    mockSupabaseSignOut.mockResolvedValueOnce({
+      error: new Error('network down'),
+    });
+
+    const hook = renderHook(() => useAuth(), { wrapper });
+
+    await waitFor(() => {
+      expect(hook.result.current.isReady).toBe(true);
+      expect(hook.result.current.user?.uid).toBe('user-1');
+    });
+
+    let caughtError: unknown = null;
+    await act(async () => {
+      try {
+        await hook.result.current.signOut();
+      } catch (error) {
+        caughtError = error;
+      }
+    });
+
+    expect(caughtError).toEqual(expect.objectContaining({ message: 'network down' }));
+    expect(mockClearSharedFeedCache).toHaveBeenCalledWith('user-1');
+    expect(mockPurgeLocalAccountScope).not.toHaveBeenCalled();
+    expect(mockSetActiveNotesScope).toHaveBeenLastCalledWith('__local__');
+    expect(hook.result.current.user).toBeNull();
+  });
+
+  it('retries session hydration when the app returns to the foreground', async () => {
+    mockGetSession
+      .mockRejectedValueOnce(new Error('network down'))
+      .mockResolvedValueOnce({
+        data: { session: buildSession() },
+        error: null,
+      });
+
+    const hook = renderHook(() => useAuth(), { wrapper });
+
+    await waitFor(() => {
+      expect(hook.result.current.isReady).toBe(true);
+      expect(hook.result.current.user).toBeNull();
+    });
+
+    await act(async () => {
+      appStateListener?.('active');
+    });
+
+    await waitFor(() => {
+      expect(hook.result.current.user?.uid).toBe('user-1');
+    });
   });
 
   it('requires a recent sign-in message from delete account when the backend rejects it', async () => {

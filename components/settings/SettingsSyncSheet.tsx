@@ -26,6 +26,7 @@ export default function SettingsSyncSheet({
     setSyncEnabled,
     showDiagnostics,
     status,
+    statusLabel,
   } = useSyncSheetDetails(accountHint);
 
   const containerModifiers = [
@@ -66,6 +67,15 @@ export default function SettingsSyncSheet({
               {t('settings.autoSync', 'Auto sync')}
             </SwiftUIText>
           )}
+          <SwiftUIText
+            modifiers={[
+              foregroundStyle(colors.secondaryText),
+              font({ size: 13, weight: 'medium' }),
+              padding({ top: 8 }),
+            ]}
+          >
+            {statusLabel}
+          </SwiftUIText>
         </VStack>
 
         <VStack

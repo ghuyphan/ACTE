@@ -252,7 +252,10 @@ export function useProfileScreenModel() {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     showAppAlert(
       t('profile.logoutConfirmTitle', 'Log out of Noto?'),
-      t('profile.logoutConfirmMsg', 'Your notes will remain safely synced. You can sign back in anytime.'),
+      t(
+        'profile.logoutConfirmMsg',
+        'Your notes stay on this device. If anything is still waiting to sync, sign back in later to finish it.'
+      ),
       [
         { text: t('common.cancel', 'Cancel'), style: 'cancel' },
         {

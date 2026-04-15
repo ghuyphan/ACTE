@@ -57,6 +57,7 @@ jest.mock('../services/mediaIntegrity', () => ({
 }));
 
 jest.mock('../services/database', () => ({
+  LOCAL_NOTES_SCOPE: '__local__',
   getActiveNotesScope: () => mockGetActiveNotesScope(),
   getAllNotes: jest.fn(async () => [...mockNotesDb]),
   getAllNotesForScope: (scope: string) => mockGetAllNotesForScope(scope),
@@ -371,8 +372,12 @@ describe('useNotesStore', () => {
     expect(mockGetAllNotesForScope).toHaveBeenCalledWith('user-42');
   });
 
-  it('loads the persisted active scope when auth is ready but the user session is unavailable', async () => {
+  it('loads the local scope when auth is ready but the user session is unavailable', async () => {
     mockGetActiveNotesScope.mockReturnValue('user-42');
+    mockUseAuth.mockReturnValue({
+      user: null,
+      isReady: true,
+    });
 
     const { result } = renderHook(() => useNotesStore(), { wrapper: TestWrapper });
 
@@ -380,7 +385,7 @@ describe('useNotesStore', () => {
       expect(result.current.loading).toBe(false);
     });
 
-    expect(mockGetAllNotesForScope).toHaveBeenCalledWith('user-42');
+    expect(mockGetAllNotesForScope).toHaveBeenCalledWith('__local__');
   });
 
   it('updates and favorites a note', async () => {

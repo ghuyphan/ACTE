@@ -4,7 +4,7 @@ import type { Note } from '../../services/database';
 import type { SharedPost } from '../../services/sharedFeedService';
 import type { NotesLoadPhase } from '../state/useNotesStore';
 import type { SharedFeedLoadPhase } from '../useSharedFeedStore';
-import type { SyncBootstrapState, SyncPhase } from '../useSyncStatus';
+import type { SyncBootstrapState } from '../useSyncStatus';
 
 export type HomeFeedMode =
   | 'content'
@@ -30,7 +30,6 @@ interface UseHomeFeedViewModelParams {
   sharedEnabled: boolean;
   sharedPhase: SharedFeedLoadPhase;
   sharedPosts: SharedPost[];
-  syncPhase: SyncPhase;
   syncBootstrapState: SyncBootstrapState;
   isFriendsFilterEnabled: boolean;
   suppressedHomeNoteIds: string[];
@@ -57,7 +56,6 @@ export function useHomeFeedViewModel({
   sharedEnabled,
   sharedPhase,
   sharedPosts,
-  syncPhase,
   syncBootstrapState,
   isFriendsFilterEnabled,
   suppressedHomeNoteIds,
@@ -66,7 +64,6 @@ export function useHomeFeedViewModel({
   resetHomeFeedReady,
 }: UseHomeFeedViewModelParams): UseHomeFeedViewModelResult {
   const currentUserUid = userUid ?? null;
-  void syncPhase;
   const previousUserUidRef = useRef<string | null>(currentUserUid);
   const notesInitialLoadComplete = notesPhase !== 'bootstrapping';
   const notesLoading = notesPhase === 'bootstrapping' || notesPhase === 'hydrating';

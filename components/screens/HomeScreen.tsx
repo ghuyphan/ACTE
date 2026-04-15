@@ -226,19 +226,10 @@ export default function HomeScreen() {
           ? 'cache-ready'
           : 'bootstrapping');
   const {
-    phase: syncPhaseFromStore,
     bootstrapState: syncBootstrapState,
     isInitialSyncPending,
     requestSync,
-    status: syncStatus,
   } = useSyncStatus();
-  const syncPhase =
-    syncPhaseFromStore ??
-    (isInitialSyncPending
-      ? 'bootstrapping'
-      : syncStatus === 'syncing'
-        ? 'syncing'
-        : syncStatus);
   const {
     tier,
     isConfigured: isPlusConfigured,
@@ -519,7 +510,6 @@ export default function HomeScreen() {
     sharedEnabled,
     sharedPhase,
     sharedPosts,
-    syncPhase,
     syncBootstrapState,
     isFriendsFilterEnabled,
     suppressedHomeNoteIds,

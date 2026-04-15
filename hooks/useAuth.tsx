@@ -1,7 +1,7 @@
 import type { Session } from '@supabase/supabase-js';
 import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
 import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { Platform } from 'react-native';
+import { AppState, Platform } from 'react-native';
 import {
   GOOGLE_IOS_CLIENT_ID,
   GOOGLE_WEB_CLIENT_ID,
@@ -9,7 +9,6 @@ import {
 } from '../constants/auth';
 import i18n from '../constants/i18n';
 import {
-  getPersistedActiveNotesScopeSync,
   LOCAL_NOTES_SCOPE,
   migrateLocalNotesScopeToUser,
   setActiveNotesScope,
@@ -61,10 +60,6 @@ function isSupabaseAuthAvailable() {
 
 function isGoogleAuthAvailable() {
   return isSupabaseAuthAvailable() && isGoogleSigninConfigured;
-}
-
-function getStoredNotesScope() {
-  return getPersistedActiveNotesScopeSync() ?? LOCAL_NOTES_SCOPE;
 }
 
 function getUnavailableResult(provider: 'auth' | 'google'): AuthActionResult {
@@ -381,6 +376,47 @@ async function mapDeleteAccountErrorResult(error: unknown): Promise<AuthActionRe
   };
 }
 
+type SessionSyncFailureCode = 'none' | 'migration_failed';
+
+const SESSION_SYNC_MIGRATION_FAILED = 'session-sync-migration-failed';
+
+function createSessionSyncError(code: Exclude<SessionSyncFailureCode, 'none'>, cause?: unknown) {
+  const error = new Error(SESSION_SYNC_MIGRATION_FAILED) as Error & {
+    sessionSyncFailureCode?: Exclude<SessionSyncFailureCode, 'none'>;
+    cause?: unknown;
+  };
+  error.sessionSyncFailureCode = code;
+  error.cause = cause;
+  return error;
+}
+
+function getSessionSyncFailureCode(error: unknown): SessionSyncFailureCode {
+  if (
+    typeof error === 'object' &&
+    error &&
+    'sessionSyncFailureCode' in error &&
+    (error as { sessionSyncFailureCode?: unknown }).sessionSyncFailureCode === 'migration_failed'
+  ) {
+    return 'migration_failed';
+  }
+
+  return 'none';
+}
+
+function getSessionSyncFailureMessage(code: SessionSyncFailureCode) {
+  if (code === 'migration_failed') {
+    return i18n.t(
+      'auth.localMigrationFailed',
+      'We could not move your local notes into this account right now. Your notes are still on this device. Please try signing in again.'
+    );
+  }
+
+  return i18n.t(
+    'auth.continueFailed',
+    'We could not finish setup right now. Please try again.'
+  );
+}
+
 async function syncUserProfile(session: Session | null) {
   const user = mapSupabaseUser(session?.user);
   if (!user) {
@@ -392,6 +428,7 @@ async function syncUserProfile(session: Session | null) {
     await migrateLocalNotesScopeToUser(user.uid);
   } catch (error) {
     console.warn('[auth] Failed to migrate local notes scope:', error);
+    throw createSessionSyncError('migration_failed', error);
   }
 
   setActiveNotesScope(user.uid);
@@ -399,20 +436,44 @@ async function syncUserProfile(session: Session | null) {
   return user;
 }
 
+function mergeUserWithPublicProfile(user: AppUser, profile: {
+  displayName: string | null;
+  username: string | null;
+  usernameSetAt: string | null;
+  photoURL: string | null;
+}) {
+  return {
+    ...user,
+    displayName: profile.displayName ?? user.displayName,
+    username: profile.username ?? user.username ?? null,
+    usernameSetAt: profile.usernameSetAt ?? user.usernameSetAt ?? null,
+    photoURL: profile.photoURL ?? user.photoURL ?? null,
+  };
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AppUser | null>(null);
   const [isReady, setIsReady] = useState(() => !isSupportedPlatform());
   const authSyncRequestIdRef = useRef(0);
+  const userRef = useRef<AppUser | null>(user);
+  userRef.current = user;
+  const sessionSyncFailureRef = useRef<SessionSyncFailureCode>('none');
 
   const invalidateAuthSyncRequests = useCallback(() => {
     authSyncRequestIdRef.current += 1;
     return authSyncRequestIdRef.current;
   }, []);
 
-  const syncProfileInBackground = useCallback(
+  const applySignedOutState = useCallback(() => {
+    setActiveNotesScope(LOCAL_NOTES_SCOPE);
+    setUser(null);
+    setIsReady(true);
+  }, []);
+
+  const reconcileUserProfile = useCallback(
     async (nextUser: AppUser | null, requestId: number) => {
       if (!nextUser) {
-        return;
+        return null;
       }
 
       try {
@@ -425,31 +486,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         });
 
         if (!profile || authSyncRequestIdRef.current !== requestId) {
-          return;
+          return nextUser;
         }
 
-        setUser((currentUser) => {
-          if (!currentUser || currentUser.uid !== nextUser.uid) {
-            return currentUser;
-          }
-
-          if (
-            currentUser.username === profile.username &&
-            currentUser.usernameSetAt === profile.usernameSetAt &&
-            currentUser.photoURL === profile.photoURL
-          ) {
-            return currentUser;
-          }
-
-          return {
-            ...currentUser,
-            username: profile.username,
-            usernameSetAt: profile.usernameSetAt,
-            photoURL: profile.photoURL,
-          };
-        });
+        return mergeUserWithPublicProfile(nextUser, profile);
       } catch (error) {
-        console.warn('[auth] Background profile sync failed:', error);
+        console.warn('[auth] Profile reconciliation failed:', error);
+        return nextUser;
       }
     },
     []
@@ -458,9 +501,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const syncAuthSession = useCallback(
     async (
       session: Session | null,
-      errorContext: 'load Supabase session' | 'sync auth state',
+      errorContext: string,
       requestId = invalidateAuthSyncRequests()
     ) => {
+      sessionSyncFailureRef.current = 'none';
+
       try {
         if (authSyncRequestIdRef.current !== requestId) {
           return null;
@@ -479,25 +524,77 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           return null;
         }
 
-        setUser(nextUser);
+        const reconciledUser = await reconcileUserProfile(nextUser, requestId);
+        if (authSyncRequestIdRef.current !== requestId) {
+          return null;
+        }
+
+        setUser(reconciledUser);
         setIsReady(true);
-        void syncProfileInBackground(nextUser, requestId);
-        return nextUser;
+        return reconciledUser;
       } catch (error) {
         console.warn(`[auth] Failed to ${errorContext}:`, error);
         if (authSyncRequestIdRef.current !== requestId) {
           return null;
         }
 
+        const syncFailureCode = getSessionSyncFailureCode(error);
+        if (syncFailureCode !== 'none') {
+          sessionSyncFailureRef.current = syncFailureCode;
+          applySignedOutState();
+          return null;
+        }
+
         const fallbackUser = mapSupabaseUser(session?.user);
-        setActiveNotesScope(fallbackUser?.uid ?? getStoredNotesScope());
+        setActiveNotesScope(fallbackUser?.uid ?? LOCAL_NOTES_SCOPE);
         setUser(fallbackUser);
         setIsReady(true);
-        void syncProfileInBackground(fallbackUser, requestId);
         return fallbackUser;
       }
     },
-    [invalidateAuthSyncRequests, syncProfileInBackground]
+    [applySignedOutState, invalidateAuthSyncRequests, reconcileUserProfile]
+  );
+
+  const reloadAuthSession = useCallback(
+    async (errorContext: string) => {
+      const supabase = getSupabase();
+      if (!isSupportedPlatform() || !supabase) {
+        setIsReady(true);
+        return null;
+      }
+
+      const requestId = invalidateAuthSyncRequests();
+
+      try {
+        const { data, error } = await supabase.auth.getSession();
+        if (error) {
+          throw error;
+        }
+
+        if (authSyncRequestIdRef.current !== requestId) {
+          return null;
+        }
+
+        return await syncAuthSession(data.session ?? null, errorContext, requestId);
+      } catch (error) {
+        console.warn(`[auth] Failed to ${errorContext}:`, error);
+        if (authSyncRequestIdRef.current !== requestId) {
+          return null;
+        }
+
+        const fallbackUser = userRef.current;
+        if (fallbackUser) {
+          setActiveNotesScope(fallbackUser.uid);
+          setUser(fallbackUser);
+          setIsReady(true);
+          return fallbackUser;
+        }
+
+        applySignedOutState();
+        return null;
+      }
+    },
+    [applySignedOutState, invalidateAuthSyncRequests, syncAuthSession]
   );
 
   useEffect(() => {
@@ -512,7 +609,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    setActiveNotesScope(getStoredNotesScope());
+    setActiveNotesScope(LOCAL_NOTES_SCOPE);
 
     const supabase = getSupabase();
     if (!isSupportedPlatform() || !supabase) {
@@ -520,43 +617,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    let active = true;
-
-    void (async () => {
-      const requestId = invalidateAuthSyncRequests();
-
-      try {
-        const { data, error } = await supabase.auth.getSession();
-        if (error) {
-          throw error;
-        }
-
-        if (!active || authSyncRequestIdRef.current !== requestId) {
-          return;
-        }
-
-        await syncAuthSession(data.session ?? null, 'load Supabase session', requestId);
-      } catch (error) {
-        console.warn('[auth] Failed to load Supabase session:', error);
-        if (active && authSyncRequestIdRef.current === requestId) {
-          setUser(null);
-          setActiveNotesScope(getStoredNotesScope());
-          setIsReady(true);
-        }
-      }
-    })();
-
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
       void syncAuthSession(session, 'sync auth state');
     });
 
+    void reloadAuthSession('load Supabase session');
+
     return () => {
-      active = false;
       subscription.unsubscribe();
     };
-  }, [invalidateAuthSyncRequests, syncAuthSession]);
+  }, [reloadAuthSession, syncAuthSession]);
+
+  useEffect(() => {
+    if (!isSupportedPlatform() || !isSupabaseAuthAvailable()) {
+      return;
+    }
+
+    const subscription = AppState.addEventListener('change', (nextState) => {
+      if (nextState !== 'active') {
+        return;
+      }
+
+      void reloadAuthSession('refresh Supabase session');
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, [reloadAuthSession]);
 
   const value = useMemo<AuthContextValue>(
     () => ({
@@ -625,7 +715,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             throw error;
           }
 
-          await syncAuthSession(data.session ?? null, 'sync auth state');
+          const nextUser = await syncAuthSession(data.session ?? null, 'sync auth state');
+          if (data.session && !nextUser) {
+            return {
+              status: 'error',
+              message: getSessionSyncFailureMessage(sessionSyncFailureRef.current),
+            };
+          }
+
           return { status: 'success' };
         } catch (error: unknown) {
           if (typeof error === 'object' && error && 'code' in error) {
@@ -660,7 +757,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             throw error;
           }
 
-          await syncAuthSession(data.session ?? null, 'sync auth state');
+          const nextUser = await syncAuthSession(data.session ?? null, 'sync auth state');
+          if (data.session && !nextUser) {
+            return {
+              status: 'error',
+              message: getSessionSyncFailureMessage(sessionSyncFailureRef.current),
+            };
+          }
+
           return { status: 'success' };
         } catch (error) {
           return {
@@ -697,7 +801,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             throw error;
           }
 
-          await syncAuthSession(data.session ?? null, 'sync auth state');
+          const nextUser = await syncAuthSession(data.session ?? null, 'sync auth state');
+          if (data.session && !nextUser) {
+            return {
+              status: 'error',
+              message: getSessionSyncFailureMessage(sessionSyncFailureRef.current),
+            };
+          }
+
           if (!data.session) {
             return {
               status: 'success',
@@ -871,6 +982,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       },
       signOut: async () => {
         const supabase = getSupabase();
+        const currentUserUid = user?.uid ?? null;
+        let signOutError: unknown = null;
 
         try {
           await unregisterCurrentSocialPushToken().catch(() => undefined);
@@ -879,15 +992,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           // Ignore Google sign-out failures and still clear the Supabase session.
         }
 
-        if (supabase) {
-          const { error } = await supabase.auth.signOut();
-          if (error) {
-            throw error;
+        try {
+          if (supabase) {
+            const { error } = await supabase.auth.signOut();
+            if (error) {
+              throw error;
+            }
           }
+        } catch (error) {
+          signOutError = error;
         }
 
-        await clearAuthenticatedUserState(user?.uid ?? null, setUser, invalidateAuthSyncRequests);
-        await purgeAuthenticatedUserState(user?.uid ?? null);
+        await clearAuthenticatedUserState(currentUserUid, setUser, invalidateAuthSyncRequests);
+
+        if (signOutError) {
+          throw signOutError;
+        }
       },
     }),
     [invalidateAuthSyncRequests, isReady, syncAuthSession, user]

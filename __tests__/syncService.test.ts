@@ -940,7 +940,12 @@ jest.mock('../utils/supabase', () => ({
   }),
 }));
 
-import { getSyncRepository, getSyncService, syncNotes } from '../services/syncService';
+import {
+  getSyncRepository,
+  getSyncService,
+  isInitialSyncPendingForUser,
+  syncNotes,
+} from '../services/syncService';
 
 function createTextNote(id: string, content = `note ${id}`): NoteRecord {
   return {
@@ -1561,8 +1566,7 @@ describe('syncService', () => {
     expect(mockUpsertNote).not.toHaveBeenCalled();
   });
 
-  it('stops advancing the note cursor when a remote photo object is missing', async () => {
-    await AsyncStorage.setItem('sync.lastRemoteCursor.user-1', '2026-03-09T00:00:00.000Z');
+  it('skips a missing remote photo object and still completes the first full sync', async () => {
     mockRemoteNotes.set('note-photo-missing', {
       id: 'note-photo-missing',
       user_id: 'user-1',
@@ -1616,28 +1620,34 @@ describe('syncService', () => {
       code: '404',
     });
 
-    const result = await syncNotes(syncUser, [], { mode: 'incremental' });
+    const result = await syncNotes(syncUser, [], { mode: 'full' });
 
     expect(result).toEqual(
       expect.objectContaining({
         status: 'success',
-        importedCount: 0,
+        importedCount: 1,
+        bootstrapCompleted: true,
       })
     );
-    expect(mockUpsertNote).not.toHaveBeenCalledWith(
+    expect(consoleWarnSpy).toHaveBeenCalledWith(
+      '[syncService] Skipping remote photo note with missing media:',
+      expect.objectContaining({
+        noteId: 'note-photo-missing',
+        photoPath: 'user-1/note-photo-missing',
+      })
+    );
+    expect(mockUpsertNote).toHaveBeenCalledWith(
       expect.objectContaining({
         id: 'note-text-later',
       })
     );
+    await expect(isInitialSyncPendingForUser('user-1')).resolves.toBe(false);
     await expect(getStoredRemoteSyncCursor()).resolves.toEqual({
       notes: {
-        syncedAt: '2026-03-09T00:00:00.000Z',
-        id: '',
+        syncedAt: '2026-03-12T00:00:00.000Z',
+        id: 'note-text-later',
       },
-      tombstones: {
-        deletedAt: '2026-03-09T00:00:00.000Z',
-        noteId: '',
-      },
+      tombstones: null,
     });
   });
 

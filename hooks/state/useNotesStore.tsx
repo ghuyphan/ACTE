@@ -3,7 +3,6 @@ import { createContext, ReactNode, useCallback, useContext, useEffect, useRef, u
 import { useAuth } from '../useAuth';
 import {
   CreateNoteInput,
-  getActiveNotesScope,
   LOCAL_NOTES_SCOPE,
   createNote as dbCreate,
   deleteAllNotes as dbDeleteAll,
@@ -62,7 +61,7 @@ const NotesStoreContext = createContext<NotesStoreValue | undefined>(undefined);
 const INITIAL_NOTES_BOOTSTRAP_LIMIT = 24;
 
 function resolveNotesScope(userUid: string | null | undefined) {
-  return userUid ?? getActiveNotesScope() ?? LOCAL_NOTES_SCOPE;
+  return typeof userUid === 'string' && userUid.trim() ? userUid.trim() : LOCAL_NOTES_SCOPE;
 }
 
 function useNotesStoreValue(): NotesStoreValue {

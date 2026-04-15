@@ -148,6 +148,11 @@ export function SyncStatusProvider({ children }: { children: ReactNode }) {
     await setPersistentItem(SYNC_ENABLED_KEY, enabled.toString());
   }, []);
 
+  const invalidateSyncRequests = useCallback(() => {
+    syncRequestIdRef.current += 1;
+    return syncRequestIdRef.current;
+  }, []);
+
   const isCurrentSyncRequest = useCallback(
     (requestId: number, requestUserUid: string | null) =>
       syncRequestIdRef.current === requestId && currentUserUidRef.current === requestUserUid,
@@ -235,7 +240,7 @@ export function SyncStatusProvider({ children }: { children: ReactNode }) {
       email: user?.email ?? null,
       photoURL: user?.photoURL ?? null,
     };
-    const requestId = ++syncRequestIdRef.current;
+    const requestId = invalidateSyncRequests();
 
     const syncTask = (async () => {
       setStatus('syncing');
@@ -348,6 +353,7 @@ export function SyncStatusProvider({ children }: { children: ReactNode }) {
     }
 
     if (!user || !isAuthAvailable) {
+      invalidateSyncRequests();
       clearDebounceTimer();
       pendingRunRef.current = false;
       skipNextNotesEffectRef.current = false;
@@ -381,6 +387,7 @@ export function SyncStatusProvider({ children }: { children: ReactNode }) {
   }, [
     clearDebounceTimer,
     getPreferredSyncMode,
+    invalidateSyncRequests,
     isAuthAvailable,
     isInitialSyncStateReady,
     isReady,

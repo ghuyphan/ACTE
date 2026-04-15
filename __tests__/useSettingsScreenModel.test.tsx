@@ -44,6 +44,7 @@ const mockAuthState = {
 
 const mockSyncState = {
   status: 'idle' as 'idle' | 'syncing' | 'success' | 'error',
+  bootstrapState: 'complete' as 'idle' | 'preparing' | 'syncing' | 'disabled' | 'offline' | 'error' | 'complete',
   lastSyncedAt: null as string | null,
   lastMessage: null as string | null,
   pendingCount: 0,
@@ -169,6 +170,7 @@ describe('useSettingsScreenModel', () => {
     mockAuthState.user = null;
     mockAuthState.isAuthAvailable = true;
     mockSyncState.status = 'idle';
+    mockSyncState.bootstrapState = 'complete';
     mockSyncState.lastSyncedAt = null;
     mockSyncState.lastMessage = null;
     mockSyncState.pendingCount = 0;
@@ -221,7 +223,7 @@ describe('useSettingsScreenModel', () => {
     });
   });
 
-  it('shows off only when a signed-in user has sync disabled', () => {
+  it('shows paused when a signed-in user has sync disabled', () => {
     mockAuthState.user = {
       id: 'user-1',
       uid: 'user-1',
@@ -233,7 +235,7 @@ describe('useSettingsScreenModel', () => {
     const { result } = renderHook(() => useSettingsScreenModel());
 
     expect(result.current.showSyncEntry).toBe(true);
-    expect(result.current.syncValue).toBe('Off');
+    expect(result.current.syncValue).toBe('Paused');
   });
 
   it('opens the sync sheet for signed-in users', () => {
@@ -290,7 +292,7 @@ describe('useSettingsScreenModel', () => {
     expect(result.current.accountValue).toBe('@huyphan');
   });
 
-  it('shows pending sync status without a signed-in account subtitle', () => {
+  it('shows offline pending sync status without a signed-in account subtitle', () => {
     mockAuthState.user = {
       id: 'user-1',
       uid: 'user-1',
@@ -302,8 +304,22 @@ describe('useSettingsScreenModel', () => {
 
     const { result } = renderHook(() => useSettingsScreenModel());
 
-    expect(result.current.syncValue).toBe('Pending');
+    expect(result.current.syncValue).toBe('Offline, 3 pending');
     expect(result.current.accountHint).toBeNull();
+  });
+
+  it('shows preparing during the first sync bootstrap', () => {
+    mockAuthState.user = {
+      id: 'user-1',
+      uid: 'user-1',
+      displayName: 'Huy',
+      email: 'huy@example.com',
+    };
+    mockSyncState.bootstrapState = 'preparing';
+
+    const { result } = renderHook(() => useSettingsScreenModel());
+
+    expect(result.current.syncValue).toBe('Preparing');
   });
 
   it('keeps sync error details out of the signed-in account row', () => {
@@ -318,10 +334,11 @@ describe('useSettingsScreenModel', () => {
 
     const { result } = renderHook(() => useSettingsScreenModel());
 
+    expect(result.current.syncValue).toBe('Attention');
     expect(result.current.accountHint).toBeNull();
   });
 
-  it('does not show last synced timestamps in the account row', () => {
+  it('shows a short synced status instead of the full last synced timestamp in the row', () => {
     mockAuthState.user = {
       id: 'user-1',
       uid: 'user-1',
@@ -333,6 +350,7 @@ describe('useSettingsScreenModel', () => {
 
     const { result } = renderHook(() => useSettingsScreenModel());
 
+    expect(result.current.syncValue).toBe('Synced');
     expect(result.current.accountHint).toBeNull();
   });
 
@@ -346,6 +364,7 @@ describe('useSettingsScreenModel', () => {
     mockSyncState.blockedCount = 1;
 
     const blockedResult = renderHook(() => useSettingsScreenModel());
+    expect(blockedResult.result.current.syncValue).toBe('Attention');
     expect(blockedResult.result.current.accountHint).toBeNull();
 
     blockedResult.unmount();
@@ -353,6 +372,7 @@ describe('useSettingsScreenModel', () => {
     mockSyncState.failedCount = 2;
 
     const retryResult = renderHook(() => useSettingsScreenModel());
+    expect(retryResult.result.current.syncValue).toBe('Attention');
     expect(retryResult.result.current.accountHint).toBeNull();
   });
 

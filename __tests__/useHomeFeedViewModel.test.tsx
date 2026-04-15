@@ -39,7 +39,6 @@ function createParams(overrides: Partial<Parameters<typeof useHomeFeedViewModel>
     sharedEnabled: true,
     sharedPhase: 'ready' as const,
     sharedPosts: [],
-    syncPhase: 'idle' as const,
     syncBootstrapState: 'complete' as const,
     isFriendsFilterEnabled: false,
     suppressedHomeNoteIds: [],
@@ -61,7 +60,6 @@ describe('useHomeFeedViewModel', () => {
 
   it('returns the syncing-empty mode while the initial signed-in sync is still running', () => {
     const params = createParams({
-      syncPhase: 'bootstrapping',
       syncBootstrapState: 'syncing',
       sharedPhase: 'cache-ready',
     });

@@ -7,6 +7,7 @@ import { Href, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
+  GestureResponderEvent,
   Image,
   KeyboardAvoidingView,
   Platform,
@@ -45,6 +46,7 @@ const MAX_DISPLAY_NAME_LENGTH = 40;
 const APP_ICON_LIGHT_SOURCE = require('../../../assets/images/icon/icon-default.png');
 const APP_ICON_DARK_SOURCE = require('../../../assets/images/icon/icon-dark.png');
 const SheetTextInput = Platform.OS === 'android' ? BottomSheetTextInput : TextInput;
+const IOS_SHEET_DETENT_BUFFER = 52;
 const FORM_LAYOUT_TRANSITION = CurvedTransition.duration(220)
   .easingX(Easing.out(Easing.cubic))
   .easingY(Easing.out(Easing.cubic))
@@ -173,8 +175,7 @@ export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [hasAcceptedPrivacyPolicy, setHasAcceptedPrivacyPolicy] = useState(false);
-  const [hasAcceptedLandingPolicy, setHasAcceptedLandingPolicy] = useState(false);
+  const [hasAcceptedPolicyConsent, setHasAcceptedPolicyConsent] = useState(true);
   const [authMessage, setAuthMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [activeAction, setActiveAction] = useState<'google' | 'signIn' | 'register' | 'reset' | null>(null);
@@ -219,7 +220,6 @@ export default function LoginScreen() {
   const openForm = useCallback(
     (mode: Exclude<AuthScreenMode, 'landing'>) => {
       resetMessages();
-      setHasAcceptedPrivacyPolicy(false);
       setScreenMode(mode);
     },
     [resetMessages]
@@ -227,7 +227,6 @@ export default function LoginScreen() {
 
   const goBackInFlow = useCallback(() => {
     resetMessages();
-    setHasAcceptedPrivacyPolicy(false);
     setScreenMode((currentMode) => {
       if (currentMode === 'register' || currentMode === 'resetPassword') {
         return 'signIn';
@@ -239,7 +238,6 @@ export default function LoginScreen() {
 
   const dismissForm = useCallback(() => {
     resetMessages();
-    setHasAcceptedPrivacyPolicy(false);
     setScreenMode('landing');
   }, [resetMessages]);
 
@@ -274,25 +272,28 @@ export default function LoginScreen() {
   const gradientColors: [string, string, string] = isDark
     ? [colors.background, colors.card, '#1A1A1A']
     : [colors.background, colors.surface, '#ECE2D7'];
+  const resolvedFormDetentHeight = formContentHeight > 0 ? formContentHeight + IOS_SHEET_DETENT_BUFFER : 0;
+  const resolvedPreviousFormDetentHeight =
+    previousFormContentHeight > 0 ? previousFormContentHeight + IOS_SHEET_DETENT_BUFFER : 0;
 
   const nativeSheetDetents =
-    previousFormContentHeight > 0 && previousFormContentHeight !== formContentHeight
-      ? [{ height: previousFormContentHeight }, { height: formContentHeight }]
-      : formContentHeight > 0
-        ? [{ height: formContentHeight }]
+    resolvedPreviousFormDetentHeight > 0 && resolvedPreviousFormDetentHeight !== resolvedFormDetentHeight
+      ? [{ height: resolvedPreviousFormDetentHeight }, { height: resolvedFormDetentHeight }]
+      : resolvedFormDetentHeight > 0
+        ? [{ height: resolvedFormDetentHeight }]
         : [];
 
   const nativeSheetModifiers = [
     presentationDragIndicator('visible'),
     environment('colorScheme', isDark ? 'dark' : 'light'),
-    ...(formContentHeight > 0
-      ? [presentationDetents(nativeSheetDetents, { selection: { height: formContentHeight } })]
+    ...(resolvedFormDetentHeight > 0
+      ? [presentationDetents(nativeSheetDetents, { selection: { height: resolvedFormDetentHeight } })]
       : []),
   ];
   const appIconSource = isDark ? APP_ICON_DARK_SOURCE : APP_ICON_LIGHT_SOURCE;
 
   const continueToApp = async () => {
-    if (!hasAcceptedLandingPolicy && (canOpenPrivacyPolicy || canOpenSupport)) {
+    if (!hasAcceptedPolicyConsent && (canOpenPrivacyPolicy || canOpenSupport)) {
       showLandingAuthMessage(
         t('auth.validationLocalPolicy', 'Review and accept the privacy policy before continuing in local mode.')
       );
@@ -335,7 +336,7 @@ export default function LoginScreen() {
   };
 
   const handleGoogleSignIn = async () => {
-    if (!hasAcceptedLandingPolicy && (canOpenPrivacyPolicy || canOpenSupport)) {
+    if (!hasAcceptedPolicyConsent && (canOpenPrivacyPolicy || canOpenSupport)) {
       showLandingAuthMessage(
         t('auth.validationLandingPolicy', 'Accept the privacy policy before continuing.')
       );
@@ -441,7 +442,7 @@ export default function LoginScreen() {
       return;
     }
 
-    if (!hasAcceptedPrivacyPolicy) {
+    if (!hasAcceptedPolicyConsent) {
       setAuthMessage(
         t('auth.validationPrivacyConsent', 'Accept the privacy policy before creating your account.')
       );
@@ -565,6 +566,14 @@ export default function LoginScreen() {
   const handleOpenSupport = () => {
     void openSupport();
   };
+
+  const togglePolicyConsent = useCallback(() => {
+    setHasAcceptedPolicyConsent((currentValue) => !currentValue);
+  }, []);
+
+  const stopConsentRowToggle = useCallback((event?: GestureResponderEvent) => {
+    event?.stopPropagation?.();
+  }, []);
 
   const renderFormFields = () => (
     <>
@@ -690,8 +699,8 @@ export default function LoginScreen() {
         <Animated.View layout={FORM_LAYOUT_TRANSITION}>
           <Pressable
             accessibilityRole="checkbox"
-            accessibilityState={{ checked: hasAcceptedPrivacyPolicy, disabled: activeAction === 'register' }}
-            onPress={() => setHasAcceptedPrivacyPolicy((currentValue) => !currentValue)}
+            accessibilityState={{ checked: hasAcceptedPolicyConsent, disabled: activeAction === 'register' }}
+            onPress={togglePolicyConsent}
             style={[
               styles.legalConsentCard,
               {
@@ -703,7 +712,7 @@ export default function LoginScreen() {
           >
             <View style={styles.legalConsentControl}>
               <ConsentCheckbox
-                value={hasAcceptedPrivacyPolicy}
+                value={hasAcceptedPolicyConsent}
                 disabled={activeAction === 'register'}
                 testID="auth-privacy-checkbox"
               />
@@ -712,7 +721,10 @@ export default function LoginScreen() {
               {t('auth.privacyConsentPrefix', 'I agree to the ')}
               {canOpenPrivacyPolicy ? (
                 <Text
-                  onPress={handleOpenPrivacyPolicy}
+                  onPress={(event) => {
+                    stopConsentRowToggle(event);
+                    handleOpenPrivacyPolicy();
+                  }}
                   style={[styles.inlineLink, { color: colors.primary }]}
                   testID="auth-privacy-policy-link-inline"
                 >
@@ -842,7 +854,11 @@ export default function LoginScreen() {
           bounces={false}
           keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
           keyboardShouldPersistTaps="handled"
-          contentContainerStyle={styles.formContent}
+          contentContainerStyle={[
+            styles.formContent,
+            styles.scrollFormContent,
+            { paddingBottom: Math.max(insets.bottom, 20) + 20 },
+          ]}
           showsVerticalScrollIndicator={false}
         >
           {renderFormFields()}
@@ -978,14 +994,14 @@ export default function LoginScreen() {
         {canOpenPrivacyPolicy || canOpenSupport ? (
         <Pressable
           accessibilityRole="checkbox"
-          accessibilityState={{ checked: hasAcceptedLandingPolicy }}
-          onPress={() => setHasAcceptedLandingPolicy((currentValue) => !currentValue)}
+          accessibilityState={{ checked: hasAcceptedPolicyConsent }}
+          onPress={togglePolicyConsent}
           style={styles.landingConsentRow}
           testID="auth-landing-policy-consent"
         >
             <View style={styles.landingConsentControlSlot}>
               <ConsentCheckbox
-                value={hasAcceptedLandingPolicy}
+                value={hasAcceptedPolicyConsent}
                 testID="auth-landing-policy-checkbox"
               />
             </View>
@@ -993,7 +1009,10 @@ export default function LoginScreen() {
               {t('auth.landingPolicyConsentPrefix', 'I agree to the ')}
               {canOpenPrivacyPolicy ? (
                 <Text
-                  onPress={handleOpenPrivacyPolicy}
+                  onPress={(event) => {
+                    stopConsentRowToggle(event);
+                    handleOpenPrivacyPolicy();
+                  }}
                   style={[styles.inlineLink, { color: colors.primary }]}
                   testID="auth-privacy-policy-link"
                 >
@@ -1005,7 +1024,10 @@ export default function LoginScreen() {
               ) : null}
               {canOpenSupport ? (
                 <Text
-                  onPress={handleOpenSupport}
+                  onPress={(event) => {
+                    stopConsentRowToggle(event);
+                    handleOpenSupport();
+                  }}
                   style={[styles.inlineLink, { color: colors.primary }]}
                   testID="auth-support-link"
                 >
@@ -1120,6 +1142,9 @@ const styles = StyleSheet.create({
   },
   nativeFormContent: {
     paddingBottom: 24,
+  },
+  scrollFormContent: {
+    paddingBottom: 40,
   },
   formHeader: {
     gap: 14,
@@ -1241,6 +1266,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 8,
     flexWrap: 'wrap',
+    paddingTop: 2,
+    paddingBottom: 20,
   },
   localConsentRow: {
     flexDirection: 'row',

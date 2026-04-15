@@ -362,6 +362,97 @@ describe('useSyncStatus', () => {
     expect(mockRefreshNotes).not.toHaveBeenCalled();
   });
 
+  it('rejects a stale sync completion after logout and relogin to the same account', async () => {
+    mockAuthState.user = {
+      uid: 'user-1',
+      displayName: 'Huy',
+      email: 'huy@example.com',
+      photoURL: null,
+    };
+
+    const firstSync = createDeferred<{
+      status: 'success';
+      syncedCount: number;
+      importedCount: number;
+      uploadedCount: number;
+      failedCount: number;
+      bootstrapCompleted?: boolean;
+    }>();
+    const secondSync = createDeferred<{
+      status: 'success';
+      syncedCount: number;
+      importedCount: number;
+      uploadedCount: number;
+      failedCount: number;
+      bootstrapCompleted?: boolean;
+    }>();
+    mockSyncNotes
+      .mockImplementationOnce(() => firstSync.promise)
+      .mockImplementationOnce(() => secondSync.promise);
+
+    const { result, rerender } = renderHook(() => useSyncStatus(), { wrapper });
+    await flushSyncPref();
+
+    await waitFor(() => {
+      expect(mockSyncNotes).toHaveBeenCalledTimes(1);
+      expect(result.current.status).toBe('syncing');
+    });
+
+    mockAuthState.user = null;
+    rerender(undefined as never);
+
+    await waitFor(() => {
+      expect(result.current.status).toBe('idle');
+      expect(result.current.lastSyncedAt).toBeNull();
+    });
+
+    mockAuthState.user = {
+      uid: 'user-1',
+      displayName: 'Huy',
+      email: 'huy@example.com',
+      photoURL: null,
+    };
+    rerender(undefined as never);
+
+    expect(mockSyncNotes).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      firstSync.resolve({
+        status: 'success',
+        syncedCount: 1,
+        importedCount: 0,
+        uploadedCount: 1,
+        failedCount: 0,
+        bootstrapCompleted: true,
+      });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(mockSyncNotes).toHaveBeenCalledTimes(2);
+      expect(result.current.status).toBe('syncing');
+      expect(result.current.lastSyncedAt).toBeNull();
+    });
+
+    await act(async () => {
+      secondSync.resolve({
+        status: 'success',
+        syncedCount: 1,
+        importedCount: 0,
+        uploadedCount: 1,
+        failedCount: 0,
+        bootstrapCompleted: true,
+      });
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(result.current.status).toBe('success');
+      expect(result.current.lastSyncedAt).not.toBeNull();
+    });
+  });
+
   it('uses refreshed queue stats when composing the post-sync status message', async () => {
     mockAuthState.user = {
       uid: 'user-1',

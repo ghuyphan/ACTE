@@ -21,6 +21,24 @@ import {
   resolveAppLanguageKey,
 } from '../../settings/settingsSelectionOptions';
 
+function formatSyncTimestamp(dateString: string | null) {
+  if (!dateString) {
+    return null;
+  }
+
+  const date = new Date(dateString);
+  if (Number.isNaN(date.getTime())) {
+    return null;
+  }
+
+  return date.toLocaleString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}
+
 export function useSettingsScreenModel() {
   const { t, i18n } = useTranslation();
   const { theme, colors, isDark } = useTheme();
@@ -32,7 +50,11 @@ export function useSettingsScreenModel() {
   const { enableFromPrompt, openSystemSettings, status: socialPushStatus } = useSocialPushPermission();
   const {
     status: syncStatus,
+    bootstrapState,
+    lastSyncedAt,
     pendingCount,
+    failedCount,
+    blockedCount,
     isEnabled: syncEnabled,
   } = useSyncStatus();
   const { tier, isPurchaseAvailable, plusPriceLabel, photoNoteLimit } = useSubscription();
@@ -108,19 +130,49 @@ export function useSettingsScreenModel() {
     }
 
     if (!syncEnabled) {
-      return t('settings.autoSyncOff', 'Off');
-    }
-
-    if (syncStatus === 'syncing') {
-      return t('settings.autoSyncingShort', 'Syncing');
+      return t('settings.syncPausedShort', 'Paused');
     }
 
     if (!isOnline && pendingCount > 0) {
-      return t('settings.syncPendingShort', 'Pending');
+      return t('settings.syncOfflinePendingShort', 'Offline, {{count}} pending', {
+        count: pendingCount,
+      });
+    }
+
+    if (!isOnline && bootstrapState === 'offline') {
+      return t('settings.syncOfflineShort', 'Offline');
+    }
+
+    if (syncStatus === 'error' || failedCount > 0 || blockedCount > 0) {
+      return t('settings.syncNeedsAttentionShort', 'Attention');
+    }
+
+    if (syncStatus === 'syncing' || bootstrapState === 'syncing') {
+      return t('settings.autoSyncingShort', 'Syncing');
+    }
+
+    if (bootstrapState === 'preparing') {
+      return t('settings.syncPreparingShort', 'Preparing');
+    }
+
+    if (formatSyncTimestamp(lastSyncedAt)) {
+      return t('settings.syncLastSyncedShort', 'Synced');
     }
 
     return t('settings.autoSyncOnShort', 'On');
-  }, [isAuthAvailable, isOnline, pendingCount, syncEnabled, syncStatus, t, user]);
+  }, [
+    blockedCount,
+    bootstrapState,
+    failedCount,
+    isAuthAvailable,
+    isOnline,
+    lastSyncedAt,
+    pendingCount,
+    syncEnabled,
+    syncStatus,
+    t,
+    user,
+  ]);
 
   const plusValue = useMemo(() => {
     if (tier === 'plus') {

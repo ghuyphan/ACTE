@@ -12,9 +12,11 @@ const mockAuthState = {
 };
 
 const mockSyncState = {
+  bootstrapState: 'complete' as 'idle' | 'preparing' | 'syncing' | 'disabled' | 'offline' | 'error' | 'complete',
   blockedCount: 0,
   failedCount: 0,
   isEnabled: true,
+  lastSyncedAt: null as string | null,
   lastMessage: null as string | null,
   pendingCount: 0,
   recentQueueItems: [] as unknown[],
@@ -50,13 +52,26 @@ jest.mock('../hooks/useSyncStatus', () => ({
   useSyncStatus: () => mockSyncState,
 }));
 
+jest.mock('../hooks/useConnectivity', () => ({
+  useConnectivity: () => ({
+    isOnline: mockConnectivityState.isOnline,
+  }),
+}));
+
+const mockConnectivityState = {
+  isOnline: true,
+};
+
 describe('useSyncSheetDetails', () => {
   beforeEach(() => {
     mockAuthState.user = null;
     mockAuthState.isAuthAvailable = true;
+    mockConnectivityState.isOnline = true;
+    mockSyncState.bootstrapState = 'complete';
     mockSyncState.blockedCount = 0;
     mockSyncState.failedCount = 0;
     mockSyncState.isEnabled = true;
+    mockSyncState.lastSyncedAt = null;
     mockSyncState.lastMessage = null;
     mockSyncState.pendingCount = 0;
     mockSyncState.recentQueueItems = [];
@@ -65,18 +80,19 @@ describe('useSyncSheetDetails', () => {
     mockSyncState.status = 'idle';
   });
 
-  it('prefers the current sync hint when one is available', () => {
+  it('shows the detailed last synced status in the sync sheet', () => {
     mockAuthState.user = {
       id: 'user-1',
       uid: 'user-1',
       displayName: 'Huy',
       email: 'huy@example.com',
     };
+    mockSyncState.lastSyncedAt = '2026-04-14T05:12:00.000Z';
 
-    const { result } = renderHook(() => useSyncSheetDetails('Last synced today'));
+    const { result } = renderHook(() => useSyncSheetDetails(null));
 
-    expect(result.current.description).toBe('Last synced today');
-    expect(result.current.statusLabel).toBe('On');
+    expect(result.current.description).toBe('Your notes sync automatically while you are signed in.');
+    expect(result.current.statusLabel.startsWith('Last synced ')).toBe(true);
     expect(result.current.queueSummary).toBeNull();
     expect(result.current.showDiagnostics).toBe(false);
   });
@@ -95,7 +111,53 @@ describe('useSyncSheetDetails', () => {
     expect(result.current.description).toBe(
       'Your notes stay on this device until you turn cloud sync back on.'
     );
-    expect(result.current.statusLabel).toBe('Off');
+    expect(result.current.statusLabel).toBe('Sync paused');
+  });
+
+  it('surfaces preparing and offline states in the sync sheet', () => {
+    mockAuthState.user = {
+      id: 'user-1',
+      uid: 'user-1',
+      displayName: 'Huy',
+      email: 'huy@example.com',
+    };
+    mockSyncState.bootstrapState = 'preparing';
+
+    const preparingResult = renderHook(() => useSyncSheetDetails(null));
+    expect(preparingResult.result.current.statusLabel).toBe('Preparing first sync');
+    expect(preparingResult.result.current.description).toBe(
+      'Keep Noto open a little longer so your first backup can finish safely.'
+    );
+
+    preparingResult.unmount();
+    mockSyncState.bootstrapState = 'offline';
+    mockConnectivityState.isOnline = false;
+    mockSyncState.pendingCount = 2;
+
+    const offlineResult = renderHook(() => useSyncSheetDetails(null));
+    expect(offlineResult.result.current.statusLabel).toBe('Offline, 2 pending');
+    expect(offlineResult.result.current.canRequestSync).toBe(false);
+    expect(offlineResult.result.current.description).toBe(
+      'Your notes are saved locally and will sync when you are back online.'
+    );
+  });
+
+  it('shows attention when sync needs help', () => {
+    mockAuthState.user = {
+      id: 'user-1',
+      uid: 'user-1',
+      displayName: 'Huy',
+      email: 'huy@example.com',
+    };
+    mockSyncState.blockedCount = 1;
+
+    const { result } = renderHook(() => useSyncSheetDetails(null));
+
+    expect(result.current.statusLabel).toBe('Needs attention');
+    expect(result.current.description).toBe(
+      'Some memories need your attention before they can be safely stored.'
+    );
+    expect(result.current.showDiagnostics).toBe(true);
   });
 
   it('falls back to the signed-out account message when no user is available', () => {
