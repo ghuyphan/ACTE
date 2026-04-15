@@ -9,7 +9,6 @@ import {
   AppState,
   Keyboard,
   Platform,
-  Pressable,
   StyleSheet,
   useWindowDimensions,
   View,
@@ -18,6 +17,7 @@ import { PAYWALL_RESULT } from 'react-native-purchases-ui';
 import { useSharedValue } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AppSheetAlert from '../sheets/AppSheetAlert';
+import CaptureAudienceStrip from '../home/CaptureAudienceStrip';
 import CaptureCard, { type CaptureCardHandle } from '../home/CaptureCard';
 import {
   findHomeFeedItemIndex,
@@ -26,6 +26,7 @@ import {
 import HomeFeedEmptyState from '../home/HomeFeedEmptyState';
 import HomeHeaderSearch from '../home/HomeHeaderSearch';
 import NotesFeed from '../home/NotesFeed';
+import PlacePulseStrip from '../home/PlacePulseStrip';
 import SavedNotePolaroidReveal from '../home/SavedNotePolaroidReveal';
 import SharedManageSheet from '../home/SharedManageSheet';
 import { useHomeFeedViewModel } from '../../hooks/app/useHomeFeedViewModel';
@@ -33,7 +34,7 @@ import { useHomeSharedActions } from '../../hooks/app/useHomeSharedActions';
 import { useAppSheetAlert } from '../../hooks/useAppSheetAlert';
 import { useActiveFeedTarget } from '../../hooks/useActiveFeedTarget';
 import { useAuth } from '../../hooks/useAuth';
-import { useCaptureFlow } from '../../hooks/useCaptureFlow';
+import { useCaptureFlow, type CaptureDraftState } from '../../hooks/useCaptureFlow';
 import { useFeedFocus } from '../../hooks/useFeedFocus';
 import { useHomeStartupReady } from '../../hooks/app/useHomeStartupReady';
 import {
@@ -55,6 +56,7 @@ import {
   countPhotoNotesCreatedToday,
   getRemainingPhotoSlots,
 } from '../../constants/subscription';
+import { DEFAULT_NOTE_RADIUS } from '../../constants/noteRadius';
 import { DEFAULT_NOTE_COLOR_ID, PREMIUM_NOTE_COLOR_IDS } from '../../services/noteAppearance';
 import { resolveAutoNoteEmoji } from '../../services/noteDecorations';
 import { saveNoteDoodle } from '../../services/noteDoodles';
@@ -76,16 +78,89 @@ import {
   PREVIEWABLE_PREMIUM_NOTE_COLOR_IDS,
 } from '../../services/premiumNoteFinish';
 import { generateNoteId, type Note } from '../../services/database';
+import { getDistanceMeters, getReminderPlaceGroups } from '../../services/reminderSelection';
 import { getSharedFeedErrorMessage } from '../../services/sharedFeedService';
 import type { NotesRouteTransitionRect } from '../../utils/notesRouteTransition';
 import { setPendingNotesRouteTransition } from '../../utils/notesRouteTransition';
 import { scheduleOnIdle } from '../../utils/scheduleOnIdle';
-import { getPersistentItem, setPersistentItem } from '../../utils/appStorage';
+import { getPersistentItem, removePersistentItem, setPersistentItem } from '../../utils/appStorage';
 import { setAndroidSoftInputMode } from '../../utils/androidSoftInputMode';
 import { isIOS26OrNewer } from '../../utils/platform';
 
 const LIVE_PHOTO_CAMERA_HINT_SEEN_KEY = 'noto.capture.live-photo-hint-seen.v1';
+const CAPTURE_DRAFT_STORAGE_KEY = 'noto.capture.home-draft.v1';
+const PLACE_PULSE_RADIUS_METERS = 500;
 type SaveButtonState = 'idle' | 'saving' | 'success';
+
+type PersistedCaptureDraft = CaptureDraftState & {
+  version: 1;
+  noteColor: string | null;
+  captureTarget: 'private' | 'shared';
+  selectedSharedAudienceUserId: string | null;
+};
+
+function isPersistableCaptureDraft(draft: CaptureDraftState) {
+  if (draft.captureMode === 'camera') {
+    return Boolean(draft.capturedPhoto);
+  }
+
+  return draft.noteText.trim().length > 0;
+}
+
+function parsePersistedCaptureDraft(rawValue: string | null): PersistedCaptureDraft | null {
+  if (!rawValue) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(rawValue) as Partial<PersistedCaptureDraft> | null;
+    if (!parsed || parsed.version !== 1) {
+      return null;
+    }
+
+    const captureMode = parsed.captureMode === 'camera' ? 'camera' : 'text';
+    const noteText = typeof parsed.noteText === 'string' ? parsed.noteText : '';
+    const capturedPhoto =
+      typeof parsed.capturedPhoto === 'string' && parsed.capturedPhoto.trim().length > 0
+        ? parsed.capturedPhoto
+        : null;
+    const capturedPairedVideo =
+      typeof parsed.capturedPairedVideo === 'string' && parsed.capturedPairedVideo.trim().length > 0
+        ? parsed.capturedPairedVideo
+        : null;
+    const radius = typeof parsed.radius === 'number' && Number.isFinite(parsed.radius)
+      ? parsed.radius
+      : DEFAULT_NOTE_RADIUS;
+    const selectedPhotoFilterId =
+      typeof parsed.selectedPhotoFilterId === 'string'
+        ? parsed.selectedPhotoFilterId as PhotoFilterId
+        : 'original';
+    const noteColor = typeof parsed.noteColor === 'string' ? parsed.noteColor : DEFAULT_NOTE_COLOR_ID;
+    const captureTarget = parsed.captureTarget === 'shared' ? 'shared' : 'private';
+    const selectedSharedAudienceUserId =
+      typeof parsed.selectedSharedAudienceUserId === 'string' &&
+      parsed.selectedSharedAudienceUserId.trim().length > 0
+        ? parsed.selectedSharedAudienceUserId
+        : null;
+
+    const normalizedDraft: PersistedCaptureDraft = {
+      version: 1,
+      captureMode,
+      noteText,
+      capturedPhoto,
+      capturedPairedVideo,
+      radius,
+      selectedPhotoFilterId,
+      noteColor,
+      captureTarget,
+      selectedSharedAudienceUserId,
+    };
+
+    return isPersistableCaptureDraft(normalizedDraft) ? normalizedDraft : null;
+  } catch {
+    return null;
+  }
+}
 
 function logHomeFeedDebug(event: string, payload: Record<string, unknown>) {
   if (!__DEV__) {
@@ -164,6 +239,7 @@ export default function HomeScreen() {
   const [settledSharedButtonMode, setSettledSharedButtonMode] = useState<'manage' | 'filter'>('manage');
   const [isFriendsFilterEnabled, setIsFriendsFilterEnabled] = useState(false);
   const [captureTarget, setCaptureTarget] = useState<'private' | 'shared'>('private');
+  const [selectedSharedAudienceUserId, setSelectedSharedAudienceUserId] = useState<string | null>(null);
   const [noteColor, setNoteColor] = useState<string | null>(DEFAULT_NOTE_COLOR_ID);
   const [showSharedManageSheet, setShowSharedManageSheet] = useState(false);
   const [savedNoteRevealNote, setSavedNoteRevealNote] = useState<Note | null>(null);
@@ -190,10 +266,12 @@ export default function HomeScreen() {
   const lastFreeNoteColorRef = useRef<string>(DEFAULT_NOTE_COLOR_ID);
   const finalizeInlineSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const resetSaveStateTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const persistCaptureDraftTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const saveInFlightRef = useRef(false);
   const settledArchiveItemRef = useRef<{ id: string; kind: 'note' | 'shared-post' } | null>(null);
   const previousVisibleFeedItemKeysRef = useRef<string[] | null>(null);
   const lastHandledOpenSharedManageAtRef = useRef<string | null>(null);
+  const [captureDraftReady, setCaptureDraftReady] = useState(false);
   useScrollToTop(flatListRef);
 
   useEffect(() => {
@@ -263,6 +341,7 @@ export default function HomeScreen() {
   const {
     captureMode,
     cameraSessionKey,
+    setCaptureMode,
     noteText,
     setNoteText,
     capturedPhoto,
@@ -294,6 +373,7 @@ export default function HomeScreen() {
     isLivePhotoSaveGuardActive,
     needsCameraPermission,
     resetCapture,
+    restoreCaptureState,
   } = useCaptureFlow();
   const isCameraPreviewActive =
     captureMode === 'camera' &&
@@ -384,7 +464,6 @@ export default function HomeScreen() {
     visibleFeedItems,
     ownedSharedNoteIds,
     savedNoteRevealIsSharedByMe,
-    isFriendsFilterActive,
   } = useHomeFeedViewModel({
     userUid: user?.uid,
     notes,
@@ -419,27 +498,6 @@ export default function HomeScreen() {
     user?.uid,
     visibleFeedItems.length,
   ]);
-
-  const homeFeedEmptyState = useMemo(() => {
-    if (feedMode === 'content') {
-      return null;
-    }
-
-    return (
-      <HomeFeedEmptyState
-        mode={feedMode}
-        colors={colors}
-        t={t}
-        onDisableFriendsFilter={() => {
-          setIsFriendsFilterEnabled(false);
-        }}
-        onOpenFriends={presentSharedManageSheet}
-        onCreateFirstMemory={() => {
-          flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
-        }}
-      />
-    );
-  }, [colors, feedMode, presentSharedManageSheet, t]);
 
   const handleRequestCameraPermission = useCallback(async () => {
     showAlert({
@@ -476,6 +534,15 @@ export default function HomeScreen() {
     });
   }, [cameraPermissionRequiresSettings, openAppSettings, requestPermission, showAlert, t]);
 
+  const clearPersistedCaptureDraft = useCallback(async () => {
+    if (persistCaptureDraftTimeoutRef.current) {
+      clearTimeout(persistCaptureDraftTimeoutRef.current);
+      persistCaptureDraftTimeoutRef.current = null;
+    }
+
+    await removePersistentItem(CAPTURE_DRAFT_STORAGE_KEY).catch(() => undefined);
+  }, []);
+
   const resetCaptureDraft = useCallback(() => {
     captureCardRef.current?.dismissInputs?.();
     resetCapture();
@@ -484,12 +551,14 @@ export default function HomeScreen() {
   }, [resetCapture]);
 
   const finalizeSavedCapture = useCallback(() => {
+    void clearPersistedCaptureDraft();
     resetCaptureDraft();
     setCaptureTarget('private');
+    setSelectedSharedAudienceUserId(null);
     setNoteColor(DEFAULT_NOTE_COLOR_ID);
     lastFreeNoteColorRef.current = DEFAULT_NOTE_COLOR_ID;
     flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
-  }, [resetCaptureDraft]);
+  }, [clearPersistedCaptureDraft, resetCaptureDraft]);
 
   const handleChangeNoteColor = useCallback((nextColor: string | null) => {
     const resolvedColor = nextColor ?? DEFAULT_NOTE_COLOR_ID;
@@ -498,6 +567,134 @@ export default function HomeScreen() {
       lastFreeNoteColorRef.current = resolvedColor;
     }
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    void getPersistentItem(CAPTURE_DRAFT_STORAGE_KEY).then(async (storedValue) => {
+      const persistedDraft = parsePersistedCaptureDraft(storedValue);
+      if (!persistedDraft) {
+        if (!cancelled) {
+          setCaptureDraftReady(true);
+        }
+        return;
+      }
+
+      if (persistedDraft.captureMode === 'camera' && persistedDraft.capturedPhoto) {
+        const photoInfo = await FileSystem.getInfoAsync(persistedDraft.capturedPhoto).catch(() => ({
+          exists: false,
+        }));
+
+        if (!photoInfo.exists) {
+          await clearPersistedCaptureDraft();
+          if (!cancelled) {
+            setCaptureDraftReady(true);
+          }
+          return;
+        }
+
+        if (persistedDraft.capturedPairedVideo) {
+          const pairedVideoInfo = await FileSystem.getInfoAsync(persistedDraft.capturedPairedVideo).catch(() => ({
+            exists: false,
+          }));
+          if (!pairedVideoInfo.exists) {
+            persistedDraft.capturedPairedVideo = null;
+          }
+        }
+      }
+
+      if (cancelled) {
+        return;
+      }
+
+      restoreCaptureState({
+        captureMode: persistedDraft.captureMode,
+        noteText: persistedDraft.noteText,
+        capturedPhoto: persistedDraft.capturedPhoto,
+        capturedPairedVideo: persistedDraft.capturedPairedVideo,
+        radius: persistedDraft.radius,
+        selectedPhotoFilterId: persistedDraft.selectedPhotoFilterId,
+      });
+      captureCardRef.current?.resetDoodle();
+      captureCardRef.current?.resetStickers();
+      handleChangeNoteColor(persistedDraft.noteColor);
+      setCaptureTarget(
+        persistedDraft.captureTarget === 'shared' && sharedEnabled && user ? 'shared' : 'private'
+      );
+      setSelectedSharedAudienceUserId(
+        persistedDraft.captureTarget === 'shared' ? persistedDraft.selectedSharedAudienceUserId : null
+      );
+      setCaptureDraftReady(true);
+    }).catch(() => {
+      if (!cancelled) {
+        setCaptureDraftReady(true);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    captureDraftReady,
+    clearPersistedCaptureDraft,
+    handleChangeNoteColor,
+    restoreCaptureState,
+    sharedEnabled,
+    user,
+  ]);
+
+  useEffect(() => {
+    if (!captureDraftReady) {
+      return;
+    }
+
+    if (persistCaptureDraftTimeoutRef.current) {
+      clearTimeout(persistCaptureDraftTimeoutRef.current);
+    }
+
+    const nextDraft: PersistedCaptureDraft = {
+      version: 1,
+      captureMode,
+      noteText,
+      capturedPhoto,
+      capturedPairedVideo,
+      radius,
+      selectedPhotoFilterId,
+      noteColor,
+      captureTarget,
+      selectedSharedAudienceUserId,
+    };
+
+    persistCaptureDraftTimeoutRef.current = setTimeout(() => {
+      persistCaptureDraftTimeoutRef.current = null;
+
+      if (!isPersistableCaptureDraft(nextDraft)) {
+        void clearPersistedCaptureDraft();
+        return;
+      }
+
+      void setPersistentItem(CAPTURE_DRAFT_STORAGE_KEY, JSON.stringify(nextDraft)).catch(() => undefined);
+    }, 240);
+
+    return () => {
+      if (persistCaptureDraftTimeoutRef.current) {
+        clearTimeout(persistCaptureDraftTimeoutRef.current);
+        persistCaptureDraftTimeoutRef.current = null;
+      }
+    };
+  }, [
+    captureDraftReady,
+    captureMode,
+    noteText,
+    capturedPhoto,
+    capturedPairedVideo,
+    radius,
+    selectedPhotoFilterId,
+    noteColor,
+    captureTarget,
+    selectedSharedAudienceUserId,
+    clearPersistedCaptureDraft,
+  ]);
 
   const clearInlineSaveTimers = useCallback(() => {
     if (finalizeInlineSaveTimeoutRef.current) {
@@ -518,6 +715,10 @@ export default function HomeScreen() {
   useEffect(() => {
     return () => {
       clearInlineSaveTimers();
+      if (persistCaptureDraftTimeoutRef.current) {
+        clearTimeout(persistCaptureDraftTimeoutRef.current);
+        persistCaptureDraftTimeoutRef.current = null;
+      }
       setSavedNoteRevealActive(false);
     };
   }, [clearInlineSaveTimers, setSavedNoteRevealActive]);
@@ -680,6 +881,7 @@ export default function HomeScreen() {
   useEffect(() => {
     if (!user) {
       setCaptureTarget('private');
+      setSelectedSharedAudienceUserId(null);
       dismissSharedManageSheet();
     }
   }, [dismissSharedManageSheet, user]);
@@ -687,8 +889,19 @@ export default function HomeScreen() {
   useEffect(() => {
     if (!sharedEnabled || friends.length === 0) {
       setCaptureTarget('private');
+      setSelectedSharedAudienceUserId(null);
     }
   }, [friends.length, sharedEnabled]);
+
+  useEffect(() => {
+    if (!selectedSharedAudienceUserId) {
+      return;
+    }
+
+    if (!friends.some((friend) => friend.userId === selectedSharedAudienceUserId)) {
+      setSelectedSharedAudienceUserId(null);
+    }
+  }, [friends, selectedSharedAudienceUserId]);
 
   useFocusEffect(
     useCallback(() => {
@@ -830,6 +1043,64 @@ export default function HomeScreen() {
     });
   }, [showAlert, t]);
 
+  const placePulseSummary = useMemo(() => {
+    if (!location) {
+      return {
+        nearbyNoteCount: 0,
+        targetNoteId: null as string | null,
+      };
+    }
+
+    const nearbyGroups = getReminderPlaceGroups(notes)
+      .map((group) => ({
+        group,
+        distanceMeters: getDistanceMeters(
+          {
+            latitude: location.coords.latitude,
+            longitude: location.coords.longitude,
+          },
+          {
+            latitude: group.latitude,
+            longitude: group.longitude,
+          }
+        ),
+      }))
+      .filter((entry) => entry.distanceMeters <= PLACE_PULSE_RADIUS_METERS)
+      .sort((left, right) => left.distanceMeters - right.distanceMeters);
+
+    const highlightedPlace = nearbyGroups[0]?.group ?? null;
+    const latestNearbyNote = highlightedPlace
+      ? [...highlightedPlace.notes].sort(
+          (left, right) =>
+            new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime()
+        )[0] ?? null
+      : null;
+
+    return {
+      nearbyNoteCount: nearbyGroups.reduce(
+        (sum, entry) => sum + entry.group.notes.length,
+        0
+      ),
+      targetNoteId: latestNearbyNote?.id ?? null,
+    };
+  }, [location, notes]);
+
+  const handlePlacePulsePress = useCallback(() => {
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    Keyboard.dismiss();
+
+    if (placePulseSummary.targetNoteId) {
+      if (isFriendsFilterEnabled) {
+        setIsFriendsFilterEnabled(false);
+      }
+
+      setPendingSavedNoteScrollTargetId(placePulseSummary.targetNoteId);
+      return;
+    }
+
+    flatListRef.current?.scrollToOffset({ offset: snapHeight, animated: true });
+  }, [isFriendsFilterEnabled, placePulseSummary.targetNoteId, snapHeight]);
+
   const {
     handleCaptureTargetChange,
     handleCreateInvite,
@@ -853,6 +1124,48 @@ export default function HomeScreen() {
     showSharedUnavailableSheet,
     setCaptureTarget,
   });
+
+  const captureFooterContent = useMemo(() => {
+    if (captureTarget === 'shared' && friends.length > 0) {
+      return (
+        <CaptureAudienceStrip
+          friends={friends}
+          selectedFriendUid={selectedSharedAudienceUserId}
+          onSelectFriendUid={setSelectedSharedAudienceUserId}
+          t={t}
+        />
+      );
+    }
+
+    if (!location) {
+      return null;
+    }
+
+    if (placePulseSummary.nearbyNoteCount <= 0) {
+      return null;
+    }
+
+    return (
+      <PlacePulseStrip
+        label={
+          placePulseSummary.nearbyNoteCount === 1
+            ? t('home.placePulseNearbySingle', '1 nearby memory')
+            : t('home.placePulseNearbyPlural', '{{count}} nearby memories', {
+                count: placePulseSummary.nearbyNoteCount,
+              })
+        }
+        onPress={handlePlacePulsePress}
+      />
+    );
+  }, [
+    captureTarget,
+    friends,
+    handlePlacePulsePress,
+    location,
+    placePulseSummary.nearbyNoteCount,
+    selectedSharedAudienceUserId,
+    t,
+  ]);
 
   const showSavedSheet = useCallback((noteId?: string | null) => {
     const releaseSavedNote = () => {
@@ -1271,6 +1584,79 @@ export default function HomeScreen() {
     [t]
   );
 
+  const scrollCaptureToTop = useCallback(() => {
+    flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
+  }, []);
+
+  const handleEmptyStateTakePhoto = useCallback(() => {
+    scrollCaptureToTop();
+    if (captureMode !== 'camera') {
+      setCaptureMode('camera');
+    }
+  }, [captureMode, scrollCaptureToTop, setCaptureMode]);
+
+  const handleEmptyStateWriteOneSentence = useCallback(() => {
+    scrollCaptureToTop();
+    if (captureMode !== 'text') {
+      setCaptureMode('text');
+    }
+  }, [captureMode, scrollCaptureToTop, setCaptureMode]);
+
+  const handleEmptyStateEnableLocation = useCallback(async () => {
+    scrollCaptureToTop();
+    const result = await requestForegroundLocation();
+    if (result.location) {
+      showAlert({
+        variant: 'success',
+        title: t('capture.locationReadyTitle', 'Location ready'),
+        message: t(
+          'capture.locationReadyBody',
+          'Noto can now link your next note to this place.'
+        ),
+        primaryAction: {
+          label: t('common.done', 'Done'),
+        },
+      });
+      return;
+    }
+
+    showDoneSheet(
+      'warning',
+      t('capture.locationUnavailableTitle', 'Location unavailable'),
+      getLocationUnavailableMessage(result),
+      result.requiresSettings
+    );
+  }, [getLocationUnavailableMessage, requestForegroundLocation, scrollCaptureToTop, showAlert, showDoneSheet, t]);
+
+  const homeFeedEmptyState = useMemo(() => {
+    if (feedMode === 'content') {
+      return null;
+    }
+
+    return (
+      <HomeFeedEmptyState
+        mode={feedMode}
+        colors={colors}
+        t={t}
+        onDisableFriendsFilter={() => {
+          setIsFriendsFilterEnabled(false);
+        }}
+        onOpenFriends={presentSharedManageSheet}
+        onTakePhotoHere={handleEmptyStateTakePhoto}
+        onWriteOneSentence={handleEmptyStateWriteOneSentence}
+        onEnableLocation={handleEmptyStateEnableLocation}
+      />
+    );
+  }, [
+    colors,
+    feedMode,
+    handleEmptyStateEnableLocation,
+    handleEmptyStateTakePhoto,
+    handleEmptyStateWriteOneSentence,
+    presentSharedManageSheet,
+    t,
+  ]);
+
   const saveNote = useCallback(async () => {
     if (saveInFlightRef.current) {
       return;
@@ -1460,7 +1846,10 @@ export default function HomeScreen() {
             shareOutcome = 'no-friends';
           } else {
             try {
-              await createSharedPost(createdNote);
+              await createSharedPost(
+                createdNote,
+                selectedSharedAudienceUserId ? [selectedSharedAudienceUserId] : undefined
+              );
               shareOutcome = 'shared';
             } catch (shareError) {
               shareFailureMessage = getSharedFeedErrorMessage(shareError);
@@ -1538,6 +1927,7 @@ export default function HomeScreen() {
     captureTarget,
     createSharedPost,
     friends.length,
+    selectedSharedAudienceUserId,
     tier,
     remindersEnabled,
     sharedEnabled,
@@ -1792,12 +2182,14 @@ export default function HomeScreen() {
           onChangeShareTarget={handleCaptureTargetChange}
           onInteractionLockChange={setCaptureInteractionScrollLocked}
           onTextEntryFocusChange={handleCaptureTextEntryFocusChange}
+          footerContent={captureFooterContent}
         />
       </View>
     ),
     [
       cameraDevice,
       cameraPermissionRequiresSettings,
+      captureFooterContent,
       cameraRef,
       cameraSessionKey,
       captureMode,

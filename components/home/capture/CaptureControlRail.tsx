@@ -5,6 +5,7 @@ import { Radii } from '../../../constants/theme';
 import { useReducedMotion } from '../../../hooks/useReducedMotion';
 import { isOlderIOS } from '../../../utils/platform';
 import { GlassView } from '../../ui/GlassView';
+import { getGlassSurfacePalette } from '../../ui/glassTokens';
 import type { CaptureCardColors } from './captureShared';
 import { styles } from './captureCardStyles';
 
@@ -24,6 +25,10 @@ export function CaptureControlRail({
   style,
 }: CaptureControlRailProps) {
   const reduceMotionEnabled = useReducedMotion();
+  const glassPalette = getGlassSurfacePalette({
+    isDark: colors.captureGlassColorScheme === 'dark',
+    borderColor,
+  });
   const railLayoutTransition = useMemo(
     () =>
       reduceMotionEnabled
@@ -43,7 +48,7 @@ export function CaptureControlRail({
           style={[
             StyleSheet.absoluteFill,
             {
-              backgroundColor: colors.captureGlassFill,
+              backgroundColor: glassPalette.controlBackgroundColor,
               borderRadius: Radii.pill,
             },
           ]}
@@ -55,6 +60,7 @@ export function CaptureControlRail({
           style={StyleSheet.absoluteFill}
           glassEffectStyle="regular"
           colorScheme={colors.captureGlassColorScheme}
+          fallbackColor={glassPalette.controlBackgroundColor}
         />
       ) : null}
       <Reanimated.View layout={railLayoutTransition} style={[styles.textBottomToolsRow, rowStyle]}>

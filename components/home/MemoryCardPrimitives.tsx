@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { TFunction } from 'i18next';
 import { Image } from 'expo-image';
 import { type ReactNode, useEffect, useMemo, useState } from 'react';
-import { Pressable, StyleProp, StyleSheet, Text, useWindowDimensions, View, ViewStyle } from 'react-native';
+import { Platform, Pressable, StyleProp, StyleSheet, Text, useWindowDimensions, View, ViewStyle } from 'react-native';
 import Animated, {
   Easing,
   useAnimatedStyle,
@@ -11,6 +11,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { Layout, Radii, Typography } from '../../constants/theme';
 import { useRelativeTimeNow } from '../../hooks/useRelativeTimeNow';
+import { useTheme } from '../../hooks/useTheme';
 import { Note } from '../../services/database';
 import { getNotePairedVideoUri } from '../../services/livePhotoStorage';
 import { getNotePhotoUri } from '../../services/photoStorage';
@@ -22,7 +23,8 @@ import {
   type DebugTiltState,
 } from '../notes/StickerPhysicsDebugControls';
 import TextMemoryCard from '../notes/TextMemoryCard';
-import InfoPill from '../ui/InfoPill';
+import { GlassView } from '../ui/GlassView';
+import { glassTokens, getGlassSurfacePalette } from '../ui/glassTokens';
 import LivePhotoIcon from '../ui/LivePhotoIcon';
 import SharedPostCardVisual from './SharedPostCardVisual';
 
@@ -67,7 +69,35 @@ function MetadataContainer({
   children: ReactNode;
   onPress?: () => void;
 }) {
-  const pill = <InfoPill style={styles.metadataPill}>{children}</InfoPill>;
+  const { colors, isDark } = useTheme();
+  const glassPalette = getGlassSurfacePalette({
+    isDark,
+    borderColor: colors.border,
+  });
+
+  const pill = (
+    <View
+      style={[
+        styles.metadataPill,
+        styles.metadataPillShell,
+        {
+          borderColor: glassPalette.controlBorderColor,
+          backgroundColor: Platform.OS === 'android' ? glassPalette.controlBackgroundColor : 'transparent',
+        },
+      ]}
+    >
+      {Platform.OS !== 'android' ? (
+        <GlassView
+          pointerEvents="none"
+          style={StyleSheet.absoluteFill}
+          glassEffectStyle="regular"
+          colorScheme={isDark ? 'dark' : 'light'}
+          fallbackColor={glassPalette.fallbackControlBackgroundColor}
+        />
+      ) : null}
+      {children}
+    </View>
+  );
 
   if (!onPress) {
     return pill;
@@ -257,12 +287,6 @@ export function NoteMemoryCard({
         </View>
         <View style={[styles.metadataPillDot, { backgroundColor: colors.secondaryText }]} />
         <Text style={[styles.metadataPillDate, { color: colors.secondaryText }]}>{dateStr}</Text>
-        {note.hasDoodle ? (
-          <>
-            <View style={[styles.metadataPillDot, { backgroundColor: colors.secondaryText }]} />
-            <Ionicons name="brush-outline" size={14} color={colors.secondaryText} />
-          </>
-        ) : null}
       </View>
       {onPress ? (
         <MetadataAction
@@ -607,15 +631,20 @@ const styles = StyleSheet.create({
     fontFamily: 'Noto Sans',
   },
   metadataPill: {
-    minHeight: 42,
-    maxWidth: '85%',
-    paddingHorizontal: 10,
+    minHeight: glassTokens.pillControlHeight,
+    maxWidth: '88%',
+    paddingHorizontal: 16,
     paddingVertical: 0,
-    borderRadius: Radii.pill,
+    borderRadius: glassTokens.pillControlRadius,
+  },
+  metadataPillShell: {
+    borderWidth: glassTokens.borderWidth,
+    overflow: 'hidden',
+    justifyContent: 'center',
   },
   metadataPressable: {
     alignSelf: 'center',
-    maxWidth: '85%',
+    maxWidth: '88%',
   },
   metadataPressablePressed: {
     opacity: 0.84,
@@ -628,12 +657,12 @@ const styles = StyleSheet.create({
   metadataLocationGroup: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 5,
     flexShrink: 1,
     minWidth: 0,
   },
   metadataPillDate: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '500',
     fontFamily: 'Noto Sans',
     flexShrink: 0,
@@ -647,14 +676,14 @@ const styles = StyleSheet.create({
   metadataPillContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 8,
     maxWidth: '100%',
     minWidth: 0,
   },
   metadataPillMain: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 7,
     minWidth: 0,
     flexShrink: 1,
   },
@@ -663,11 +692,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 4,
     flexShrink: 0,
-    marginLeft: 8,
+    marginLeft: 10,
   },
   metadataActionText: {
     fontSize: 13,
-    fontWeight: '600',
+    fontWeight: '700',
     fontFamily: 'Noto Sans',
   },
 });

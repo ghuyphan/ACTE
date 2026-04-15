@@ -1,6 +1,7 @@
 import { GlassView as ExpoGlassView } from 'expo-glass-effect';
 import type { ComponentProps } from 'react';
 import { Platform, StyleSheet, View } from 'react-native';
+import { getGlassSurfacePalette } from './glassTokens';
 
 type ExpoGlassViewProps = ComponentProps<typeof ExpoGlassView>;
 
@@ -21,7 +22,7 @@ function getAndroidFallbackColor({
     return tintColor;
   }
 
-  return colorScheme === 'dark' ? 'rgba(24,24,28,0.94)' : 'rgba(255,252,246,0.94)';
+  return getGlassSurfacePalette({ isDark: colorScheme === 'dark' }).fallbackSurfaceColor;
 }
 
 export function GlassView({

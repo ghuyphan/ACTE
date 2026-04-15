@@ -1,9 +1,14 @@
 import { ReactNode } from 'react';
 import { Platform, StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
 import { BlurView } from 'expo-blur';
-import { Layout, Shadows } from '../../constants/theme';
+import { Layout } from '../../constants/theme';
 import { useTheme } from '../../hooks/useTheme';
 import { GlassView } from './GlassView';
+import {
+  glassContainerShadow,
+  glassTokens,
+  getGlassSurfacePalette,
+} from './glassTokens';
 
 interface GlassHeaderProps {
   topInset: number;
@@ -23,13 +28,7 @@ export default function GlassHeader({
   const { colors, isDark } = useTheme();
   const isAndroid = Platform.OS === 'android';
   const showDockedMaterial = dockedBlurred && !isAndroid;
-  const dockedBackdropColor = isDark
-    ? isAndroid
-      ? 'rgba(18,13,10,0.34)'
-      : 'rgba(18,13,10,0.22)'
-    : isAndroid
-      ? 'rgba(255,251,244,0.36)'
-      : 'rgba(255,251,244,0.24)';
+  const { dockedBackdropColor } = getGlassSurfacePalette({ isDark });
 
   if (docked) {
     return (
@@ -50,16 +49,16 @@ export default function GlassHeader({
           ]}
         >
           {showDockedMaterial ? (
-              <BlurView
-                intensity={24}
-                tint={isDark ? 'dark' : 'light'}
-                style={[
-                  StyleSheet.absoluteFill,
-                  {
-                    backgroundColor: dockedBackdropColor,
-                  },
-                ]}
-              />
+            <BlurView
+              intensity={24}
+              tint={isDark ? 'dark' : 'light'}
+              style={[
+                StyleSheet.absoluteFill,
+                {
+                  backgroundColor: dockedBackdropColor,
+                },
+              ]}
+            />
           ) : null}
           <View
             pointerEvents="none"
@@ -115,17 +114,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 0,
   },
   container: {
-    borderRadius: 30,
+    borderRadius: glassTokens.headerContainerRadius,
     overflow: 'hidden',
-    ...(Platform.OS === 'android'
-      ? {
-          shadowColor: '#000',
-          shadowOffset: { width: 0, height: 2 },
-          shadowOpacity: 0.06,
-          shadowRadius: 8,
-          elevation: 2,
-        }
-      : Shadows.floating),
+    ...glassContainerShadow,
   },
   dockedContainer: {
     borderRadius: 0,

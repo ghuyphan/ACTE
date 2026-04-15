@@ -14,6 +14,15 @@ import type { PhotoFilterId } from '../services/photoFilters';
 import { LIVE_PHOTO_MAX_DURATION_SECONDS } from '../services/livePhotoProcessing';
 
 export type CaptureMode = 'text' | 'camera';
+export type CaptureDraftState = {
+  captureMode: CaptureMode;
+  noteText: string;
+  capturedPhoto: string | null;
+  capturedPairedVideo: string | null;
+  radius: number;
+  selectedPhotoFilterId: PhotoFilterId;
+};
+
 const LIVE_PHOTO_SETTLE_MS = 450;
 const LIVE_PHOTO_SAVE_GUARD_MS = 900;
 const LIVE_PHOTO_RELEASE_BUFFER_MS = 180;
@@ -508,6 +517,25 @@ export function useCaptureFlow() {
     setRadius(DEFAULT_NOTE_RADIUS);
   }, [cancelLivePhotoCapture]);
 
+  const restoreCaptureState = useCallback((draft: CaptureDraftState) => {
+    void cancelLivePhotoCapture();
+    setCaptureMode(draft.captureMode);
+    setNoteText(draft.noteText);
+    setCapturedPhoto(draft.capturedPhoto);
+    setCapturedPairedVideo(draft.capturedPairedVideo);
+    setIsStillPhotoCaptureInProgress(false);
+    setIsLivePhotoCaptureInProgress(false);
+    setIsLivePhotoCaptureSettling(false);
+    setIsLivePhotoSaveGuardActive(false);
+    clearLivePhotoTapSuppression();
+    setRadius(draft.radius);
+    setSelectedPhotoFilterId(draft.selectedPhotoFilterId);
+
+    if (draft.captureMode === 'camera') {
+      setCameraSessionKey((current) => current + 1);
+    }
+  }, [cancelLivePhotoCapture, clearLivePhotoTapSuppression]);
+
   const needsCameraPermission = captureMode === 'camera' && (!permission || !permission.granted);
 
   return {
@@ -548,5 +576,6 @@ export function useCaptureFlow() {
     finishLivePhotoCapture,
     needsCameraPermission,
     resetCapture,
+    restoreCaptureState,
   };
 }

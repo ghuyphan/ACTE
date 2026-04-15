@@ -5,6 +5,7 @@ import type { CaptureCardColors } from './captureShared';
 import { CaptureAnimatedPressable } from './CaptureAnimatedPressable';
 import { CaptureControlRail } from './CaptureControlRail';
 import { styles } from './captureCardStyles';
+import { getGlassSurfacePalette } from '../../ui/glassTokens';
 import LivePhotoIcon from '../../ui/LivePhotoIcon';
 
 interface LiveCameraActionBarProps {
@@ -30,6 +31,10 @@ export function LiveCameraActionBar({
     return null;
   }
 
+  const glassPalette = getGlassSurfacePalette({
+    isDark: colors.captureGlassColorScheme === 'dark',
+    borderColor: colors.captureCardBorder,
+  });
   const showLivePhotoGuide = Boolean(cameraInstructionText);
 
   return (
@@ -59,8 +64,8 @@ export function LiveCameraActionBar({
             styles.textCardActionPill,
             styles.captureActionTextPill,
             {
-              backgroundColor: colors.captureGlassFill,
-              borderColor: 'transparent',
+              backgroundColor: glassPalette.subtleControlBackgroundColor,
+              borderColor: glassPalette.subtleControlBorderColor,
             },
           ]}
         >

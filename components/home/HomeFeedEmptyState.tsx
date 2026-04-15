@@ -16,7 +16,9 @@ interface HomeFeedEmptyStateProps {
   t: TFunction;
   onDisableFriendsFilter: () => void;
   onOpenFriends: () => void;
-  onCreateFirstMemory: () => void;
+  onTakePhotoHere: () => void;
+  onWriteOneSentence: () => void;
+  onEnableLocation: () => void;
 }
 
 function HomeFeedEmptyState({
@@ -25,7 +27,9 @@ function HomeFeedEmptyState({
   t,
   onDisableFriendsFilter,
   onOpenFriends,
-  onCreateFirstMemory,
+  onTakePhotoHere,
+  onWriteOneSentence,
+  onEnableLocation,
 }: HomeFeedEmptyStateProps) {
   const isSyncingEmpty = mode === 'syncing-empty';
   const isFriendsEmpty = mode === 'friends-empty';
@@ -102,23 +106,81 @@ function HomeFeedEmptyState({
           </Pressable>
         </View>
       ) : mode === 'first-note-empty' ? (
-        <View style={styles.emptyActions}>
+        <View style={styles.firstNoteActionList}>
           <Pressable
             accessibilityRole="button"
             onPress={() => {
               void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              onCreateFirstMemory();
+              onTakePhotoHere();
             }}
             style={({ pressed }) => [
-              styles.emptyButton,
+              styles.suggestionCard,
               {
-                opacity: pressed ? 0.72 : 1,
+                opacity: pressed ? 0.78 : 1,
               },
             ]}
           >
-            <Text style={[styles.emptyButtonText, { color: colors.primary }]}>
-              {t('home.createFirst', 'Save your first memory')}
-            </Text>
+            <View style={styles.suggestionIconWrap}>
+              <Ionicons name="camera-outline" size={18} color={colors.primary} />
+            </View>
+            <View style={styles.suggestionCopy}>
+              <Text style={[styles.suggestionTitle, { color: colors.text }]}>
+                {t('home.firstNoteActionPhotoTitle', 'Take a photo here')}
+              </Text>
+              <Text style={[styles.suggestionBody, { color: colors.secondaryText }]}>
+                {t('home.firstNoteActionPhotoBody', 'Start with a quick snapshot of this place.')}
+              </Text>
+            </View>
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => {
+              void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              onWriteOneSentence();
+            }}
+            style={({ pressed }) => [
+              styles.suggestionCard,
+              {
+                opacity: pressed ? 0.78 : 1,
+              },
+            ]}
+          >
+            <View style={styles.suggestionIconWrap}>
+              <Ionicons name="create-outline" size={18} color={colors.primary} />
+            </View>
+            <View style={styles.suggestionCopy}>
+              <Text style={[styles.suggestionTitle, { color: colors.text }]}>
+                {t('home.firstNoteActionTextTitle', 'Write one sentence')}
+              </Text>
+              <Text style={[styles.suggestionBody, { color: colors.secondaryText }]}>
+                {t('home.firstNoteActionTextBody', 'Leave yourself a tiny clue for next time.')}
+              </Text>
+            </View>
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => {
+              void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              onEnableLocation();
+            }}
+            style={({ pressed }) => [
+              styles.suggestionCard,
+              {
+                opacity: pressed ? 0.78 : 1,
+              },
+            ]}
+          >
+            <View style={styles.suggestionIconWrap}>
+              <Ionicons name="location-outline" size={18} color={colors.primary} />
+            </View>
+            <View style={styles.suggestionCopy}>
+              <Text style={[styles.suggestionTitle, { color: colors.text }]}>
+                {t('home.firstNoteActionLocationTitle', 'Enable location')}
+              </Text>
+              <Text style={[styles.suggestionBody, { color: colors.secondaryText }]}>
+                {t('home.firstNoteActionLocationBody', 'Let Noto link your notes to the places around you.')}
+              </Text>
+            </View>
           </Pressable>
         </View>
       ) : null}
@@ -171,6 +233,45 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 18,
     fontWeight: '800',
+    fontFamily: 'Noto Sans',
+  },
+  firstNoteActionList: {
+    width: '100%',
+    gap: 10,
+    marginTop: 16,
+  },
+  suggestionCard: {
+    width: '100%',
+    minHeight: 68,
+    borderRadius: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    backgroundColor: 'rgba(255,255,255,0.46)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  suggestionIconWrap: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.62)',
+  },
+  suggestionCopy: {
+    flex: 1,
+    gap: 2,
+  },
+  suggestionTitle: {
+    fontSize: 14,
+    lineHeight: 18,
+    fontWeight: '800',
+    fontFamily: 'Noto Sans',
+  },
+  suggestionBody: {
+    fontSize: 12,
+    lineHeight: 16,
     fontFamily: 'Noto Sans',
   },
 });

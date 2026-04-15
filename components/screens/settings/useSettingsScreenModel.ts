@@ -276,7 +276,11 @@ export function useSettingsScreenModel() {
     setShowTheme,
     showHaptics,
     showLanguage,
-    showSocialPushEntry: Boolean(user && sharedFeedEnabled),
+    showSocialPushEntry: Boolean(
+      user &&
+      sharedFeedEnabled &&
+      (socialPushStatus === 'denied' || socialPushStatus === 'blocked')
+    ),
     showSyncEntry: Boolean(user),
     showSync,
     showTheme,

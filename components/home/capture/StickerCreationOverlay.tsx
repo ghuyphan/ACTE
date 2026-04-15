@@ -28,6 +28,7 @@ import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 import { Radii, Typography } from '../../../constants/theme';
 import { useReducedMotion } from '../../../hooks/useReducedMotion';
 import { useTheme } from '../../../hooks/useTheme';
+import { getGlassSurfacePalette } from '../../ui/glassTokens';
 import PrimaryButton from '../../ui/PrimaryButton';
 import { triggerCaptureCardHaptic } from './captureMotion';
 import type {
@@ -279,8 +280,12 @@ function StickerCreationOverlay({
   }));
 
   const textColor = colors.text ?? '#1C1C1E';
-  const borderColor = colors.border ?? 'rgba(255,255,255,0.12)';
-  const buttonFill = isDark ? 'rgba(24,20,18,0.68)' : 'rgba(255,251,246,0.88)';
+  const glassPalette = getGlassSurfacePalette({
+    isDark,
+    borderColor: colors.border,
+  });
+  const borderColor = glassPalette.controlBorderColor;
+  const buttonFill = glassPalette.controlBackgroundColor;
   const actionBarBackground = isDark ? 'rgba(18,14,12,0.88)' : 'rgba(255,250,244,0.96)';
   const topInset = insets.top + 8;
   const bottomInset = Math.max(insets.bottom, 14);

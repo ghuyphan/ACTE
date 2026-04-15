@@ -9,6 +9,7 @@ import { DEFAULT_NOTE_COLOR_ID, getCaptureNoteGradient } from '../../../services
 import DoodleIcon from '../../ui/DoodleIcon';
 import LivePhotoIcon from '../../ui/LivePhotoIcon';
 import StickerIcon from '../../ui/StickerIcon';
+import { getGlassSurfacePalette } from '../../ui/glassTokens';
 import {
   CaptureAnimatedPressable,
   CaptureToggleIconButton,
@@ -298,7 +299,6 @@ interface TextCaptureBottomBarProps {
   showInlinePasteButton: boolean;
   stickerModeEnabled: boolean;
   t: TFunction;
-  textCardActiveIconColor: string;
   useNativeInlinePasteButton: boolean;
 }
 
@@ -324,9 +324,13 @@ export function TextCaptureBottomBar({
   showInlinePasteButton,
   stickerModeEnabled,
   t,
-  textCardActiveIconColor,
   useNativeInlinePasteButton,
 }: TextCaptureBottomBarProps) {
+  const glassPalette = getGlassSurfacePalette({
+    isDark: colors.captureGlassColorScheme === 'dark',
+    borderColor: colors.captureCardBorder,
+  });
+
   return (
     <View style={styles.textBottomToolsWrap}>
       <CaptureDecorateRail
@@ -346,20 +350,20 @@ export function TextCaptureBottomBar({
         stickerModeEnabled={stickerModeEnabled}
         t={t}
         theme={{
-          activeBackgroundColor: colors.captureButtonBg,
-          activeBorderColor: 'transparent',
-          activeIconColor: textCardActiveIconColor,
-          detailBackgroundColor: 'transparent',
-          detailBorderColor: 'transparent',
+          activeBackgroundColor: glassPalette.activeControlBackgroundColor,
+          activeBorderColor: glassPalette.controlBorderColor,
+          activeIconColor: colors.captureGlassText,
+          detailBackgroundColor: glassPalette.subtleControlBackgroundColor,
+          detailBorderColor: glassPalette.subtleControlBorderColor,
           detailIconColor: colors.captureGlassText,
-          inactiveBackgroundColor: colors.captureGlassFill,
+          inactiveBackgroundColor: 'transparent',
           inactiveBorderColor: 'transparent',
           inactiveIconColor: colors.captureGlassText,
-          paletteButtonBackgroundColor: colors.captureGlassFill,
-          paletteButtonBorderColor: 'transparent',
-          paletteSelectedBorderColor: colors.captureButtonBg,
+          paletteButtonBackgroundColor: glassPalette.subtleControlBackgroundColor,
+          paletteButtonBorderColor: glassPalette.subtleControlBorderColor,
+          paletteSelectedBorderColor: glassPalette.controlBorderColor,
           paletteSwatchBorderColor: 'rgba(43,38,33,0.16)',
-          railBorderColor: colors.captureCardBorder,
+          railBorderColor: glassPalette.controlBorderColor,
         }}
         defaultActions={
           <>
@@ -381,8 +385,8 @@ export function TextCaptureBottomBar({
                       styles.textBottomToolsButton,
                       styles.textBottomToolsAction,
                       {
-                        borderColor: 'transparent',
-                        backgroundColor: colors.captureGlassFill,
+                        borderColor: glassPalette.subtleControlBorderColor,
+                        backgroundColor: glassPalette.subtleControlBackgroundColor,
                       },
                     ]}
                   >
@@ -400,14 +404,14 @@ export function TextCaptureBottomBar({
                     imageOptions={{ format: 'png' }}
                     displayMode="iconOnly"
                     cornerStyle="capsule"
-                    backgroundColor={colors.captureGlassFill}
+                    backgroundColor={glassPalette.subtleControlBackgroundColor}
                     foregroundColor={colors.captureGlassText}
                     onPress={handleNativeInlinePasteStickerPress}
                     style={[
                       styles.nativeInlinePasteStickerButton,
                       {
                         borderWidth: StyleSheet.hairlineWidth,
-                        borderColor: 'transparent',
+                        borderColor: glassPalette.subtleControlBorderColor,
                       },
                     ]}
                   />
@@ -422,8 +426,8 @@ export function TextCaptureBottomBar({
                       styles.textBottomToolsButton,
                       styles.textBottomToolsAction,
                       {
-                        borderColor: 'transparent',
-                        backgroundColor: colors.captureGlassFill,
+                        borderColor: glassPalette.subtleControlBorderColor,
+                        backgroundColor: glassPalette.subtleControlBackgroundColor,
                       },
                     ]}
                   >
@@ -458,7 +462,6 @@ interface PhotoCaptureBottomBarProps {
   onRemoveMotionClip: () => void;
   stickerModeEnabled: boolean;
   t: TFunction;
-  textCardActiveIconColor: string;
 }
 
 export function PhotoCaptureBottomBar({
@@ -480,8 +483,12 @@ export function PhotoCaptureBottomBar({
   onRemoveMotionClip,
   stickerModeEnabled,
   t,
-  textCardActiveIconColor,
 }: PhotoCaptureBottomBarProps) {
+  const glassPalette = getGlassSurfacePalette({
+    isDark: colors.captureGlassColorScheme === 'dark',
+    borderColor: colors.captureCardBorder,
+  });
+
   return (
     <View style={styles.captureActionBarWrap}>
       <CaptureDecorateRail
@@ -501,20 +508,20 @@ export function PhotoCaptureBottomBar({
         stickerModeEnabled={stickerModeEnabled}
         t={t}
         theme={{
-          activeBackgroundColor: colors.captureButtonBg,
-          activeBorderColor: 'transparent',
-          activeIconColor: textCardActiveIconColor,
-          detailBackgroundColor: 'transparent',
-          detailBorderColor: 'transparent',
+          activeBackgroundColor: glassPalette.activeControlBackgroundColor,
+          activeBorderColor: glassPalette.controlBorderColor,
+          activeIconColor: colors.captureGlassText,
+          detailBackgroundColor: glassPalette.subtleControlBackgroundColor,
+          detailBorderColor: glassPalette.subtleControlBorderColor,
           detailIconColor: colors.captureGlassText,
-          inactiveBackgroundColor: colors.captureGlassFill,
+          inactiveBackgroundColor: 'transparent',
           inactiveBorderColor: 'transparent',
           inactiveIconColor: colors.captureGlassText,
-          paletteButtonBackgroundColor: colors.captureGlassFill,
-          paletteButtonBorderColor: 'transparent',
-          paletteSelectedBorderColor: colors.captureButtonBg,
+          paletteButtonBackgroundColor: glassPalette.subtleControlBackgroundColor,
+          paletteButtonBorderColor: glassPalette.subtleControlBorderColor,
+          paletteSelectedBorderColor: glassPalette.controlBorderColor,
           paletteSwatchBorderColor: 'rgba(43,38,33,0.16)',
-          railBorderColor: colors.captureCardBorder,
+          railBorderColor: glassPalette.controlBorderColor,
         }}
         afterToggles={
           <CaptureAnimatedPressable
@@ -535,15 +542,17 @@ export function PhotoCaptureBottomBar({
               styles.livePhotoTogglePill,
               {
                 backgroundColor: hasLivePhotoMotion
-                  ? colors.captureButtonBg
-                  : colors.captureGlassFill,
-                borderColor: 'transparent',
+                  ? glassPalette.activeControlBackgroundColor
+                  : glassPalette.subtleControlBackgroundColor,
+                borderColor: hasLivePhotoMotion
+                  ? glassPalette.controlBorderColor
+                  : glassPalette.subtleControlBorderColor,
               },
             ]}
           >
             <LivePhotoIcon
               size={15}
-              color={hasLivePhotoMotion ? textCardActiveIconColor : colors.captureGlassText}
+              color={colors.captureGlassText}
             />
           </CaptureAnimatedPressable>
         }

@@ -1270,7 +1270,6 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                     showInlinePasteButton={showInlinePasteButton}
                     stickerModeEnabled={stickerModeEnabled}
                     t={t}
-                    textCardActiveIconColor={textCardActiveIconColor}
                     useNativeInlinePasteButton={useNativeInlinePasteButton}
                   />
                 </Reanimated.View>
@@ -1298,7 +1297,6 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                     onRemoveMotionClip={onRemoveMotionClip}
                     stickerModeEnabled={stickerModeEnabled}
                     t={t}
-                    textCardActiveIconColor={textCardActiveIconColor}
                   />
                 </Reanimated.View>
               ) : (

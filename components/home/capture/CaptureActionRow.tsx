@@ -1,6 +1,7 @@
 import type { TFunction } from 'i18next';
 import { Text, View } from 'react-native';
 import Reanimated from 'react-native-reanimated';
+import { getGlassSurfacePalette } from '../../ui/glassTokens';
 import type { CaptureCardAnimatedStyle, CaptureCardColors, CameraUiStage } from './captureShared';
 import { CaptureAnimatedPressable, CaptureGlassActionButton } from './CaptureControls';
 import { styles } from './captureCardStyles';
@@ -23,6 +24,11 @@ function CaptureShareTargetButton({
   onChangeShareTarget,
   style,
 }: CaptureShareTargetButtonProps) {
+  const glassPalette = getGlassSurfacePalette({
+    isDark: colors.captureGlassColorScheme === 'dark',
+    borderColor: colors.captureCardBorder,
+  });
+
   return (
     <CaptureGlassActionButton
       testID="capture-share-target-toggle"
@@ -36,9 +42,14 @@ function CaptureShareTargetButton({
       onPress={() => onChangeShareTarget(shareTarget === 'private' ? 'shared' : 'private')}
       iconName={isSharedTarget ? 'people' : 'lock-closed'}
       iconColor={colors.captureGlassText}
+      active={isSharedTarget}
       glassColorScheme={colors.captureGlassColorScheme}
-      fallbackColor={colors.card}
-      borderColor={colors.captureCardBorder}
+      fallbackColor={
+        isSharedTarget
+          ? glassPalette.activeControlBackgroundColor
+          : glassPalette.controlBackgroundColor
+      }
+      borderColor={glassPalette.controlBorderColor}
       style={style}
     />
   );
@@ -109,6 +120,10 @@ export function CaptureActionRow({
   shutterOuterAnimatedStyle,
   t,
 }: CaptureActionRowProps) {
+  const glassPalette = getGlassSurfacePalette({
+    isDark: colors.captureGlassColorScheme === 'dark',
+    borderColor: colors.captureCardBorder,
+  });
   const remainingPhotoSlotsLabel =
     typeof remainingPhotoSlots === 'number' && remainingPhotoSlots > 0
       ? t('capture.photoSlotsRemainingCompact', '{{count}} left', { count: remainingPhotoSlots })
@@ -199,8 +214,8 @@ export function CaptureActionRow({
               iconName="camera-reverse"
               iconColor={colors.captureGlassText}
               glassColorScheme={colors.captureGlassColorScheme}
-              fallbackColor={colors.card}
-              borderColor={colors.captureCardBorder}
+              fallbackColor={glassPalette.controlBackgroundColor}
+              borderColor={glassPalette.controlBorderColor}
               style={styles.belowCardTrailingAction}
             />
           ) : (
@@ -249,8 +264,8 @@ export function CaptureActionRow({
           iconName="refresh"
           iconColor={colors.captureGlassText}
           glassColorScheme={colors.captureGlassColorScheme}
-          fallbackColor={colors.card}
-          borderColor={colors.captureCardBorder}
+          fallbackColor={glassPalette.controlBackgroundColor}
+          borderColor={glassPalette.controlBorderColor}
           style={styles.belowCardTrailingAction}
         />
       ) : (

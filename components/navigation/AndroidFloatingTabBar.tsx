@@ -17,6 +17,10 @@ import { useTranslation } from 'react-i18next';
 import { useSavedNoteRevealUi } from '../../hooks/ui/useSavedNoteRevealUi';
 import { useTheme } from '../../hooks/useTheme';
 import {
+  glassTokens,
+  getGlassSurfacePalette,
+} from '../ui/glassTokens';
+import {
   requestAndroidTabSearchFocus,
   setAndroidTabSearchQuery,
   useAndroidTabSearchFocusRequestId,
@@ -269,6 +273,10 @@ export default function AndroidFloatingTabBar({
 }: BottomTabBarProps) {
   const { t } = useTranslation();
   const { colors, isDark } = useTheme();
+  const glassPalette = getGlassSurfacePalette({
+    isDark,
+    borderColor: colors.androidTabShellBorder,
+  });
   const { isSavedNoteRevealActive } = useSavedNoteRevealUi();
   const { width: windowWidth } = useWindowDimensions();
   const insets = useSafeAreaInsets();
@@ -411,13 +419,23 @@ export default function AndroidFloatingTabBar({
   const searchPlaceholder = responsiveMetrics.isCompact
     ? t('tabs.search', 'Search')
     : t('home.searchPlaceholder', 'Search your journal...');
-  const focusedSearchBackgroundColor = searchSelected ? colors.card : colors.androidTabShellBackground;
-  const focusedSearchBorderColor = searchSelected ? colors.border : colors.androidTabShellBorder;
+  const shellBackgroundColor = glassPalette.controlBackgroundColor;
+  const shellBorderColor = glassPalette.controlBorderColor;
+  const selectedShellBackgroundColor = glassPalette.activeControlBackgroundColor;
+  const focusedSearchBackgroundColor = searchSelected
+    ? glassPalette.fallbackSurfaceColor
+    : shellBackgroundColor;
+  const focusedSearchBorderColor = searchSelected
+    ? shellBorderColor
+    : shellBorderColor;
   const searchShellGradientColors: [string, string] = searchSelected
-    ? [colors.card, colors.surface]
+    ? [
+        isDark ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.22)',
+        'transparent',
+      ]
     : isDark
-      ? ['rgba(255,255,255,0.08)', 'rgba(255,255,255,0.01)']
-      : ['rgba(255,255,255,0.16)', 'rgba(255,255,255,0.03)'];
+      ? ['rgba(255,255,255,0.06)', 'rgba(255,255,255,0.01)']
+      : ['rgba(255,255,255,0.14)', 'rgba(255,255,255,0.02)'];
 
   const tabWidth = useMemo(() => {
     if (primaryBarExpandedWidth <= 0 || primaryRoutes.length === 0) {
@@ -634,10 +652,9 @@ export default function AndroidFloatingTabBar({
             styles.bar,
             primaryBarAnimatedStyle,
             {
-              backgroundColor: colors.androidTabShellBackground,
-              borderColor: colors.androidTabShellBorder,
+              backgroundColor: shellBackgroundColor,
+              borderColor: shellBorderColor,
               padding: responsiveMetrics.barContentInset,
-              shadowColor: colors.androidTabShellShadow,
             },
           ]}
         >
@@ -645,8 +662,8 @@ export default function AndroidFloatingTabBar({
             pointerEvents="none"
             colors={
               isDark
-                ? ['rgba(255,255,255,0.08)', 'rgba(255,255,255,0.01)']
-                : ['rgba(255,255,255,0.16)', 'rgba(255,255,255,0.02)']
+                ? ['rgba(255,255,255,0.06)', 'rgba(255,255,255,0.01)']
+                : ['rgba(255,255,255,0.14)', 'rgba(255,255,255,0.02)']
             }
             start={{ x: 0.1, y: 0 }}
             end={{ x: 0.9, y: 1 }}
@@ -659,8 +676,8 @@ export default function AndroidFloatingTabBar({
               styles.activeCapsule,
               indicatorAnimatedStyle,
               {
-                backgroundColor: colors.androidTabShellSelectedBackground,
-                borderColor: colors.androidTabShellSelectedBorder,
+                backgroundColor: selectedShellBackgroundColor,
+                borderColor: shellBorderColor,
                 bottom: responsiveMetrics.barContentInset,
                 left: responsiveMetrics.barContentInset,
                 top: responsiveMetrics.barContentInset,
@@ -668,7 +685,11 @@ export default function AndroidFloatingTabBar({
             ]}
           >
             <LinearGradient
-              colors={colors.androidTabShellSelectedGradient}
+              colors={
+                isDark
+                  ? ['rgba(255,255,255,0.08)', 'rgba(255,255,255,0.02)']
+                  : ['rgba(255,255,255,0.26)', 'rgba(255,255,255,0.08)']
+              }
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
               style={StyleSheet.absoluteFill}
@@ -727,7 +748,6 @@ export default function AndroidFloatingTabBar({
                   borderColor: focusedSearchBorderColor,
                   height: responsiveMetrics.searchButtonSize,
                   paddingHorizontal: responsiveMetrics.searchHorizontalPadding,
-                  shadowColor: colors.androidTabShellShadow,
                 },
                 pressed ? styles.tabButtonPressed : null,
               ]}
@@ -788,14 +808,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
   },
   bar: {
-    borderRadius: 999,
-    borderWidth: 1,
+    borderRadius: glassTokens.headerContainerRadius,
+    borderWidth: glassTokens.borderWidth,
     overflow: 'hidden',
     position: 'relative',
-    shadowOffset: { width: 0, height: 14 },
-    shadowOpacity: 0.18,
-    shadowRadius: 22,
-    elevation: 10,
   },
   barContent: {
     justifyContent: 'center',
@@ -815,7 +831,7 @@ const styles = StyleSheet.create({
   },
   activeCapsule: {
     borderRadius: 999,
-    borderWidth: 1,
+    borderWidth: glassTokens.borderWidth,
     overflow: 'hidden',
     position: 'absolute',
   },
@@ -849,14 +865,10 @@ const styles = StyleSheet.create({
   },
   searchButton: {
     alignItems: 'center',
-    borderRadius: 999,
-    borderWidth: 1,
+    borderRadius: glassTokens.headerContainerRadius,
+    borderWidth: glassTokens.borderWidth,
     justifyContent: 'center',
     overflow: 'hidden',
-    shadowOffset: { width: 0, height: 14 },
-    shadowOpacity: 0.18,
-    shadowRadius: 22,
-    elevation: 10,
   },
   searchIconWrap: {
     alignItems: 'center',

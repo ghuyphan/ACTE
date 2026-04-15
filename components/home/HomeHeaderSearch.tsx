@@ -48,6 +48,7 @@ import { Sheet } from "../../constants/theme";
 import { isIOS26OrNewer } from "../../utils/platform";
 import type { NotesRouteTransitionRect } from "../../utils/notesRouteTransition";
 import GlassHeader from "../ui/GlassHeader";
+import { glassTokens, getGlassSurfacePalette } from "../ui/glassTokens";
 
 const HEADER_BUTTON_HIT_SLOP = {
   top: 8,
@@ -127,23 +128,22 @@ export default function HomeHeaderSearch({
   const useDockedHeader =
     Platform.OS === "android" || (Platform.OS === "ios" && !isIOS26OrNewer);
   const useNativeLiquidGlassControls = Platform.OS === "ios" && isIOS26OrNewer;
+  const glassPalette = getGlassSurfacePalette({
+    isDark,
+    borderColor: colors.border,
+  });
   const neutralHeaderControlForegroundColor = isDark
     ? "#FFF7E8"
     : colors.secondaryText;
-  const androidHeaderControlBackgroundColor = isDark
-    ? "rgba(24,20,18,0.68)"
-    : "rgba(255,251,246,0.88)";
-  const androidHeaderControlBorderColor =
-    colors.border ??
-    (isDark ? "rgba(255,255,255,0.12)" : "rgba(113,86,26,0.18)");
+  const androidHeaderControlBackgroundColor =
+    glassPalette.controlBackgroundColor;
+  const androidHeaderControlBorderColor = glassPalette.controlBorderColor;
   const androidHeaderControlForegroundColor =
     neutralHeaderControlForegroundColor;
-  const androidHeaderSearchBackgroundColor = isDark
-    ? "rgba(255,247,232,0.22)"
-    : "rgba(255,255,255,0.88)";
-  const activeHeaderControlBackgroundColor = isDark
-    ? "rgba(255,247,232,0.14)"
-    : "rgba(109,95,74,0.10)";
+  const androidHeaderSearchBackgroundColor =
+    glassPalette.searchFieldBackgroundColor;
+  const activeHeaderControlBackgroundColor =
+    glassPalette.activeControlBackgroundColor;
   const notesButtonRef = useRef<View>(null);
 
   useEffect(() => {
@@ -201,18 +201,15 @@ export default function HomeHeaderSearch({
     textSize: size === "large" ? 13 : 12,
   });
 
-  const headerControlBackgroundColor = isDark
-    ? "rgba(255,255,255,0.94)"
-    : "rgba(255,255,255,0.88)";
+  const headerControlBackgroundColor =
+    glassPalette.fallbackControlBackgroundColor;
   const headerControlForegroundColor = neutralHeaderControlForegroundColor;
   const searchFieldBackgroundColor = isAndroid
     ? androidHeaderSearchBackgroundColor
     : headerControlBackgroundColor;
   const searchFieldBorderColor = isAndroid
     ? androidHeaderControlBorderColor
-    : isDark
-    ? "rgba(255,255,255,0.08)"
-    : "rgba(113,86,26,0.10)";
+    : glassPalette.searchFieldBorderColor;
 
   const getControlColors = (emphasized = false) => ({
     backgroundColor: emphasized
@@ -910,14 +907,14 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   iconButton: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
+    width: glassTokens.iconControlSize,
+    height: glassTokens.iconControlSize,
+    borderRadius: glassTokens.iconControlRadius,
     alignItems: "center",
     justifyContent: "center",
   },
   androidHeaderActionButton: {
-    borderWidth: StyleSheet.hairlineWidth,
+    borderWidth: glassTokens.borderWidth,
   },
   swiftHeaderControlHost: {
     minHeight: 38,
@@ -934,10 +931,10 @@ const styles = StyleSheet.create({
   },
   searchContainer: {
     flex: 1,
-    height: 42,
+    height: glassTokens.iconControlSize,
     paddingHorizontal: 14,
-    borderRadius: 21,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: glassTokens.iconControlRadius,
+    borderWidth: glassTokens.borderWidth,
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
@@ -956,9 +953,9 @@ const styles = StyleSheet.create({
     fontFamily: "Noto Sans",
   },
   textButton: {
-    minHeight: 40,
+    minHeight: glassTokens.pillControlHeight,
     paddingHorizontal: 16,
-    borderRadius: 20,
+    borderRadius: glassTokens.pillControlRadius,
     justifyContent: "center",
     alignItems: "center",
     maxWidth: 156,
