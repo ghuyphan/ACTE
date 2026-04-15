@@ -40,9 +40,7 @@ function HomeFeedEmptyState({
   const syncingTitle =
     bootstrapState === 'switching-account'
       ? t('home.bootstrapSwitchingTitle', 'Opening your account')
-      : bootstrapState === 'loading-notes'
-        ? t('home.bootstrapLoadingNotesTitle', 'Loading your notes')
-        : bootstrapState === 'loading-shared'
+      : bootstrapState === 'loading-shared'
           ? t('home.bootstrapLoadingSharedTitle', 'Loading shared memories')
           : t('home.syncingEmptyTitle', 'Importing your cloud notes');
   const syncingBody =
@@ -51,12 +49,7 @@ function HomeFeedEmptyState({
           'home.bootstrapSwitchingBody',
           'We are switching from local notes to your signed-in account now.'
         )
-      : bootstrapState === 'loading-notes'
-        ? t(
-            'home.bootstrapLoadingNotesBody',
-            'We are loading the notes already stored for this account on this device.'
-          )
-        : bootstrapState === 'loading-shared'
+      : bootstrapState === 'loading-shared'
           ? t(
               'home.bootstrapLoadingSharedBody',
               'We are checking your shared feed and friend activity before showing Home.'

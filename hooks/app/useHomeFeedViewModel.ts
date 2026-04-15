@@ -176,7 +176,13 @@ export function useHomeFeedViewModel({
     bootstrapState === 'offline' ||
     bootstrapState === 'error';
   const hasStableHomeFeedContent = homeFeedItems.length > 0;
+  const hasVisibleHomeFeedContent = visibleFeedItems.length > 0;
   const hasStableFriendFeedContent = friendPosts.length > 0;
+  const isSuppressedBySavedRevealOnly =
+    !isFriendsFilterActive &&
+    !hasVisibleHomeFeedContent &&
+    hasStableHomeFeedContent &&
+    Boolean(savedNoteRevealNoteId);
 
   const feedMode: HomeFeedMode = useMemo(() => {
     if (isPostLoginSyncingEmpty) {
@@ -193,7 +199,8 @@ export function useHomeFeedViewModel({
 
     if (
       !isFriendsFilterActive &&
-      !hasStableHomeFeedContent &&
+      !hasVisibleHomeFeedContent &&
+      !isSuppressedBySavedRevealOnly &&
       !authUserChanged &&
       notesInitialLoadComplete &&
       !notesLoading &&
@@ -207,10 +214,11 @@ export function useHomeFeedViewModel({
     authUserChanged,
     currentUserUid,
     hasStableFriendFeedContent,
-    hasStableHomeFeedContent,
+    hasVisibleHomeFeedContent,
     isFriendsFilterActive,
     isPostLoginBootstrapBlocked,
     isPostLoginSyncingEmpty,
+    isSuppressedBySavedRevealOnly,
     notesInitialLoadComplete,
     notesLoading,
     sharedInitialLoadComplete,

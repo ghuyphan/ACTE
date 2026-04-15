@@ -413,6 +413,25 @@ describe('HomeScreen empty state', () => {
     expect(screen.queryByText('Your journal is waiting')).toBeNull();
   });
 
+  it('keeps the importing copy visible while signed-in notes are still hydrating', async () => {
+    mockSyncStatusState = {
+      bootstrapState: 'syncing',
+      status: 'syncing',
+      isInitialSyncPending: true,
+      requestSync: jest.fn(),
+    };
+    mockNotesStoreState = {
+      ...mockNotesStoreState,
+      loading: true,
+      initialLoadComplete: false,
+    };
+
+    const screen = await renderHomeScreen();
+
+    expect(screen.getByText('Importing your cloud notes')).toBeTruthy();
+    expect(screen.queryByText('Loading your notes')).toBeNull();
+  });
+
   it('shows an explicit blocked state when the first cloud sync cannot run offline', async () => {
     mockSyncStatusState = {
       bootstrapState: 'offline',

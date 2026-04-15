@@ -193,6 +193,7 @@ interface NotesFeedProps {
   flatListRef: RefObject<any>;
   captureHeader: ReactElement;
   emptyState?: ReactElement | null;
+  initialItemIndex?: number | null;
   captureMode: 'text' | 'camera';
   screenActive?: boolean;
   items?: HomeFeedItem[];
@@ -228,6 +229,7 @@ export default function NotesFeed({
   flatListRef,
   captureHeader,
   emptyState = null,
+  initialItemIndex = null,
   captureMode,
   screenActive = true,
   items,
@@ -626,6 +628,7 @@ export default function NotesFeed({
     <FlashList
       ref={flatListRef}
       data={listData}
+      initialScrollIndex={typeof initialItemIndex === 'number' ? initialItemIndex : undefined}
       keyExtractor={getHomeFeedItemKey}
       renderItem={renderItem}
       extraData={activeCardKey}

@@ -81,11 +81,24 @@ describe('useHomeFeedViewModel', () => {
     expect(result.current.isFeedBootstrapPending).toBe(true);
   });
 
-  it('keeps content mode when feed items are only hidden by the saved-note suppression flow', () => {
+  it('falls back to the empty state when feed items are hidden but no saved-note reveal is active', () => {
     const note = buildNote();
     const params = createParams({
       notes: [note],
       suppressedHomeNoteIds: [note.id],
+    });
+    const { result } = renderHook(() => useHomeFeedViewModel(params));
+
+    expect(result.current.feedMode).toBe('first-note-empty');
+    expect(result.current.visibleFeedItems).toEqual([]);
+  });
+
+  it('keeps content mode while the saved-note reveal is intentionally hiding the new note', () => {
+    const note = buildNote();
+    const params = createParams({
+      notes: [note],
+      suppressedHomeNoteIds: [note.id],
+      savedNoteRevealNoteId: note.id,
     });
     const { result } = renderHook(() => useHomeFeedViewModel(params));
 
