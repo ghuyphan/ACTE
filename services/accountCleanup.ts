@@ -23,6 +23,18 @@ interface SharedCacheRow {
   sticker_placements_json: string | null;
 }
 
+function getSyncCursorStorageKey(ownerUid: string) {
+  return `sync.lastRemoteCursor.${ownerUid}`;
+}
+
+function getSyncedNoteIdsStorageKey(ownerUid: string) {
+  return `sync.syncedNoteIds.${ownerUid}`;
+}
+
+function getInitialSyncPendingStorageKey(ownerUid: string) {
+  return `settings.initialSyncPending.${ownerUid}`;
+}
+
 async function deleteFileIfPresent(fileUri: string | null | undefined) {
   const normalizedPath = typeof fileUri === 'string' ? fileUri.trim() : '';
   if (!normalizedPath) {
@@ -113,7 +125,12 @@ export async function purgeLocalAccountScope(ownerUid: string | null | undefined
   await deleteAllNotesForScope(normalizedOwnerUid);
   await database.runAsync('DELETE FROM sticker_assets WHERE owner_uid = ?', normalizedOwnerUid);
   await database.runAsync('DELETE FROM sync_queue WHERE owner_uid = ?', normalizedOwnerUid);
+  await database.runAsync('DELETE FROM sync_state WHERE owner_uid = ?', normalizedOwnerUid);
+  await database.runAsync('DELETE FROM sync_runs WHERE owner_uid = ?', normalizedOwnerUid);
   await clearSharedFeedCache(normalizedOwnerUid).catch(() => undefined);
+  await removePersistentItem(getSyncCursorStorageKey(normalizedOwnerUid)).catch(() => undefined);
+  await removePersistentItem(getSyncedNoteIdsStorageKey(normalizedOwnerUid)).catch(() => undefined);
+  await removePersistentItem(getInitialSyncPendingStorageKey(normalizedOwnerUid)).catch(() => undefined);
   await removePersistentItem(`subscription.snapshot.${normalizedOwnerUid}`).catch(() => undefined);
   await clearGeofenceRegions().catch(() => undefined);
 }

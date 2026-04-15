@@ -44,8 +44,11 @@ import { scheduleWidgetDataUpdate } from '../services/widgetService';
 import { useAuth } from './useAuth';
 import { useConnectivity } from './useConnectivity';
 
+export type SharedFeedLoadPhase = 'bootstrapping' | 'cache-ready' | 'ready' | 'refreshing';
+
 interface SharedFeedStoreValue {
   enabled: boolean;
+  phase: SharedFeedLoadPhase;
   loading: boolean;
   ready: boolean;
   initialLoadComplete: boolean;
@@ -115,6 +118,13 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
   );
 
   const enabled = isAuthAvailable;
+  const phase: SharedFeedLoadPhase = !ready
+    ? 'bootstrapping'
+    : loading
+      ? 'refreshing'
+      : initialLoadComplete
+        ? 'ready'
+        : 'cache-ready';
 
   const commitSnapshot = useCallback(
     (
@@ -664,6 +674,7 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
   return useMemo<SharedFeedStoreValue>(
     () => ({
       enabled,
+      phase,
       loading,
       ready,
       initialLoadComplete,
@@ -955,6 +966,7 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
       dataSource,
       enabled,
       friends,
+      phase,
       initialLoadComplete,
       isOnline,
       lastUpdatedAt,

@@ -486,13 +486,11 @@ export async function migrateNotesScope(sourceScope: string, targetScope: string
             normalizedSourceScope
         );
         await txn.runAsync(
-            'UPDATE sync_state SET owner_uid = ? WHERE owner_uid = ?',
-            normalizedTargetScope,
+            'DELETE FROM sync_state WHERE owner_uid = ?',
             normalizedSourceScope
         );
         await txn.runAsync(
-            'UPDATE sync_runs SET owner_uid = ? WHERE owner_uid = ?',
-            normalizedTargetScope,
+            'DELETE FROM sync_runs WHERE owner_uid = ?',
             normalizedSourceScope
         );
         await txn.runAsync(

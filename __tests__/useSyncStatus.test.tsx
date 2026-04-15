@@ -425,6 +425,44 @@ describe('useSyncStatus', () => {
     expect(mockSyncNotes).not.toHaveBeenCalled();
   });
 
+  it('classifies an initial sync as offline-blocked instead of active bootstrapping when offline', async () => {
+    mockAuthState.user = {
+      uid: 'user-1',
+      displayName: 'Huy',
+      email: 'huy@example.com',
+      photoURL: null,
+    };
+    mockConnectivityState.status = 'offline';
+    mockConnectivityState.isOnline = false;
+    mockConnectivityState.isInternetReachable = false;
+
+    const { result } = renderHook(() => useSyncStatus(), { wrapper });
+    await flushSyncPref();
+
+    await waitFor(() => {
+      expect(result.current.bootstrapState).toBe('offline');
+      expect(result.current.phase).toBe('idle');
+    });
+  });
+
+  it('classifies an initial sync as disabled-blocked when sync is turned off', async () => {
+    mockAuthState.user = {
+      uid: 'user-1',
+      displayName: 'Huy',
+      email: 'huy@example.com',
+      photoURL: null,
+    };
+    mockStorage.set('settings.syncEnabled', 'false');
+
+    const { result } = renderHook(() => useSyncStatus(), { wrapper });
+    await flushSyncPref();
+
+    await waitFor(() => {
+      expect(result.current.bootstrapState).toBe('disabled');
+      expect(result.current.phase).toBe('idle');
+    });
+  });
+
   it('keeps retrying the first account sync as a full sync until one succeeds', async () => {
     mockAuthState.user = {
       uid: 'user-1',

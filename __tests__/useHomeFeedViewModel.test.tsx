@@ -35,14 +35,12 @@ function createParams(overrides: Partial<Parameters<typeof useHomeFeedViewModel>
   return {
     userUid: 'user-1',
     notes: [],
-    notesLoading: false,
-    notesInitialLoadComplete: true,
+    notesPhase: 'ready' as const,
     sharedEnabled: true,
-    sharedReady: true,
-    sharedInitialLoadComplete: true,
+    sharedPhase: 'ready' as const,
     sharedPosts: [],
-    isInitialSyncPending: false,
-    syncStatus: 'idle' as const,
+    syncPhase: 'idle' as const,
+    syncBootstrapState: 'complete' as const,
     isFriendsFilterEnabled: false,
     suppressedHomeNoteIds: [],
     savedNoteRevealNoteId: null,
@@ -63,9 +61,9 @@ describe('useHomeFeedViewModel', () => {
 
   it('returns the syncing-empty mode while the initial signed-in sync is still running', () => {
     const params = createParams({
-      isInitialSyncPending: true,
-      syncStatus: 'idle',
-      sharedInitialLoadComplete: false,
+      syncPhase: 'bootstrapping',
+      syncBootstrapState: 'syncing',
+      sharedPhase: 'cache-ready',
     });
     const { result } = renderHook(() => useHomeFeedViewModel(params));
 
@@ -74,8 +72,8 @@ describe('useHomeFeedViewModel', () => {
 
   it('keeps the signed-in bootstrap state while notes are still hydrating', () => {
     const params = createParams({
-      notesInitialLoadComplete: true,
-      notesLoading: true,
+      notesPhase: 'bootstrapping',
+      syncBootstrapState: 'preparing',
     });
     const { result } = renderHook(() => useHomeFeedViewModel(params));
 
@@ -112,5 +110,16 @@ describe('useHomeFeedViewModel', () => {
     expect(result.current.feedMode).toBe('friends-empty');
     expect(result.current.ownedSharedNoteIds).toEqual(['note-1']);
     expect(result.current.savedNoteRevealIsSharedByMe).toBe(true);
+  });
+
+  it('returns the blocked bootstrap mode when first cloud load is offline', () => {
+    const params = createParams({
+      syncBootstrapState: 'offline',
+    });
+    const { result } = renderHook(() => useHomeFeedViewModel(params));
+
+    expect(result.current.feedMode).toBe('bootstrap-blocked-empty');
+    expect(result.current.bootstrapState).toBe('offline');
+    expect(result.current.isFeedBootstrapPending).toBe(false);
   });
 });

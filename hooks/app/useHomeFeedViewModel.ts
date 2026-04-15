@@ -2,26 +2,36 @@ import { useEffect, useMemo, useRef } from 'react';
 import { buildHomeFeedItems, type HomeFeedItem } from '../../components/home/feedItems';
 import type { Note } from '../../services/database';
 import type { SharedPost } from '../../services/sharedFeedService';
-
-type HomeSyncStatus = 'idle' | 'syncing' | 'success' | 'error';
+import type { NotesLoadPhase } from '../state/useNotesStore';
+import type { SharedFeedLoadPhase } from '../useSharedFeedStore';
+import type { SyncBootstrapState, SyncPhase } from '../useSyncStatus';
 
 export type HomeFeedMode =
   | 'content'
   | 'syncing-empty'
+  | 'bootstrap-blocked-empty'
   | 'friends-empty'
   | 'first-note-empty';
+
+export type HomeFeedBootstrapState =
+  | 'idle'
+  | 'switching-account'
+  | 'loading-notes'
+  | 'loading-shared'
+  | 'syncing'
+  | 'disabled'
+  | 'offline'
+  | 'error';
 
 interface UseHomeFeedViewModelParams {
   userUid: string | null | undefined;
   notes: Note[];
-  notesLoading: boolean;
-  notesInitialLoadComplete: boolean;
+  notesPhase: NotesLoadPhase;
   sharedEnabled: boolean;
-  sharedReady: boolean;
-  sharedInitialLoadComplete: boolean;
+  sharedPhase: SharedFeedLoadPhase;
   sharedPosts: SharedPost[];
-  isInitialSyncPending: boolean;
-  syncStatus: HomeSyncStatus;
+  syncPhase: SyncPhase;
+  syncBootstrapState: SyncBootstrapState;
   isFriendsFilterEnabled: boolean;
   suppressedHomeNoteIds: string[];
   savedNoteRevealNoteId?: string | null;
@@ -32,6 +42,7 @@ interface UseHomeFeedViewModelParams {
 interface UseHomeFeedViewModelResult {
   feedMode: HomeFeedMode;
   isFeedBootstrapPending: boolean;
+  bootstrapState: HomeFeedBootstrapState;
   homeFeedItemsCount: number;
   visibleFeedItems: HomeFeedItem[];
   ownedSharedNoteIds: string[];
@@ -42,14 +53,12 @@ interface UseHomeFeedViewModelResult {
 export function useHomeFeedViewModel({
   userUid,
   notes,
-  notesLoading,
-  notesInitialLoadComplete,
+  notesPhase,
   sharedEnabled,
-  sharedReady,
-  sharedInitialLoadComplete,
+  sharedPhase,
   sharedPosts,
-  isInitialSyncPending,
-  syncStatus,
+  syncPhase,
+  syncBootstrapState,
   isFriendsFilterEnabled,
   suppressedHomeNoteIds,
   savedNoteRevealNoteId = null,
@@ -57,7 +66,12 @@ export function useHomeFeedViewModel({
   resetHomeFeedReady,
 }: UseHomeFeedViewModelParams): UseHomeFeedViewModelResult {
   const currentUserUid = userUid ?? null;
+  void syncPhase;
   const previousUserUidRef = useRef<string | null>(currentUserUid);
+  const notesInitialLoadComplete = notesPhase !== 'bootstrapping';
+  const notesLoading = notesPhase === 'bootstrapping' || notesPhase === 'hydrating';
+  const sharedInitialLoadComplete =
+    sharedPhase === 'ready' || sharedPhase === 'refreshing';
 
   const friendPosts = useMemo(
     () => sharedPosts.filter((post) => post.authorUid !== currentUserUid),
@@ -110,26 +124,67 @@ export function useHomeFeedViewModel({
   );
 
   const authUserChanged = previousUserUidRef.current !== currentUserUid;
-  const shouldHoldSignedInEmptyState =
-    Boolean(currentUserUid) &&
-    (
-      authUserChanged ||
-      !notesInitialLoadComplete ||
-      notesLoading ||
-      !sharedInitialLoadComplete ||
-      (isInitialSyncPending && syncStatus !== 'error')
-    );
-  const isPostLoginSyncingEmpty =
+  const hasNoSignedInContent =
     Boolean(currentUserUid) &&
     notes.length === 0 &&
-    sharedPosts.length === 0 &&
-    shouldHoldSignedInEmptyState;
+    sharedPosts.length === 0;
+  const bootstrapState: HomeFeedBootstrapState = useMemo(() => {
+    if (!hasNoSignedInContent) {
+      return 'idle';
+    }
+
+    if (authUserChanged) {
+      return 'switching-account';
+    }
+
+    if (!notesInitialLoadComplete || notesLoading) {
+      return 'loading-notes';
+    }
+
+    if (!sharedInitialLoadComplete) {
+      return 'loading-shared';
+    }
+
+    switch (syncBootstrapState) {
+      case 'preparing':
+      case 'syncing':
+        return 'syncing';
+      case 'disabled':
+        return 'disabled';
+      case 'offline':
+        return 'offline';
+      case 'error':
+        return 'error';
+      default:
+        return 'idle';
+    }
+  }, [
+    authUserChanged,
+    hasNoSignedInContent,
+    notesInitialLoadComplete,
+    notesLoading,
+    sharedInitialLoadComplete,
+    syncBootstrapState,
+  ]);
+  const isPostLoginSyncingEmpty =
+    bootstrapState === 'switching-account' ||
+    bootstrapState === 'loading-notes' ||
+    bootstrapState === 'loading-shared' ||
+    bootstrapState === 'syncing';
+  const isPostLoginBootstrapBlocked =
+    bootstrapState === 'disabled' ||
+    bootstrapState === 'offline' ||
+    bootstrapState === 'error';
   const hasStableHomeFeedContent = homeFeedItems.length > 0;
   const hasStableFriendFeedContent = friendPosts.length > 0;
 
   const feedMode: HomeFeedMode = useMemo(() => {
     if (isPostLoginSyncingEmpty) {
       return 'syncing-empty';
+    }
+
+    if (isPostLoginBootstrapBlocked) {
+      return 'bootstrap-blocked-empty';
     }
 
     if (isFriendsFilterActive && !hasStableFriendFeedContent) {
@@ -154,6 +209,7 @@ export function useHomeFeedViewModel({
     hasStableFriendFeedContent,
     hasStableHomeFeedContent,
     isFriendsFilterActive,
+    isPostLoginBootstrapBlocked,
     isPostLoginSyncingEmpty,
     notesInitialLoadComplete,
     notesLoading,
@@ -183,6 +239,7 @@ export function useHomeFeedViewModel({
   return {
     feedMode,
     isFeedBootstrapPending: isPostLoginSyncingEmpty,
+    bootstrapState,
     homeFeedItemsCount: homeFeedItems.length,
     visibleFeedItems,
     ownedSharedNoteIds,

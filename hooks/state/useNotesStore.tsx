@@ -38,8 +38,11 @@ import { scheduleWidgetDataUpdate } from '../../services/widgetService';
 import type { UpdateWidgetDataOptions } from '../../services/widgetService';
 import { scheduleOnIdle } from '../../utils/scheduleOnIdle';
 
+export type NotesLoadPhase = 'bootstrapping' | 'hydrating' | 'ready' | 'refreshing';
+
 interface NotesStoreValue {
   notes: Note[];
+  phase: NotesLoadPhase;
   loading: boolean;
   initialLoadComplete: boolean;
   refreshNotes: (
@@ -65,9 +68,9 @@ function resolveNotesScope(userUid: string | null | undefined) {
 function useNotesStoreValue(): NotesStoreValue {
   const { user, isReady: authReady } = useAuth();
   const [notes, setNotes] = useState<Note[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [initialLoadComplete, setInitialLoadComplete] = useState(false);
+  const [phase, setPhase] = useState<NotesLoadPhase>('bootstrapping');
   const notesRef = useRef<Note[]>([]);
+  const phaseRef = useRef<NotesLoadPhase>(phase);
   const activeScopeRef = useRef<string>(resolveNotesScope(user?.uid));
   const activeScopeRevisionRef = useRef(0);
   const refreshRequestIdRef = useRef(0);
@@ -75,6 +78,13 @@ function useNotesStoreValue(): NotesStoreValue {
   useEffect(() => {
     notesRef.current = notes;
   }, [notes]);
+
+  useEffect(() => {
+    phaseRef.current = phase;
+  }, [phase]);
+
+  const loading = phase === 'bootstrapping' || phase === 'hydrating';
+  const initialLoadComplete = phase !== 'bootstrapping';
 
   const scheduleWidgetUpdate = useCallback(
     (
@@ -156,7 +166,9 @@ function useNotesStoreValue(): NotesStoreValue {
 
       try {
         if (showLoading) {
-          setLoading(true);
+          setPhase('bootstrapping');
+        } else if (phaseRef.current === 'ready') {
+          setPhase('refreshing');
         }
 
         if (showLoading) {
@@ -169,7 +181,7 @@ function useNotesStoreValue(): NotesStoreValue {
 
           notesRef.current = stagedNotes;
           setNotes(stagedNotes);
-          setInitialLoadComplete(true);
+          setPhase('hydrating');
         }
 
         const allNotes = await getAllNotesForScope(scope);
@@ -187,12 +199,9 @@ function useNotesStoreValue(): NotesStoreValue {
         }
       } catch (error) {
         console.error('Failed to load notes:', error);
-        if (showLoading && refreshRequestIdRef.current === requestId) {
-          setInitialLoadComplete(true);
-        }
       } finally {
-        if (showLoading && refreshRequestIdRef.current === requestId) {
-          setLoading(false);
+        if (refreshRequestIdRef.current === requestId) {
+          setPhase('ready');
         }
       }
     },
@@ -251,8 +260,7 @@ function useNotesStoreValue(): NotesStoreValue {
     applyActiveScope(nextScope);
     notesRef.current = [];
     setNotes([]);
-    setInitialLoadComplete(false);
-    setLoading(true);
+    setPhase('bootstrapping');
     void refreshNotes(true, {
       scope: nextScope,
       syncGeofences: true,
@@ -454,6 +462,7 @@ function useNotesStoreValue(): NotesStoreValue {
 
   return {
     notes,
+    phase,
     loading,
     initialLoadComplete,
     refreshNotes,

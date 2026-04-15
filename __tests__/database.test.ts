@@ -386,4 +386,49 @@ describe('database migrations', () => {
 
     expect(mockExecAsync.mock.calls.map(([sql]) => sql)).toEqual(['BEGIN IMMEDIATE', 'ROLLBACK']);
   });
+
+  it('does not migrate local sync metadata into an authenticated account scope', async () => {
+    let getDB!: () => Promise<unknown>;
+    let migrateNotesScope!: (sourceScope: string, targetScope: string) => Promise<void>;
+
+    jest.isolateModules(() => {
+      ({ getDB, migrateNotesScope } = require('../services/database'));
+    });
+
+    await getDB();
+
+    mockExecAsync.mockClear();
+    mockRunAsync.mockClear();
+
+    await migrateNotesScope('__local__', 'user-1');
+
+    expect(mockRunAsync).toHaveBeenCalledWith(
+      'UPDATE notes SET owner_uid = ? WHERE owner_uid = ?',
+      'user-1',
+      '__local__'
+    );
+    expect(mockRunAsync).toHaveBeenCalledWith(
+      'UPDATE sync_queue SET owner_uid = ? WHERE owner_uid = ?',
+      'user-1',
+      '__local__'
+    );
+    expect(mockRunAsync).toHaveBeenCalledWith(
+      'DELETE FROM sync_state WHERE owner_uid = ?',
+      '__local__'
+    );
+    expect(mockRunAsync).toHaveBeenCalledWith(
+      'DELETE FROM sync_runs WHERE owner_uid = ?',
+      '__local__'
+    );
+    expect(mockRunAsync).not.toHaveBeenCalledWith(
+      'UPDATE sync_state SET owner_uid = ? WHERE owner_uid = ?',
+      'user-1',
+      '__local__'
+    );
+    expect(mockRunAsync).not.toHaveBeenCalledWith(
+      'UPDATE sync_runs SET owner_uid = ? WHERE owner_uid = ?',
+      'user-1',
+      '__local__'
+    );
+  });
 });

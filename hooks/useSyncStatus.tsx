@@ -14,8 +14,19 @@ import { useNotes } from './useNotes';
 import { getPersistentItem, setPersistentItem } from '../utils/appStorage';
 
 type SyncState = 'idle' | 'syncing' | 'success' | 'error';
+export type SyncPhase = 'idle' | 'bootstrapping' | 'syncing' | 'success' | 'error';
+export type SyncBootstrapState =
+  | 'idle'
+  | 'preparing'
+  | 'syncing'
+  | 'disabled'
+  | 'offline'
+  | 'error'
+  | 'complete';
 
 interface SyncStatusContextValue {
+  phase: SyncPhase;
+  bootstrapState: SyncBootstrapState;
   status: SyncState;
   isInitialSyncPending: boolean;
   lastSyncedAt: string | null;
@@ -467,8 +478,68 @@ export function SyncStatusProvider({ children }: { children: ReactNode }) {
     );
   }, [connectivityStatus, failedCount, pendingCount, queueSync]);
 
+  const bootstrapState: SyncBootstrapState = useMemo(() => {
+    if (!user || !isAuthAvailable) {
+      return 'idle';
+    }
+
+    if (!isInitialSyncPending) {
+      return 'complete';
+    }
+
+    if (!notesInitialLoadComplete || !isSyncPrefReady || !isInitialSyncStateReady) {
+      return 'preparing';
+    }
+
+    if (!syncEnabledState) {
+      return 'disabled';
+    }
+
+    if (!isOnline) {
+      return 'offline';
+    }
+
+    if (status === 'syncing') {
+      return 'syncing';
+    }
+
+    if (status === 'error') {
+      return 'error';
+    }
+
+    return 'preparing';
+  }, [
+    isAuthAvailable,
+    isInitialSyncPending,
+    isInitialSyncStateReady,
+    isOnline,
+    isSyncPrefReady,
+    notesInitialLoadComplete,
+    status,
+    syncEnabledState,
+    user,
+  ]);
+
+  const phase: SyncPhase = useMemo(() => {
+    if (!user || !isAuthAvailable) {
+      return 'idle';
+    }
+
+    if (bootstrapState === 'preparing' || bootstrapState === 'syncing') {
+      return 'bootstrapping';
+    }
+
+    if (status === 'syncing') {
+      return 'syncing';
+    }
+
+    return status;
+  }, [bootstrapState, isAuthAvailable, status, user]);
+
   const value = useMemo<SyncStatusContextValue>(
     () => ({
+      phase,
+      bootstrapState,
       status,
       isInitialSyncPending,
       lastSyncedAt,
@@ -485,7 +556,9 @@ export function SyncStatusProvider({ children }: { children: ReactNode }) {
     }),
     [
       blockedCount,
+      bootstrapState,
       failedCount,
+      phase,
       isInitialSyncPending,
       lastMessage,
       lastSyncedAt,

@@ -33,6 +33,7 @@ import SharedPlacePulseStrip, {
 } from '../home/SharedPlacePulseStrip';
 import SharedManageSheet from '../home/SharedManageSheet';
 import { useHomeFeedViewModel } from '../../hooks/app/useHomeFeedViewModel';
+import { useHomeRefresh } from '../../hooks/app/useHomeRefresh';
 import { useHomeSharedActions } from '../../hooks/app/useHomeSharedActions';
 import { useAppSheetAlert } from '../../hooks/useAppSheetAlert';
 import { useActiveFeedTarget } from '../../hooks/useActiveFeedTarget';
@@ -180,14 +181,6 @@ function parsePersistedCaptureDraft(rawValue: string | null): PersistedCaptureDr
   }
 }
 
-function logHomeFeedDebug(event: string, payload: Record<string, unknown>) {
-  if (!__DEV__) {
-    return;
-  }
-
-  console.log(`[home-feed] ${event}`, payload);
-}
-
 export default function HomeScreen() {
   const { openSharedManageAt } = useLocalSearchParams<{ openSharedManageAt?: string }>();
   const { height: windowHeight } = useWindowDimensions();
@@ -197,11 +190,20 @@ export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const bottomTabVisualInset = useBottomTabVisualInset();
   const { setSavedNoteRevealActive } = useSavedNoteRevealUi();
-  const { notes, loading, refreshNotes, createNote, initialLoadComplete: notesInitialLoadComplete } = useNotesStore();
+  const {
+    notes,
+    phase: notesPhaseFromStore,
+    loading,
+    refreshNotes,
+    createNote,
+    initialLoadComplete: notesInitialLoadComplete,
+  } = useNotesStore();
+  const notesPhase = notesPhaseFromStore ?? (loading ? 'bootstrapping' : 'ready');
   const localDailyPhotoNoteCount = useMemo(() => countPhotoNotesCreatedToday(notes), [notes]);
   const { user, isAuthAvailable } = useAuth();
   const {
     enabled: sharedEnabled,
+    phase: sharedPhaseFromStore,
     loading: sharedLoading,
     ready: sharedReady,
     initialLoadComplete: sharedInitialLoadComplete = true,
@@ -214,7 +216,29 @@ export default function HomeScreen() {
     removeFriend,
     createSharedPost,
   } = useSharedFeedStore();
-  const { isInitialSyncPending, status: syncStatus } = useSyncStatus();
+  const sharedPhase =
+    sharedPhaseFromStore ??
+    (sharedLoading
+      ? 'refreshing'
+      : sharedInitialLoadComplete
+        ? 'ready'
+        : sharedReady
+          ? 'cache-ready'
+          : 'bootstrapping');
+  const {
+    phase: syncPhaseFromStore,
+    bootstrapState: syncBootstrapState,
+    isInitialSyncPending,
+    requestSync,
+    status: syncStatus,
+  } = useSyncStatus();
+  const syncPhase =
+    syncPhaseFromStore ??
+    (isInitialSyncPending
+      ? 'bootstrapping'
+      : syncStatus === 'syncing'
+        ? 'syncing'
+        : syncStatus);
   const {
     tier,
     isConfigured: isPlusConfigured,
@@ -245,7 +269,6 @@ export default function HomeScreen() {
   const isScreenFocused = useIsFocused();
   const showLegacySearchButton = Platform.OS === 'ios' && !isIOS26OrNewer;
 
-  const [refreshing, setRefreshing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveButtonState, setSaveButtonState] = useState<SaveButtonState>('idle');
   const [suppressedHomeNoteIds, setSuppressedHomeNoteIds] = useState<string[]>([]);
@@ -480,6 +503,7 @@ export default function HomeScreen() {
     permission.canAskAgain === false;
   const {
     feedMode,
+    bootstrapState,
     isFeedBootstrapPending,
     homeFeedItemsCount,
     visibleFeedItems,
@@ -488,38 +512,18 @@ export default function HomeScreen() {
   } = useHomeFeedViewModel({
     userUid: user?.uid,
     notes,
-    notesLoading: loading,
-    notesInitialLoadComplete,
+    notesPhase,
     sharedEnabled,
-    sharedReady,
-    sharedInitialLoadComplete,
+    sharedPhase,
     sharedPosts,
-    isInitialSyncPending,
-    syncStatus,
+    syncPhase,
+    syncBootstrapState,
     isFriendsFilterEnabled,
     suppressedHomeNoteIds,
     savedNoteRevealNoteId: savedNoteRevealNote?.id ?? null,
     markHomeFeedReady,
     resetHomeFeedReady,
   });
-
-  useEffect(() => {
-    logHomeFeedDebug('state', {
-      userUid: user?.uid ?? null,
-      loadedNotesCount: notes.length,
-      loading,
-      sharedLoading,
-      homeFeedItemsCount,
-      visibleFeedItemsCount: visibleFeedItems.length,
-    });
-  }, [
-    homeFeedItemsCount,
-    loading,
-    notes.length,
-    sharedLoading,
-    user?.uid,
-    visibleFeedItems.length,
-  ]);
 
   const handleRequestCameraPermission = useCallback(async () => {
     showAlert({
@@ -993,31 +997,14 @@ export default function HomeScreen() {
     ])
   );
 
-  const onRefresh = useCallback(async () => {
-    const hasNetworkRefreshWork = Boolean(user && sharedEnabled);
-
-    if (!hasNetworkRefreshWork) {
-      await refreshNotes(false);
+  const { refreshing, refreshHome } = useHomeRefresh({
+    hasNetworkRefreshWork: Boolean(user && sharedEnabled),
+    refreshNotes,
+    refreshSharedFeed: user && sharedEnabled ? refreshSharedFeed : undefined,
+    onAfterLocalRefresh: () => {
       setSuppressedHomeNoteIds([]);
-      return;
-    }
-
-    setRefreshing(true);
-    try {
-      await refreshNotes(false);
-      setSuppressedHomeNoteIds([]);
-
-      if (user && sharedEnabled) {
-        try {
-          await refreshSharedFeed();
-        } catch (error) {
-          console.warn('Shared feed refresh failed:', error);
-        }
-      }
-    } finally {
-      setRefreshing(false);
-    }
-  }, [refreshNotes, refreshSharedFeed, sharedEnabled, user]);
+    },
+  });
 
   const showDoneSheet = useCallback(
     (
@@ -1752,22 +1739,26 @@ export default function HomeScreen() {
     return (
       <HomeFeedEmptyState
         mode={feedMode}
+        bootstrapState={bootstrapState}
         colors={colors}
         t={t}
         onDisableFriendsFilter={() => {
           setIsFriendsFilterEnabled(false);
         }}
         onOpenFriends={presentSharedManageSheet}
+        onRetryBootstrap={requestSync}
         onTakePhotoHere={handleEmptyStateTakePhoto}
         onWriteOneSentence={handleEmptyStateWriteOneSentence}
       />
     );
   }, [
+    bootstrapState,
     colors,
     feedMode,
     handleEmptyStateTakePhoto,
     handleEmptyStateWriteOneSentence,
     presentSharedManageSheet,
+    requestSync,
     t,
   ]);
   const feedRefreshing = refreshing || (homeFeedItemsCount === 0 && isFeedBootstrapPending);
@@ -2373,7 +2364,7 @@ export default function HomeScreen() {
           ownedSharedNoteIds={ownedSharedNoteIds}
           refreshing={feedRefreshing}
           onRefresh={() => {
-            void onRefresh();
+            void refreshHome();
           }}
           topInset={insets.top}
           snapHeight={snapHeight}

@@ -33,8 +33,17 @@ let mockSharedFeedStoreState = {
 };
 
 let mockSyncStatusState = {
+  bootstrapState: 'complete' as
+    | 'idle'
+    | 'preparing'
+    | 'syncing'
+    | 'disabled'
+    | 'offline'
+    | 'error'
+    | 'complete',
   status: 'idle' as 'idle' | 'syncing' | 'success' | 'error',
   isInitialSyncPending: false,
+  requestSync: jest.fn(),
 };
 
 jest.mock('@react-navigation/native', () => ({
@@ -343,8 +352,10 @@ describe('HomeScreen empty state', () => {
       createSharedPost: jest.fn(async () => undefined),
     };
     mockSyncStatusState = {
+      bootstrapState: 'complete',
       status: 'idle',
       isInitialSyncPending: false,
+      requestSync: jest.fn(),
     };
   });
 
@@ -352,7 +363,7 @@ describe('HomeScreen empty state', () => {
     const screen = await renderHomeScreen();
 
     expect(screen.getByText('Your journal is waiting')).toBeTruthy();
-    expect(screen.queryByText('Syncing your memories')).toBeNull();
+    expect(screen.queryByText('Importing your cloud notes')).toBeNull();
 
     mockSharedFeedStoreState = {
       ...mockSharedFeedStoreState,
@@ -365,25 +376,29 @@ describe('HomeScreen empty state', () => {
     });
 
     expect(screen.getByText('Your journal is waiting')).toBeTruthy();
-    expect(screen.queryByText('Syncing your memories')).toBeNull();
+    expect(screen.queryByText('Importing your cloud notes')).toBeNull();
   });
 
   it('still shows the syncing state while the initial sync is actively running', async () => {
     mockSyncStatusState = {
+      bootstrapState: 'syncing',
       status: 'syncing',
       isInitialSyncPending: true,
+      requestSync: jest.fn(),
     };
 
     const screen = await renderHomeScreen();
 
-    expect(screen.getByText('Syncing your memories')).toBeTruthy();
+    expect(screen.getByText('Importing your cloud notes')).toBeTruthy();
     expect(screen.queryByText('Your journal is waiting')).toBeNull();
   });
 
   it('keeps the syncing state visible while the first account sync is still pending', async () => {
     mockSyncStatusState = {
+      bootstrapState: 'offline',
       status: 'idle',
       isInitialSyncPending: true,
+      requestSync: jest.fn(),
     };
     mockSharedFeedStoreState = {
       ...mockSharedFeedStoreState,
@@ -392,7 +407,23 @@ describe('HomeScreen empty state', () => {
 
     const screen = await renderHomeScreen();
 
-    expect(screen.getByText('Syncing your memories')).toBeTruthy();
+    expect(screen.getByText('Loading shared memories')).toBeTruthy();
+    expect(screen.queryByText('Cloud sync is turned off')).toBeNull();
+    expect(screen.queryByText('You are offline right now')).toBeNull();
+    expect(screen.queryByText('Your journal is waiting')).toBeNull();
+  });
+
+  it('shows an explicit blocked state when the first cloud sync cannot run offline', async () => {
+    mockSyncStatusState = {
+      bootstrapState: 'offline',
+      status: 'idle',
+      isInitialSyncPending: true,
+      requestSync: jest.fn(),
+    };
+
+    const screen = await renderHomeScreen();
+
+    expect(screen.getByText('You are offline right now')).toBeTruthy();
     expect(screen.queryByText('Your journal is waiting')).toBeNull();
   });
 });
