@@ -11,9 +11,10 @@ const mockSignInWithGoogle = jest.fn<Promise<{ status: 'success' }>, []>(async (
 const mockSignInWithEmail = jest.fn<Promise<{ status: 'success' }>, [string, string]>(
   async () => ({ status: 'success' })
 );
-const mockRegisterWithEmail = jest.fn<Promise<{ status: 'success' }>, [unknown]>(
-  async () => ({ status: 'success' })
-);
+const mockRegisterWithEmail = jest.fn<
+  Promise<{ status: 'success'; message?: string; requiresEmailConfirmation?: boolean }>,
+  [unknown]
+>(async () => ({ status: 'success' }));
 const mockSendPasswordReset = jest.fn<Promise<{ status: 'success' }>, [string]>(
   async () => ({ status: 'success' })
 );
@@ -292,6 +293,30 @@ describe('LoginScreen', () => {
       password: 'secret123',
       displayName: 'Taylor',
     });
+  });
+
+  it('stays on auth and shows the confirmation message when sign-up requires email verification', async () => {
+    mockRegisterWithEmail.mockResolvedValueOnce({
+      status: 'success',
+      requiresEmailConfirmation: true,
+      message: 'Check your email to confirm your account before signing in.',
+    });
+
+    const { getByTestId, findByText } = render(<LoginScreen />);
+
+    fireEvent.press(getByTestId('auth-continue-email'));
+    fireEvent.press(getByTestId('auth-switch-register'));
+    fireEvent.changeText(getByTestId('auth-email-input'), 'user@example.com');
+    fireEvent.changeText(getByTestId('auth-password-input'), 'secret123');
+    fireEvent.changeText(getByTestId('auth-confirm-password-input'), 'secret123');
+    fireEvent.press(getByTestId('auth-privacy-consent'));
+    fireEvent.press(getByTestId('auth-form-submit'));
+
+    expect(
+      await findByText('Check your email to confirm your account before signing in.')
+    ).toBeTruthy();
+    expect(mockCompleteOnboardingAndEnterApp).not.toHaveBeenCalled();
+    expect(mockReplace).not.toHaveBeenCalled();
   });
 
   it('validates email format for sign-in and reset flows', async () => {

@@ -989,4 +989,75 @@ describe('useSharedFeedStore', () => {
       expect(mockRefreshSharedFeed).toHaveBeenCalledTimes(1);
     });
   });
+
+  it('reruns a forced refresh after an in-flight refresh instead of letting stale data win', async () => {
+    const firstRefresh = createDeferred<{
+      friends: any[];
+      sharedPosts: any[];
+      activeInvite: any;
+    }>();
+    const secondRefresh = createDeferred<{
+      friends: any[];
+      sharedPosts: any[];
+      activeInvite: any;
+    }>();
+
+    mockRefreshSharedFeed
+      .mockImplementationOnce(() => firstRefresh.promise)
+      .mockImplementationOnce(() => secondRefresh.promise);
+
+    const { result } = renderHook(() => useSharedFeedStore(), { wrapper });
+
+    await waitFor(() => {
+      expect(result.current.ready).toBe(true);
+    });
+
+    let manualRefreshPromise!: Promise<void>;
+    await act(async () => {
+      manualRefreshPromise = result.current.refreshSharedFeed();
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(mockRefreshSharedFeed).toHaveBeenCalledTimes(1);
+    });
+
+    await act(async () => {
+      appStateListener?.('active');
+    });
+
+    expect(mockRefreshSharedFeed).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      firstRefresh.resolve({
+        friends: [],
+        sharedPosts: [createSharedPost({ id: 'stale-post', text: 'stale snapshot' })],
+        activeInvite: null,
+      });
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(mockRefreshSharedFeed).toHaveBeenCalledTimes(2);
+    });
+
+    await act(async () => {
+      secondRefresh.resolve({
+        friends: [],
+        sharedPosts: [createSharedPost({ id: 'fresh-post', text: 'fresh snapshot' })],
+        activeInvite: null,
+      });
+      await manualRefreshPromise;
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(result.current.sharedPosts).toEqual([
+        expect.objectContaining({
+          id: 'fresh-post',
+          text: 'fresh snapshot',
+        }),
+      ]);
+    });
+  });
 });

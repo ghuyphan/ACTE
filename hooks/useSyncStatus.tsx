@@ -43,7 +43,11 @@ const SyncStatusContext = createContext<SyncStatusContextValue | undefined>(unde
 
 export function SyncStatusProvider({ children }: { children: ReactNode }) {
   const { user, isReady, isAuthAvailable } = useAuth();
-  const { notes, refreshNotes, loading } = useNotes();
+  const {
+    notes,
+    refreshNotes,
+    initialLoadComplete: notesInitialLoadComplete,
+  } = useNotes();
   const { isOnline, status: connectivityStatus } = useConnectivity();
   const [status, setStatus] = useState<SyncState>('idle');
   const [isInitialSyncPending, setIsInitialSyncPending] = useState(false);
@@ -186,7 +190,7 @@ export function SyncStatusProvider({ children }: { children: ReactNode }) {
       !isReady ||
       !isAuthAvailable ||
       !requestUserUid ||
-      loading ||
+      !notesInitialLoadComplete ||
       !syncEnabledState ||
       !isSyncPrefReady ||
       !isInitialSyncStateReady
@@ -288,7 +292,7 @@ export function SyncStatusProvider({ children }: { children: ReactNode }) {
         !isReady ||
         !isAuthAvailable ||
         !user ||
-        loading ||
+        !notesInitialLoadComplete ||
         !syncEnabledState ||
         !isSyncPrefReady ||
         !isInitialSyncStateReady
@@ -321,14 +325,14 @@ export function SyncStatusProvider({ children }: { children: ReactNode }) {
       isOnline,
       isReady,
       isSyncPrefReady,
-      loading,
+      notesInitialLoadComplete,
       syncEnabledState,
       user,
     ]
   );
 
   useEffect(() => {
-    if (!isReady || loading) {
+    if (!isReady) {
       return;
     }
 
@@ -345,6 +349,10 @@ export function SyncStatusProvider({ children }: { children: ReactNode }) {
       setLastMessage(null);
       setLastSyncedAt(null);
       void refreshQueueStats();
+      return;
+    }
+
+    if (!notesInitialLoadComplete) {
       return;
     }
 
@@ -366,7 +374,7 @@ export function SyncStatusProvider({ children }: { children: ReactNode }) {
     isInitialSyncStateReady,
     isReady,
     isSyncPrefReady,
-    loading,
+    notesInitialLoadComplete,
     queueSync,
     refreshQueueStats,
     syncEnabledState,
@@ -374,7 +382,13 @@ export function SyncStatusProvider({ children }: { children: ReactNode }) {
   ]);
 
   useEffect(() => {
-    if (!isReady || loading || !user || !isAuthAvailable || !isInitialSyncStateReady) {
+    if (
+      !isReady ||
+      !user ||
+      !isAuthAvailable ||
+      !isInitialSyncStateReady ||
+      !notesInitialLoadComplete
+    ) {
       return;
     }
 
@@ -395,7 +409,7 @@ export function SyncStatusProvider({ children }: { children: ReactNode }) {
     isAuthAvailable,
     isInitialSyncStateReady,
     isReady,
-    loading,
+    notesInitialLoadComplete,
     notes,
     queueSync,
     refreshQueueStats,
@@ -425,18 +439,32 @@ export function SyncStatusProvider({ children }: { children: ReactNode }) {
   }, [refreshQueueStats]);
 
   useEffect(() => {
+    const offlinePendingMessage = i18n.t(
+      'settings.syncPendingOffline',
+      'Your notes are saved locally and will sync when you are back online.'
+    );
+    const offlineReadOnlyMessage = i18n.t(
+      'settings.offlineReadOnly',
+      'You are offline right now. Cloud sync will resume when you reconnect.'
+    );
+
     if (connectivityStatus !== 'online') {
       if (pendingCount > 0) {
-        setLastMessage(
-          i18n.t('settings.syncPendingOffline', 'Your notes are saved locally and will sync when you are back online.')
-        );
+        setLastMessage(offlinePendingMessage);
       }
       return;
     }
 
     if (pendingCount > 0 || failedCount > 0) {
       queueSync(true, 'incremental');
+      return;
     }
+
+    setLastMessage((currentMessage) =>
+      currentMessage === offlinePendingMessage || currentMessage === offlineReadOnlyMessage
+        ? null
+        : currentMessage
+    );
   }, [connectivityStatus, failedCount, pendingCount, queueSync]);
 
   const value = useMemo<SyncStatusContextValue>(

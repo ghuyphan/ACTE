@@ -458,6 +458,19 @@ export default function LoginScreen() {
     const result = await registerWithEmail(input);
 
     if (result.status === 'success') {
+      if (result.requiresEmailConfirmation) {
+        setActiveAction(null);
+        setScreenMode('signIn');
+        setSuccessMessage(
+          result.message ??
+            t(
+              'auth.registerEmailConfirmation',
+              'Check your email to confirm your account before signing in.'
+            )
+        );
+        return;
+      }
+
       const completed = await handleAuthSuccess();
       if (!completed) {
         setActiveAction(null);

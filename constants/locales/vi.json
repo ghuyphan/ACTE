@@ -34,9 +34,9 @@
         "syncingEmptyBody": "Noto đang kéo về các trang nhật ký và bài chia sẻ của bạn. Thường chỉ mất một lát thôi.",
         "firstNoteEmptyTitle": "Nhật ký đang chờ bạn",
         "firstNoteEmptyBody": "Lưu trang nhật ký hoặc tấm ảnh đầu tiên để bắt đầu lấp đầy nơi này nhé.",
-        "firstNoteActionPhotoTitle": "Chụp một tấm ở đây",
+        "firstNoteActionPhotoTitle": "Chụp ảnh",
         "firstNoteActionPhotoBody": "Bắt đầu bằng một bức ảnh nhanh về nơi này.",
-        "firstNoteActionTextTitle": "Viết một câu thôi",
+        "firstNoteActionTextTitle": "Viết",
         "firstNoteActionTextBody": "Để lại một gợi ý nhỏ cho lần quay lại sau.",
         "firstNoteActionLocationTitle": "Bật vị trí",
         "firstNoteActionLocationBody": "Để Noto gắn trang nhật ký với những nơi quanh bạn.",
@@ -44,7 +44,9 @@
         "friendsFilterActive": "Đang lọc theo bạn bè",
         "placePulseLabel": "Gần đây",
         "placePulseNearbySingle": "1 trang nhật ký gần đây",
-        "placePulseNearbyPlural": "{{count}} trang nhật ký gần đây"
+        "placePulseNearbyPlural": "{{count}} trang nhật ký gần đây",
+        "sharedPlacePulseA11ySingle": "Mở 1 bài chia sẻ gần đây từ bạn bè",
+        "sharedPlacePulseA11yPlural": "Mở {{count}} bài chia sẻ gần đây từ bạn bè"
     },
     "capture": {
         "switchCamera": "Camera",

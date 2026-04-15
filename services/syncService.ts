@@ -272,7 +272,14 @@ const INITIAL_SYNC_PENDING_KEY_PREFIX = 'settings.initialSyncPending.';
 const EXPIRED_SESSION_SYNC_ERROR = 'Server session unavailable. Sign in again to resume sync.';
 const MISMATCHED_SESSION_SYNC_ERROR =
   'Signed-in session does not match this account. Sign out and sign in again.';
-const syncRunsInFlight = new Map<string, Promise<SyncResult>>();
+type InFlightSyncRun = {
+  promise: Promise<SyncResult>;
+  requestedMode: SyncMode;
+  currentMode: SyncMode;
+  queuedMode: SyncMode | null;
+};
+
+const syncRunsInFlight = new Map<string, InFlightSyncRun>();
 
 function rowToQueueItem(row: QueueRow): SyncQueueItem {
   return {
@@ -2408,10 +2415,28 @@ export async function syncNotes(
 
   const inFlightRun = syncRunsInFlight.get(ownerScope);
   if (inFlightRun) {
-    return inFlightRun;
+    if (
+      requestedMode === 'full' &&
+      inFlightRun.requestedMode !== 'full' &&
+      inFlightRun.currentMode !== 'full'
+    ) {
+      inFlightRun.queuedMode = 'full';
+    }
+    return inFlightRun.promise;
   }
 
-  const syncTask = (async (): Promise<SyncResult> => {
+  const runState: InFlightSyncRun = {
+    promise: Promise.resolve({
+      status: 'error',
+      bootstrapCompleted: false,
+      message: 'sync-not-started',
+    }),
+    requestedMode,
+    currentMode: requestedMode,
+    queuedMode: null,
+  };
+
+  const runSyncCycle = async (cycleRequestedMode: SyncMode): Promise<SyncResult> => {
     let runId: string | null = null;
 
     try {
@@ -2422,7 +2447,8 @@ export async function syncNotes(
       const lastRemoteCursor = await getLastRemoteSyncCursor(ownerScope, userId);
       const syncedNoteIds = await getPreviouslySyncedNoteIds(userId);
       const mode: SyncMode =
-        requestedMode === 'full' || !lastRemoteCursor ? 'full' : 'incremental';
+        cycleRequestedMode === 'full' || !lastRemoteCursor ? 'full' : 'incremental';
+      runState.currentMode = mode;
       const wasInitialSyncPending = await isInitialSyncPendingForUser(userId);
       const currentLocalNotes = await getAllNotesForScope(ownerScope);
 
@@ -2616,7 +2642,7 @@ export async function syncNotes(
       if (runId) {
         await finishSyncRun(ownerScope, userId, runId, 'error', getErrorMessage(error));
       }
-      if (requestedMode === 'full' || (await isInitialSyncPendingForUser(userId))) {
+      if (cycleRequestedMode === 'full' || (await isInitialSyncPendingForUser(userId))) {
         await setInitialSyncStatusForUser(ownerScope, userId, 'pending');
       }
       if (shouldLogSyncWarning(error)) {
@@ -2629,12 +2655,30 @@ export async function syncNotes(
         message: getSyncFailureMessage(error),
       };
     }
+  };
+
+  const syncTask = (async (): Promise<SyncResult> => {
+    let cycleRequestedMode = requestedMode;
+
+    while (true) {
+      runState.requestedMode = cycleRequestedMode;
+      const result = await runSyncCycle(cycleRequestedMode);
+
+      if (runState.queuedMode === 'full' && runState.currentMode !== 'full') {
+        runState.queuedMode = null;
+        cycleRequestedMode = 'full';
+        continue;
+      }
+
+      return result;
+    }
   })();
 
-  syncRunsInFlight.set(ownerScope, syncTask);
-  return syncTask.finally(() => {
+  runState.promise = syncTask.finally(() => {
     syncRunsInFlight.delete(ownerScope);
   });
+  syncRunsInFlight.set(ownerScope, runState);
+  return runState.promise;
 }
 
 

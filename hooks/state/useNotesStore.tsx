@@ -170,7 +170,6 @@ function useNotesStoreValue(): NotesStoreValue {
           notesRef.current = stagedNotes;
           setNotes(stagedNotes);
           setInitialLoadComplete(true);
-          setLoading(false);
         }
 
         const allNotes = await getAllNotesForScope(scope);
@@ -252,6 +251,7 @@ function useNotesStoreValue(): NotesStoreValue {
     applyActiveScope(nextScope);
     notesRef.current = [];
     setNotes([]);
+    setInitialLoadComplete(false);
     setLoading(true);
     void refreshNotes(true, {
       scope: nextScope,

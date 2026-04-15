@@ -34,9 +34,9 @@
         "syncingEmptyBody": "We are pulling in your notes and shared memories now. This usually takes just a moment.",
         "firstNoteEmptyTitle": "Your journal is waiting",
         "firstNoteEmptyBody": "Save your first note or photo to start filling this space.",
-        "firstNoteActionPhotoTitle": "Take a photo here",
+        "firstNoteActionPhotoTitle": "Photo",
         "firstNoteActionPhotoBody": "Start with a quick snapshot of this place.",
-        "firstNoteActionTextTitle": "Write one sentence",
+        "firstNoteActionTextTitle": "Write",
         "firstNoteActionTextBody": "Leave yourself a tiny clue for next time.",
         "firstNoteActionLocationTitle": "Enable location",
         "firstNoteActionLocationBody": "Let Noto link your notes to the places around you.",
@@ -44,7 +44,9 @@
         "friendsFilterActive": "Friends filter on",
         "placePulseLabel": "Nearby",
         "placePulseNearbySingle": "1 nearby memory",
-        "placePulseNearbyPlural": "{{count}} nearby memories"
+        "placePulseNearbyPlural": "{{count}} nearby memories",
+        "sharedPlacePulseA11ySingle": "Open 1 nearby shared post from a friend",
+        "sharedPlacePulseA11yPlural": "Open {{count}} nearby shared posts from friends"
     },
     "capture": {
         "switchCamera": "Camera",

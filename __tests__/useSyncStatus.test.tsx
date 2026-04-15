@@ -43,7 +43,7 @@ const mockNotesState = {
     createdAt: string;
     updatedAt: string | null;
   }>,
-  loading: false,
+  initialLoadComplete: true,
   refreshNotes: (showLoading?: boolean) => mockRefreshNotes(showLoading),
 };
 const mockConnectivityState = {
@@ -126,7 +126,7 @@ beforeEach(() => {
   mockAuthState.isReady = true;
   mockAuthState.isAuthAvailable = true;
   mockNotesState.notes = [];
-  mockNotesState.loading = false;
+  mockNotesState.initialLoadComplete = true;
   mockConnectivityState.status = 'online';
   mockConnectivityState.isOnline = true;
   mockConnectivityState.isInternetReachable = true;

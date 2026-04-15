@@ -382,6 +382,46 @@ describe('useAuth', () => {
     expect(mockUpsertPublicUserProfile).toHaveBeenCalled();
   });
 
+  it('keeps the user signed out when email confirmation is still required', async () => {
+    mockSignUp.mockImplementationOnce(async ({ email, options }: { email: string; options?: { data?: Record<string, unknown> } }) => ({
+      data: {
+        session: null,
+        user: {
+          ...buildSession().user,
+          email,
+          user_metadata: {
+            ...buildSession().user.user_metadata,
+            ...(options?.data ?? {}),
+          },
+        },
+      },
+      error: null,
+    }) as any);
+
+    const hook = renderHook(() => useAuth(), { wrapper });
+
+    await waitFor(() => {
+      expect(hook.result.current.isReady).toBe(true);
+    });
+
+    let result!: { status: string; message?: string; requiresEmailConfirmation?: boolean };
+    await act(async () => {
+      result = await hook.result.current.registerWithEmail({
+        email: 'confirm@example.com',
+        password: 'secret123',
+        displayName: 'Confirm Me',
+      });
+    });
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        status: 'success',
+        requiresEmailConfirmation: true,
+      })
+    );
+    expect(hook.result.current.user).toBeNull();
+  });
+
   it('updates the username and reflects it in the current user state', async () => {
     mockAuthState.initialSession = buildSession({
       user: {

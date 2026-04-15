@@ -21,6 +21,7 @@ let mockSharedFeedStoreState = {
   enabled: true,
   loading: false,
   ready: true,
+  initialLoadComplete: true,
   friends: [] as Array<Record<string, unknown>>,
   sharedPosts: [] as Array<Record<string, unknown>>,
   activeInvite: null,
@@ -331,6 +332,7 @@ describe('HomeScreen empty state', () => {
       enabled: true,
       loading: false,
       ready: true,
+      initialLoadComplete: true,
       friends: [],
       sharedPosts: [],
       activeInvite: null,
@@ -370,6 +372,22 @@ describe('HomeScreen empty state', () => {
     mockSyncStatusState = {
       status: 'syncing',
       isInitialSyncPending: true,
+    };
+
+    const screen = await renderHomeScreen();
+
+    expect(screen.getByText('Syncing your memories')).toBeTruthy();
+    expect(screen.queryByText('Your journal is waiting')).toBeNull();
+  });
+
+  it('keeps the syncing state visible while the first account sync is still pending', async () => {
+    mockSyncStatusState = {
+      status: 'idle',
+      isInitialSyncPending: true,
+    };
+    mockSharedFeedStoreState = {
+      ...mockSharedFeedStoreState,
+      initialLoadComplete: false,
     };
 
     const screen = await renderHomeScreen();

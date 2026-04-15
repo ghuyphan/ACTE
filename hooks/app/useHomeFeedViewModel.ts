@@ -18,6 +18,7 @@ interface UseHomeFeedViewModelParams {
   notesInitialLoadComplete: boolean;
   sharedEnabled: boolean;
   sharedReady: boolean;
+  sharedInitialLoadComplete: boolean;
   sharedPosts: SharedPost[];
   isInitialSyncPending: boolean;
   syncStatus: HomeSyncStatus;
@@ -30,6 +31,7 @@ interface UseHomeFeedViewModelParams {
 
 interface UseHomeFeedViewModelResult {
   feedMode: HomeFeedMode;
+  isFeedBootstrapPending: boolean;
   homeFeedItemsCount: number;
   visibleFeedItems: HomeFeedItem[];
   ownedSharedNoteIds: string[];
@@ -44,6 +46,7 @@ export function useHomeFeedViewModel({
   notesInitialLoadComplete,
   sharedEnabled,
   sharedReady,
+  sharedInitialLoadComplete,
   sharedPosts,
   isInitialSyncPending,
   syncStatus,
@@ -112,8 +115,9 @@ export function useHomeFeedViewModel({
     (
       authUserChanged ||
       !notesInitialLoadComplete ||
-      !sharedReady ||
-      (isInitialSyncPending && syncStatus === 'syncing')
+      notesLoading ||
+      !sharedInitialLoadComplete ||
+      (isInitialSyncPending && syncStatus !== 'error')
     );
   const isPostLoginSyncingEmpty =
     Boolean(currentUserUid) &&
@@ -138,7 +142,7 @@ export function useHomeFeedViewModel({
       !authUserChanged &&
       notesInitialLoadComplete &&
       !notesLoading &&
-      (!currentUserUid || sharedReady)
+      (!currentUserUid || sharedInitialLoadComplete)
     ) {
       return 'first-note-empty';
     }
@@ -153,7 +157,7 @@ export function useHomeFeedViewModel({
     isPostLoginSyncingEmpty,
     notesInitialLoadComplete,
     notesLoading,
-    sharedReady,
+    sharedInitialLoadComplete,
   ]);
 
   useEffect(() => {
@@ -178,6 +182,7 @@ export function useHomeFeedViewModel({
 
   return {
     feedMode,
+    isFeedBootstrapPending: isPostLoginSyncingEmpty,
     homeFeedItemsCount: homeFeedItems.length,
     visibleFeedItems,
     ownedSharedNoteIds,

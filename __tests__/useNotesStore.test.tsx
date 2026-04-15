@@ -198,9 +198,9 @@ describe('useNotesStore', () => {
     expect(result.current.initialLoadComplete).toBe(false);
 
     await waitFor(() => {
-      expect(result.current.loading).toBe(false);
       expect(result.current.initialLoadComplete).toBe(true);
       expect(result.current.notes).toHaveLength(24);
+      expect(result.current.loading).toBe(true);
     });
 
     await act(async () => {
@@ -208,6 +208,7 @@ describe('useNotesStore', () => {
     });
 
     await waitFor(() => {
+      expect(result.current.loading).toBe(false);
       expect(result.current.notes).toHaveLength(30);
     });
   });

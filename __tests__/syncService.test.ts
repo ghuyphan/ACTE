@@ -58,6 +58,7 @@ const mockPublicProfiles = new Map<string, any>();
 let mockNotesUpsertError: unknown = null;
 const mockActiveNotesScope = 'test-scope';
 let mockSessionUserId = 'user-1';
+let mockNotesQueryBarrier: Promise<void> | null = null;
 const mockUndeletableRemoteNoteIds = new Set<string>();
 const mockUndeletableRemoteSharedPostIds = new Set<string>();
 const mockDeleteResponseOmittedRemoteNoteIds = new Set<string>();
@@ -93,6 +94,16 @@ const mockGetNoteById = jest.fn(async (id: string) => {
   return localNotesStore.find((note) => note.id === id) ?? null;
 });
 const mockGetAllNotes = jest.fn(async () => localNotesStore);
+
+function createDeferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((nextResolve, nextReject) => {
+    resolve = nextResolve;
+    reject = nextReject;
+  });
+  return { promise, resolve, reject };
+}
 
 const mockRunAsync = jest.fn(async (sql: string, ...args: any[]) => {
   if (sql.includes('INSERT INTO sync_queue')) {
@@ -515,7 +526,11 @@ function mockCreateNotesQueryBuilder() {
       return builder;
     },
     then: (resolve: (value: unknown) => unknown, reject?: (reason: unknown) => unknown) => {
-      try {
+      const run = async () => {
+        if (mockNotesQueryBarrier) {
+          await mockNotesQueryBarrier;
+        }
+
         if (state.deleteMode) {
           const rows = executeNotesQuery(state);
           const deletedRows = rows.filter((row) => !mockUndeletableRemoteNoteIds.has(String(row.id)));
@@ -525,17 +540,19 @@ function mockCreateNotesQueryBuilder() {
           for (const row of deletedRows) {
             mockRemoteNotes.delete(row.id);
           }
-          return Promise.resolve(resolve({ data: returnedRows, error: null }));
+          return resolve({ data: returnedRows, error: null });
         }
 
-        return Promise.resolve(resolve({ data: executeNotesQuery(state), error: null }));
-      } catch (error) {
+        return resolve({ data: executeNotesQuery(state), error: null });
+      };
+
+      return run().catch((error) => {
         if (reject) {
-          return Promise.resolve(reject(error));
+          return reject(error);
         }
 
         return Promise.reject(error);
-      }
+      });
     },
   };
 
@@ -1016,6 +1033,7 @@ beforeEach(async () => {
   queueId = 1;
   mockNotesUpsertError = null;
   mockSessionUserId = 'user-1';
+  mockNotesQueryBarrier = null;
   mockUndeletableRemoteNoteIds.clear();
   mockUndeletableRemoteSharedPostIds.clear();
   mockDeleteResponseOmittedRemoteNoteIds.clear();
@@ -1180,6 +1198,52 @@ describe('syncService', () => {
     );
     expect(mockRemoteNoteTombstones.has('note-1')).toBe(false);
     expect(mockUpsertPublicProfile).toHaveBeenCalled();
+  });
+
+  it('upgrades an in-flight incremental sync to a full sync when a full run is requested', async () => {
+    localNotesStore = [createTextNote('note-1')];
+    await AsyncStorage.setItem(
+      'sync.lastRemoteCursor.user-1',
+      JSON.stringify({
+        notes: {
+          syncedAt: '2026-03-09T00:00:00.000Z',
+          id: 'cursor-note',
+        },
+        tombstones: null,
+      })
+    );
+
+    const notesQueryBarrier = createDeferred<void>();
+    mockNotesQueryBarrier = notesQueryBarrier.promise;
+
+    const incrementalPromise = syncNotes(syncUser, localNotesStore, { mode: 'incremental' });
+    await Promise.resolve();
+    const fullPromise = syncNotes(syncUser, localNotesStore, { mode: 'full' });
+
+    notesQueryBarrier.resolve();
+
+    const [incrementalResult, fullResult] = await Promise.all([incrementalPromise, fullPromise]);
+
+    expect(incrementalResult).toEqual(
+      expect.objectContaining({
+        status: 'success',
+        uploadedCount: 1,
+        bootstrapCompleted: true,
+      })
+    );
+    expect(fullResult).toEqual(
+      expect.objectContaining({
+        status: 'success',
+        uploadedCount: 1,
+        bootstrapCompleted: true,
+      })
+    );
+    expect(mockRemoteNotes.get('note-1')).toEqual(
+      expect.objectContaining({
+        id: 'note-1',
+        user_id: 'user-1',
+      })
+    );
   });
 
   it('drains queued note changes across multiple queue batches in one sync run', async () => {

@@ -8,7 +8,6 @@ import { normalizeUsernameInput, validateUsernameInput } from '../../../services
 import { showAppAlert } from '../../../utils/alert';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../../hooks/useAuth';
-import { useNotes } from '../../../hooks/useNotes';
 import { useSubscription } from '../../../hooks/useSubscription';
 import { useTheme } from '../../../hooks/useTheme';
 import { createLegalLinkActions, getLegalLinkAvailability } from '../shared/legalLinkActions';
@@ -17,7 +16,6 @@ export function useProfileScreenModel() {
   const { t } = useTranslation();
   const { colors, isDark } = useTheme();
   const { user, isAuthAvailable, deleteAccount, signOut, updateAvatar, updateUsername } = useAuth();
-  const { refreshNotes } = useNotes();
   const { tier } = useSubscription();
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -234,7 +232,6 @@ export function useProfileScreenModel() {
     setTransitionUser(user);
     try {
       await signOut();
-      await refreshNotes(false).catch(() => undefined);
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       router.replace('/(tabs)/settings');
     } catch (error) {
@@ -304,11 +301,10 @@ export function useProfileScreenModel() {
                   'We could not delete your account right now. Please try again in a moment.'
                 )
             );
-          }
-          return;
         }
+        return;
+      }
 
-        await refreshNotes(false).catch(() => undefined);
         router.replace('/(tabs)/settings');
         showAppAlert(
           t('profile.deleteAccountSuccessTitle', 'Account deleted'),

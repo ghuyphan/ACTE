@@ -48,6 +48,7 @@ interface SharedFeedStoreValue {
   enabled: boolean;
   loading: boolean;
   ready: boolean;
+  initialLoadComplete: boolean;
   dataSource: 'live' | 'cache';
   lastUpdatedAt: string | null;
   friends: FriendConnection[];
@@ -93,6 +94,7 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
   const [activeInvite, setActiveInvite] = useState<FriendInvite | null>(null);
   const [loading, setLoading] = useState(false);
   const [ready, setReady] = useState(false);
+  const [initialLoadComplete, setInitialLoadComplete] = useState(false);
   const [dataSource, setDataSource] = useState<'live' | 'cache'>('cache');
   const [lastUpdatedAt, setLastUpdatedAt] = useState<string | null>(null);
   const friendsRef = useRef<FriendConnection[]>([]);
@@ -102,6 +104,9 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
   const createInvitePromiseRef = useRef<Promise<FriendInvite> | null>(null);
   const previousUserUidRef = useRef<string | null>(null);
   const sharedFeedSessionRef = useRef(0);
+  const refreshRequestIdRef = useRef(0);
+  const refreshInFlightRef = useRef<Promise<void> | null>(null);
+  const pendingForcedRefreshRef = useRef(false);
 
   const isCurrentSharedFeedSession = useCallback(
     (sessionId: number, userUid: string) =>
@@ -412,33 +417,70 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
       createInvitePromiseRef.current = null;
       setLoading(false);
       setReady(true);
+      setInitialLoadComplete(true);
+      pendingForcedRefreshRef.current = false;
+      refreshInFlightRef.current = null;
       return;
     }
 
     if (!isOnline) {
       setLoading(false);
       setReady(true);
+      setInitialLoadComplete(true);
       return;
     }
 
-    setLoading(true);
     const userUid = user.uid;
     const sessionId = sharedFeedSessionRef.current;
-    try {
-      const snapshot = await fetchSharedFeed(user, options);
-      if (!isCurrentSharedFeedSession(sessionId, userUid)) {
-        return;
-      }
-      const updatedAt = new Date().toISOString();
-      commitSnapshotAndPersist(userUid, snapshot, updatedAt);
-      void hydrateSharedPostMedia(userUid, sessionId, 'live', updatedAt, snapshot.sharedPosts);
-    } finally {
-      if (isCurrentSharedFeedSession(sessionId, userUid)) {
-        setLoading(false);
-        setReady(true);
-      }
+    if (refreshInFlightRef.current) {
+      pendingForcedRefreshRef.current = pendingForcedRefreshRef.current || Boolean(options?.force);
+      return refreshInFlightRef.current;
     }
+
+    const requestId = ++refreshRequestIdRef.current;
+    const refreshPromise = (async () => {
+      setLoading(true);
+      try {
+        const snapshot = await fetchSharedFeed(user, options);
+        if (
+          !isCurrentSharedFeedSession(sessionId, userUid) ||
+          refreshRequestIdRef.current !== requestId
+        ) {
+          return;
+        }
+
+        const updatedAt = new Date().toISOString();
+        commitSnapshotAndPersist(userUid, snapshot, updatedAt);
+        void hydrateSharedPostMedia(userUid, sessionId, 'live', updatedAt, snapshot.sharedPosts);
+      } finally {
+        if (
+          isCurrentSharedFeedSession(sessionId, userUid) &&
+          refreshRequestIdRef.current === requestId
+        ) {
+          setLoading(false);
+          setReady(true);
+          setInitialLoadComplete(true);
+        }
+      }
+    })().finally(async () => {
+      if (refreshInFlightRef.current === refreshPromise) {
+        refreshInFlightRef.current = null;
+      }
+
+      if (
+        pendingForcedRefreshRef.current &&
+        isCurrentSharedFeedSession(sessionId, userUid) &&
+        user?.uid === userUid
+      ) {
+        pendingForcedRefreshRef.current = false;
+        await refreshAll({ force: true });
+      }
+    });
+
+    refreshInFlightRef.current = refreshPromise;
+    return refreshPromise;
   }, [
+    commitSnapshot,
     commitSnapshotAndPersist,
     enabled,
     hydrateSharedPostMedia,
@@ -495,6 +537,9 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
       createInvitePromiseRef.current = null;
       setLoading(false);
       setReady(true);
+      setInitialLoadComplete(true);
+      pendingForcedRefreshRef.current = false;
+      refreshInFlightRef.current = null;
       if (previousUserUidRef.current) {
         void clearSharedFeedCache(previousUserUidRef.current);
         invalidateSharedFeedRefresh(previousUserUidRef.current);
@@ -515,6 +560,9 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
     );
     setLoading(true);
     setReady(false);
+    setInitialLoadComplete(false);
+    pendingForcedRefreshRef.current = false;
+    refreshInFlightRef.current = null;
     suppressedActiveInviteIdRef.current = null;
     void hydrateFromCache(user.uid, sessionId)
       .catch(() => undefined)
@@ -522,6 +570,7 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
         if (sharedFeedSessionRef.current === sessionId && !isOnline) {
           setLoading(false);
           setReady(true);
+          setInitialLoadComplete(true);
         }
       });
 
@@ -545,6 +594,7 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
         );
         setLoading(false);
         setReady(true);
+        setInitialLoadComplete(true);
       },
       onError: (error) => {
         if (sharedFeedSessionRef.current !== sessionId || previousUserUidRef.current !== user.uid) {
@@ -553,6 +603,7 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
         console.warn('Shared feed subscription failed:', getSharedFeedErrorMessage(error));
         setLoading(false);
         setReady(true);
+        setInitialLoadComplete(true);
       },
     });
 
@@ -615,6 +666,7 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
       enabled,
       loading,
       ready,
+      initialLoadComplete,
       dataSource,
       lastUpdatedAt,
       friends,
@@ -903,6 +955,7 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
       dataSource,
       enabled,
       friends,
+      initialLoadComplete,
       isOnline,
       lastUpdatedAt,
       loading,

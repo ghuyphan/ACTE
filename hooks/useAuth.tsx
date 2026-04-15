@@ -25,6 +25,7 @@ export interface AuthActionResult {
   status: 'success' | 'cancelled' | 'unavailable' | 'error';
   message?: string;
   shouldOpenHelpLink?: boolean;
+  requiresEmailConfirmation?: boolean;
 }
 
 export interface EmailRegistrationInput {
@@ -698,7 +699,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
           await syncAuthSession(data.session ?? null, 'sync auth state');
           if (!data.session) {
-            setUser(mapSupabaseUser(data.user));
+            return {
+              status: 'success',
+              message: i18n.t(
+                'auth.registerEmailConfirmation',
+                'Check your email to confirm your account before signing in.'
+              ),
+              requiresEmailConfirmation: true,
+            };
           }
           return { status: 'success' };
         } catch (error) {

@@ -28,6 +28,9 @@ import HomeHeaderSearch from '../home/HomeHeaderSearch';
 import NotesFeed from '../home/NotesFeed';
 import PlacePulseStrip from '../home/PlacePulseStrip';
 import SavedNotePolaroidReveal from '../home/SavedNotePolaroidReveal';
+import SharedPlacePulseStrip, {
+  type SharedPlacePulseAvatar,
+} from '../home/SharedPlacePulseStrip';
 import SharedManageSheet from '../home/SharedManageSheet';
 import { useHomeFeedViewModel } from '../../hooks/app/useHomeFeedViewModel';
 import { useHomeSharedActions } from '../../hooks/app/useHomeSharedActions';
@@ -79,7 +82,7 @@ import {
 } from '../../services/premiumNoteFinish';
 import { generateNoteId, type Note } from '../../services/database';
 import { getDistanceMeters, getReminderPlaceGroups } from '../../services/reminderSelection';
-import { getSharedFeedErrorMessage } from '../../services/sharedFeedService';
+import { getSharedFeedErrorMessage, type SharedPost } from '../../services/sharedFeedService';
 import type { NotesRouteTransitionRect } from '../../utils/notesRouteTransition';
 import { setPendingNotesRouteTransition } from '../../utils/notesRouteTransition';
 import { scheduleOnIdle } from '../../utils/scheduleOnIdle';
@@ -90,6 +93,8 @@ import { isIOS26OrNewer } from '../../utils/platform';
 const LIVE_PHOTO_CAMERA_HINT_SEEN_KEY = 'noto.capture.live-photo-hint-seen.v1';
 const CAPTURE_DRAFT_STORAGE_KEY = 'noto.capture.home-draft.v1';
 const PLACE_PULSE_RADIUS_METERS = 500;
+const SHARED_PLACE_PULSE_MAX_AVATARS = 3;
+const SHARED_PLACE_PULSE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 type SaveButtonState = 'idle' | 'saving' | 'success';
 
 type PersistedCaptureDraft = CaptureDraftState & {
@@ -105,6 +110,19 @@ function isPersistableCaptureDraft(draft: CaptureDraftState) {
   }
 
   return draft.noteText.trim().length > 0;
+}
+
+function hasFiniteCoordinate(value: number | null | undefined): value is number {
+  return typeof value === 'number' && Number.isFinite(value);
+}
+
+function getSharedPlacePulseFallbackLabel(post: SharedPost) {
+  const trimmedName = post.authorDisplayName?.trim();
+  if (trimmedName) {
+    return (trimmedName[0] ?? '?').toUpperCase();
+  }
+
+  return '?';
 }
 
 function parsePersistedCaptureDraft(rawValue: string | null): PersistedCaptureDraft | null {
@@ -186,6 +204,7 @@ export default function HomeScreen() {
     enabled: sharedEnabled,
     loading: sharedLoading,
     ready: sharedReady,
+    initialLoadComplete: sharedInitialLoadComplete = true,
     friends,
     sharedPosts,
     activeInvite,
@@ -219,6 +238,7 @@ export default function HomeScreen() {
   const {
     clearFeedFocus,
     peekFeedFocus,
+    requestFeedFocus,
   } = useFeedFocus();
   const { openNoteDetail } = useNoteDetailSheet();
   const router = useRouter();
@@ -460,6 +480,7 @@ export default function HomeScreen() {
     permission.canAskAgain === false;
   const {
     feedMode,
+    isFeedBootstrapPending,
     homeFeedItemsCount,
     visibleFeedItems,
     ownedSharedNoteIds,
@@ -471,6 +492,7 @@ export default function HomeScreen() {
     notesInitialLoadComplete,
     sharedEnabled,
     sharedReady,
+    sharedInitialLoadComplete,
     sharedPosts,
     isInitialSyncPending,
     syncStatus,
@@ -1085,6 +1107,84 @@ export default function HomeScreen() {
     };
   }, [location, notes]);
 
+  const sharedPlacePulseSummary = useMemo(() => {
+    if (
+      captureTarget !== 'private' ||
+      !location ||
+      !sharedEnabled ||
+      !sharedReady
+    ) {
+      return {
+        nearbySharedPostCount: 0,
+        targetPostId: null as string | null,
+        avatars: [] as SharedPlacePulseAvatar[],
+        overflowCount: 0,
+      };
+    }
+
+    const currentCoordinates = {
+      latitude: location.coords.latitude,
+      longitude: location.coords.longitude,
+    };
+    const minimumCreatedAt = Date.now() - SHARED_PLACE_PULSE_MAX_AGE_MS;
+
+    const nearbySharedPosts = sharedPosts
+      .filter((post) => {
+        if (!hasFiniteCoordinate(post.latitude) || !hasFiniteCoordinate(post.longitude)) {
+          return false;
+        }
+
+        const createdAtMs = new Date(post.createdAt).getTime();
+        if (!Number.isFinite(createdAtMs) || createdAtMs < minimumCreatedAt) {
+          return false;
+        }
+
+        return (
+          getDistanceMeters(currentCoordinates, {
+            latitude: post.latitude,
+            longitude: post.longitude,
+          }) <= PLACE_PULSE_RADIUS_METERS
+        );
+      })
+      .sort(
+        (left, right) =>
+          new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime()
+      );
+
+    const uniqueNearbyAuthorIds = new Set<string>();
+    for (const post of nearbySharedPosts) {
+      uniqueNearbyAuthorIds.add(post.authorUid.trim() || post.id);
+    }
+
+    const avatars: SharedPlacePulseAvatar[] = [];
+    const renderedAuthorIds = new Set<string>();
+
+    for (const post of nearbySharedPosts) {
+      const authorKey = post.authorUid.trim() || post.id;
+      if (renderedAuthorIds.has(authorKey)) {
+        continue;
+      }
+
+      renderedAuthorIds.add(authorKey);
+      avatars.push({
+        id: authorKey,
+        photoUrl: post.authorPhotoURLSnapshot,
+        fallbackLabel: getSharedPlacePulseFallbackLabel(post),
+      });
+
+      if (avatars.length >= SHARED_PLACE_PULSE_MAX_AVATARS) {
+        break;
+      }
+    }
+
+    return {
+      nearbySharedPostCount: nearbySharedPosts.length,
+      targetPostId: nearbySharedPosts[0]?.id ?? null,
+      avatars,
+      overflowCount: Math.max(uniqueNearbyAuthorIds.size - avatars.length, 0),
+    };
+  }, [captureTarget, location, sharedEnabled, sharedPosts, sharedReady]);
+
   const handlePlacePulsePress = useCallback(() => {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     Keyboard.dismiss();
@@ -1100,6 +1200,20 @@ export default function HomeScreen() {
 
     flatListRef.current?.scrollToOffset({ offset: snapHeight, animated: true });
   }, [isFriendsFilterEnabled, placePulseSummary.targetNoteId, snapHeight]);
+
+  const handleSharedPlacePulsePress = useCallback(() => {
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    Keyboard.dismiss();
+
+    if (!sharedPlacePulseSummary.targetPostId) {
+      return;
+    }
+
+    requestFeedFocus({
+      kind: 'shared-post',
+      id: sharedPlacePulseSummary.targetPostId,
+    });
+  }, [requestFeedFocus, sharedPlacePulseSummary.targetPostId]);
 
   const {
     handleCaptureTargetChange,
@@ -1137,6 +1251,30 @@ export default function HomeScreen() {
       );
     }
 
+    if (sharedPlacePulseSummary.nearbySharedPostCount > 0) {
+      return (
+        <SharedPlacePulseStrip
+          avatars={sharedPlacePulseSummary.avatars}
+          overflowCount={sharedPlacePulseSummary.overflowCount}
+          accessibilityLabel={
+            sharedPlacePulseSummary.nearbySharedPostCount === 1
+              ? t(
+                  'home.sharedPlacePulseA11ySingle',
+                  'Open 1 nearby shared post from a friend'
+                )
+              : t(
+                  'home.sharedPlacePulseA11yPlural',
+                  'Open {{count}} nearby shared posts from friends',
+                  {
+                    count: sharedPlacePulseSummary.nearbySharedPostCount,
+                  }
+                )
+          }
+          onPress={handleSharedPlacePulsePress}
+        />
+      );
+    }
+
     if (!location) {
       return null;
     }
@@ -1161,9 +1299,13 @@ export default function HomeScreen() {
     captureTarget,
     friends,
     handlePlacePulsePress,
+    handleSharedPlacePulsePress,
     location,
     placePulseSummary.nearbyNoteCount,
     selectedSharedAudienceUserId,
+    sharedPlacePulseSummary.avatars,
+    sharedPlacePulseSummary.nearbySharedPostCount,
+    sharedPlacePulseSummary.overflowCount,
     t,
   ]);
 
@@ -1602,32 +1744,6 @@ export default function HomeScreen() {
     }
   }, [captureMode, scrollCaptureToTop, setCaptureMode]);
 
-  const handleEmptyStateEnableLocation = useCallback(async () => {
-    scrollCaptureToTop();
-    const result = await requestForegroundLocation();
-    if (result.location) {
-      showAlert({
-        variant: 'success',
-        title: t('capture.locationReadyTitle', 'Location ready'),
-        message: t(
-          'capture.locationReadyBody',
-          'Noto can now link your next note to this place.'
-        ),
-        primaryAction: {
-          label: t('common.done', 'Done'),
-        },
-      });
-      return;
-    }
-
-    showDoneSheet(
-      'warning',
-      t('capture.locationUnavailableTitle', 'Location unavailable'),
-      getLocationUnavailableMessage(result),
-      result.requiresSettings
-    );
-  }, [getLocationUnavailableMessage, requestForegroundLocation, scrollCaptureToTop, showAlert, showDoneSheet, t]);
-
   const homeFeedEmptyState = useMemo(() => {
     if (feedMode === 'content') {
       return null;
@@ -1644,18 +1760,17 @@ export default function HomeScreen() {
         onOpenFriends={presentSharedManageSheet}
         onTakePhotoHere={handleEmptyStateTakePhoto}
         onWriteOneSentence={handleEmptyStateWriteOneSentence}
-        onEnableLocation={handleEmptyStateEnableLocation}
       />
     );
   }, [
     colors,
     feedMode,
-    handleEmptyStateEnableLocation,
     handleEmptyStateTakePhoto,
     handleEmptyStateWriteOneSentence,
     presentSharedManageSheet,
     t,
   ]);
+  const feedRefreshing = refreshing || (homeFeedItemsCount === 0 && isFeedBootstrapPending);
 
   const saveNote = useCallback(async () => {
     if (saveInFlightRef.current) {
@@ -2256,7 +2371,7 @@ export default function HomeScreen() {
           screenActive={isScreenFocused}
           items={visibleFeedItems}
           ownedSharedNoteIds={ownedSharedNoteIds}
-          refreshing={refreshing}
+          refreshing={feedRefreshing}
           onRefresh={() => {
             void onRefresh();
           }}

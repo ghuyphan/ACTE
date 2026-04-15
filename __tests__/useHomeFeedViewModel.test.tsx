@@ -39,6 +39,7 @@ function createParams(overrides: Partial<Parameters<typeof useHomeFeedViewModel>
     notesInitialLoadComplete: true,
     sharedEnabled: true,
     sharedReady: true,
+    sharedInitialLoadComplete: true,
     sharedPosts: [],
     isInitialSyncPending: false,
     syncStatus: 'idle' as const,
@@ -63,12 +64,23 @@ describe('useHomeFeedViewModel', () => {
   it('returns the syncing-empty mode while the initial signed-in sync is still running', () => {
     const params = createParams({
       isInitialSyncPending: true,
-      syncStatus: 'syncing',
-      sharedReady: false,
+      syncStatus: 'idle',
+      sharedInitialLoadComplete: false,
     });
     const { result } = renderHook(() => useHomeFeedViewModel(params));
 
     expect(result.current.feedMode).toBe('syncing-empty');
+  });
+
+  it('keeps the signed-in bootstrap state while notes are still hydrating', () => {
+    const params = createParams({
+      notesInitialLoadComplete: true,
+      notesLoading: true,
+    });
+    const { result } = renderHook(() => useHomeFeedViewModel(params));
+
+    expect(result.current.feedMode).toBe('syncing-empty');
+    expect(result.current.isFeedBootstrapPending).toBe(true);
   });
 
   it('keeps content mode when feed items are only hidden by the saved-note suppression flow', () => {

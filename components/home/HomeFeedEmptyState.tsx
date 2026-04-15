@@ -18,7 +18,6 @@ interface HomeFeedEmptyStateProps {
   onOpenFriends: () => void;
   onTakePhotoHere: () => void;
   onWriteOneSentence: () => void;
-  onEnableLocation: () => void;
 }
 
 function HomeFeedEmptyState({
@@ -29,7 +28,6 @@ function HomeFeedEmptyState({
   onOpenFriends,
   onTakePhotoHere,
   onWriteOneSentence,
-  onEnableLocation,
 }: HomeFeedEmptyStateProps) {
   const isSyncingEmpty = mode === 'syncing-empty';
   const isFriendsEmpty = mode === 'friends-empty';
@@ -111,76 +109,36 @@ function HomeFeedEmptyState({
             accessibilityRole="button"
             onPress={() => {
               void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              onTakePhotoHere();
-            }}
-            style={({ pressed }) => [
-              styles.suggestionCard,
-              {
-                opacity: pressed ? 0.78 : 1,
-              },
-            ]}
-          >
-            <View style={styles.suggestionIconWrap}>
-              <Ionicons name="camera-outline" size={18} color={colors.primary} />
-            </View>
-            <View style={styles.suggestionCopy}>
-              <Text style={[styles.suggestionTitle, { color: colors.text }]}>
-                {t('home.firstNoteActionPhotoTitle', 'Take a photo here')}
-              </Text>
-              <Text style={[styles.suggestionBody, { color: colors.secondaryText }]}>
-                {t('home.firstNoteActionPhotoBody', 'Start with a quick snapshot of this place.')}
-              </Text>
-            </View>
-          </Pressable>
-          <Pressable
-            accessibilityRole="button"
-            onPress={() => {
-              void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
               onWriteOneSentence();
             }}
             style={({ pressed }) => [
-              styles.suggestionCard,
+              styles.inlineActionButton,
               {
-                opacity: pressed ? 0.78 : 1,
+                opacity: pressed ? 0.72 : 1,
               },
             ]}
           >
-            <View style={styles.suggestionIconWrap}>
-              <Ionicons name="create-outline" size={18} color={colors.primary} />
-            </View>
-            <View style={styles.suggestionCopy}>
-              <Text style={[styles.suggestionTitle, { color: colors.text }]}>
-                {t('home.firstNoteActionTextTitle', 'Write one sentence')}
-              </Text>
-              <Text style={[styles.suggestionBody, { color: colors.secondaryText }]}>
-                {t('home.firstNoteActionTextBody', 'Leave yourself a tiny clue for next time.')}
-              </Text>
-            </View>
+            <Text style={[styles.inlineActionText, { color: colors.text }]}>
+              {t('home.firstNoteActionTextTitle', 'Write')}
+            </Text>
           </Pressable>
+          <View style={[styles.inlineActionDivider, { backgroundColor: colors.secondaryText }]} />
           <Pressable
             accessibilityRole="button"
             onPress={() => {
               void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              onEnableLocation();
+              onTakePhotoHere();
             }}
             style={({ pressed }) => [
-              styles.suggestionCard,
+              styles.inlineActionButton,
               {
-                opacity: pressed ? 0.78 : 1,
+                opacity: pressed ? 0.72 : 1,
               },
             ]}
           >
-            <View style={styles.suggestionIconWrap}>
-              <Ionicons name="location-outline" size={18} color={colors.primary} />
-            </View>
-            <View style={styles.suggestionCopy}>
-              <Text style={[styles.suggestionTitle, { color: colors.text }]}>
-                {t('home.firstNoteActionLocationTitle', 'Enable location')}
-              </Text>
-              <Text style={[styles.suggestionBody, { color: colors.secondaryText }]}>
-                {t('home.firstNoteActionLocationBody', 'Let Noto link your notes to the places around you.')}
-              </Text>
-            </View>
+            <Text style={[styles.inlineActionText, { color: colors.secondaryText }]}>
+              {t('home.firstNoteActionPhotoTitle', 'Photo')}
+            </Text>
           </Pressable>
         </View>
       ) : null}
@@ -236,42 +194,29 @@ const styles = StyleSheet.create({
     fontFamily: 'Noto Sans',
   },
   firstNoteActionList: {
-    width: '100%',
-    gap: 10,
-    marginTop: 16,
-  },
-  suggestionCard: {
-    width: '100%',
-    minHeight: 68,
-    borderRadius: 20,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    backgroundColor: 'rgba(255,255,255,0.46)',
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    flexWrap: 'wrap',
     gap: 12,
+    marginTop: 18,
   },
-  suggestionIconWrap: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
+  inlineActionButton: {
+    minHeight: 28,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.62)',
   },
-  suggestionCopy: {
-    flex: 1,
-    gap: 2,
-  },
-  suggestionTitle: {
-    fontSize: 14,
-    lineHeight: 18,
-    fontWeight: '800',
+  inlineActionText: {
+    fontSize: 16,
+    lineHeight: 20,
+    fontWeight: '700',
     fontFamily: 'Noto Sans',
+    textAlign: 'center',
   },
-  suggestionBody: {
-    fontSize: 12,
-    lineHeight: 16,
-    fontFamily: 'Noto Sans',
+  inlineActionDivider: {
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    opacity: 0.35,
   },
 });
