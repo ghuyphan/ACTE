@@ -179,6 +179,22 @@ describe('useNotesRecapViewModel', () => {
     });
   });
 
+  it('uses localized weekday labels for English and Vietnamese', async () => {
+    const englishResult = renderHook(() => useNotesRecapViewModel({ notes: [buildNote()] }));
+
+    await waitFor(() => {
+      expect(englishResult.result.current.weekDayLabels).toEqual(['S', 'M', 'T', 'W', 'T', 'F', 'S']);
+    });
+
+    mockLanguage = 'vi';
+
+    const vietnameseResult = renderHook(() => useNotesRecapViewModel({ notes: [buildNote()] }));
+
+    await waitFor(() => {
+      expect(vietnameseResult.result.current.weekDayLabels).toEqual(['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN']);
+    });
+  });
+
   it('supports selecting multiple recap days at the same time', async () => {
     const notes: Note[] = [
       buildNote({

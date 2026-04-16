@@ -23,8 +23,6 @@ export const SHUTTER_SIDE_ACTION_OFFSET =
   SHUTTER_OUTER_SIZE / 2 + SHUTTER_SIDE_ACTION_GAP + SIDE_ACTION_SIZE;
 export const PHOTO_DOODLE_DEFAULT_COLOR = '#FFFFFF';
 export const PHOTO_CAPTION_MAX_LENGTH = 60;
-export const PHOTO_FILTER_BUTTON_SIZE = 34;
-export const PHOTO_FILTER_PREVIEW_SIZE = 30;
 export const LIVE_PHOTO_RING_STROKE_WIDTH = 4;
 export const CAMERA_FOCUS_RING_SIZE = 64;
 export const DOCKED_HEADER_CONTENT_OVERLAP = 8;
@@ -152,15 +150,6 @@ export const styles = StyleSheet.create({
     width: TOP_CONTROL_HEIGHT,
     height: TOP_CONTROL_HEIGHT,
   },
-  cardTopOverlay: {
-    position: 'absolute',
-    top: CARD_CHROME_SAFE_TOP,
-    left: 14,
-    right: 14,
-    gap: 8,
-    alignItems: 'center',
-    zIndex: 11,
-  },
   cardBottomOverlay: {
     position: 'absolute',
     left: 12,
@@ -168,27 +157,6 @@ export const styles = StyleSheet.create({
     bottom: 12,
     alignItems: 'center',
     zIndex: 12,
-  },
-  cardTopOverlayRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'flex-start',
-    gap: 8,
-  },
-  cardTopOverlayRowWrap: {
-    flexWrap: 'wrap',
-  },
-  photoTopToolsBar: {
-    alignSelf: 'flex-start',
-    maxWidth: '100%',
-  },
-  photoTopToolsRow: {
-    justifyContent: 'flex-start',
-    alignSelf: 'flex-start',
-  },
-  photoTopDetailAction: {
-    backgroundColor: 'transparent',
-    borderColor: 'transparent',
   },
   photoDoodleActionsCluster: {
     flexDirection: 'row',
@@ -501,6 +469,47 @@ export const styles = StyleSheet.create({
     width: '100%',
     alignItems: 'center',
   },
+  liveCameraActionRow: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  liveCameraFilterRail: {
+    flex: 1,
+    minWidth: 0,
+  },
+  liveCameraLibraryButton: {
+    flexShrink: 0,
+  },
+  liveFilterScroll: {
+    flexGrow: 0,
+  },
+  liveFilterRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingRight: 2,
+  },
+  liveFilterPill: {
+    minHeight: 30,
+    borderRadius: 999,
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  liveFilterPillContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  liveFilterPillLabel: {
+    fontSize: 11,
+    lineHeight: 14,
+    fontWeight: '700',
+    fontFamily: 'Noto Sans',
+  },
   textBottomToolsBar: {
     alignSelf: 'center',
     minHeight: 46,
@@ -554,10 +563,6 @@ export const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  cameraInstructionText: {
-    ...Typography.pill,
-    textAlign: 'center',
-  },
   captureQuotaHintText: {
     marginTop: 8,
     maxWidth: '88%',
@@ -568,6 +573,7 @@ export const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
+    marginBottom: 6,
     paddingHorizontal: 10,
     paddingVertical: 2,
   },
@@ -582,53 +588,6 @@ export const styles = StyleSheet.create({
     width: '100%',
     position: 'relative',
     alignItems: 'center',
-  },
-  cameraMetaSlot: {
-    width: '100%',
-    minHeight: 40,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  cameraMetaHintLayer: {
-    position: 'absolute',
-    alignSelf: 'center',
-  },
-  cameraMetaButtonLayer: {
-    position: 'absolute',
-    alignSelf: 'center',
-  },
-  cameraHintPill: {
-    minHeight: 34,
-    maxWidth: '100%',
-    borderRadius: Radii.pill,
-    borderWidth: StyleSheet.hairlineWidth,
-    overflow: 'hidden',
-    justifyContent: 'center',
-    alignSelf: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-  },
-  cameraHintContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-  },
-  cameraHintText: {
-    ...Typography.pill,
-    fontSize: 13,
-    lineHeight: 16,
-    textAlign: 'center',
-  },
-  cameraHintSeparator: {
-    fontSize: 12,
-    lineHeight: 16,
-  },
-  cameraHintAccentText: {
-    fontSize: 13,
-    lineHeight: 16,
-    fontWeight: '600',
-    fontFamily: 'Noto Sans',
   },
   belowCardShutterRow: {
     flexDirection: 'row',
@@ -649,60 +608,6 @@ export const styles = StyleSheet.create({
     minHeight: 92,
     paddingTop: 12,
     paddingBottom: 14,
-  },
-  photoFilterTray: {
-    maxWidth: '100%',
-    borderRadius: 999,
-    borderWidth: StyleSheet.hairlineWidth,
-    paddingHorizontal: 6,
-    paddingVertical: 5,
-    overflow: 'hidden',
-  },
-  photoFilterScroll: {
-    flexGrow: 0,
-  },
-  photoFilterRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-  },
-  photoFilterEmbeddedScroll: {
-    maxWidth: 166,
-  },
-  photoFilterButton: {
-    width: PHOTO_FILTER_BUTTON_SIZE,
-    height: PHOTO_FILTER_BUTTON_SIZE,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: PHOTO_FILTER_BUTTON_SIZE / 2,
-    borderWidth: 2,
-    padding: 1,
-  },
-  photoFilterButtonLocked: {
-    opacity: 0.84,
-  },
-  photoFilterPreviewClip: {
-    width: PHOTO_FILTER_PREVIEW_SIZE,
-    height: PHOTO_FILTER_PREVIEW_SIZE,
-    borderRadius: PHOTO_FILTER_PREVIEW_SIZE / 2,
-    overflow: 'hidden',
-  },
-  photoFilterLockBadge: {
-    position: 'absolute',
-    right: -1,
-    bottom: -1,
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(28,28,30,0.88)',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.2)',
-  },
-  photoFilterPreviewCanvas: {
-    width: '100%',
-    height: '100%',
   },
   belowCardLeadingAction: {
     position: 'absolute',

@@ -1,3 +1,15 @@
+jest.mock('@shopify/react-native-skia', () => ({
+  BlendMode: {
+    SrcOver: 'srcOver',
+    Screen: 'screen',
+    SoftLight: 'softLight',
+    Multiply: 'multiply',
+  },
+  ImageFormat: { JPEG: 'jpeg' },
+  TileMode: { Clamp: 'clamp' },
+  Skia: {},
+}));
+
 import { PHOTO_FILTER_PRESETS } from '../services/photoFilters';
 
 describe('photoFilters', () => {
@@ -7,7 +19,12 @@ describe('photoFilters', () => {
         continue;
       }
 
-      const biasValues = [preset.matrix[4], preset.matrix[9], preset.matrix[14], preset.matrix[19]];
+      const biasValues = [
+        preset.renderMatrix[4],
+        preset.renderMatrix[9],
+        preset.renderMatrix[14],
+        preset.renderMatrix[19],
+      ];
 
       expect(biasValues.every((value) => Math.abs(value) <= 1)).toBe(true);
     }

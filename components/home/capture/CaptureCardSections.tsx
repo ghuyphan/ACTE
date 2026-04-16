@@ -25,7 +25,8 @@ import PhotoMediaView from '../../notes/PhotoMediaView';
 import PremiumNoteFinishOverlay from '../../ui/PremiumNoteFinishOverlay';
 import PrimaryButton from '../../ui/PrimaryButton';
 import StickerPastePopover from '../../ui/StickerPastePopover';
-import { FilteredPhotoCanvas, PhotoFilterCarousel } from './CaptureControls';
+import { FilteredPhotoCanvas } from './CaptureControls';
+import { LiveCameraFilterOverlay } from './LiveCameraFilterOverlay';
 import {
   CAMERA_FOCUS_RING_SIZE,
   CARD_SIZE,
@@ -246,9 +247,6 @@ interface PhotoCaptureSurfaceProps {
   noteText: string;
   onCanvasGestureActiveChange: (active: boolean) => void;
   onChangeNoteText: (nextText: string) => void;
-  onChangePhotoFilter: (filterId: PhotoFilterId) => void;
-  lockedPhotoFilterIds?: PhotoFilterId[];
-  onPressLockedPhotoFilter?: (filterId: PhotoFilterId) => void;
   onPhotoCaptionBlur: () => void;
   onPhotoCaptionFocus: () => void;
   onPhotoSurfaceReady: () => void;
@@ -289,9 +287,6 @@ export function PhotoCaptureSurface({
   noteText,
   onCanvasGestureActiveChange,
   onChangeNoteText,
-  onChangePhotoFilter,
-  lockedPhotoFilterIds = [],
-  onPressLockedPhotoFilter,
   onPhotoCaptionBlur,
   onPhotoCaptionFocus,
   onPhotoSurfaceReady,
@@ -317,16 +312,24 @@ export function PhotoCaptureSurface({
       style={[styles.cameraContainer, { backgroundColor: colors.captureCameraOverlay }]}
     >
       {hasLivePhotoMotion ? (
-        <PhotoMediaView
-          imageUrl={capturedPhoto}
-          isLivePhoto
-          pairedVideoUri={capturedPairedVideo}
-          showLiveBadge={false}
-          style={styles.cameraPreview}
-          imageStyle={styles.cameraPreview}
-          enablePlayback
-          onImageReady={onPhotoSurfaceReady}
-        />
+        <>
+          <PhotoMediaView
+            imageUrl={capturedPhoto}
+            isLivePhoto
+            pairedVideoUri={capturedPairedVideo}
+            showLiveBadge={false}
+            style={styles.cameraPreview}
+            imageStyle={styles.cameraPreview}
+            enablePlayback
+            onImageReady={onPhotoSurfaceReady}
+          />
+          <LiveCameraFilterOverlay
+            filterId={selectedPhotoFilterId}
+            width={CARD_SIZE}
+            height={CARD_SIZE}
+            style={styles.cameraPreview}
+          />
+        </>
       ) : (
         <FilteredPhotoCanvas
           sourceUri={capturedPhoto}
@@ -417,19 +420,6 @@ export function PhotoCaptureSurface({
         actionTestID="capture-card-paste-action"
         dismissTestID="capture-card-paste-dismiss"
       />
-      {!hasLivePhotoMotion ? (
-        <View pointerEvents="box-none" style={styles.cardTopOverlay}>
-          <PhotoFilterCarousel
-            sourceUri={capturedPhoto}
-            selectedFilterId={selectedPhotoFilterId}
-            lockedFilterIds={lockedPhotoFilterIds}
-            onSelectFilter={onChangePhotoFilter}
-            onPressLockedFilter={onPressLockedPhotoFilter}
-            t={t}
-            colors={colors}
-          />
-        </View>
-      ) : null}
       <View pointerEvents="box-none" style={styles.cardBottomOverlay}>
         <View
           style={[
@@ -516,6 +506,7 @@ interface LiveCameraSurfaceProps {
   showCaptureCover: boolean;
   showCameraUnavailableState: boolean;
   showCameraZoomBadge: boolean;
+  selectedPhotoFilterId: PhotoFilterId;
   t: TFunction;
 }
 
@@ -548,6 +539,7 @@ export function LiveCameraSurface({
   showCaptureCover,
   showCameraUnavailableState,
   showCameraZoomBadge,
+  selectedPhotoFilterId,
   t,
 }: LiveCameraSurfaceProps) {
   const shouldShowZoomBadge = showCameraZoomBadge || cameraPreviewZoom > 1.01;
@@ -579,6 +571,12 @@ export function LiveCameraSurface({
               onError={(error) => {
                 handleCameraStartupFailure(error.message);
               }}
+            />
+            <LiveCameraFilterOverlay
+              filterId={selectedPhotoFilterId}
+              width={CARD_SIZE}
+              height={CARD_SIZE}
+              style={styles.cameraPreview}
             />
             {shouldShowZoomBadge ? (
               <View pointerEvents="none" style={styles.cameraZoomBadge}>

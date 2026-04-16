@@ -1173,6 +1173,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                     livePhotoProgressPath={livePhotoProgressPath}
                     livePhotoRingProgress={livePhotoRingProgress}
                     needsCameraPermission={needsCameraPermission}
+                    selectedPhotoFilterId={selectedPhotoFilterId}
                     shouldRenderCameraPreview={shouldRenderCameraPreview}
                     showCaptureCover={
                       shouldRenderCaptureCover && !shouldRenderPhotoCaptureSurface
@@ -1206,9 +1207,6 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                     noteText={noteText}
                     onCanvasGestureActiveChange={setCanvasGestureActive}
                     onChangeNoteText={onChangeNoteText}
-                    onChangePhotoFilter={onChangePhotoFilter}
-                    lockedPhotoFilterIds={lockedPhotoFilterIds}
-                    onPressLockedPhotoFilter={onPressLockedPhotoFilter}
                     onPhotoCaptionBlur={handlePhotoCaptionBlur}
                     onPhotoCaptionFocus={handlePhotoCaptionFocus}
                     onPhotoSurfaceReady={handlePhotoSurfaceReady}
@@ -1309,8 +1307,12 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                     colors={colors}
                     importingPhoto={importingPhoto}
                     libraryImportLocked={libraryImportLocked}
+                    lockedPhotoFilterIds={lockedPhotoFilterIds}
                     needsCameraPermission={needsCameraPermission}
+                    onChangePhotoFilter={onChangePhotoFilter}
                     onOpenPhotoLibrary={onOpenPhotoLibrary}
+                    onPressLockedPhotoFilter={onPressLockedPhotoFilter}
+                    selectedPhotoFilterId={selectedPhotoFilterId}
                     t={t}
                   />
                 </Reanimated.View>

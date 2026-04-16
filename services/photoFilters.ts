@@ -61,8 +61,9 @@ export type PhotoFilterPreset = {
   labelKey: string;
   defaultLabel: string;
   tier: PlanTier;
-  matrix: number[];
-  layers?: PhotoFilterLayer[];
+  previewLayers: PhotoFilterLayer[];
+  renderMatrix: number[];
+  renderLayers?: PhotoFilterLayer[];
 };
 
 const IDENTITY_MATRIX = [
@@ -88,7 +89,7 @@ const MATTE_CAFE_LAYERS: PhotoFilterLayer[] = [
   },
   {
     type: 'linearGradient',
-    colors: ['rgba(255, 249, 241, 0.8)', 'rgba(236, 227, 212, 0.45)', 'rgba(176, 193, 178, 0.36)'],
+    colors: ['rgba(255, 249, 241, 0.78)', 'rgba(236, 227, 212, 0.44)', 'rgba(176, 193, 178, 0.34)'],
     positions: [0, 0.48, 1],
     start: { x: 0.3, y: 0 },
     end: { x: 0.7, y: 1 },
@@ -97,7 +98,7 @@ const MATTE_CAFE_LAYERS: PhotoFilterLayer[] = [
   },
   {
     type: 'linearGradient',
-    colors: ['rgba(0, 0, 0, 0)', 'rgba(80, 96, 84, 0.78)'],
+    colors: ['rgba(0, 0, 0, 0)', 'rgba(80, 96, 84, 0.74)'],
     positions: [0.35, 1],
     start: { x: 0.5, y: 0.15 },
     end: { x: 0.5, y: 1 },
@@ -106,22 +107,160 @@ const MATTE_CAFE_LAYERS: PhotoFilterLayer[] = [
   },
   {
     type: 'radialGradient',
-    colors: ['rgba(0, 0, 0, 0)', 'rgba(73, 64, 53, 0.55)'],
+    colors: ['rgba(0, 0, 0, 0)', 'rgba(73, 64, 53, 0.48)'],
     positions: [0.68, 1],
     center: { x: 0.5, y: 0.5 },
     radius: 0.82,
-    opacity: 0.06,
+    opacity: 0.05,
     blendMode: 'multiply',
   },
   {
     type: 'grain',
-      freqX: 1.15,
-      freqY: 1.15,
-      octaves: 3,
-      seed: 18,
-      tileScale: 0.22,
-      opacity: 0.018,
-      blendMode: 'softLight',
+    freqX: 1.15,
+    freqY: 1.15,
+    octaves: 3,
+    seed: 18,
+    tileScale: 0.22,
+    opacity: 0.018,
+    blendMode: 'softLight',
+  },
+];
+
+const WARM_GLOW_LAYERS: PhotoFilterLayer[] = [
+  {
+    type: 'solid',
+    color: '#F4D8A9',
+    opacity: 0.05,
+    blendMode: 'softLight',
+  },
+  {
+    type: 'linearGradient',
+    colors: ['rgba(255, 244, 220, 0.75)', 'rgba(239, 181, 105, 0.35)', 'rgba(120, 79, 44, 0.22)'],
+    positions: [0, 0.54, 1],
+    start: { x: 0.2, y: 0 },
+    end: { x: 0.8, y: 1 },
+    opacity: 0.09,
+    blendMode: 'softLight',
+  },
+  {
+    type: 'grain',
+    freqX: 1.12,
+    freqY: 1.12,
+    octaves: 2,
+    seed: 11,
+    tileScale: 0.24,
+    opacity: 0.012,
+    blendMode: 'softLight',
+  },
+];
+
+const COOL_DUSK_LAYERS: PhotoFilterLayer[] = [
+  {
+    type: 'solid',
+    color: '#D7E5F3',
+    opacity: 0.05,
+    blendMode: 'softLight',
+  },
+  {
+    type: 'linearGradient',
+    colors: ['rgba(225, 239, 255, 0.75)', 'rgba(137, 176, 214, 0.28)', 'rgba(35, 55, 90, 0.4)'],
+    positions: [0, 0.58, 1],
+    start: { x: 0.5, y: 0 },
+    end: { x: 0.5, y: 1 },
+    opacity: 0.1,
+    blendMode: 'softLight',
+  },
+  {
+    type: 'radialGradient',
+    colors: ['rgba(0, 0, 0, 0)', 'rgba(27, 38, 61, 0.4)'],
+    positions: [0.7, 1],
+    center: { x: 0.5, y: 0.48 },
+    radius: 0.84,
+    opacity: 0.04,
+    blendMode: 'multiply',
+  },
+];
+
+const MONO_MATTE_LAYERS: PhotoFilterLayer[] = [
+  {
+    type: 'solid',
+    color: '#ECE9E2',
+    opacity: 0.04,
+    blendMode: 'softLight',
+  },
+  {
+    type: 'radialGradient',
+    colors: ['rgba(255,255,255,0)', 'rgba(28, 28, 30, 0.32)'],
+    positions: [0.72, 1],
+    center: { x: 0.5, y: 0.5 },
+    radius: 0.85,
+    opacity: 0.04,
+    blendMode: 'multiply',
+  },
+  {
+    type: 'grain',
+    freqX: 1.2,
+    freqY: 1.2,
+    octaves: 3,
+    seed: 9,
+    tileScale: 0.18,
+    opacity: 0.018,
+    blendMode: 'softLight',
+  },
+];
+
+const VIVID_POP_LAYERS: PhotoFilterLayer[] = [
+  {
+    type: 'solid',
+    color: '#FFE5C7',
+    opacity: 0.04,
+    blendMode: 'screen',
+  },
+  {
+    type: 'linearGradient',
+    colors: ['rgba(255, 208, 168, 0.48)', 'rgba(255, 255, 255, 0)', 'rgba(77, 150, 171, 0.3)'],
+    positions: [0, 0.5, 1],
+    start: { x: 0, y: 0.1 },
+    end: { x: 1, y: 0.9 },
+    opacity: 0.08,
+    blendMode: 'softLight',
+  },
+];
+
+const VINTAGE_FILM_LAYERS: PhotoFilterLayer[] = [
+  {
+    type: 'solid',
+    color: '#E6D3B7',
+    opacity: 0.05,
+    blendMode: 'softLight',
+  },
+  {
+    type: 'linearGradient',
+    colors: ['rgba(246, 238, 218, 0.66)', 'rgba(189, 173, 141, 0.22)', 'rgba(91, 99, 84, 0.32)'],
+    positions: [0, 0.55, 1],
+    start: { x: 0.15, y: 0 },
+    end: { x: 0.85, y: 1 },
+    opacity: 0.08,
+    blendMode: 'softLight',
+  },
+  {
+    type: 'radialGradient',
+    colors: ['rgba(0, 0, 0, 0)', 'rgba(74, 61, 42, 0.42)'],
+    positions: [0.72, 1],
+    center: { x: 0.5, y: 0.48 },
+    radius: 0.87,
+    opacity: 0.05,
+    blendMode: 'multiply',
+  },
+  {
+    type: 'grain',
+    freqX: 1.05,
+    freqY: 1.05,
+    octaves: 3,
+    seed: 14,
+    tileScale: 0.2,
+    opacity: 0.02,
+    blendMode: 'softLight',
   },
 ];
 
@@ -131,80 +270,92 @@ export const PHOTO_FILTER_PRESETS: PhotoFilterPreset[] = [
     labelKey: 'capture.filterOriginal',
     defaultLabel: 'Original',
     tier: 'free',
-    matrix: IDENTITY_MATRIX,
+    previewLayers: [],
+    renderMatrix: IDENTITY_MATRIX,
   },
   {
     id: 'soft',
     labelKey: 'capture.filterSoft',
     defaultLabel: 'Soft',
     tier: 'free',
-    matrix: [
+    previewLayers: MATTE_CAFE_LAYERS,
+    renderMatrix: [
       0.8, 0.11, 0.03, 0, 0.02,
       0.04, 0.84, 0.04, 0, 0.015,
       0.03, 0.09, 0.82, 0, 0.02,
       0, 0, 0, 1, 0,
     ],
-    layers: MATTE_CAFE_LAYERS,
+    renderLayers: MATTE_CAFE_LAYERS,
   },
   {
     id: 'warm',
     labelKey: 'capture.filterWarm',
     defaultLabel: 'Warm',
     tier: 'plus',
-    matrix: [
+    previewLayers: WARM_GLOW_LAYERS,
+    renderMatrix: [
       1.08, 0.02, 0, 0, 0,
       0.01, 1.01, 0, 0, 0,
       0, 0.01, 0.92, 0, 0,
       0, 0, 0, 1, 0,
     ],
+    renderLayers: WARM_GLOW_LAYERS,
   },
   {
     id: 'cool',
     labelKey: 'capture.filterCool',
     defaultLabel: 'Cool',
     tier: 'plus',
-    matrix: [
+    previewLayers: COOL_DUSK_LAYERS,
+    renderMatrix: [
       0.95, 0, 0.02, 0, 0,
       0, 1, 0.01, 0, 0,
       0.02, 0.01, 1.08, 0, 0,
       0, 0, 0, 1, 0,
     ],
+    renderLayers: COOL_DUSK_LAYERS,
   },
   {
     id: 'mono',
     labelKey: 'capture.filterMono',
     defaultLabel: 'Mono',
     tier: 'plus',
-    matrix: [
+    previewLayers: MONO_MATTE_LAYERS,
+    renderMatrix: [
       0.2126, 0.7152, 0.0722, 0, 0,
       0.2126, 0.7152, 0.0722, 0, 0,
       0.2126, 0.7152, 0.0722, 0, 0,
       0, 0, 0, 1, 0,
     ],
+    renderLayers: MONO_MATTE_LAYERS,
   },
   {
     id: 'vivid',
     labelKey: 'capture.filterVivid',
     defaultLabel: 'Vivid',
     tier: 'plus',
-    matrix: [
+    previewLayers: VIVID_POP_LAYERS,
+    renderMatrix: [
       1.12, -0.04, -0.04, 0, 0,
       -0.03, 1.12, -0.03, 0, 0,
       -0.03, -0.03, 1.12, 0, 0,
       0, 0, 0, 1, 0,
     ],
+    renderLayers: VIVID_POP_LAYERS,
   },
   {
     id: 'vintage',
     labelKey: 'capture.filterVintage',
     defaultLabel: 'Vintage',
     tier: 'plus',
-    matrix: [
+    previewLayers: VINTAGE_FILM_LAYERS,
+    renderMatrix: [
       0.88, 0.08, 0.02, 0, 0,
       0.04, 0.9, 0.02, 0, 0,
       0.02, 0.06, 0.78, 0, 0,
       0, 0, 0, 1, 0,
     ],
+    renderLayers: VINTAGE_FILM_LAYERS,
   },
 ];
 
@@ -270,6 +421,23 @@ function createLayerPaint(width: number, height: number, layer: PhotoFilterLayer
   return paint;
 }
 
+export function applyPhotoFilterLayerStack(
+  canvas: SkCanvas,
+  width: number,
+  height: number,
+  layers: PhotoFilterLayer[]
+) {
+  if (!layers.length) {
+    return;
+  }
+
+  const fullRect = Skia.XYWHRect(0, 0, width, height);
+  for (const layer of layers) {
+    const layerPaint = createLayerPaint(width, height, layer);
+    canvas.drawRect(fullRect, layerPaint);
+  }
+}
+
 export function applyPhotoFilterToCanvas(
   canvas: SkCanvas,
   sourceImage: SkImage,
@@ -280,26 +448,17 @@ export function applyPhotoFilterToCanvas(
   const imagePaint = Skia.Paint();
   imagePaint.setAntiAlias(true);
   imagePaint.setDither(true);
-  imagePaint.setColorFilter(Skia.ColorFilter.MakeMatrix(preset.matrix));
+  imagePaint.setColorFilter(Skia.ColorFilter.MakeMatrix(preset.renderMatrix));
 
   canvas.drawImage(sourceImage, 0, 0, imagePaint);
-
-  if (!preset.layers?.length) {
-    return;
-  }
-
-  const fullRect = Skia.XYWHRect(0, 0, width, height);
-  for (const layer of preset.layers) {
-    const layerPaint = createLayerPaint(width, height, layer);
-    canvas.drawRect(fullRect, layerPaint);
-  }
+  applyPhotoFilterLayerStack(canvas, width, height, preset.renderLayers ?? preset.previewLayers);
 }
 
 async function getImageSize(sourceUri: string) {
   return await new Promise<{ width: number; height: number }>((resolve, reject) => {
     Image.getSize(
       sourceUri,
-      (width, height) => resolve({ width, height }),
+      (nextWidth, nextHeight) => resolve({ width: nextWidth, height: nextHeight }),
       reject
     );
   });

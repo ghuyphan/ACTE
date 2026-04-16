@@ -38,6 +38,8 @@ interface RecapCalendarGridProps {
 
 const DEFAULT_WEEKDAY_LABELS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 const COMPACT_COLUMN_WIDTH = 56;
+const PHOTO_FRAME_BORDER_COLOR = '#FFFFFF';
+const PHOTO_BACKING_COLOR = '#FFF7EA';
 
 const mergeStyles = (...styles: any[]) => styles;
 
@@ -220,112 +222,86 @@ const RecapCalendarDayCell = memo(function RecapCalendarDayCell({
                 )}
               >
                 {isPhotoMode ? (
-                  <View
-                    style={mergeStyles(
-                      styles.photoDayShell,
-                      compact ? styles.photoDayShellCompact : null
-                    )}
-                  >
-                    <View
-                      style={mergeStyles(
-                        styles.photoDayMediaArea,
-                        compact ? styles.photoDayMediaAreaCompact : null
-                      )}
-                    >
-                      {photoPreviewUris[1] ? (
+                  <>
+                    {photoPreviewUris[1] ? (
+                      <View
+                        style={mergeStyles(
+                          styles.photoStackWrap,
+                          compact ? styles.photoStackWrapCompact : null
+                        )}
+                      >
                         <View
                           style={mergeStyles(
-                            styles.photoStackWrap,
-                            compact ? styles.photoStackWrapCompact : null
+                            styles.photoStackBackFrame,
+                            compact ? styles.photoStackBackFrameCompact : null,
+                            {
+                              borderColor: PHOTO_FRAME_BORDER_COLOR,
+                              backgroundColor: PHOTO_BACKING_COLOR,
+                              transform: [{ rotate: '6deg' }],
+                            }
+                          )}
+                        />
+                        <View
+                          testID={day.dateKey ? `notes-recap-day-secondary-photo-${day.dateKey}` : undefined}
+                          style={mergeStyles(
+                            styles.photoStackFrontFrame,
+                            compact ? styles.photoStackFrontFrameCompact : null,
+                            {
+                              borderColor: PHOTO_FRAME_BORDER_COLOR,
+                              backgroundColor: PHOTO_FRAME_BORDER_COLOR,
+                              transform: [{ rotate: '-8deg' }],
+                            }
                           )}
                         >
+                          <Image
+                            source={{ uri: primaryPhotoUri }}
+                            style={styles.photoStackImage}
+                            contentFit="cover"
+                          />
+                        </View>
+                        {overflowLabel ? (
                           <View
+                            pointerEvents="none"
                             style={mergeStyles(
-                              styles.photoStackBackFrame,
-                              compact ? styles.photoStackBackFrameCompact : null,
+                              styles.photoStackCountBadge,
+                              compact ? styles.photoStackCountBadgeCompact : null,
                               {
-                                borderColor: `${palette.card}F0`,
-                                backgroundColor: palette.card,
-                                transform: [{ rotate: '-7deg' }],
+                                backgroundColor: palette.primary,
+                                borderColor: palette.card,
                               }
                             )}
                           >
-                            <Image
-                              source={{ uri: photoPreviewUris[0] }}
-                              style={styles.photoStackImage}
-                              contentFit="cover"
-                            />
-                          </View>
-                          <View
-                            testID={day.dateKey ? `notes-recap-day-secondary-photo-${day.dateKey}` : undefined}
-                            style={mergeStyles(
-                              styles.photoStackFrontFrame,
-                              compact ? styles.photoStackFrontFrameCompact : null,
-                              {
-                                borderColor: `${palette.card}F8`,
-                                backgroundColor: palette.card,
-                                transform: [{ rotate: '6deg' }],
-                              }
-                            )}
-                          >
-                            <Image
-                              source={{ uri: photoPreviewUris[1] }}
-                              style={styles.photoStackImage}
-                              contentFit="cover"
-                            />
-                          </View>
-                          {overflowLabel ? (
-                            <View
-                              pointerEvents="none"
+                            <Text
                               style={mergeStyles(
-                                styles.photoStackCountBadge,
-                                compact ? styles.photoStackCountBadgeCompact : null,
-                                {
-                                  backgroundColor: palette.primary,
-                                  borderColor: `${palette.card}F0`,
-                                }
+                                styles.photoStackCountText,
+                                compact ? styles.photoStackCountTextCompact : null
                               )}
                             >
-                              <Text
-                                style={mergeStyles(
-                                  styles.photoStackCountText,
-                                  compact ? styles.photoStackCountTextCompact : null
-                                )}
-                              >
-                                {overflowLabel}
-                              </Text>
-                            </View>
-                          ) : null}
-                        </View>
-                      ) : (
-                        <View
-                          style={mergeStyles(
-                            styles.photoSingleWrap,
-                            compact ? styles.photoSingleWrapCompact : null
-                          )}
-                        >
-                          <View
-                            style={mergeStyles(
-                              styles.photoSingleFrame,
-                              compact ? styles.photoSingleFrameCompact : null,
-                              {
-                                borderColor: `${palette.card}F2`,
-                                backgroundColor: palette.card,
-                                transform: [{ rotate: '-4deg' }],
-                              }
-                            )}
-                          >
-                            <Image
-                              source={{ uri: primaryPhotoUri }}
-                              style={styles.photoStackImage}
-                              contentFit="cover"
-                            />
+                              {overflowLabel}
+                            </Text>
                           </View>
-                          {overflowLabel ? floatingOverflowBadge : null}
-                        </View>
-                      )}
-                    </View>
-                  </View>
+                        ) : null}
+                      </View>
+                    ) : (
+                      <View
+                        style={mergeStyles(
+                          styles.photoSingleFrame,
+                          compact ? styles.photoSingleFrameCompact : null,
+                          {
+                            borderColor: PHOTO_FRAME_BORDER_COLOR,
+                            backgroundColor: PHOTO_FRAME_BORDER_COLOR,
+                          }
+                        )}
+                      >
+                        <Image
+                          source={{ uri: primaryPhotoUri }}
+                          style={styles.photoStackImage}
+                          contentFit="cover"
+                        />
+                        {overflowLabel ? floatingOverflowBadge : null}
+                      </View>
+                    )}
+                  </>
                 ) : contentMode === 'text' ? (
                   <>
                     {floatingOverflowBadge}
@@ -652,43 +628,6 @@ const styles = StyleSheet.create({
   dayTileEmpty: {
     overflow: 'hidden',
   },
-  dayCard: {
-    minHeight: 56,
-    borderRadius: 21,
-    borderCurve: 'continuous',
-    borderWidth: StyleSheet.hairlineWidth,
-    paddingHorizontal: 8,
-    paddingVertical: 7,
-    gap: 6,
-    justifyContent: 'space-between',
-    overflow: 'hidden',
-  },
-  dayCardCompact: {
-    minHeight: 52,
-    borderRadius: 18,
-    paddingHorizontal: 6,
-    paddingVertical: 5,
-    gap: 4,
-  },
-  dayCardPhoto: {
-    paddingHorizontal: 0,
-    paddingVertical: 0,
-  },
-  dayCardPhotoCompact: {
-    paddingHorizontal: 0,
-    paddingVertical: 0,
-  },
-  dayCardTextOnly: {
-    paddingHorizontal: 0,
-    paddingVertical: 0,
-  },
-  dayCardTextOnlyCompact: {
-    paddingHorizontal: 0,
-    paddingVertical: 0,
-  },
-  dayCardEmpty: {
-    justifyContent: 'center',
-  },
   dayFrame: {
     flex: 1,
     position: 'relative',
@@ -715,142 +654,67 @@ const styles = StyleSheet.create({
   emptySlot: {
     minHeight: 76,
   },
-  dayPhotoFill: {
-    ...StyleSheet.absoluteFillObject,
-  },
-  dayPhotoOverlay: {
-    ...StyleSheet.absoluteFillObject,
-  },
-  photoDayShell: {
-    minHeight: 56,
-    position: 'relative',
-  },
-  photoDayShellCompact: {
-    minHeight: 52,
-  },
-  photoSelectionHalo: {
-    position: 'absolute',
-    top: 2,
-    left: 5,
-    right: 5,
-    height: 42,
-    borderRadius: 18,
-    borderWidth: 2.5,
-  },
-  photoSelectionHaloCompact: {
-    top: 2,
-    left: 4,
-    right: 4,
-    height: 38,
-    borderRadius: 16,
-    borderWidth: 2,
-  },
-  photoDayMediaArea: {
-    position: 'absolute',
-    top: 12,
-    left: 0,
-    right: 0,
-    height: 38,
-    width: '100%',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  photoDayMediaAreaCompact: {
-    height: 34,
-  },
-  photoSingleWrap: {
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  photoSingleWrapCompact: {},
   photoSingleFrame: {
-    width: 42,
-    height: 42,
-    borderRadius: 13,
+    width: '100%',
+    height: '100%',
+    borderRadius: 18,
     borderCurve: 'continuous',
     borderWidth: 1.5,
     padding: 1.5,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.12,
-    shadowRadius: 5,
-    elevation: 3,
+    overflow: 'hidden',
   },
   photoSingleFrameCompact: {
-    width: 38,
-    height: 38,
-    borderRadius: 12,
-    padding: 1,
+    borderRadius: 16,
   },
   photoStackWrap: {
-    width: 60,
-    height: 42,
+    width: '100%',
+    height: '100%',
     alignItems: 'center',
     justifyContent: 'center',
   },
   photoStackWrapCompact: {
-    width: 54,
-    height: 38,
   },
   photoStackBackFrame: {
     position: 'absolute',
-    top: 2,
-    left: 4,
-    width: 34,
-    height: 34,
-    borderRadius: 11,
+    top: 1,
+    right: -1,
+    width: '86%',
+    height: '86%',
+    borderRadius: 16,
     borderCurve: 'continuous',
     borderWidth: 1.5,
     padding: 1.5,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.12,
-    shadowRadius: 5,
-    elevation: 3,
+    overflow: 'hidden',
   },
   photoStackBackFrameCompact: {
-    top: 2,
-    left: 3,
-    width: 30,
-    height: 30,
-    borderRadius: 10,
-    padding: 1,
+    borderRadius: 14,
   },
   photoStackFrontFrame: {
     position: 'absolute',
-    top: 9,
-    left: 22,
-    width: 34,
-    height: 34,
-    borderRadius: 11,
+    top: 1,
+    left: 0,
+    width: '88%',
+    height: '88%',
+    borderRadius: 16,
     borderCurve: 'continuous',
     borderWidth: 1.5,
     padding: 1.5,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.12,
-    shadowRadius: 5,
-    elevation: 4,
+    overflow: 'hidden',
   },
   photoStackFrontFrameCompact: {
-    top: 8,
-    left: 19,
-    width: 30,
-    height: 30,
-    borderRadius: 10,
-    padding: 1,
+    borderRadius: 14,
   },
   photoStackImage: {
     width: '100%',
     height: '100%',
-    borderRadius: 8,
+    borderRadius: 12,
   },
   photoStackCountBadge: {
     position: 'absolute',
-    top: -2,
-    left: 38,
-    minWidth: 20,
-    height: 20,
+    top: -3,
+    right: -2,
+    minWidth: 18,
+    height: 18,
     borderRadius: 10,
     paddingHorizontal: 4,
     alignItems: 'center',
@@ -858,15 +722,15 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.12,
-    shadowRadius: 4,
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
     elevation: 2,
   },
   photoStackCountBadgeCompact: {
-    top: -1,
-    left: 33,
-    minWidth: 18,
-    height: 18,
+    top: -2,
+    right: -1,
+    minWidth: 16,
+    height: 16,
     borderRadius: 9,
     paddingHorizontal: 3,
   },
@@ -882,120 +746,46 @@ const styles = StyleSheet.create({
     fontSize: 8,
     lineHeight: 9,
   },
-  dayBody: {
-    flex: 1,
-    justifyContent: 'center',
-    paddingTop: 14,
-  },
-  dayBodyCompact: {
-    paddingTop: 12,
-  },
-  dayBodyNoDayLabel: {
-    paddingTop: 0,
-  },
-  dayBodyNoDayLabelCompact: {
-    paddingTop: 0,
-  },
-  dayBodyPhoto: {
-    paddingTop: 18,
-    paddingBottom: 4,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  dayBodyPhotoCompact: {
-    paddingTop: 16,
-    paddingBottom: 3,
-  },
-  dayBodyTextOnly: {
-    flex: 1,
-    paddingTop: 0,
-    justifyContent: 'center',
-    alignItems: 'stretch',
-  },
-  dayNumber: {
-    position: 'absolute',
-    top: 7,
-    left: 12,
-    right: 12,
-    fontSize: 15,
-    lineHeight: 18,
-    fontWeight: '800',
-    fontFamily: 'Noto Sans',
-    textAlign: 'left',
-    includeFontPadding: false,
-    zIndex: 4,
-    textShadowColor: 'rgba(0,0,0,0.16)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 3,
-  },
-  dayNumberCompact: {
-    top: 6,
-    left: 10,
-    right: 10,
-    fontSize: 14,
-    lineHeight: 16,
-  },
-  dayNumberEmpty: {
-    textShadowColor: 'transparent',
-    textShadowRadius: 0,
-  },
   dayOverflowBadge: {
     position: 'absolute',
-    top: 5,
-    right: 5,
-    minWidth: 24,
-    maxWidth: 34,
-    height: 24,
-    borderRadius: 12,
-    paddingHorizontal: 5,
+    top: -4,
+    right: -4,
+    minWidth: 18,
+    maxWidth: 28,
+    height: 18,
+    borderRadius: 9,
+    paddingHorizontal: 4,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1.5,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.12,
-    shadowRadius: 4,
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
     elevation: 2,
     zIndex: 5,
   },
   dayOverflowBadgeCompact: {
-    top: 4,
-    right: 4,
-    minWidth: 22,
-    maxWidth: 30,
-    height: 22,
-    borderRadius: 11,
-    paddingHorizontal: 4,
+    top: -3,
+    right: -3,
+    minWidth: 16,
+    maxWidth: 24,
+    height: 16,
+    borderRadius: 8,
+    paddingHorizontal: 3,
   },
   dayOverflowBadgeText: {
     ...Typography.pill,
-    fontSize: 10,
-    lineHeight: 11,
+    fontSize: 8,
+    lineHeight: 9,
     fontWeight: '800',
     color: '#FFFFFF',
     includeFontPadding: false,
     maxWidth: '100%',
   },
   dayOverflowBadgeTextCompact: {
-    fontSize: 9,
-    lineHeight: 10,
-  },
-  photoDayNumber: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    ...Typography.pill,
-    fontSize: 15,
-    lineHeight: 18,
-    fontWeight: '800',
-    fontFamily: 'Noto Sans',
-    textAlign: 'center',
-    includeFontPadding: false,
-  },
-  photoDayNumberCompact: {
-    fontSize: 14,
-    lineHeight: 16,
+    fontSize: 7,
+    lineHeight: 8,
   },
   markerRow: {
     flexDirection: 'row',
@@ -1012,19 +802,19 @@ const styles = StyleSheet.create({
     flex: 1,
     width: '100%',
     height: '100%',
-    borderRadius: 21,
+    borderRadius: 16,
     borderCurve: 'continuous',
     borderWidth: StyleSheet.hairlineWidth,
     paddingHorizontal: 9,
-    paddingTop: 24,
-    paddingBottom: 7,
+    paddingTop: 8,
+    paddingBottom: 8,
     justifyContent: 'space-between',
   },
   textDaySheetCompact: {
-    borderRadius: 18,
+    borderRadius: 14,
     paddingHorizontal: 7,
-    paddingTop: 21,
-    paddingBottom: 5,
+    paddingTop: 7,
+    paddingBottom: 7,
   },
   textDaySheetContentOnly: {
     paddingTop: 9,
@@ -1114,14 +904,14 @@ const styles = StyleSheet.create({
     gap: 3,
   },
   emptyDayPill: {
-    width: 100,
-    height: 100,
+    width: 48,
+    height: 48,
     borderRadius: 18,
-    transform: [{ scale: 0.48 }],
   },
   emptyDayPillCompact: {
+    width: 44,
+    height: 44,
     borderRadius: 16,
-    transform: [{ scale: 0.44 }],
   },
   dayMeta: {
     minHeight: 22,

@@ -90,13 +90,24 @@ function formatRecapDayLabel(date: Date, locale: string) {
   }).format(date);
 }
 
-function buildWeekdayLabels(locale: string) {
-  const formatter = new Intl.DateTimeFormat(locale, { weekday: 'narrow' });
-  const sunday = new Date(2026, 2, 1);
+function isVietnameseLocale(locale: string) {
+  return locale.startsWith('vi');
+}
 
-  return Array.from({ length: 7 }, (_, index) =>
-    formatter.format(new Date(sunday.getFullYear(), sunday.getMonth(), sunday.getDate() + index))
-  );
+function buildWeekdayLabels(locale: string) {
+  if (isVietnameseLocale(locale)) {
+    return ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'];
+  }
+
+  return ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+}
+
+function getLocaleWeekdayIndex(weekdayIndex: number, locale: string) {
+  if (isVietnameseLocale(locale)) {
+    return (weekdayIndex + 6) % 7;
+  }
+
+  return weekdayIndex;
 }
 
 function buildPhotoPileItemsFromNotes(notes: Note[], keyPrefix: string) {
@@ -375,7 +386,7 @@ export function useNotesRecapViewModel({
     }
 
     const placeholderDays: RecapCalendarDay[] = [];
-    const firstWeekdayIndex = activeRecap.days[0]?.weekdayIndex ?? 0;
+    const firstWeekdayIndex = getLocaleWeekdayIndex(activeRecap.days[0]?.weekdayIndex ?? 0, locale);
 
     for (let index = 0; index < firstWeekdayIndex; index += 1) {
       placeholderDays.push({

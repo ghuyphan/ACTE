@@ -1,23 +1,9 @@
 import { memo, useMemo } from 'react';
-import {
-  Canvas,
-  ColorMatrix,
-  FractalNoise,
-  Group,
-  Image as SkiaImage,
-  LinearGradient,
-  Paint,
-  RadialGradient,
-  Rect,
-  useImage as useSkiaImage,
-} from '@shopify/react-native-skia';
+import { Canvas, ColorMatrix, Group, Image as SkiaImage, Paint, useImage as useSkiaImage } from '@shopify/react-native-skia';
 import { Image } from 'expo-image';
 import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
-import {
-  getPhotoFilterPreset,
-  type PhotoFilterId,
-  type PhotoFilterLayer,
-} from '../../../services/photoFilters';
+import { getPhotoFilterPreset, type PhotoFilterId } from '../../../services/photoFilters';
+import { PhotoFilterLayerStack } from './PhotoFilterLayerStack';
 
 export type FilteredPhotoCanvasProps = {
   sourceUri: string;
@@ -38,87 +24,7 @@ export const FilteredPhotoCanvas = memo(function FilteredPhotoCanvas({
 }: FilteredPhotoCanvasProps) {
   const image = useSkiaImage(sourceUri);
   const filterPreset = useMemo(() => getPhotoFilterPreset(filterId), [filterId]);
-  const filterLayers = filterPreset.layers ?? [];
-
-  const renderFilterLayer = (layer: PhotoFilterLayer, index: number) => {
-    if (layer.type === 'solid') {
-      return (
-        <Rect
-          key={`filter-layer-${index}`}
-          x={0}
-          y={0}
-          width={width}
-          height={height}
-          color={layer.color}
-          opacity={layer.opacity}
-          blendMode={layer.blendMode}
-        />
-      );
-    }
-
-    if (layer.type === 'linearGradient') {
-      return (
-        <Rect
-          key={`filter-layer-${index}`}
-          x={0}
-          y={0}
-          width={width}
-          height={height}
-          opacity={layer.opacity}
-          blendMode={layer.blendMode}
-        >
-          <LinearGradient
-            start={{ x: width * layer.start.x, y: height * layer.start.y }}
-            end={{ x: width * layer.end.x, y: height * layer.end.y }}
-            colors={layer.colors}
-            positions={layer.positions}
-          />
-        </Rect>
-      );
-    }
-
-    if (layer.type === 'radialGradient') {
-      return (
-        <Rect
-          key={`filter-layer-${index}`}
-          x={0}
-          y={0}
-          width={width}
-          height={height}
-          opacity={layer.opacity}
-          blendMode={layer.blendMode}
-        >
-          <RadialGradient
-            c={{ x: width * layer.center.x, y: height * layer.center.y }}
-            r={Math.max(width, height) * layer.radius}
-            colors={layer.colors}
-            positions={layer.positions}
-          />
-        </Rect>
-      );
-    }
-
-    return (
-      <Rect
-        key={`filter-layer-${index}`}
-        x={0}
-        y={0}
-        width={width}
-        height={height}
-        opacity={layer.opacity}
-        blendMode={layer.blendMode}
-      >
-        <FractalNoise
-          freqX={layer.freqX}
-          freqY={layer.freqY}
-          octaves={layer.octaves}
-          seed={layer.seed}
-          tileWidth={Math.max(96, width * layer.tileScale)}
-          tileHeight={Math.max(96, height * layer.tileScale)}
-        />
-      </Rect>
-    );
-  };
+  const renderLayers = filterPreset.renderLayers ?? filterPreset.previewLayers;
 
   return (
     <View style={style}>
@@ -139,7 +45,7 @@ export const FilteredPhotoCanvas = memo(function FilteredPhotoCanvas({
                 ? undefined
                 : (
                   <Paint>
-                    <ColorMatrix matrix={filterPreset.matrix} />
+                    <ColorMatrix matrix={filterPreset.renderMatrix} />
                   </Paint>
                 )
             }
@@ -153,7 +59,7 @@ export const FilteredPhotoCanvas = memo(function FilteredPhotoCanvas({
               fit="cover"
             />
           </Group>
-          {filterLayers.map(renderFilterLayer)}
+          <PhotoFilterLayerStack width={width} height={height} layers={renderLayers} />
         </Canvas>
       ) : null}
     </View>

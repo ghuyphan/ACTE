@@ -1,9 +1,10 @@
-import { Ionicons } from '@expo/vector-icons';
 import type { TFunction } from 'i18next';
-import { ActivityIndicator, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
+import type { PhotoFilterId } from '../../../services/photoFilters';
 import type { CaptureCardColors } from './captureShared';
-import { CaptureAnimatedPressable } from './CaptureAnimatedPressable';
+import { CaptureGlassActionButton } from './CaptureGlassActionButton';
 import { CaptureControlRail } from './CaptureControlRail';
+import { PhotoFilterPicker } from './PhotoFilterPicker';
 import { styles } from './captureCardStyles';
 import { getGlassSurfacePalette } from '../../ui/glassTokens';
 import LivePhotoIcon from '../../ui/LivePhotoIcon';
@@ -13,8 +14,12 @@ interface LiveCameraActionBarProps {
   colors: CaptureCardColors;
   importingPhoto: boolean;
   libraryImportLocked: boolean;
+  lockedPhotoFilterIds?: PhotoFilterId[];
   needsCameraPermission: boolean;
+  onChangePhotoFilter: (filterId: PhotoFilterId) => void;
   onOpenPhotoLibrary: () => void;
+  onPressLockedPhotoFilter?: (filterId: PhotoFilterId) => void;
+  selectedPhotoFilterId: PhotoFilterId;
   t: TFunction;
 }
 
@@ -23,8 +28,12 @@ export function LiveCameraActionBar({
   colors,
   importingPhoto,
   libraryImportLocked,
+  lockedPhotoFilterIds = [],
   needsCameraPermission,
+  onChangePhotoFilter,
   onOpenPhotoLibrary,
+  onPressLockedPhotoFilter,
+  selectedPhotoFilterId,
   t,
 }: LiveCameraActionBarProps) {
   if (needsCameraPermission) {
@@ -39,49 +48,43 @@ export function LiveCameraActionBar({
 
   return (
     <View style={styles.captureActionBarWrap}>
+      {showLivePhotoGuide ? (
+        <View style={styles.cameraActionHintWrap}>
+          <LivePhotoIcon size={15} color={colors.captureGlassText} />
+          <Text style={[styles.cameraActionHintText, { color: colors.captureGlassText }]}>
+            {t('capture.livePhotoCoachLiveHint', 'Hold for live photo')}
+          </Text>
+        </View>
+      ) : null}
       <CaptureControlRail borderColor={colors.captureCardBorder} colors={colors}>
-        {showLivePhotoGuide ? (
-          <View style={styles.cameraActionHintWrap}>
-            <LivePhotoIcon size={15} color={colors.captureGlassText} />
-            <Text style={[styles.cameraActionHintText, { color: colors.captureGlassText }]}>
-              {t('capture.livePhotoCoachLiveHint', 'Hold for live photo')}
-            </Text>
+        <View style={styles.liveCameraActionRow}>
+          <View style={styles.liveCameraFilterRail}>
+            <PhotoFilterPicker
+              colors={colors}
+              lockedFilterIds={lockedPhotoFilterIds}
+              onSelectFilter={onChangePhotoFilter}
+              onPressLockedFilter={onPressLockedPhotoFilter}
+              selectedFilterId={selectedPhotoFilterId}
+              t={t}
+            />
           </View>
-        ) : null}
-        <CaptureAnimatedPressable
-          testID="capture-library-button"
-          accessibilityLabel={
-            libraryImportLocked
-              ? t('capture.plusLibraryLocked', 'Plus')
-              : t('capture.importPhoto', 'Photos')
-          }
-          onPress={onOpenPhotoLibrary}
-          active={importingPhoto}
-          activeScale={1.015}
-          activeTranslateY={0}
-          contentActiveScale={1}
-          style={[
-            styles.textCardActionPill,
-            styles.captureActionTextPill,
-            {
-              backgroundColor: glassPalette.subtleControlBackgroundColor,
-              borderColor: glassPalette.subtleControlBorderColor,
-            },
-          ]}
-        >
-          {importingPhoto ? (
-            <ActivityIndicator size="small" color={colors.captureGlassText} />
-          ) : (
-            <>
-              <Ionicons name="images-outline" size={16} color={colors.captureGlassText} />
-              <Text style={[styles.captureActionPillLabel, { color: colors.captureGlassText }]}>
-                {libraryImportLocked
-                  ? t('capture.plusLibraryLocked', 'Plus')
-                  : t('capture.importPhoto', 'Photos')}
-              </Text>
-            </>
-          )}
-        </CaptureAnimatedPressable>
+          <CaptureGlassActionButton
+            testID="capture-library-button"
+            accessibilityLabel={
+              libraryImportLocked
+                ? t('capture.plusLibraryLocked', 'Plus')
+                : t('capture.importPhoto', 'Photos')
+            }
+            onPress={onOpenPhotoLibrary}
+            disabled={importingPhoto}
+            iconName="images-outline"
+            iconColor={colors.captureGlassText}
+            glassColorScheme={colors.captureGlassColorScheme}
+            fallbackColor={glassPalette.controlBackgroundColor}
+            borderColor={glassPalette.controlBorderColor}
+            style={styles.liveCameraLibraryButton}
+          />
+        </View>
       </CaptureControlRail>
     </View>
   );
