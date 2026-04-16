@@ -9,6 +9,7 @@ export interface DoodleColorPaletteProps {
   onSelectColor: (color: string) => void;
   buttonBackgroundColor: string;
   buttonBorderColor: string;
+  selectedBackgroundColor: string;
   selectedBorderColor: string;
   swatchBorderColor: string;
   testIDPrefix: string;
@@ -20,6 +21,7 @@ export const DoodleColorPalette = memo(function DoodleColorPalette({
   onSelectColor,
   buttonBackgroundColor,
   buttonBorderColor,
+  selectedBackgroundColor,
   selectedBorderColor,
   swatchBorderColor,
   testIDPrefix,
@@ -45,15 +47,16 @@ export const DoodleColorPalette = memo(function DoodleColorPalette({
               accessibilityLabel={`Doodle color ${index + 1}`}
               onPress={() => onSelectColor(color)}
               active={isSelected}
-              activeScale={1}
-              activeTranslateY={0}
-              contentActiveScale={1}
-              contentActiveTranslateY={0}
+              activeScale={1.035}
+              activeTranslateY={-1.5}
+              contentActiveScale={1.06}
+              contentActiveTranslateY={-0.5}
               style={[
                 styles.doodleColorButton,
                 {
-                  backgroundColor: buttonBackgroundColor,
+                  backgroundColor: isSelected ? selectedBackgroundColor : buttonBackgroundColor,
                   borderColor: isSelected ? selectedBorderColor : buttonBorderColor,
+                  borderWidth: isSelected ? 1 : undefined,
                 },
               ]}
             >
@@ -62,7 +65,10 @@ export const DoodleColorPalette = memo(function DoodleColorPalette({
                   styles.doodleColorSwatch,
                   {
                     backgroundColor: color,
-                    borderColor: color.toUpperCase() === '#FFFFFF' ? swatchBorderColor : 'transparent',
+                    borderColor:
+                      color.toUpperCase() === '#FFFFFF'
+                        ? swatchBorderColor
+                        : 'transparent',
                   },
                 ]}
               />

@@ -1038,12 +1038,24 @@ describe('CaptureCard doodle handle', () => {
     });
 
     expect(getByTestId('mock-doodle-active-color')).toHaveTextContent('#1C1C1E');
+    expect(getByTestId('capture-doodle-color-0').props.accessibilityState).toEqual({
+      selected: true,
+    });
+    expect(getByTestId('capture-doodle-color-2').props.accessibilityState).toEqual({
+      selected: false,
+    });
 
     act(() => {
       fireEvent.press(getByTestId('capture-doodle-color-2'));
     });
 
     expect(getByTestId('mock-doodle-active-color')).toHaveTextContent('#FFC107');
+    expect(getByTestId('capture-doodle-color-0').props.accessibilityState).toEqual({
+      selected: false,
+    });
+    expect(getByTestId('capture-doodle-color-2').props.accessibilityState).toEqual({
+      selected: true,
+    });
 
     act(() => {
       fireEvent.press(getByTestId('mock-doodle-commit'));
@@ -2011,51 +2023,6 @@ describe('CaptureCard doodle handle', () => {
 
     expect(mockCreateStickerImportSourceFromSubjectCutout).not.toHaveBeenCalled();
     expect(mockCleanupSubjectCutoutImportSource).toHaveBeenCalledWith(null);
-  });
-
-  it('does not lock parent scrolling just by opening sticker edit mode', () => {
-    const ref = React.createRef<CaptureCardHandle>();
-    const onDoodleModeChange = jest.fn();
-    const onInteractionLockChange = jest.fn();
-    const { getByTestId } = renderCaptureCard(ref, {
-      noteText: '',
-      onDoodleModeChange,
-      onInteractionLockChange,
-    });
-
-    act(() => {
-      fireEvent.press(getByTestId('capture-sticker-toggle'));
-    });
-
-    expect(onDoodleModeChange).toHaveBeenLastCalledWith(true);
-    expect(onInteractionLockChange).not.toHaveBeenCalledWith(true);
-  });
-
-  it('locks parent scrolling only while a doodle gesture is active', () => {
-    const ref = React.createRef<CaptureCardHandle>();
-    const onInteractionLockChange = jest.fn();
-    const { getByTestId } = renderCaptureCard(ref, {
-      noteText: '',
-      onInteractionLockChange,
-    });
-
-    act(() => {
-      fireEvent.press(getByTestId('capture-doodle-toggle'));
-    });
-
-    expect(onInteractionLockChange).not.toHaveBeenCalledWith(true);
-
-    act(() => {
-      fireEvent.press(getByTestId('mock-doodle-gesture-start'));
-    });
-
-    expect(onInteractionLockChange).toHaveBeenLastCalledWith(true);
-
-    act(() => {
-      fireEvent.press(getByTestId('mock-doodle-gesture-end'));
-    });
-
-    expect(onInteractionLockChange).toHaveBeenLastCalledWith(false);
   });
 
   it('clears sticker selection first, then exits sticker mode on empty-card taps', async () => {

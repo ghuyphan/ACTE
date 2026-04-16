@@ -32,7 +32,7 @@ SplashScreen.preventAutoHideAsync();
 
 function AppContent() {
   const { colors, isDark, themeReady } = useTheme();
-  const { initialLoadComplete } = useNotesStore();
+  const { phase: notesPhase } = useNotesStore();
   const { t } = useTranslation();
   const {
     isDatabaseReady,
@@ -48,7 +48,7 @@ function AppContent() {
   useAppSplashGate({
     isDatabaseReady,
     isStartupRouteReady,
-    notesReady: initialLoadComplete,
+    notesReady: notesPhase === 'ready' || notesPhase === 'refreshing',
     startupError,
     themeReady,
   });

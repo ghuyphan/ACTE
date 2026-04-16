@@ -267,7 +267,6 @@ export default function HomeScreen() {
   const [appState, setAppState] = useState(AppState.currentState);
   const [isCaptureTextEntryFocused, setIsCaptureTextEntryFocused] = useState(false);
   const [lockedCaptureSnapHeight, setLockedCaptureSnapHeight] = useState<number | null>(null);
-  const [captureInteractionScrollLocked, setCaptureInteractionScrollLocked] = useState(false);
   const [isCaptureVisible, setIsCaptureVisible] = useState(true);
   const [isCaptureScrollSettled, setIsCaptureScrollSettled] = useState(true);
   const [settledSharedButtonMode, setSettledSharedButtonMode] = useState<'manage' | 'filter'>('manage');
@@ -2173,7 +2172,6 @@ export default function HomeScreen() {
   const handleToggleCaptureMode = useCallback(() => {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     captureCardRef.current?.closeDecorateControls();
-    setCaptureInteractionScrollLocked(false);
     flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
     toggleCaptureMode();
   }, [toggleCaptureMode]);
@@ -2302,7 +2300,6 @@ export default function HomeScreen() {
           onChangeRadius={setRadius}
           shareTarget={captureTarget}
           onChangeShareTarget={handleCaptureTargetChange}
-          onInteractionLockChange={setCaptureInteractionScrollLocked}
           onTextEntryFocusChange={handleCaptureTextEntryFocusChange}
           footerContent={captureFooterContent}
         />
@@ -2395,8 +2392,8 @@ export default function HomeScreen() {
           onCaptureScrollSettledChange={setIsCaptureScrollSettled}
           onInitialContentDraw={markHomeFeedReady}
           scrollEnabled={
-            !captureInteractionScrollLocked &&
-            !isCaptureTextEntryFocused
+            !isCaptureTextEntryFocused &&
+            !isLivePhotoCaptureInProgress
           }
           capturePageLocked={shouldLockCapturePage}
         />

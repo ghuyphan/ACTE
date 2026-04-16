@@ -65,6 +65,7 @@ export function useHomeFeedViewModel({
 }: UseHomeFeedViewModelParams): UseHomeFeedViewModelResult {
   const currentUserUid = userUid ?? null;
   const previousUserUidRef = useRef<string | null>(currentUserUid);
+  const previousDebugSnapshotRef = useRef<string | null>(null);
   const notesInitialLoadComplete = notesPhase !== 'bootstrapping';
   const notesLoading = notesPhase === 'bootstrapping' || notesPhase === 'hydrating';
   const sharedInitialLoadComplete =
@@ -224,6 +225,47 @@ export function useHomeFeedViewModel({
   useEffect(() => {
     previousUserUidRef.current = currentUserUid;
   }, [currentUserUid]);
+
+  useEffect(() => {
+    if (!__DEV__) {
+      return;
+    }
+
+    const snapshot = JSON.stringify({
+      currentUserUid,
+      notesPhase,
+      sharedPhase,
+      syncBootstrapState,
+      notesCount: notes.length,
+      sharedPostsCount: sharedPosts.length,
+      homeFeedItemsCount: homeFeedItems.length,
+      visibleFeedItemsCount: visibleFeedItems.length,
+      bootstrapState,
+      feedMode,
+      hasNoSignedInContent,
+      isFriendsFilterActive,
+    });
+
+    if (previousDebugSnapshotRef.current === snapshot) {
+      return;
+    }
+
+    previousDebugSnapshotRef.current = snapshot;
+    console.log('[homeFeed] state changed', JSON.parse(snapshot));
+  }, [
+    bootstrapState,
+    currentUserUid,
+    feedMode,
+    hasNoSignedInContent,
+    homeFeedItems.length,
+    isFriendsFilterActive,
+    notes.length,
+    notesPhase,
+    sharedPhase,
+    sharedPosts.length,
+    syncBootstrapState,
+    visibleFeedItems.length,
+  ]);
 
   useEffect(() => {
     if (!notesInitialLoadComplete) {

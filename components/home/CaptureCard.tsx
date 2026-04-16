@@ -208,7 +208,6 @@ interface CaptureCardProps {
   shareTarget: 'private' | 'shared';
   onChangeShareTarget: (nextTarget: 'private' | 'shared') => void;
   onDoodleModeChange?: (enabled: boolean) => void;
-  onInteractionLockChange?: (locked: boolean) => void;
   onTextEntryFocusChange?: (focused: boolean) => void;
   footerContent?: ReactNode;
 }
@@ -272,7 +271,6 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   shareTarget,
   onChangeShareTarget,
   onDoodleModeChange,
-  onInteractionLockChange,
   onTextEntryFocusChange,
   footerContent,
 }, ref) {
@@ -296,8 +294,6 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   const [isPhotoCaptionFocused, setIsPhotoCaptionFocused] = useState(false);
   const [pendingPhotoReveal, setPendingPhotoReveal] = useState(false);
   const [shouldRenderCaptureCover, setShouldRenderCaptureCover] = useState(false);
-  const [canvasGestureActive, setCanvasGestureActive] = useState(false);
-  const [cameraGestureActive, setCameraGestureActive] = useState(false);
   const [stickerEntryAnimation, setStickerEntryAnimation] = useState<StickerEntryAnimation | null>(null);
   const previousCapturedPhotoRef = useRef(capturedPhoto);
   const previousTextDraftEmptyRef = useRef(noteText.length === 0);
@@ -344,6 +340,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
 
   const isCaptureTextEntryFocused = isTextEntryFocused || isPhotoCaptionFocused;
   const pageBottomInset = topInset + HOME_PAGE_VISUAL_BOTTOM_INSET;
+  const handleCanvasGestureActiveChange = useCallback((_active: boolean) => {}, []);
   const animateIosKeyboardLift = useCallback(
     (nextLift: number, duration?: number) => {
       const nextDuration = reduceMotionEnabled ? 0 : Math.max(120, Math.round(duration ?? 240));
@@ -707,7 +704,6 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
     t,
     cardSize: CARD_SIZE,
     livePhotoRingStrokeWidth: LIVE_PHOTO_RING_STROKE_WIDTH,
-    onCameraGestureActiveChange: setCameraGestureActive,
     onToggleFacing,
     onTakePicture,
     onShutterPressOut,
@@ -800,15 +796,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   useEffect(() => {
     closeDecorateControls();
     closeStickerOverlays();
-    setCanvasGestureActive(false);
-    setCameraGestureActive(false);
   }, [captureMode, capturedPhoto, closeDecorateControls, closeStickerOverlays]);
-
-  useEffect(() => {
-    if (!doodleModeEnabled && !stickerModeEnabled) {
-      setCanvasGestureActive(false);
-    }
-  }, [doodleModeEnabled, stickerModeEnabled]);
 
   useEffect(() => {
     const wasTextDraftEmpty = previousTextDraftEmptyRef.current;
@@ -826,17 +814,6 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
         (doodleModeEnabled || stickerModeEnabled)
     );
   }, [captureMode, capturedPhoto, doodleModeEnabled, onDoodleModeChange, stickerModeEnabled]);
-
-  useEffect(() => {
-    onInteractionLockChange?.(
-      canvasGestureActive || cameraGestureActive || isLivePhotoCaptureInProgress
-    );
-  }, [
-    canvasGestureActive,
-    cameraGestureActive,
-    isLivePhotoCaptureInProgress,
-    onInteractionLockChange,
-  ]);
 
   useEffect(() => {
     if (!isModeSwitchAnimating) {
@@ -1134,7 +1111,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
               noteInputRef={noteInputRef}
               noteColor={effectiveTextModeNoteColor}
               noteText={noteText}
-              onCanvasGestureActiveChange={setCanvasGestureActive}
+              onCanvasGestureActiveChange={handleCanvasGestureActiveChange}
               recentAutoEmoji={recentAutoEmoji}
               selectedStickerId={selectedStickerId}
               setTextDoodleStrokes={setTextDoodleStrokes}
@@ -1205,7 +1182,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                     interactionsDisabled={interactionsDisabled}
                     noteInputRef={noteInputRef}
                     noteText={noteText}
-                    onCanvasGestureActiveChange={setCanvasGestureActive}
+                    onCanvasGestureActiveChange={handleCanvasGestureActiveChange}
                     onChangeNoteText={onChangeNoteText}
                     onPhotoCaptionBlur={handlePhotoCaptionBlur}
                     onPhotoCaptionFocus={handlePhotoCaptionFocus}

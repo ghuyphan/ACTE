@@ -239,6 +239,7 @@ function CaptureDecorateRail({
             onSelectColor={handleSelectDoodleColor}
             buttonBackgroundColor={theme.paletteButtonBackgroundColor}
             buttonBorderColor={theme.paletteButtonBorderColor}
+            selectedBackgroundColor={theme.activeBackgroundColor}
             selectedBorderColor={theme.paletteSelectedBorderColor}
             swatchBorderColor={theme.paletteSwatchBorderColor}
             testIDPrefix="capture-doodle-color"
