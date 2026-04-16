@@ -116,6 +116,8 @@
         "cameraTryAgain": "Try Again",
         "draw": "Draw",
         "doneDrawing": "Done",
+        "filters": "Filters",
+        "doneFilters": "Done",
         "grantAccess": "Grant Access",
         "retake": "Retake",
         "importPhoto": "Photos",

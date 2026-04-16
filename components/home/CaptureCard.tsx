@@ -294,6 +294,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   const [isPhotoCaptionFocused, setIsPhotoCaptionFocused] = useState(false);
   const [pendingPhotoReveal, setPendingPhotoReveal] = useState(false);
   const [shouldRenderCaptureCover, setShouldRenderCaptureCover] = useState(false);
+  const [liveCameraFilterModeEnabled, setLiveCameraFilterModeEnabled] = useState(false);
   const [stickerEntryAnimation, setStickerEntryAnimation] = useState<StickerEntryAnimation | null>(null);
   const previousCapturedPhotoRef = useRef(capturedPhoto);
   const previousTextDraftEmptyRef = useRef(noteText.length === 0);
@@ -567,7 +568,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
     handleSelectSticker,
     handleShowCardPastePrompt,
     handleShowStickerSourceOptions,
-    handleToggleStickerMode,
+    handleToggleStickerMode: handleToggleStickerModeInternal,
     importingSticker,
     inlinePasteLoading,
     pastePrompt,
@@ -609,6 +610,18 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
       setStickerEntryAnimation(null);
     }
   }, [stickerEntryAnimation, stickerPlacements]);
+
+  useEffect(() => {
+    if (captureMode !== 'camera' || Boolean(capturedPhoto)) {
+      setLiveCameraFilterModeEnabled(false);
+    }
+  }, [captureMode, capturedPhoto]);
+
+  useEffect(() => {
+    if (doodleModeEnabled || stickerModeEnabled) {
+      setLiveCameraFilterModeEnabled(false);
+    }
+  }, [doodleModeEnabled, stickerModeEnabled]);
 
   const handleCompleteStampCutterPlacement = useCallback(
     ({
@@ -712,13 +725,32 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
 
   const handleToggleDoodleMode = useCallback(() => {
     dismissPastePrompt();
+    setLiveCameraFilterModeEnabled(false);
     toggleDoodleModeInternal();
   }, [dismissPastePrompt, toggleDoodleModeInternal]);
+
+  const handleToggleLiveCameraFilterMode = useCallback(() => {
+    dismissPastePrompt();
+    dismissCaptureInputs();
+    closeDecorateControls();
+    setLiveCameraFilterModeEnabled((current) => !current);
+  }, [closeDecorateControls, dismissCaptureInputs, dismissPastePrompt]);
+
+  const handleToggleStickerMode = useCallback(() => {
+    dismissPastePrompt();
+    setLiveCameraFilterModeEnabled(false);
+    handleToggleStickerModeInternal();
+  }, [dismissPastePrompt, handleToggleStickerModeInternal]);
 
   const handlePressStickerCanvas = useCallback(() => {
     dismissPastePrompt();
     handlePressStickerCanvasInternal();
   }, [dismissPastePrompt, handlePressStickerCanvasInternal]);
+
+  const handleCloseDecorateControls = useCallback(() => {
+    setLiveCameraFilterModeEnabled(false);
+    closeDecorateControls();
+  }, [closeDecorateControls]);
 
   const disableAndroidCaptureTransforms =
     Platform.OS === 'android' &&
@@ -794,9 +826,9 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   ]);
 
   useEffect(() => {
-    closeDecorateControls();
+    handleCloseDecorateControls();
     closeStickerOverlays();
-  }, [captureMode, capturedPhoto, closeDecorateControls, closeStickerOverlays]);
+  }, [captureMode, capturedPhoto, closeStickerOverlays, handleCloseDecorateControls]);
 
   useEffect(() => {
     const wasTextDraftEmpty = previousTextDraftEmptyRef.current;
@@ -820,9 +852,9 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
       return;
     }
 
-    closeDecorateControls();
+    handleCloseDecorateControls();
     closeStickerOverlays();
-  }, [closeDecorateControls, closeStickerOverlays, isModeSwitchAnimating]);
+  }, [closeStickerOverlays, handleCloseDecorateControls, isModeSwitchAnimating]);
 
   const handleSavePressIn = useCallback(() => {
     if (isSaveDisabled) {
@@ -857,14 +889,14 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
       }),
       resetDoodle,
       resetStickers,
-      closeDecorateControls,
+      closeDecorateControls: handleCloseDecorateControls,
       dismissInputs: dismissCaptureInputs,
     }),
     [
-      closeDecorateControls,
       dismissCaptureInputs,
       doodleModeEnabled,
       doodleStrokes,
+      handleCloseDecorateControls,
       resetDoodle,
       resetStickers,
       stickerModeEnabled,
@@ -1127,6 +1159,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                 <View style={styles.cameraSurfaceLayer}>
                   <LiveCameraSurface
                     cameraDevice={cameraDevice}
+                    cameraInstructionText={cameraInstructionText}
                     cameraFocusPoint={cameraFocusPoint}
                     cameraFocusRingAnimatedStyle={cameraFocusRingAnimatedStyle}
                     cameraKey={cameraKey}
@@ -1280,8 +1313,8 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                   style={styles.belowCardToolbarLayer}
                 >
                   <LiveCameraActionBar
-                    cameraInstructionText={cameraInstructionText}
                     colors={colors}
+                    filterModeEnabled={liveCameraFilterModeEnabled}
                     importingPhoto={importingPhoto}
                     libraryImportLocked={libraryImportLocked}
                     lockedPhotoFilterIds={lockedPhotoFilterIds}
@@ -1289,6 +1322,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                     onChangePhotoFilter={onChangePhotoFilter}
                     onOpenPhotoLibrary={onOpenPhotoLibrary}
                     onPressLockedPhotoFilter={onPressLockedPhotoFilter}
+                    onToggleFilterMode={handleToggleLiveCameraFilterMode}
                     selectedPhotoFilterId={selectedPhotoFilterId}
                     t={t}
                   />

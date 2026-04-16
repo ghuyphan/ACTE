@@ -1,17 +1,22 @@
 import type { TFunction } from 'i18next';
-import { ActivityIndicator, Text, View } from 'react-native';
+import { ActivityIndicator, View } from 'react-native';
 import type { PhotoFilterId } from '../../../services/photoFilters';
 import type { CaptureCardColors } from './captureShared';
 import { CaptureAnimatedPressable } from './CaptureAnimatedPressable';
 import { CaptureControlRail } from './CaptureControlRail';
+import { CaptureToggleIconButton } from './CaptureToggleIconButton';
 import { PhotoFilterPicker } from './PhotoFilterPicker';
-import { styles } from './captureCardStyles';
-import LivePhotoIcon from '../../ui/LivePhotoIcon';
 import { Ionicons } from '@expo/vector-icons';
+import { getGlassSurfacePalette } from '../../ui/glassTokens';
+import {
+  DECORATE_OPTION_ACTIVE_SCALE,
+  DECORATE_OPTION_CONTENT_SCALE,
+  styles,
+} from './captureCardStyles';
 
 interface LiveCameraActionBarProps {
-  cameraInstructionText?: string | null;
   colors: CaptureCardColors;
+  filterModeEnabled: boolean;
   importingPhoto: boolean;
   libraryImportLocked: boolean;
   lockedPhotoFilterIds?: PhotoFilterId[];
@@ -19,13 +24,14 @@ interface LiveCameraActionBarProps {
   onChangePhotoFilter: (filterId: PhotoFilterId) => void;
   onOpenPhotoLibrary: () => void;
   onPressLockedPhotoFilter?: (filterId: PhotoFilterId) => void;
+  onToggleFilterMode: () => void;
   selectedPhotoFilterId: PhotoFilterId;
   t: TFunction;
 }
 
 export function LiveCameraActionBar({
-  cameraInstructionText = null,
   colors,
+  filterModeEnabled,
   importingPhoto,
   libraryImportLocked,
   lockedPhotoFilterIds = [],
@@ -33,6 +39,7 @@ export function LiveCameraActionBar({
   onChangePhotoFilter,
   onOpenPhotoLibrary,
   onPressLockedPhotoFilter,
+  onToggleFilterMode,
   selectedPhotoFilterId,
   t,
 }: LiveCameraActionBarProps) {
@@ -40,30 +47,57 @@ export function LiveCameraActionBar({
     return null;
   }
 
-  const showLivePhotoGuide = Boolean(cameraInstructionText);
+  const glassPalette = getGlassSurfacePalette({
+    isDark: colors.captureGlassColorScheme === 'dark',
+    borderColor: colors.captureCardBorder,
+  });
+  const isFilterToggleActive = filterModeEnabled || selectedPhotoFilterId !== 'original';
 
   return (
     <View style={styles.captureActionBarWrap}>
-      {showLivePhotoGuide ? (
-        <View style={styles.cameraActionHintWrap}>
-          <LivePhotoIcon size={15} color={colors.captureGlassText} />
-          <Text style={[styles.cameraActionHintText, { color: colors.captureGlassText }]}>
-            {t('capture.livePhotoCoachLiveHint', 'Hold for live photo')}
-          </Text>
-        </View>
-      ) : null}
       <CaptureControlRail borderColor={colors.captureCardBorder} colors={colors}>
         <View style={styles.liveCameraActionRow}>
-          <View style={styles.liveCameraFilterRail}>
-            <PhotoFilterPicker
-              colors={colors}
-              lockedFilterIds={lockedPhotoFilterIds}
-              onSelectFilter={onChangePhotoFilter}
-              onPressLockedFilter={onPressLockedPhotoFilter}
-              selectedFilterId={selectedPhotoFilterId}
-              t={t}
-            />
-          </View>
+          <CaptureToggleIconButton
+            testID="capture-filter-toggle"
+            accessibilityLabel={
+              filterModeEnabled
+                ? t('capture.doneFilters', 'Done')
+                : t('capture.filters', 'Filters')
+            }
+            onPress={onToggleFilterMode}
+            active={isFilterToggleActive}
+            activeIconName="options-outline"
+            inactiveIconName="options-outline"
+            renderActiveIcon={({ color, size }) => (
+              <Ionicons name="color-filter-outline" size={size} color={color} />
+            )}
+            renderInactiveIcon={({ color, size }) => (
+              <Ionicons name="color-filter-outline" size={size} color={color} />
+            )}
+            activeBackgroundColor={glassPalette.activeControlBackgroundColor}
+            inactiveBackgroundColor="transparent"
+            activeBorderColor={glassPalette.controlBorderColor}
+            inactiveBorderColor="transparent"
+            activeIconColor={colors.captureGlassText}
+            inactiveIconColor={colors.captureGlassText}
+            activeScale={DECORATE_OPTION_ACTIVE_SCALE}
+            activeTranslateY={0}
+            contentActiveScale={DECORATE_OPTION_CONTENT_SCALE}
+            contentActiveTranslateY={0}
+            style={styles.textBottomToolsButton}
+          />
+          {filterModeEnabled ? (
+            <View style={styles.liveCameraFilterRail}>
+              <PhotoFilterPicker
+                colors={colors}
+                lockedFilterIds={lockedPhotoFilterIds}
+                onSelectFilter={onChangePhotoFilter}
+                onPressLockedFilter={onPressLockedPhotoFilter}
+                selectedFilterId={selectedPhotoFilterId}
+                t={t}
+              />
+            </View>
+          ) : null}
           <View
             pointerEvents="none"
             style={[

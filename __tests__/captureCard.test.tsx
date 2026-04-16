@@ -156,11 +156,20 @@ jest.mock('@shopify/react-native-skia', () => {
   const { View } = require('react-native');
 
   return {
+    BlendMode: {
+      SrcOver: 'srcOver',
+      Screen: 'screen',
+      SoftLight: 'softLight',
+      Multiply: 'multiply',
+    },
     BlendColor: ({ children }: any) => <>{children}</>,
     Canvas: ({ children, ...props }: any) => <View {...props}>{children}</View>,
     Circle: (props: any) => <View {...props} />,
     Group: ({ children }: any) => <>{children}</>,
     Image: (props: any) => <View {...props} />,
+    ImageFormat: {
+      PNG: 'png',
+    },
     Path: (props: any) => <View {...props} />,
     PathOp: {
       Difference: 'difference',
@@ -180,6 +189,9 @@ jest.mock('@shopify/react-native-skia', () => {
           op: jest.fn(),
         }),
       },
+    },
+    TileMode: {
+      Clamp: 'clamp',
     },
     useImage: jest.fn(() => ({ mock: 'image' })),
   };
@@ -921,34 +933,36 @@ describe('CaptureCard doodle handle', () => {
     }
   });
 
-  it('shows filter circles for captured photos and lets you choose one', () => {
+  it('shows live-camera filters only after expanding the filter controls', () => {
     const ref = React.createRef<CaptureCardHandle>();
     const onChangePhotoFilter = jest.fn();
-    const { getByTestId } = renderCaptureCard(ref, {
+    const { getByTestId, queryByTestId } = renderCaptureCard(ref, {
       captureMode: 'camera',
-      capturedPhoto: 'file:///captured-photo.jpg',
       selectedPhotoFilterId: 'original',
       onChangePhotoFilter,
     });
 
+    expect(queryByTestId('capture-filter-vivid')).toBeNull();
+
+    fireEvent.press(getByTestId('capture-filter-toggle'));
     fireEvent.press(getByTestId('capture-filter-vivid'));
 
     expect(onChangePhotoFilter).toHaveBeenCalledWith('vivid');
   });
 
-  it('routes locked filter taps through the premium action instead of selecting them', () => {
+  it('routes locked live-camera filters through the premium action instead of selecting them', () => {
     const ref = React.createRef<CaptureCardHandle>();
     const onChangePhotoFilter = jest.fn();
     const onPressLockedPhotoFilter = jest.fn();
     const { getByTestId } = renderCaptureCard(ref, {
       captureMode: 'camera',
-      capturedPhoto: 'file:///captured-photo.jpg',
       selectedPhotoFilterId: 'original',
       lockedPhotoFilterIds: ['vivid'],
       onChangePhotoFilter,
       onPressLockedPhotoFilter,
     });
 
+    fireEvent.press(getByTestId('capture-filter-toggle'));
     fireEvent.press(getByTestId('capture-filter-vivid'));
 
     expect(onChangePhotoFilter).not.toHaveBeenCalled();
@@ -986,18 +1000,19 @@ describe('CaptureCard doodle handle', () => {
 
     expect(getByLabelText('Preview live photo motion')).toBeTruthy();
     expect(queryByTestId('capture-filter-vivid')).toBeNull();
+    expect(queryByTestId('capture-filter-toggle')).toBeNull();
     expect(queryByTestId('capture-card-paste-surface')).toBeNull();
   });
 
   it('keeps the simplified camera action row without removing the footer controls', () => {
     const ref = React.createRef<CaptureCardHandle>();
-    const { getByText, getByTestId, queryByLabelText, queryByTestId } = renderCaptureCard(ref, {
+    const { getByTestId, queryByLabelText, queryByTestId } = renderCaptureCard(ref, {
       captureMode: 'camera',
       cameraInstructionText: 'Tap for a photo. Hold for a live photo.',
     });
 
     expect(queryByLabelText('Tap for a photo. Hold for a live photo.')).toBeNull();
-    expect(getByText('Hold for live photo')).toBeTruthy();
+    expect(getByTestId('capture-live-photo-guide')).toBeTruthy();
     expect(getByTestId('capture-library-button')).toBeTruthy();
     expect(getByTestId('capture-shutter-button')).toBeTruthy();
     expect(getByTestId('capture-share-target-toggle')).toBeTruthy();
@@ -1311,11 +1326,9 @@ describe('CaptureCard doodle handle', () => {
 
   it('restores captured-photo controls after closing doodle mode', () => {
     const ref = React.createRef<CaptureCardHandle>();
-    const onChangePhotoFilter = jest.fn();
     const view = renderCaptureCard(ref, {
       captureMode: 'camera',
       capturedPhoto: 'file:///photo.jpg',
-      onChangePhotoFilter,
     });
 
     act(() => {
@@ -1329,12 +1342,8 @@ describe('CaptureCard doodle handle', () => {
     });
 
     expect(view.queryByTestId('mock-doodle-editable')).toBeNull();
-
-    act(() => {
-      fireEvent.press(view.getByTestId('capture-filter-vivid'));
-    });
-
-    expect(onChangePhotoFilter).toHaveBeenCalledWith('vivid');
+    expect(view.queryByTestId('capture-filter-toggle')).toBeNull();
+    expect(view.queryByTestId('capture-filter-vivid')).toBeNull();
   });
 
   it('hides the share toggle while camera permission is required', () => {

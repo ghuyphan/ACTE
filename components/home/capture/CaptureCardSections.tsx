@@ -25,6 +25,7 @@ import PhotoMediaView from '../../notes/PhotoMediaView';
 import PremiumNoteFinishOverlay from '../../ui/PremiumNoteFinishOverlay';
 import PrimaryButton from '../../ui/PrimaryButton';
 import StickerPastePopover from '../../ui/StickerPastePopover';
+import LivePhotoIcon from '../../ui/LivePhotoIcon';
 import { FilteredPhotoCanvas } from './CaptureControls';
 import { LiveCameraFilterOverlay } from './LiveCameraFilterOverlay';
 import {
@@ -479,6 +480,7 @@ export function PhotoCaptureSurface({
 
 interface LiveCameraSurfaceProps {
   cameraDevice?: CameraDevice;
+  cameraInstructionText?: string | null;
   cameraFocusPoint: { x: number; y: number } | null;
   cameraFocusRingAnimatedStyle: CaptureCardAnimatedStyle;
   cameraKey: number | string;
@@ -512,6 +514,7 @@ interface LiveCameraSurfaceProps {
 
 export function LiveCameraSurface({
   cameraDevice,
+  cameraInstructionText = null,
   cameraFocusPoint,
   cameraFocusRingAnimatedStyle,
   cameraKey,
@@ -543,6 +546,11 @@ export function LiveCameraSurface({
   t,
 }: LiveCameraSurfaceProps) {
   const shouldShowZoomBadge = showCameraZoomBadge || cameraPreviewZoom > 1.01;
+  const showLivePhotoGuide =
+    Boolean(cameraInstructionText) &&
+    !needsCameraPermission &&
+    !showCameraUnavailableState &&
+    !isLivePhotoCaptureInProgress;
 
   return (
     <View
@@ -585,6 +593,27 @@ export function LiveCameraSurface({
                 >
                   {cameraZoomLabel}
                 </Text>
+              </View>
+            ) : null}
+            {showLivePhotoGuide ? (
+              <View pointerEvents="none" style={styles.cameraLivePhotoGuideOverlay}>
+                <View
+                  testID="capture-live-photo-guide"
+                  style={[
+                    styles.cameraLivePhotoGuidePill,
+                    {
+                      backgroundColor: colors.captureGlassFill,
+                      borderColor: colors.captureGlassBorder,
+                    },
+                  ]}
+                >
+                  <LivePhotoIcon size={15} color={colors.captureGlassText} />
+                  <Text
+                    style={[styles.cameraActionHintText, { color: colors.captureGlassText }]}
+                  >
+                    {t('capture.livePhotoCoachLiveHint', 'Hold for live photo')}
+                  </Text>
+                </View>
               </View>
             ) : null}
             {cameraFocusPoint ? (
