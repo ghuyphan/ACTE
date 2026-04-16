@@ -114,7 +114,11 @@ export function useSyncSheetDetails(accountHint: string | null) {
         blocked: blockedCount,
       })
     : null;
-  const canRequestSync = canManageSync && isEnabled && isOnline;
+  const canRequestSync =
+    canManageSync &&
+    isEnabled &&
+    isOnline &&
+    bootstrapState !== 'preparing';
   const diagnosticsMessage =
     status === 'error'
       ? lastMessage ??

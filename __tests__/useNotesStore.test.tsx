@@ -12,6 +12,7 @@ const mockGetInfoAsync = jest.fn();
 const mockDeleteAsync = jest.fn();
 const mockGetAllNotesForScope = jest.fn();
 const mockGetNotesPageForScope = jest.fn();
+const mockGetPersistedActiveNotesScopeSync = jest.fn<string | null, []>(() => null);
 const mockGetActiveNotesScope = jest.fn(() => '__local__');
 const mockUseAuth = jest.fn(() => ({
   user: null,
@@ -59,6 +60,7 @@ jest.mock('../services/mediaIntegrity', () => ({
 jest.mock('../services/database', () => ({
   LOCAL_NOTES_SCOPE: '__local__',
   getActiveNotesScope: () => mockGetActiveNotesScope(),
+  getPersistedActiveNotesScopeSync: () => mockGetPersistedActiveNotesScopeSync(),
   getAllNotes: jest.fn(async () => [...mockNotesDb]),
   getAllNotesForScope: (scope: string) => mockGetAllNotesForScope(scope),
   getNotesPageForScope: (scope: string, options: { limit: number; offset?: number }) =>
@@ -135,6 +137,7 @@ beforeEach(() => {
   mockGetNotesPageForScope.mockImplementation(async (_scope: string, options: { limit: number }) =>
     mockNotesDb.slice(0, options.limit)
   );
+  mockGetPersistedActiveNotesScopeSync.mockReturnValue(null);
   mockGetActiveNotesScope.mockReturnValue('__local__');
 });
 
@@ -370,6 +373,33 @@ describe('useNotesStore', () => {
     });
 
     expect(mockGetAllNotesForScope).toHaveBeenCalledWith('user-42');
+  });
+
+  it('does not hydrate a previously persisted account scope before auth is ready', async () => {
+    mockGetPersistedActiveNotesScopeSync.mockReturnValue('user-42');
+    mockUseAuth.mockReturnValue({
+      user: null,
+      isReady: false,
+    });
+
+    const { result, rerender } = renderHook(() => useNotesStore(), { wrapper: TestWrapper });
+
+    expect(mockGetAllNotesForScope).not.toHaveBeenCalled();
+    expect(result.current.initialLoadComplete).toBe(false);
+
+    mockUseAuth.mockReturnValue({
+      user: null,
+      isReady: true,
+    });
+
+    rerender({});
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+    });
+
+    expect(mockGetAllNotesForScope).toHaveBeenCalledWith('__local__');
+    expect(mockGetAllNotesForScope).not.toHaveBeenCalledWith('user-42');
   });
 
   it('loads the local scope when auth is ready but the user session is unavailable', async () => {

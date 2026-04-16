@@ -65,7 +65,6 @@ export function useHomeFeedViewModel({
 }: UseHomeFeedViewModelParams): UseHomeFeedViewModelResult {
   const currentUserUid = userUid ?? null;
   const previousUserUidRef = useRef<string | null>(currentUserUid);
-  const previousDebugSnapshotRef = useRef<string | null>(null);
   const notesInitialLoadComplete = notesPhase !== 'bootstrapping';
   const notesLoading = notesPhase === 'bootstrapping' || notesPhase === 'hydrating';
   const sharedInitialLoadComplete =
@@ -75,9 +74,14 @@ export function useHomeFeedViewModel({
     () => sharedPosts.filter((post) => post.authorUid !== currentUserUid),
     [currentUserUid, sharedPosts]
   );
+  const authUserChanged =
+    previousUserUidRef.current !== null &&
+    currentUserUid !== null &&
+    previousUserUidRef.current !== currentUserUid;
+  const effectiveFriendPosts = authUserChanged ? [] : friendPosts;
   const sharedPostsForHomeFeed = useMemo(
-    () => (sharedEnabled ? friendPosts : sharedPosts),
-    [friendPosts, sharedEnabled, sharedPosts]
+    () => (sharedEnabled ? effectiveFriendPosts : authUserChanged ? [] : sharedPosts),
+    [authUserChanged, effectiveFriendPosts, sharedEnabled, sharedPosts]
   );
   const homeFeedItems = useMemo(
     () => buildHomeFeedItems(notes, sharedPostsForHomeFeed),
@@ -89,6 +93,10 @@ export function useHomeFeedViewModel({
     [suppressedHomeNoteIds]
   );
   const visibleFeedItems = useMemo(() => {
+    if (authUserChanged) {
+      return [];
+    }
+
     if (isFriendsFilterActive) {
       return homeFeedItems.filter((item) => item.kind === 'shared-post');
     }
@@ -96,11 +104,12 @@ export function useHomeFeedViewModel({
     return homeFeedItems.filter((item) => (
       item.kind !== 'note' || !suppressedHomeNoteIdSet.has(item.id)
     ));
-  }, [homeFeedItems, isFriendsFilterActive, suppressedHomeNoteIdSet]);
+  }, [authUserChanged, homeFeedItems, isFriendsFilterActive, suppressedHomeNoteIdSet]);
   const ownedSharedNoteIds = useMemo(
     () => (
-      currentUserUid
-        ? Array.from(
+      authUserChanged || !currentUserUid
+        ? []
+        : Array.from(
             new Set(
               sharedPosts
                 .filter(
@@ -112,27 +121,29 @@ export function useHomeFeedViewModel({
                 .map((post) => post.sourceNoteId as string)
             )
           )
-        : []
     ),
-    [currentUserUid, sharedPosts]
+    [authUserChanged, currentUserUid, sharedPosts]
   );
   const savedNoteRevealIsSharedByMe = useMemo(
     () => Boolean(savedNoteRevealNoteId && ownedSharedNoteIds.includes(savedNoteRevealNoteId)),
     [ownedSharedNoteIds, savedNoteRevealNoteId]
   );
 
-  const authUserChanged = previousUserUidRef.current !== currentUserUid;
   const hasNoSignedInContent =
     Boolean(currentUserUid) &&
     notes.length === 0 &&
     sharedPosts.length === 0;
   const bootstrapState: HomeFeedBootstrapState = useMemo(() => {
+    if (authUserChanged) {
+      return 'switching-account';
+    }
+
     if (!hasNoSignedInContent) {
       return 'idle';
     }
 
-    if (authUserChanged) {
-      return 'switching-account';
+    if (syncBootstrapState === 'complete') {
+      return 'idle';
     }
 
     if (!notesInitialLoadComplete || notesLoading) {
@@ -225,47 +236,6 @@ export function useHomeFeedViewModel({
   useEffect(() => {
     previousUserUidRef.current = currentUserUid;
   }, [currentUserUid]);
-
-  useEffect(() => {
-    if (!__DEV__) {
-      return;
-    }
-
-    const snapshot = JSON.stringify({
-      currentUserUid,
-      notesPhase,
-      sharedPhase,
-      syncBootstrapState,
-      notesCount: notes.length,
-      sharedPostsCount: sharedPosts.length,
-      homeFeedItemsCount: homeFeedItems.length,
-      visibleFeedItemsCount: visibleFeedItems.length,
-      bootstrapState,
-      feedMode,
-      hasNoSignedInContent,
-      isFriendsFilterActive,
-    });
-
-    if (previousDebugSnapshotRef.current === snapshot) {
-      return;
-    }
-
-    previousDebugSnapshotRef.current = snapshot;
-    console.log('[homeFeed] state changed', JSON.parse(snapshot));
-  }, [
-    bootstrapState,
-    currentUserUid,
-    feedMode,
-    hasNoSignedInContent,
-    homeFeedItems.length,
-    isFriendsFilterActive,
-    notes.length,
-    notesPhase,
-    sharedPhase,
-    sharedPosts.length,
-    syncBootstrapState,
-    visibleFeedItems.length,
-  ]);
 
   useEffect(() => {
     if (!notesInitialLoadComplete) {

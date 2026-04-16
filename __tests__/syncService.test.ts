@@ -167,6 +167,25 @@ const mockRunAsync = jest.fn(async (sql: string, ...args: any[]) => {
     return;
   }
 
+  if (sql.includes("SET status = 'pending'") && sql.includes('attempts = 0')) {
+    const [id, ownerUid] = args;
+    queueRows = queueRows.map((row) =>
+      row.id === id && row.owner_uid === ownerUid
+        ? {
+            ...row,
+            status: 'pending',
+            attempts: 0,
+            last_error: null,
+            next_retry_at: null,
+            terminal: 0,
+            blocked_reason: null,
+            lease_token: null,
+          }
+        : row
+    );
+    return;
+  }
+
   if (sql.includes("SET status = 'pending'")) {
     const [ownerUid] = args;
     queueRows = queueRows.map((row) =>
@@ -225,6 +244,16 @@ const mockGetAllAsync = jest.fn(async (sql: string, ...args: any[]) => {
       .slice(0, limit);
   }
 
+  if (sql.includes('terminal = 1')) {
+    const [ownerUid] = args;
+    return queueRows
+      .filter((row) => row.owner_uid === ownerUid && row.terminal === 1)
+      .map((row) => ({
+        id: row.id,
+        last_error: row.last_error,
+      }));
+  }
+
   const [ownerUid, now, limit] = args;
   return queueRows
     .filter((row) => row.owner_uid === ownerUid)
@@ -241,6 +270,19 @@ const mockGetFirstAsync = jest.fn(async (sql: string, ...args: any[]) => {
       queueRows
         .filter((row) => row.owner_uid === ownerUid && row.coalesce_key === coalesceKey)
         .sort((a, b) => a.created_at.localeCompare(b.created_at))[0] ?? null
+    );
+  }
+
+  if (sql.includes('FROM sync_queue') && sql.includes('lease_token')) {
+    const [id, ownerUid, leaseToken] = args;
+    return (
+      queueRows.find(
+        (row) =>
+          row.id === id &&
+          row.owner_uid === ownerUid &&
+          row.lease_token === leaseToken &&
+          row.status === 'processing'
+      ) ?? null
     );
   }
 
@@ -1148,6 +1190,39 @@ describe('syncService', () => {
       blockedCount: 0,
     });
     expect(queueRows[0]?.status).toBe('pending');
+  });
+
+  it('recovers blocked session-expired queue items when auth is restored', async () => {
+    queueRows = [
+      {
+        id: 1,
+        owner_uid: mockActiveNotesScope,
+        entity: 'note',
+        entity_id: 'note-1',
+        operation: 'update',
+        payload: null,
+        status: 'failed',
+        attempts: 3,
+        last_error: 'Server session unavailable. Sign in again to resume sync.',
+        next_retry_at: null,
+        terminal: 1,
+        blocked_reason: 'Your sign-in session expired. Sign out and sign back in to resume sync.',
+        lease_token: null,
+        created_at: '2026-03-10T00:00:00.000Z',
+      },
+    ];
+
+    const recoveredCount = await getSyncRepository().recoverBlockedSessionErrors();
+    const pendingItems = await getSyncRepository().listPending();
+
+    expect(recoveredCount).toBe(1);
+    expect(pendingItems).toEqual([
+      expect.objectContaining({
+        id: 1,
+        status: 'pending',
+        terminal: false,
+      }),
+    ]);
   });
 
   it('uploads a full local snapshot to Supabase and stores usage totals', async () => {

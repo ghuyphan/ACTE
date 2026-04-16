@@ -66,7 +66,7 @@ export default function FriendJoinScreen() {
   }>();
   const { t } = useTranslation();
   const { colors } = useTheme();
-  const { user, isAuthAvailable } = useAuth();
+  const { user, isAuthAvailable, isReady: authReady } = useAuth();
   const { findFriendByUsername, addFriendByUsername } = useSharedFeedStore();
   const router = useRouter();
   const [inviteValue, setInviteValue] = useState('');
@@ -193,7 +193,11 @@ export default function FriendJoinScreen() {
 
   const { joining, joinInvite } = useFriendInviteJoin({
     inviteValue,
-    onRequireAuth: () => dismissTo('auth'),
+    onRequireAuth: () => {
+      if (authReady) {
+        dismissTo('auth');
+      }
+    },
     onJoined: () => {
       router.replace({
         pathname: '/',
@@ -205,13 +209,13 @@ export default function FriendJoinScreen() {
   });
 
   useEffect(() => {
-    if (!user || autoAttemptedRef.current || !inviteValue.trim() || joinMode !== 'invite') {
+    if (!authReady || !user || autoAttemptedRef.current || !inviteValue.trim() || joinMode !== 'invite') {
       return;
     }
 
     autoAttemptedRef.current = true;
     void joinInvite(inviteValue);
-  }, [inviteValue, joinInvite, joinMode, user]);
+  }, [authReady, inviteValue, joinInvite, joinMode, user]);
 
   const handleUsernameChange = useCallback((value: string) => {
     setUsernameValue(value);
@@ -232,6 +236,10 @@ export default function FriendJoinScreen() {
         t('shared.searchByUsernameMissingTitle', 'Noto ID needed'),
         t('shared.searchByUsernameMissingBody', 'Enter a Noto ID to search.')
       );
+      return;
+    }
+
+    if (!authReady) {
       return;
     }
 
@@ -256,10 +264,14 @@ export default function FriendJoinScreen() {
     } finally {
       setSearching(false);
     }
-  }, [dismissTo, findFriendByUsername, t, user, usernameValue]);
+  }, [authReady, dismissTo, findFriendByUsername, t, user, usernameValue]);
 
   const handleAddFriend = useCallback(async () => {
     if (!searchResult) {
+      return;
+    }
+
+    if (!authReady) {
       return;
     }
 
@@ -296,7 +308,7 @@ export default function FriendJoinScreen() {
     } finally {
       setAddingFriend(false);
     }
-  }, [addFriendByUsername, dismissTo, router, searchResult, t, user]);
+  }, [addFriendByUsername, authReady, dismissTo, router, searchResult, t, user]);
 
   return (
     <AppSheet
@@ -340,7 +352,7 @@ export default function FriendJoinScreen() {
         >
           <FriendInviteJoinBody
             user={user}
-            isAuthAvailable={isAuthAvailable}
+            isAuthAvailable={isAuthAvailable && authReady}
             mode={joinMode}
             inviteValue={inviteValue}
             usernameValue={usernameValue}
@@ -365,7 +377,11 @@ export default function FriendJoinScreen() {
             onAddFriend={() => {
               void handleAddFriend();
             }}
-            onGoToAuth={() => dismissTo('auth')}
+            onGoToAuth={() => {
+              if (authReady) {
+                dismissTo('auth');
+              }
+            }}
           />
         </AppSheetScaffold>
       </KeyboardAvoidingView>

@@ -6,11 +6,11 @@ import { useAuth } from '../../hooks/useAuth';
 export default function SharedPostDetailRoute() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const { isAuthAvailable, user } = useAuth();
+  const { isAuthAvailable, isReady: authReady, user } = useAuth();
   const [visible, setVisible] = useState(true);
 
   useEffect(() => {
-    if (!id || user || !isAuthAvailable) {
+    if (!id || !authReady || user || !isAuthAvailable) {
       return;
     }
 
@@ -20,9 +20,9 @@ export default function SharedPostDetailRoute() {
         returnTo: `/shared/${id}`,
       },
     });
-  }, [id, isAuthAvailable, router, user]);
+  }, [authReady, id, isAuthAvailable, router, user]);
 
-  if (!id || (!user && isAuthAvailable)) {
+  if (!id || (!authReady && isAuthAvailable) || (!user && isAuthAvailable)) {
     return null;
   }
 

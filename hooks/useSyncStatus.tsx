@@ -49,7 +49,6 @@ interface QueueStatsSnapshot {
 
 const AUTO_SYNC_DEBOUNCE_MS = 1200;
 const SYNC_ENABLED_KEY = 'settings.syncEnabled';
-const DEBUG_SYNC_BOOTSTRAP = __DEV__;
 
 const SyncStatusContext = createContext<SyncStatusContextValue | undefined>(undefined);
 
@@ -80,24 +79,11 @@ export function SyncStatusProvider({ children }: { children: ReactNode }) {
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const syncInFlightRef = useRef<Promise<void> | null>(null);
   const syncRequestIdRef = useRef(0);
-  const pendingRunRef = useRef(false);
+  const pendingRunModeRef = useRef<SyncMode | null>(null);
   const previousUserUidRef = useRef<string | null>(null);
   const skipNextNotesEffectRef = useRef(false);
   const suppressNextNotesEffectRef = useRef(false);
   const runSyncNowRef = useRef<(mode?: SyncMode) => Promise<void>>(async () => undefined);
-
-  const logSyncBootstrap = useCallback((message: string, payload?: Record<string, unknown>) => {
-    if (!DEBUG_SYNC_BOOTSTRAP) {
-      return;
-    }
-
-    if (payload) {
-      console.log(`[syncStatus] ${message}`, payload);
-      return;
-    }
-
-    console.log(`[syncStatus] ${message}`);
-  }, []);
 
   const clearDebounceTimer = useCallback(() => {
     if (debounceTimerRef.current) {
@@ -128,6 +114,24 @@ export function SyncStatusProvider({ children }: { children: ReactNode }) {
       return null;
     }
   }, []);
+
+  const recoverBlockedSessionErrors = useCallback(async () => {
+    try {
+      const repository = getSyncRepository();
+      if (typeof repository.recoverBlockedSessionErrors !== 'function') {
+        return 0;
+      }
+
+      const recoveredCount = await repository.recoverBlockedSessionErrors();
+      if (recoveredCount > 0) {
+        await refreshQueueStats();
+      }
+      return recoveredCount;
+    } catch (error) {
+      console.warn('[syncStatus] Failed to recover blocked session sync items:', error);
+      return 0;
+    }
+  }, [refreshQueueStats]);
 
   // Load persistence
   useEffect(() => {
@@ -199,20 +203,12 @@ export function SyncStatusProvider({ children }: { children: ReactNode }) {
         if (!cancelled && currentUserUidRef.current === user.uid) {
           setIsInitialSyncPending(pending);
           setIsInitialSyncStateReady(true);
-          logSyncBootstrap('initial sync pending state loaded', {
-            userUid: user.uid,
-            pending,
-          });
         }
       } catch (error) {
         console.warn('[syncStatus] Failed to load initial sync state:', error);
         if (!cancelled && currentUserUidRef.current === user.uid) {
           setIsInitialSyncPending(true);
           setIsInitialSyncStateReady(true);
-          logSyncBootstrap('initial sync pending fallback applied', {
-            userUid: user.uid,
-            pending: true,
-          });
         }
       }
     })();
@@ -220,7 +216,7 @@ export function SyncStatusProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [isAuthAvailable, isReady, logSyncBootstrap, user]);
+  }, [isAuthAvailable, isReady, user]);
 
   runSyncNowRef.current = async (mode: SyncMode = 'incremental') => {
     const requestUserUid = currentUserUidRef.current;
@@ -249,7 +245,8 @@ export function SyncStatusProvider({ children }: { children: ReactNode }) {
     }
 
     if (syncInFlightRef.current) {
-      pendingRunRef.current = true;
+      pendingRunModeRef.current =
+        pendingRunModeRef.current === 'full' || mode === 'full' ? 'full' : 'incremental';
       return;
     }
 
@@ -267,14 +264,6 @@ export function SyncStatusProvider({ children }: { children: ReactNode }) {
     const syncTask = (async () => {
       setStatus('syncing');
       setLastMessage(null);
-      logSyncBootstrap('sync started', {
-        requestedMode: mode,
-        effectiveMode,
-        userUid: requestUserUid,
-        noteCount: notes.length,
-        notesInitialLoadComplete,
-        isInitialSyncPending: initialSyncPendingRef.current,
-      });
 
       const result = await syncNotes(currentUser, notes, { mode: effectiveMode });
       const queueStats = await refreshQueueStats();
@@ -302,21 +291,9 @@ export function SyncStatusProvider({ children }: { children: ReactNode }) {
             ? i18n.t('settings.syncPendingOffline', 'Your notes are saved locally and will sync when you are back online.')
             : result.message ?? null
         );
-        logSyncBootstrap('sync succeeded', {
-          effectiveMode,
-          userUid: requestUserUid,
-          importedCount: result.importedCount ?? 0,
-          syncedCount: result.syncedCount,
-          bootstrapCompleted: result.bootstrapCompleted,
-          hasPendingChanges,
-        });
 
         if ((result.importedCount ?? 0) > 0) {
           suppressNextNotesEffectRef.current = true;
-          logSyncBootstrap('refreshing local notes after remote import', {
-            importedCount: result.importedCount ?? 0,
-            userUid: requestUserUid,
-          });
           await refreshNotes(false, { updateWidget: true, syncGeofences: true });
           if (!isCurrentSyncRequest(requestId, requestUserUid)) {
             return;
@@ -331,17 +308,13 @@ export function SyncStatusProvider({ children }: { children: ReactNode }) {
         result.message ??
           i18n.t('settings.autoSyncRetry', 'We could not sync right now. We will try again when the app is active.')
       );
-      logSyncBootstrap('sync failed', {
-        effectiveMode,
-        userUid: requestUserUid,
-        message: result.message ?? null,
-      });
     })().finally(() => {
       syncInFlightRef.current = null;
 
-      if (pendingRunRef.current) {
-        pendingRunRef.current = false;
-        void runSyncNowRef.current(getPreferredSyncMode('incremental'));
+      const pendingMode = pendingRunModeRef.current;
+      pendingRunModeRef.current = null;
+      if (pendingMode) {
+        void runSyncNowRef.current(getPreferredSyncMode(pendingMode));
       }
     });
 
@@ -402,7 +375,8 @@ export function SyncStatusProvider({ children }: { children: ReactNode }) {
     if (!user || !isAuthAvailable) {
       invalidateSyncRequests();
       clearDebounceTimer();
-      pendingRunRef.current = false;
+      syncInFlightRef.current = null;
+      pendingRunModeRef.current = null;
       skipNextNotesEffectRef.current = false;
       suppressNextNotesEffectRef.current = false;
       previousUserUidRef.current = user?.uid ?? null;
@@ -429,7 +403,9 @@ export function SyncStatusProvider({ children }: { children: ReactNode }) {
       skipNextNotesEffectRef.current = true;
       setLastMessage(null);
       setLastSyncedAt(null);
-      queueSync(true, getPreferredSyncMode('incremental'));
+      void recoverBlockedSessionErrors().finally(() => {
+        queueSync(true, getPreferredSyncMode('incremental'));
+      });
     }
   }, [
     clearDebounceTimer,
@@ -441,6 +417,7 @@ export function SyncStatusProvider({ children }: { children: ReactNode }) {
     isSyncPrefReady,
     notesInitialLoadComplete,
     queueSync,
+    recoverBlockedSessionErrors,
     refreshQueueStats,
     syncEnabledState,
     user,
@@ -484,14 +461,16 @@ export function SyncStatusProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (nextState) => {
       if (nextState === 'active') {
-        queueSync(true, 'incremental');
+        void recoverBlockedSessionErrors().finally(() => {
+          queueSync(true, 'incremental');
+        });
       }
     });
 
     return () => {
       subscription.remove();
     };
-  }, [queueSync]);
+  }, [queueSync, recoverBlockedSessionErrors]);
 
   useEffect(() => {
     return () => {
@@ -590,31 +569,6 @@ export function SyncStatusProvider({ children }: { children: ReactNode }) {
     return status;
   }, [bootstrapState, isAuthAvailable, status, user]);
 
-  useEffect(() => {
-    logSyncBootstrap('bootstrap state changed', {
-      userUid: user?.uid ?? null,
-      bootstrapState,
-      phase,
-      status,
-      isInitialSyncPending,
-      notesInitialLoadComplete,
-      isSyncPrefReady,
-      isInitialSyncStateReady,
-      isOnline,
-    });
-  }, [
-    bootstrapState,
-    isInitialSyncPending,
-    isInitialSyncStateReady,
-    isOnline,
-    isSyncPrefReady,
-    logSyncBootstrap,
-    notesInitialLoadComplete,
-    phase,
-    status,
-    user?.uid,
-  ]);
-
   const value = useMemo<SyncStatusContextValue>(
     () => ({
       phase,
@@ -630,7 +584,9 @@ export function SyncStatusProvider({ children }: { children: ReactNode }) {
       isEnabled: syncEnabledState,
       setSyncEnabled,
       requestSync: () => {
-        queueSync(true, 'full');
+        void recoverBlockedSessionErrors().finally(() => {
+          queueSync(true, 'full');
+        });
       },
     }),
     [
@@ -643,6 +599,7 @@ export function SyncStatusProvider({ children }: { children: ReactNode }) {
       lastSyncedAt,
       pendingCount,
       queueSync,
+      recoverBlockedSessionErrors,
       recentQueueItems,
       setSyncEnabled,
       status,

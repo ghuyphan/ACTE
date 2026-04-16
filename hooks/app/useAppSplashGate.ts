@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { hasInitializedI18n, i18nReady } from '../../constants/i18n';
 
 interface UseAppSplashGateOptions {
+  authReady: boolean;
   isDatabaseReady: boolean;
   isStartupRouteReady: boolean;
   notesReady: boolean;
@@ -11,6 +12,7 @@ interface UseAppSplashGateOptions {
 }
 
 export function useAppSplashGate({
+  authReady,
   isDatabaseReady,
   isStartupRouteReady,
   notesReady,
@@ -42,6 +44,7 @@ export function useAppSplashGate({
   }, []);
 
   const startupGateReady =
+    authReady &&
     themeReady &&
     i18nInitialized &&
     isStartupRouteReady &&

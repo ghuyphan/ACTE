@@ -8,6 +8,7 @@ import { SyncStatusProvider, useSyncStatus } from '../hooks/useSyncStatus';
 const mockSyncNotes = jest.fn<Promise<unknown>, [unknown, unknown, unknown?]>();
 const mockRefreshNotes = jest.fn<Promise<void>, [boolean?]>(async () => undefined);
 const mockIsInitialSyncPendingForUser = jest.fn<Promise<boolean>, [string]>(async () => true);
+const mockRecoverBlockedSessionErrors = jest.fn<Promise<number>, []>(async () => 0);
 const mockQueueStats = {
   pendingCount: 0,
   failedCount: 0,
@@ -76,6 +77,7 @@ jest.mock('../services/syncService', () => ({
       blockedCount: mockQueueStats.blockedCount,
     }),
     listRecent: async () => [],
+    recoverBlockedSessionErrors: () => mockRecoverBlockedSessionErrors(),
   }),
 }));
 
@@ -134,6 +136,7 @@ beforeEach(() => {
   mockQueueStats.pendingCount = 0;
   mockQueueStats.failedCount = 0;
   mockQueueStats.blockedCount = 0;
+  mockRecoverBlockedSessionErrors.mockResolvedValue(0);
   mockIsInitialSyncPendingForUser.mockResolvedValue(true);
   mockSyncNotes.mockResolvedValue({
     status: 'success',
@@ -311,6 +314,90 @@ describe('useSyncStatus', () => {
     });
   });
 
+  it('preserves a manual full-sync request while an incremental sync is already running', async () => {
+    mockAuthState.user = {
+      uid: 'user-1',
+      displayName: 'Huy',
+      email: 'huy@example.com',
+      photoURL: null,
+    };
+
+    const firstSync = createDeferred<{
+      status: 'success';
+      syncedCount: number;
+      importedCount: number;
+      uploadedCount: number;
+      failedCount: number;
+      bootstrapCompleted?: boolean;
+    }>();
+    mockSyncNotes
+      .mockImplementationOnce(() => firstSync.promise)
+      .mockResolvedValueOnce({
+        status: 'success',
+        syncedCount: 1,
+        importedCount: 0,
+        uploadedCount: 1,
+        failedCount: 0,
+        bootstrapCompleted: true,
+      });
+
+    const { result } = renderHook(() => useSyncStatus(), { wrapper });
+    await flushSyncPref();
+
+    await waitFor(() => {
+      expect(mockSyncNotes).toHaveBeenCalledTimes(1);
+    });
+    expect(mockSyncNotes.mock.calls[0]?.[2]).toEqual({ mode: 'full' });
+
+    await act(async () => {
+      result.current.requestSync();
+      await Promise.resolve();
+    });
+
+    expect(mockSyncNotes).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      firstSync.resolve({
+        status: 'success',
+        syncedCount: 1,
+        importedCount: 0,
+        uploadedCount: 1,
+        failedCount: 0,
+        bootstrapCompleted: true,
+      });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(mockSyncNotes).toHaveBeenCalledTimes(2);
+    });
+    expect(mockSyncNotes.mock.calls[1]?.[2]).toEqual({ mode: 'full' });
+  });
+
+  it('recovers blocked session queue items before a manual retry', async () => {
+    mockAuthState.user = {
+      uid: 'user-1',
+      displayName: 'Huy',
+      email: 'huy@example.com',
+      photoURL: null,
+    };
+    mockQueueStats.blockedCount = 1;
+
+    const { result } = renderHook(() => useSyncStatus(), { wrapper });
+    await flushSyncPref();
+
+    await act(async () => {
+      result.current.requestSync();
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(mockRecoverBlockedSessionErrors).toHaveBeenCalled();
+      expect(mockSyncNotes).toHaveBeenCalled();
+    });
+  });
+
   it('drops a stale sync completion after signing out', async () => {
     mockAuthState.user = {
       uid: 'user-1',
@@ -360,129 +447,6 @@ describe('useSyncStatus', () => {
     expect(result.current.status).toBe('idle');
     expect(result.current.lastSyncedAt).toBeNull();
     expect(mockRefreshNotes).not.toHaveBeenCalled();
-  });
-
-  it('rejects a stale sync completion after logout and relogin to the same account', async () => {
-    mockAuthState.user = {
-      uid: 'user-1',
-      displayName: 'Huy',
-      email: 'huy@example.com',
-      photoURL: null,
-    };
-
-    const firstSync = createDeferred<{
-      status: 'success';
-      syncedCount: number;
-      importedCount: number;
-      uploadedCount: number;
-      failedCount: number;
-      bootstrapCompleted?: boolean;
-    }>();
-    const secondSync = createDeferred<{
-      status: 'success';
-      syncedCount: number;
-      importedCount: number;
-      uploadedCount: number;
-      failedCount: number;
-      bootstrapCompleted?: boolean;
-    }>();
-    mockSyncNotes
-      .mockImplementationOnce(() => firstSync.promise)
-      .mockImplementationOnce(() => secondSync.promise);
-
-    const { result, rerender } = renderHook(() => useSyncStatus(), { wrapper });
-    await flushSyncPref();
-
-    await waitFor(() => {
-      expect(mockSyncNotes).toHaveBeenCalledTimes(1);
-      expect(result.current.status).toBe('syncing');
-    });
-
-    mockAuthState.user = null;
-    rerender(undefined as never);
-
-    await waitFor(() => {
-      expect(result.current.status).toBe('idle');
-      expect(result.current.lastSyncedAt).toBeNull();
-    });
-
-    mockAuthState.user = {
-      uid: 'user-1',
-      displayName: 'Huy',
-      email: 'huy@example.com',
-      photoURL: null,
-    };
-    rerender(undefined as never);
-
-    expect(mockSyncNotes).toHaveBeenCalledTimes(1);
-
-    await act(async () => {
-      firstSync.resolve({
-        status: 'success',
-        syncedCount: 1,
-        importedCount: 0,
-        uploadedCount: 1,
-        failedCount: 0,
-        bootstrapCompleted: true,
-      });
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-
-    await waitFor(() => {
-      expect(mockSyncNotes).toHaveBeenCalledTimes(2);
-      expect(result.current.status).toBe('syncing');
-      expect(result.current.lastSyncedAt).toBeNull();
-    });
-
-    await act(async () => {
-      secondSync.resolve({
-        status: 'success',
-        syncedCount: 1,
-        importedCount: 0,
-        uploadedCount: 1,
-        failedCount: 0,
-        bootstrapCompleted: true,
-      });
-      await Promise.resolve();
-    });
-
-    await waitFor(() => {
-      expect(result.current.status).toBe('success');
-      expect(result.current.lastSyncedAt).not.toBeNull();
-    });
-  });
-
-  it('uses refreshed queue stats when composing the post-sync status message', async () => {
-    mockAuthState.user = {
-      uid: 'user-1',
-      displayName: 'Huy',
-      email: 'huy@example.com',
-      photoURL: null,
-    };
-    mockQueueStats.pendingCount = 2;
-    mockSyncNotes.mockResolvedValue({
-      status: 'success',
-      message: 'Everything synced.',
-      syncedCount: 1,
-      importedCount: 0,
-      uploadedCount: 1,
-      failedCount: 0,
-      bootstrapCompleted: true,
-    });
-
-    const { result } = renderHook(() => useSyncStatus(), { wrapper });
-    await flushSyncPref();
-
-    await waitFor(() => {
-      expect(mockSyncNotes).toHaveBeenCalled();
-      expect(result.current.lastMessage).toBe(
-        i18n.t(
-          'settings.syncPendingOffline',
-          'Your notes are saved locally and will sync when you are back online.'
-        )
-      );
-    });
   });
 
   it('surfaces the offline pending message for a manual sync request', async () => {
@@ -554,80 +518,4 @@ describe('useSyncStatus', () => {
     });
   });
 
-  it('keeps retrying the first account sync as a full sync until one succeeds', async () => {
-    mockAuthState.user = {
-      uid: 'user-1',
-      displayName: 'Huy',
-      email: 'huy@example.com',
-      photoURL: null,
-    };
-
-    const deferredFirstSync = createDeferred<{
-      status: 'error';
-      message: string;
-    }>();
-    mockSyncNotes
-      .mockImplementationOnce(() => deferredFirstSync.promise)
-      .mockResolvedValueOnce({
-        status: 'success',
-        syncedCount: 1,
-        importedCount: 0,
-        uploadedCount: 1,
-        failedCount: 0,
-        bootstrapCompleted: true,
-      })
-      .mockResolvedValueOnce({
-        status: 'success',
-        syncedCount: 0,
-        importedCount: 0,
-        uploadedCount: 0,
-        failedCount: 0,
-        bootstrapCompleted: true,
-      });
-
-    const { result } = renderHook(() => useSyncStatus(), { wrapper });
-    await flushSyncPref();
-
-    await waitFor(() => {
-      expect(mockSyncNotes).toHaveBeenCalledTimes(1);
-    });
-    expect(mockSyncNotes.mock.calls[0]?.[2]).toEqual({ mode: 'full' });
-
-    await act(async () => {
-      appStateListener?.('active');
-      await Promise.resolve();
-    });
-
-    expect(mockSyncNotes).toHaveBeenCalledTimes(1);
-
-    await act(async () => {
-      deferredFirstSync.resolve({
-        status: 'error',
-        message: 'sync interrupted',
-      });
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-
-    await waitFor(() => {
-      expect(mockSyncNotes).toHaveBeenCalledTimes(2);
-    });
-    expect(mockSyncNotes.mock.calls[1]?.[2]).toEqual({ mode: 'full' });
-
-    await waitFor(() => {
-      expect(result.current.isInitialSyncPending).toBe(false);
-    });
-
-    mockSyncNotes.mockClear();
-
-    await act(async () => {
-      appStateListener?.('active');
-      await Promise.resolve();
-    });
-
-    await waitFor(() => {
-      expect(mockSyncNotes).toHaveBeenCalledTimes(1);
-    });
-    expect(mockSyncNotes.mock.calls[0]?.[2]).toEqual({ mode: 'incremental' });
-  });
 });

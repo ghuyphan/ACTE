@@ -133,4 +133,32 @@ describe('useHomeFeedViewModel', () => {
     expect(result.current.bootstrapState).toBe('offline');
     expect(result.current.isFeedBootstrapPending).toBe(false);
   });
+
+  it('hides stale feed items during a direct account switch until the new user state settles', () => {
+    const previousParams = createParams({
+      userUid: 'user-1',
+      notes: [buildNote()],
+      sharedPosts: [buildSharedPost()],
+    });
+    const nextParams = createParams({
+      userUid: 'user-2',
+      notes: [buildNote()],
+      sharedPosts: [buildSharedPost()],
+    });
+    const { result, rerender } = renderHook(
+      ({ params }: { params: ReturnType<typeof createParams> }) => useHomeFeedViewModel(params),
+      {
+        initialProps: {
+          params: previousParams,
+        },
+      }
+    );
+
+    rerender({ params: nextParams });
+
+    expect(result.current.bootstrapState).toBe('switching-account');
+    expect(result.current.feedMode).toBe('syncing-empty');
+    expect(result.current.visibleFeedItems).toEqual([]);
+    expect(result.current.ownedSharedNoteIds).toEqual([]);
+  });
 });

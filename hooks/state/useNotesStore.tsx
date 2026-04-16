@@ -59,7 +59,6 @@ interface NotesStoreValue {
 
 const NotesStoreContext = createContext<NotesStoreValue | undefined>(undefined);
 const INITIAL_NOTES_BOOTSTRAP_LIMIT = 24;
-const DEBUG_NOTES_BOOTSTRAP = __DEV__;
 
 function resolveNotesScope(userUid: string | null | undefined) {
   return typeof userUid === 'string' && userUid.trim() ? userUid.trim() : LOCAL_NOTES_SCOPE;
@@ -71,9 +70,10 @@ function useNotesStoreValue(): NotesStoreValue {
   const [phase, setPhase] = useState<NotesLoadPhase>('bootstrapping');
   const notesRef = useRef<Note[]>([]);
   const phaseRef = useRef<NotesLoadPhase>(phase);
-  const activeScopeRef = useRef<string>(resolveNotesScope(user?.uid));
+  const activeScopeRef = useRef<string>(LOCAL_NOTES_SCOPE);
   const activeScopeRevisionRef = useRef(0);
   const refreshRequestIdRef = useRef(0);
+  const loadedScopeRef = useRef<string | null>(null);
 
   useEffect(() => {
     notesRef.current = notes;
@@ -85,19 +85,6 @@ function useNotesStoreValue(): NotesStoreValue {
 
   const loading = phase === 'bootstrapping' || phase === 'hydrating';
   const initialLoadComplete = phase !== 'bootstrapping';
-
-  const logNotesBootstrap = useCallback((message: string, payload?: Record<string, unknown>) => {
-    if (!DEBUG_NOTES_BOOTSTRAP) {
-      return;
-    }
-
-    if (payload) {
-      console.log(`[notesStore] ${message}`, payload);
-      return;
-    }
-
-    console.log(`[notesStore] ${message}`);
-  }, []);
 
   const scheduleWidgetUpdate = useCallback(
     (
@@ -176,13 +163,6 @@ function useNotesStoreValue(): NotesStoreValue {
     ) => {
       const scope = options?.scope ?? activeScopeRef.current;
       const requestId = ++refreshRequestIdRef.current;
-      logNotesBootstrap('refresh start', {
-        requestId,
-        scope,
-        showLoading,
-        currentPhase: phaseRef.current,
-        noteCountBeforeRefresh: notesRef.current.length,
-      });
 
       try {
         if (showLoading) {
@@ -202,11 +182,6 @@ function useNotesStoreValue(): NotesStoreValue {
           notesRef.current = stagedNotes;
           setNotes(stagedNotes);
           setPhase('hydrating');
-          logNotesBootstrap('staged local notes loaded', {
-            requestId,
-            scope,
-            stagedCount: stagedNotes.length,
-          });
         }
 
         const allNotes = await getAllNotesForScope(scope);
@@ -222,25 +197,15 @@ function useNotesStoreValue(): NotesStoreValue {
         if (options?.syncGeofences) {
           syncGeofencesForNotes('note refresh', allNotes);
         }
-        logNotesBootstrap('full local notes loaded', {
-          requestId,
-          scope,
-          totalCount: allNotes.length,
-        });
       } catch (error) {
         console.error('Failed to load notes:', error);
       } finally {
         if (refreshRequestIdRef.current === requestId) {
           setPhase('ready');
-          logNotesBootstrap('refresh complete', {
-            requestId,
-            scope,
-            finalCount: notesRef.current.length,
-          });
         }
       }
     },
-    [logNotesBootstrap, scheduleWidgetUpdate, syncGeofencesForNotes]
+    [scheduleWidgetUpdate, syncGeofencesForNotes]
   );
 
   useEffect(() => {
@@ -248,18 +213,28 @@ function useNotesStoreValue(): NotesStoreValue {
       return;
     }
 
+    const nextScope = resolveNotesScope(user?.uid);
+    const scopeChanged = activeScopeRef.current !== nextScope;
+    const shouldRefresh = scopeChanged || loadedScopeRef.current !== nextScope;
+
+    if (!shouldRefresh) {
+      return;
+    }
+
     let cancelled = false;
     let cleanupIdleHandle: ReturnType<typeof scheduleOnIdle> | null = null;
     let cleanupTimeout: ReturnType<typeof setTimeout> | null = null;
 
+    if (scopeChanged && loadedScopeRef.current !== null) {
+      notesRef.current = [];
+      setNotes([]);
+      setPhase('bootstrapping');
+    }
+
+    applyActiveScope(nextScope);
+    loadedScopeRef.current = nextScope;
+
     void (async () => {
-      const nextScope = resolveNotesScope(user?.uid);
-      applyActiveScope(nextScope);
-      logNotesBootstrap('initial bootstrap requested', {
-        authReady,
-        userUid: user?.uid ?? null,
-        scope: nextScope,
-      });
       await refreshNotes(true, {
         scope: nextScope,
         syncGeofences: true,
@@ -285,33 +260,7 @@ function useNotesStoreValue(): NotesStoreValue {
         clearTimeout(cleanupTimeout);
       }
     };
-  }, [applyActiveScope, authReady, logNotesBootstrap, refreshNotes, user?.uid]);
-
-  useEffect(() => {
-    if (!authReady) {
-      return;
-    }
-
-    const nextScope = resolveNotesScope(user?.uid);
-    if (activeScopeRef.current === nextScope) {
-      return;
-    }
-
-    logNotesBootstrap('scope changed, clearing in-memory notes', {
-      previousScope: activeScopeRef.current,
-      nextScope,
-      previousCount: notesRef.current.length,
-    });
-    applyActiveScope(nextScope);
-    notesRef.current = [];
-    setNotes([]);
-    setPhase('bootstrapping');
-    void refreshNotes(true, {
-      scope: nextScope,
-      syncGeofences: true,
-      updateWidget: true,
-    });
-  }, [applyActiveScope, authReady, logNotesBootstrap, refreshNotes, user?.uid]);
+  }, [applyActiveScope, authReady, refreshNotes, user?.uid]);
 
   const createNote = useCallback(
     async (input: CreateNoteInput): Promise<Note> => {

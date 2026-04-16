@@ -95,7 +95,9 @@ export interface SyncRepository {
     blockedCount: number;
   }>;
   recoverProcessing: () => Promise<void>;
-  markProcessing: (id: number, leaseToken: string) => Promise<void>;
+  recoverBlockedSessionErrors: () => Promise<number>;
+  markProcessing: (id: number, leaseToken: string) => Promise<boolean>;
+  hasLease: (id: number, leaseToken: string) => Promise<boolean>;
   markFailed: (
     id: number,
     leaseToken: string,
@@ -332,6 +334,14 @@ function getErrorMessage(error: unknown) {
 function isSessionSyncError(error: unknown) {
   const message = getErrorMessage(error);
   return message === EXPIRED_SESSION_SYNC_ERROR || message === MISMATCHED_SESSION_SYNC_ERROR;
+}
+
+function isRecoverableSessionSyncErrorMessage(message: string | null | undefined) {
+  const normalizedMessage = message?.trim() ?? '';
+  return (
+    normalizedMessage === EXPIRED_SESSION_SYNC_ERROR ||
+    normalizedMessage === MISMATCHED_SESSION_SYNC_ERROR
+  );
 }
 
 function isTerminalSyncError(error: unknown) {
@@ -1919,9 +1929,16 @@ async function flushPendingQueueToSupabase(
 
     for (const change of pendingChanges) {
       const leaseToken = createSyncLeaseToken(change.id);
-      await syncRepository.markProcessing(change.id, leaseToken);
+      const claimed = await syncRepository.markProcessing(change.id, leaseToken);
+      if (!claimed) {
+        continue;
+      }
 
       try {
+        if (!(await syncRepository.hasLease(change.id, leaseToken))) {
+          continue;
+        }
+
         if (change.operation === 'deleteAll') {
           await deleteAllRemoteNotesForUser(userId);
           syncedNoteIds.clear();
@@ -1938,9 +1955,15 @@ async function flushPendingQueueToSupabase(
         }
 
         if (change.operation === 'delete') {
+          if (!(await syncRepository.hasLease(change.id, leaseToken))) {
+            continue;
+          }
           await deleteRemoteNote(userId, change.entityId);
         } else {
           const note = await getNoteByIdForScope(change.entityId, ownerScope);
+          if (!(await syncRepository.hasLease(change.id, leaseToken))) {
+            continue;
+          }
           if (!note) {
             await deleteRemoteNote(userId, change.entityId);
           } else {
@@ -2277,6 +2300,44 @@ function createSqliteSyncRepository(resolveScope: () => string): SyncRepository 
     );
   },
 
+  async recoverBlockedSessionErrors() {
+    const db = await getDB();
+    const scope = resolveScope();
+    const blockedRows = await db.getAllAsync<Pick<QueueRow, 'id' | 'last_error'>>(
+      `SELECT id, last_error
+       FROM sync_queue
+       WHERE owner_uid = ?
+         AND terminal = 1`,
+      scope
+    );
+
+    const recoverableRowIds = blockedRows
+      .filter((row) => isRecoverableSessionSyncErrorMessage(row.last_error))
+      .map((row) => row.id);
+
+    if (recoverableRowIds.length === 0) {
+      return 0;
+    }
+
+    for (const rowId of recoverableRowIds) {
+      await db.runAsync(
+        `UPDATE sync_queue
+         SET status = 'pending',
+             attempts = 0,
+             last_error = NULL,
+             next_retry_at = NULL,
+             terminal = 0,
+             blocked_reason = NULL,
+             lease_token = NULL
+         WHERE id = ? AND owner_uid = ?`,
+        rowId,
+        scope
+      );
+    }
+
+    return recoverableRowIds.length;
+  },
+
   async markProcessing(id, leaseToken) {
     const db = await getDB();
     const scope = resolveScope();
@@ -2292,6 +2353,32 @@ function createSqliteSyncRepository(resolveScope: () => string): SyncRepository 
       id,
       scope
     );
+
+    const claimedRow = await db.getFirstAsync<{ id: number }>(
+      `SELECT id
+       FROM sync_queue
+       WHERE id = ? AND owner_uid = ? AND lease_token = ? AND status = 'processing'`,
+      id,
+      scope,
+      leaseToken
+    );
+
+    return Boolean(claimedRow);
+  },
+
+  async hasLease(id, leaseToken) {
+    const db = await getDB();
+    const scope = resolveScope();
+    const leasedRow = await db.getFirstAsync<{ id: number }>(
+      `SELECT id
+       FROM sync_queue
+       WHERE id = ? AND owner_uid = ? AND lease_token = ? AND status = 'processing'`,
+      id,
+      scope,
+      leaseToken
+    );
+
+    return Boolean(leasedRow);
   },
 
   async getStats() {

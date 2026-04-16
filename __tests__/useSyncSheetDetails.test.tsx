@@ -125,6 +125,7 @@ describe('useSyncSheetDetails', () => {
 
     const preparingResult = renderHook(() => useSyncSheetDetails(null));
     expect(preparingResult.result.current.statusLabel).toBe('Preparing first sync');
+    expect(preparingResult.result.current.canRequestSync).toBe(false);
     expect(preparingResult.result.current.description).toBe(
       'Keep Noto open a little longer so your first backup can finish safely.'
     );

@@ -22,7 +22,7 @@ export default function SharedIndexScreen() {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { user } = useAuth();
+  const { isReady: authReady, user } = useAuth();
   const { enableFromPrompt, isLoading: isSocialPushLoading, status: socialPushStatus } =
     useSocialPushPermission();
   const { dataSource, enabled, lastUpdatedAt, loading, sharedPosts } = useSharedFeedStore();
@@ -134,6 +134,12 @@ export default function SharedIndexScreen() {
           <Text style={[styles.emptyBody, { color: colors.secondaryText }]}>
             {t('shared.unavailableBody', 'This build does not have shared social enabled right now.')}
           </Text>
+        </View>
+      ) : !authReady ? (
+        <View style={styles.flexFill}>
+          <View style={styles.center}>
+            <ActivityIndicator size="large" color={colors.primary} />
+          </View>
         </View>
       ) : !user ? (
         <View style={[styles.center, { paddingTop: contentTopInset }]}>

@@ -536,6 +536,39 @@ describe('useAuth', () => {
     );
   });
 
+  it('treats the auth-state callback and direct sign-in flow as the same successful session sync', async () => {
+    const session = buildSession({
+      user: {
+        ...buildSession().user,
+        email: 'race@example.com',
+      } as Session['user'],
+    });
+    mockSignInWithPassword.mockImplementationOnce(async () => {
+      await act(async () => {
+        authStateChangeCallback?.('SIGNED_IN', session);
+      });
+
+      return {
+        data: { session },
+        error: null,
+      };
+    });
+
+    const hook = renderHook(() => useAuth(), { wrapper });
+
+    await waitFor(() => {
+      expect(hook.result.current.isReady).toBe(true);
+    });
+
+    let result!: { status: string; message?: string };
+    await act(async () => {
+      result = await hook.result.current.signInWithEmail('race@example.com', 'secret123');
+    });
+
+    expect(result).toEqual({ status: 'success' });
+    expect(hook.result.current.user?.email).toBe('race@example.com');
+  });
+
   it('returns unavailable on unsupported platforms', async () => {
     setPlatformOS('web');
 
@@ -682,7 +715,7 @@ describe('useAuth', () => {
     expect(mockSetActiveNotesScope).not.toHaveBeenCalledWith('user-42');
   });
 
-  it('clears local auth state even when Supabase sign-out fails', async () => {
+  it('keeps the current auth state intact when Supabase sign-out fails', async () => {
     mockAuthState.initialSession = buildSession();
     mockSupabaseSignOut.mockResolvedValueOnce({
       error: new Error('network down'),
@@ -705,15 +738,32 @@ describe('useAuth', () => {
     });
 
     expect(caughtError).toEqual(expect.objectContaining({ message: 'network down' }));
-    expect(mockClearSharedFeedCache).toHaveBeenCalledWith('user-1');
+    expect(mockUnregisterCurrentSocialPushToken).not.toHaveBeenCalled();
+    expect(mockClearSharedFeedCache).not.toHaveBeenCalled();
     expect(mockPurgeLocalAccountScope).not.toHaveBeenCalled();
-    expect(mockSetActiveNotesScope).toHaveBeenLastCalledWith('__local__');
-    expect(hook.result.current.user).toBeNull();
+    expect(mockSetActiveNotesScope).not.toHaveBeenLastCalledWith('__local__');
+    expect(hook.result.current.user?.uid).toBe('user-1');
   });
 
-  it('retries session hydration when the app returns to the foreground', async () => {
+  it('retries the initial session bootstrap once before falling back to signed-out mode', async () => {
     mockGetSession
       .mockRejectedValueOnce(new Error('network down'))
+      .mockResolvedValueOnce({
+        data: { session: buildSession() },
+        error: null,
+      });
+
+    const hook = renderHook(() => useAuth(), { wrapper });
+
+    await waitFor(() => {
+      expect(hook.result.current.user?.uid).toBe('user-1');
+    });
+  });
+
+  it('retries session hydration when the app returns to the foreground after bootstrap exhausts its retry', async () => {
+    mockGetSession
+      .mockRejectedValueOnce(new Error('network down'))
+      .mockRejectedValueOnce(new Error('still down'))
       .mockResolvedValueOnce({
         data: { session: buildSession() },
         error: null,
@@ -760,6 +810,7 @@ describe('useAuth', () => {
       status: 'error',
       message: 'For your security, sign out and sign back in before deleting this account.',
     });
+    expect(mockUnregisterCurrentSocialPushToken).not.toHaveBeenCalled();
     expect(mockPurgeLocalAccountScope).not.toHaveBeenCalled();
   });
 

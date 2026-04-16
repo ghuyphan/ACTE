@@ -305,10 +305,7 @@ export default function HomeScreen() {
   const previousVisibleFeedItemKeysRef = useRef<string[] | null>(null);
   const lastHandledOpenSharedManageAtRef = useRef<string | null>(null);
   const [captureDraftReady, setCaptureDraftReady] = useState(false);
-  const [notesFeedKey, setNotesFeedKey] = useState(0);
-  const [notesFeedInitialItemIndex, setNotesFeedInitialItemIndex] = useState<number | null>(null);
   useScrollToTop(flatListRef);
-  const wasBootstrapEmptyRef = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -1758,25 +1755,7 @@ export default function HomeScreen() {
     requestSync,
     t,
   ]);
-  const feedRefreshing = refreshing || (homeFeedItemsCount === 0 && isFeedBootstrapPending);
-
-  useEffect(() => {
-    const isBootstrapEmpty = homeFeedItemsCount === 0 && isFeedBootstrapPending;
-    const hasVisibleContent = feedMode === 'content' && visibleFeedItems.length > 0;
-
-    if (wasBootstrapEmptyRef.current && hasVisibleContent) {
-      setNotesFeedInitialItemIndex(isCaptureVisible ? null : 0);
-      setNotesFeedKey((current) => current + 1);
-    }
-
-    wasBootstrapEmptyRef.current = isBootstrapEmpty;
-  }, [
-    feedMode,
-    homeFeedItemsCount,
-    isCaptureVisible,
-    isFeedBootstrapPending,
-    visibleFeedItems.length,
-  ]);
+  const feedRefreshing = refreshing;
 
   const saveNote = useCallback(async () => {
     if (saveInFlightRef.current) {
@@ -2368,11 +2347,9 @@ export default function HomeScreen() {
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <View style={styles.blurTarget}>
         <NotesFeed
-          key={`home-feed-${notesFeedKey}`}
           flatListRef={flatListRef}
           captureHeader={captureHeader}
           emptyState={homeFeedEmptyState}
-          initialItemIndex={notesFeedInitialItemIndex}
           captureMode={captureMode}
           screenActive={isScreenFocused}
           items={visibleFeedItems}

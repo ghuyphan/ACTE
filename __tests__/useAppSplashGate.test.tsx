@@ -34,6 +34,7 @@ describe('useAppSplashGate', () => {
       (props: Parameters<typeof useAppSplashGate>[0]) => useAppSplashGate(props),
       {
         initialProps: {
+          authReady: false,
           isDatabaseReady: false,
           isStartupRouteReady: false,
           notesReady: false,
@@ -47,6 +48,7 @@ describe('useAppSplashGate', () => {
     expect(mockHideAsync).not.toHaveBeenCalled();
 
     rerender({
+      authReady: true,
       isDatabaseReady: true,
       isStartupRouteReady: true,
       notesReady: true,
@@ -62,6 +64,7 @@ describe('useAppSplashGate', () => {
   it('allows the startup error screen to replace the splash without waiting for note hydration', async () => {
     renderHook(() =>
       useAppSplashGate({
+        authReady: true,
         isDatabaseReady: false,
         isStartupRouteReady: true,
         notesReady: false,

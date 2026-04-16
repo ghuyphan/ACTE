@@ -3,6 +3,11 @@ import { act, fireEvent, render } from '@testing-library/react-native';
 import FriendJoinScreen from '../app/friends/join';
 
 const mockReplace = jest.fn();
+const mockAuthState = {
+  user: null as { uid: string } | null,
+  isAuthAvailable: true,
+  isReady: true,
+};
 const mockUseLocalSearchParams = jest.fn(() => ({
   inviteId: 'invite-1',
   invite: 'token-1',
@@ -34,10 +39,7 @@ jest.mock('@expo/vector-icons', () => ({
 }));
 
 jest.mock('../hooks/useAuth', () => ({
-  useAuth: () => ({
-    user: null,
-    isAuthAvailable: true,
-  }),
+  useAuth: () => mockAuthState,
 }));
 
 jest.mock('../hooks/useSharedFeed', () => ({
@@ -108,6 +110,9 @@ describe('FriendJoinScreen', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     jest.useFakeTimers();
+    mockAuthState.user = null;
+    mockAuthState.isAuthAvailable = true;
+    mockAuthState.isReady = true;
   });
 
   afterEach(() => {
@@ -130,5 +135,18 @@ describe('FriendJoinScreen', () => {
         returnTo: '/friends/join?inviteId=invite-1&invite=token-1',
       },
     });
+  });
+
+  it('does not redirect to auth while auth restoration is still settling', () => {
+    mockAuthState.isReady = false;
+    const { getByTestId } = render(<FriendJoinScreen />);
+
+    fireEvent.press(getByTestId('friend-sign-in'));
+
+    act(() => {
+      jest.runAllTimers();
+    });
+
+    expect(mockReplace).not.toHaveBeenCalled();
   });
 });

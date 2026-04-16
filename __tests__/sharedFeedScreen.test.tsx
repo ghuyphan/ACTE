@@ -5,6 +5,7 @@ import SharedFeedScreen from '../app/shared/index';
 const mockPush = jest.fn();
 const mockAuthState = {
   user: { uid: 'me' } as { uid: string } | null,
+  isReady: true,
 };
 const mockSharedFeedState = {
   enabled: true,
@@ -62,6 +63,7 @@ jest.mock('react-native-safe-area-context', () => ({
 jest.mock('../hooks/useAuth', () => ({
   useAuth: () => ({
     user: mockAuthState.user,
+    isReady: mockAuthState.isReady,
   }),
 }));
 
@@ -80,6 +82,14 @@ jest.mock('../hooks/useTheme', () => ({
 
 jest.mock('../hooks/useSharedFeed', () => ({
   useSharedFeedStore: () => mockSharedFeedState,
+}));
+
+jest.mock('../hooks/useSocialPushPermission', () => ({
+  useSocialPushPermission: () => ({
+    enableFromPrompt: jest.fn(),
+    isLoading: false,
+    status: 'granted',
+  }),
 }));
 
 jest.mock('../components/home/MemoryCardPrimitives', () => {
@@ -103,6 +113,7 @@ describe('SharedFeedScreen', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockAuthState.user = { uid: 'me' };
+    mockAuthState.isReady = true;
     mockSharedFeedState.enabled = true;
     mockSharedFeedState.loading = false;
     mockSharedFeedState.dataSource = 'cache';
@@ -137,5 +148,14 @@ describe('SharedFeedScreen', () => {
         returnTo: '/shared',
       },
     });
+  });
+
+  it('keeps showing a loading state while auth restoration is still settling', () => {
+    mockAuthState.user = null;
+    mockAuthState.isReady = false;
+
+    const { queryByText } = render(<SharedFeedScreen />);
+
+    expect(queryByText('Sign in to connect with friends')).toBeNull();
   });
 });

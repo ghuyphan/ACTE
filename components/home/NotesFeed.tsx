@@ -22,8 +22,6 @@ import { buildHomeFeedItems, type HomeFeedItem, getHomeFeedItemKey } from './fee
 import { NoteMemoryCard, SharedPostMemoryCard } from './MemoryCardPrimitives';
 
 const DOCKED_HEADER_CONTENT_OVERLAP = 22;
-const CAPTURE_PAGE_STICKY_THRESHOLD = 0.62;
-const CAPTURE_PAGE_STICKY_VELOCITY_THRESHOLD = 0.9;
 const SCROLL_SNAP_EPSILON = 2;
 const REFRESH_PULL_THRESHOLD = -6;
 const HOME_PAGE_VISUAL_BOTTOM_INSET = 90;
@@ -468,31 +466,6 @@ export default function NotesFeed({
     applySettledOffset(0);
   }, [applySettledOffset, flatListRef]);
 
-  const maybeStickToCapturePage = useCallback(
-    (offsetY: number, velocityY: number) => {
-      if (dragStartPageIndexRef.current !== 0) {
-        return false;
-      }
-
-      if (offsetY <= 0 || offsetY >= snapHeight) {
-        return false;
-      }
-
-      if (offsetY >= snapHeight * CAPTURE_PAGE_STICKY_THRESHOLD) {
-        return false;
-      }
-
-      if (Math.abs(velocityY) >= CAPTURE_PAGE_STICKY_VELOCITY_THRESHOLD) {
-        return false;
-      }
-
-      flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
-      applySettledOffset(0);
-      return true;
-    },
-    [applySettledOffset, flatListRef, snapHeight]
-  );
-
   useLayoutEffect(() => {
     if (Platform.OS !== 'android') {
       previousItemKeysRef.current = itemKeys;
@@ -695,11 +668,6 @@ export default function NotesFeed({
         const offsetY = event.nativeEvent.contentOffset.y;
         if (offsetY <= 0) {
           applySettledOffset(0);
-          return;
-        }
-
-        const velocityY = event.nativeEvent.velocity?.y ?? 0;
-        if (maybeStickToCapturePage(offsetY, velocityY)) {
           return;
         }
 

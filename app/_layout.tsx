@@ -15,6 +15,7 @@ import {
   createTransparentBackScreenOptions,
 } from '../components/app/rootStackOptions';
 import { useNotesStore } from '../hooks/useNotes';
+import { useAuth } from '../hooks/useAuth';
 import { useTheme } from '../hooks/useTheme';
 import { useAppSplashGate } from '../hooks/app/useAppSplashGate';
 import { useAppNotificationRouting } from '../hooks/app/useAppNotificationRouting';
@@ -32,6 +33,7 @@ SplashScreen.preventAutoHideAsync();
 
 function AppContent() {
   const { colors, isDark, themeReady } = useTheme();
+  const { isReady: authReady } = useAuth();
   const { phase: notesPhase } = useNotesStore();
   const { t } = useTranslation();
   const {
@@ -46,6 +48,7 @@ function AppContent() {
   useAppNotificationRouting();
   useSocialPushRegistration();
   useAppSplashGate({
+    authReady,
     isDatabaseReady,
     isStartupRouteReady,
     notesReady: notesPhase === 'ready' || notesPhase === 'refreshing',

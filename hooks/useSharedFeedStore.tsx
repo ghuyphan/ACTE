@@ -558,6 +558,11 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
       return;
     }
 
+    if (previousUserUidRef.current && previousUserUidRef.current !== user.uid) {
+      void clearSharedFeedCache(previousUserUidRef.current);
+      invalidateSharedFeedRefresh(previousUserUidRef.current);
+    }
+
     previousUserUidRef.current = user.uid;
     commitSnapshot(
       {

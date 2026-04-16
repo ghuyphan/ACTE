@@ -558,6 +558,8 @@ describe('useSharedFeedStore', () => {
       expect(result.current.activeInvite).toBeNull();
     });
 
+    expect(mockClearSharedFeedCache).toHaveBeenCalledWith('me');
+
     await act(async () => {
       deferredInvite.resolve({
         id: 'invite-2',
