@@ -42,6 +42,13 @@ export default function AppBottomSheet({
   const { colors, isDark } = useTheme();
   const backgroundColor = detached ? colors.surface : colors.card;
   const backdropOpacity = isDark ? 0.52 : 0.38;
+  const hasExplicitSnapPoints = Array.isArray(androidSnapPoints) && androidSnapPoints.length > 0;
+  const maxSnapPointIndex = hasExplicitSnapPoints ? androidSnapPoints.length - 1 : null;
+  const resolvedInitialIndex =
+    maxSnapPointIndex == null
+      ? androidInitialIndex
+      : Math.min(Math.max(androidInitialIndex, -1), maxSnapPointIndex);
+  const initialIndexProps = resolvedInitialIndex === 0 ? {} : { index: resolvedInitialIndex };
 
   useEffect(() => {
     if (Platform.OS !== 'android') {
@@ -78,7 +85,7 @@ export default function AppBottomSheet({
   return (
     <BottomSheetModal
       ref={modalRef}
-      index={androidInitialIndex}
+      {...initialIndexProps}
       detached={detached}
       bottomInset={detached ? 16 : 0}
       topInset={topInset}

@@ -143,6 +143,32 @@ describe('useAppWidgetRefresh', () => {
     });
   });
 
+  it('includes a shared refresh on startup when the user is already signed in and online', async () => {
+    mockUseAuth.mockReturnValue({ user: { uid: 'user-1' } });
+    mockUseConnectivity.mockReturnValue({ isOnline: true });
+
+    renderHook(() => useAppWidgetRefresh(), { initialProps: {} });
+
+    await act(async () => {
+      jest.runOnlyPendingTimers();
+    });
+
+    await waitFor(() => {
+      expect(mockScheduleWidgetDataUpdate).toHaveBeenCalledTimes(1);
+      expect(mockScheduleWidgetDataUpdate).toHaveBeenLastCalledWith(
+        {
+          includeLocationLookup: false,
+          includeSharedRefresh: true,
+        },
+        {
+          debounceMs: 120,
+          throttleKey: undefined,
+          throttleMs: undefined,
+        }
+      );
+    });
+  });
+
   it('requests throttled scheduling for repeated foreground refreshes', async () => {
     renderHook(() => useAppWidgetRefresh(), { initialProps: {} });
 

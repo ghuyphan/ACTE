@@ -26,7 +26,7 @@ export function useAppWidgetRefresh(options: { enabled?: boolean } = {}) {
     scheduleWidgetDataUpdate(
       {
         includeLocationLookup: reason === 'foreground',
-        includeSharedRefresh: reason !== 'startup' && isSharedRefreshEligible,
+        includeSharedRefresh: isSharedRefreshEligible,
       },
       {
         debounceMs: 120,

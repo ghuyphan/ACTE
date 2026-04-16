@@ -8,6 +8,14 @@ const mockRequestSocialPushPermission = jest.fn<
   Promise<'granted' | 'denied' | 'blocked' | 'skipped'>,
   []
 >(async () => 'granted');
+const mockGetSocialPushPermissionState = jest.fn<
+  Promise<{ canAskAgain: boolean; isGranted: boolean; status: 'granted' | 'denied' | 'blocked' | 'skipped' }>,
+  []
+>(async () => ({
+  canAskAgain: true,
+  isGranted: false,
+  status: 'denied',
+}));
 const mockSyncSocialPushRegistration = jest.fn<
   Promise<'registered' | 'denied' | 'blocked' | 'skipped'>,
   [unknown]
@@ -90,6 +98,7 @@ jest.mock('../utils/platform', () => ({
 }));
 
 jest.mock('../services/socialPushService', () => ({
+  getSocialPushPermissionState: () => mockGetSocialPushPermissionState(),
   requestSocialPushPermission: () => mockRequestSocialPushPermission(),
   syncSocialPushRegistration: (user: unknown) => mockSyncSocialPushRegistration(user),
 }));
@@ -113,12 +122,22 @@ describe('OnboardingScreen', () => {
     mockAuthState.user = null;
     mockGetPersistentItem.mockResolvedValue(null);
     mockSetPersistentItem.mockResolvedValue(undefined);
+    mockGetSocialPushPermissionState.mockResolvedValue({
+      canAskAgain: true,
+      isGranted: false,
+      status: 'denied',
+    });
     mockRequestSocialPushPermission.mockResolvedValue('granted');
     mockSyncSocialPushRegistration.mockResolvedValue('registered');
   });
 
   it('redirects away when a signed-in user lands on onboarding', async () => {
     mockAuthState.user = { id: 'user-1' };
+    mockGetSocialPushPermissionState.mockResolvedValue({
+      canAskAgain: true,
+      isGranted: true,
+      status: 'granted',
+    });
 
     render(<OnboardingScreen />);
 
@@ -127,6 +146,18 @@ describe('OnboardingScreen', () => {
     });
 
     expect(mockGetPersistentItem).not.toHaveBeenCalled();
+  });
+
+  it('keeps signed-in users on the notification step when permission still needs to be restored', async () => {
+    mockAuthState.user = { id: 'user-1' };
+
+    const { getByText } = render(<OnboardingScreen />);
+
+    await waitFor(() => {
+      expect(getByText('Allow notifications')).toBeTruthy();
+    });
+
+    expect(mockReplace).not.toHaveBeenCalled();
   });
 
   it('redirects away when onboarding was already completed', async () => {

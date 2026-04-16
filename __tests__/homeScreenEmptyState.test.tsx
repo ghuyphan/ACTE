@@ -1,8 +1,28 @@
 import React from 'react';
-import { act, render } from '@testing-library/react-native';
+import { act, render, waitFor } from '@testing-library/react-native';
 import HomeScreen from '../app/(tabs)/index';
 
 const mockPush = jest.fn();
+const mockShowAlert = jest.fn();
+const mockGetPersistentItem = jest.fn<Promise<string | null>, [string]>(async () => null);
+const mockSetPersistentItem = jest.fn<Promise<void>, [string, string]>(async () => undefined);
+const mockTranslate = (key: string, fallback?: string) => fallback ?? key;
+
+function buildNote(overrides: Record<string, unknown> = {}) {
+  return {
+    id: 'note-1',
+    type: 'text',
+    content: 'Remember this place',
+    locationName: 'District 1',
+    latitude: 10.7626,
+    longitude: 106.6601,
+    radius: 150,
+    isFavorite: false,
+    createdAt: '2026-03-10T10:00:00.000Z',
+    updatedAt: null,
+    ...overrides,
+  };
+}
 
 let mockAuthState = {
   user: { uid: 'user-1' },
@@ -46,6 +66,14 @@ let mockSyncStatusState = {
   requestSync: jest.fn(),
 };
 
+let mockGeofenceState = {
+  location: null as null,
+  remindersEnabled: false,
+  requestForegroundLocation: jest.fn(async () => ({ location: null, requiresSettings: false })),
+  requestReminderPermissions: jest.fn(async () => ({ enabled: false, requiresSettings: false })),
+  openAppSettings: jest.fn(async () => undefined),
+};
+
 jest.mock('@react-navigation/native', () => ({
   useIsFocused: () => true,
   useFocusEffect: (callback: () => void | (() => void)) => {
@@ -57,7 +85,7 @@ jest.mock('@react-navigation/native', () => ({
 
 jest.mock('react-i18next', () => ({
   useTranslation: () => ({
-    t: (key: string, fallback?: string) => fallback ?? key,
+    t: mockTranslate,
   }),
 }));
 
@@ -150,7 +178,7 @@ jest.mock('../hooks/app/useHomeSharedActions', () => ({
 jest.mock('../hooks/useAppSheetAlert', () => ({
   useAppSheetAlert: () => ({
     alertProps: {},
-    showAlert: jest.fn(),
+    showAlert: mockShowAlert,
   }),
 }));
 
@@ -214,13 +242,7 @@ jest.mock('../hooks/useFeedFocus', () => ({
 }));
 
 jest.mock('../hooks/useGeofence', () => ({
-  useGeofence: () => ({
-    location: null,
-    remindersEnabled: false,
-    requestForegroundLocation: jest.fn(async () => ({ location: null, requiresSettings: false })),
-    requestReminderPermissions: jest.fn(async () => ({ enabled: false, requiresSettings: false })),
-    openAppSettings: jest.fn(async () => undefined),
-  }),
+  useGeofence: () => mockGeofenceState,
 }));
 
 jest.mock('../hooks/useNoteDetailSheet', () => ({
@@ -313,6 +335,12 @@ jest.mock('../services/sharedFeedService', () => ({
   getSharedFeedErrorMessage: jest.fn(() => 'Shared feed unavailable'),
 }));
 
+jest.mock('../utils/appStorage', () => ({
+  getPersistentItem: (key: string) => mockGetPersistentItem(key),
+  setPersistentItem: (key: string, value: string) => mockSetPersistentItem(key, value),
+  removePersistentItem: jest.fn(async () => undefined),
+}));
+
 describe('HomeScreen empty state', () => {
   async function renderHomeScreen() {
     const screen = render(<HomeScreen />);
@@ -326,6 +354,11 @@ describe('HomeScreen empty state', () => {
 
   beforeEach(() => {
     mockPush.mockReset();
+    mockShowAlert.mockReset();
+    mockGetPersistentItem.mockReset();
+    mockSetPersistentItem.mockReset();
+    mockGetPersistentItem.mockResolvedValue(null);
+    mockSetPersistentItem.mockResolvedValue(undefined);
     mockAuthState = {
       user: { uid: 'user-1' },
       isAuthAvailable: true,
@@ -356,6 +389,13 @@ describe('HomeScreen empty state', () => {
       status: 'idle',
       isInitialSyncPending: false,
       requestSync: jest.fn(),
+    };
+    mockGeofenceState = {
+      location: null,
+      remindersEnabled: false,
+      requestForegroundLocation: jest.fn(async () => ({ location: null, requiresSettings: false })),
+      requestReminderPermissions: jest.fn(async () => ({ enabled: false, requiresSettings: false })),
+      openAppSettings: jest.fn(async () => undefined),
     };
   });
 
@@ -444,5 +484,70 @@ describe('HomeScreen empty state', () => {
 
     expect(screen.getByText('You are offline right now')).toBeTruthy();
     expect(screen.queryByText('Your journal is waiting')).toBeNull();
+  });
+
+  it('prompts once to enable reminders when existing saved places load without reminder permissions', async () => {
+    mockNotesStoreState = {
+      ...mockNotesStoreState,
+      notes: [buildNote()],
+    };
+
+    await renderHomeScreen();
+
+    await waitFor(() => {
+      expect(mockGetPersistentItem).toHaveBeenCalledWith(
+        'noto.home.reminder-recovery-prompt.v1.user-1'
+      );
+    });
+  });
+
+  it('waits until the first account sync settles before checking reminder recovery for restored notes', async () => {
+    mockNotesStoreState = {
+      ...mockNotesStoreState,
+      notes: [buildNote()],
+    };
+    mockSyncStatusState = {
+      ...mockSyncStatusState,
+      bootstrapState: 'syncing',
+      isInitialSyncPending: true,
+    };
+
+    const screen = await renderHomeScreen();
+
+    expect(mockGetPersistentItem).not.toHaveBeenCalledWith(
+      'noto.home.reminder-recovery-prompt.v1.user-1'
+    );
+
+    mockSyncStatusState = {
+      ...mockSyncStatusState,
+      bootstrapState: 'complete',
+      isInitialSyncPending: false,
+    };
+
+    await act(async () => {
+      screen.rerender(<HomeScreen />);
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(mockGetPersistentItem).toHaveBeenCalledWith(
+        'noto.home.reminder-recovery-prompt.v1.user-1'
+      );
+    });
+  });
+
+  it('does not show the reminder recovery prompt when reminders are already enabled', async () => {
+    mockNotesStoreState = {
+      ...mockNotesStoreState,
+      notes: [buildNote()],
+    };
+    mockGeofenceState = {
+      ...mockGeofenceState,
+      remindersEnabled: true,
+    };
+
+    await renderHomeScreen();
+
+    expect(mockShowAlert).not.toHaveBeenCalled();
   });
 });

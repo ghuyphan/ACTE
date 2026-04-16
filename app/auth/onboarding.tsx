@@ -16,6 +16,7 @@ import { Layout, Typography } from '../../constants/theme';
 import { useAuth } from '../../hooks/useAuth';
 import { useTheme } from '../../hooks/useTheme';
 import {
+    getSocialPushPermissionState,
     requestSocialPushPermission,
     syncSocialPushRegistration,
 } from '../../services/socialPushService';
@@ -85,13 +86,27 @@ export default function OnboardingScreen() {
             let cancelled = false;
 
             if (user) {
-                void completeOnboardingAndEnterApp((route) => {
-                    if (!cancelled) {
-                        router.replace(route);
-                    }
-                })
+                void getSocialPushPermissionState()
+                    .then((permissionState) => {
+                        if (cancelled) {
+                            return;
+                        }
+
+                        if (permissionState.status === 'granted' || permissionState.status === 'skipped') {
+                            return completeOnboardingAndEnterApp((route) => {
+                                if (!cancelled) {
+                                    router.replace(route);
+                                }
+                            });
+                        }
+
+                        setStep(SLIDES.length - 1);
+                    })
                     .catch((error) => {
-                        console.warn('Failed to persist onboarding state:', error);
+                        console.warn('Failed to inspect social push permission during onboarding:', error);
+                        if (!cancelled) {
+                            setStep(SLIDES.length - 1);
+                        }
                     });
 
                 return () => {

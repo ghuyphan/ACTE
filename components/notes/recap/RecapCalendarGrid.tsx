@@ -89,10 +89,10 @@ const RecapCalendarDayCell = memo(function RecapCalendarDayCell({
   const hasTextContent = textCount > 0;
   const isTextOnlyDay = !hasPhotoPreview && hasTextContent;
   const isEmptyDay = day.count === 0;
-  const showDayNumber = isEmptyDay;
   const isInteractive = Boolean(day.dateKey && day.count > 0 && !day.disabled);
+  const visiblePhotoPreviewCount = Math.min(photoPreviewUris.length || (primaryPhotoUri ? 1 : 0), 2);
   const visibleContentCount = hasPhotoPreview
-    ? 1
+    ? visiblePhotoPreviewCount
     : hasTextContent
       ? 1
       : Math.min(day.markers.length, 1);
@@ -118,7 +118,6 @@ const RecapCalendarDayCell = memo(function RecapCalendarDayCell({
             borderColor: palette.card,
           }
         )}
-        testID={isPhotoMode && day.dateKey ? `notes-recap-day-secondary-photo-${day.dateKey}` : undefined}
       >
         <Text
           style={mergeStyles(
@@ -152,7 +151,7 @@ const RecapCalendarDayCell = memo(function RecapCalendarDayCell({
     () => ({
       transform: [
         {
-          scale: withSpring(isSelected ? 1.03 : 1, {
+          scale: withSpring(isSelected ? 1.04 : 1, {
             damping: 18,
             mass: 0.7,
             stiffness: 220,
@@ -195,8 +194,8 @@ const RecapCalendarDayCell = memo(function RecapCalendarDayCell({
     >
       <View style={styles.dayFrame}>
         <Animated.View style={cardAnimatedStyle}>
-          {isPhotoMode ? (
-            <>
+          <View style={styles.dayTileWrap}>
+            <View style={styles.dayTileFrame}>
               <Animated.View
                 pointerEvents="none"
                 style={mergeStyles(
@@ -208,189 +207,268 @@ const RecapCalendarDayCell = memo(function RecapCalendarDayCell({
               />
               <View
                 style={mergeStyles(
-                  styles.dayCard,
-                  compact ? styles.dayCardCompact : null,
-                  styles.dayCardPhoto,
-                  compact ? styles.dayCardPhotoCompact : null,
+                  styles.dayTile,
+                  compact ? styles.dayTileCompact : null,
+                  isPhotoMode ? styles.dayTilePhoto : null,
+                  isTextOnlyDay ? styles.dayTileText : null,
+                  !isPhotoMode && !isTextOnlyDay && !isEmptyDay ? styles.dayTileMarker : null,
+                  isEmptyDay ? styles.dayTileEmpty : null,
                   {
-                    backgroundColor: palette.card,
-                    borderColor: isSelected ? 'transparent' : `${palette.border}CC`,
+                    backgroundColor: isEmptyDay ? palette.surface : palette.card,
+                    borderColor: isSelected ? 'transparent' : `${palette.border}B8`,
                   }
                 )}
               >
-                <Image
-                  source={{ uri: primaryPhotoUri }}
-                  style={styles.dayPhotoFill}
-                  contentFit="cover"
-                />
-                <View
-                  pointerEvents="none"
-                  style={mergeStyles(
-                    styles.dayPhotoOverlay,
-                    {
-                      backgroundColor: 'rgba(24, 18, 14, 0.18)',
-                    }
-                  )}
-                />
-                {showDayNumber ? (
-                  <Text
-                    style={mergeStyles(
-                      styles.dayNumber,
-                      compact ? styles.dayNumberCompact : null,
-                      { color: '#FFFFFF' }
-                    )}
-                    numberOfLines={1}
-                  >
-                    {day.dayNumber}
-                  </Text>
-                ) : null}
-                {floatingOverflowBadge}
-              </View>
-            </>
-          ) : (
-            <>
-              <Animated.View
-                pointerEvents="none"
-                style={mergeStyles(
-                  styles.daySelectionHalo,
-                  compact ? styles.daySelectionHaloCompact : null,
-                  { borderColor: palette.primary },
-                  haloAnimatedStyle
-                )}
-              />
-              <View
-                style={mergeStyles(
-                  styles.dayCard,
-                  compact ? styles.dayCardCompact : null,
-                  isTextOnlyDay ? styles.dayCardTextOnly : null,
-                  isTextOnlyDay && compact ? styles.dayCardTextOnlyCompact : null,
-                  isEmptyDay ? styles.dayCardEmpty : null,
-                  {
-                    backgroundColor: palette.card,
-                    borderColor: isSelected ? 'transparent' : `${palette.border}CC`,
-                  }
-                )}
-              >
-                {showDayNumber ? (
-                  <Text
-                    style={mergeStyles(
-                      styles.dayNumber,
-                      compact ? styles.dayNumberCompact : null,
-                      isEmptyDay ? styles.dayNumberEmpty : null,
-                      {
-                        color: isSelected ? palette.primary : palette.text,
-                      }
-                    )}
-                    numberOfLines={1}
-                  >
-                    {day.dayNumber}
-                  </Text>
-                ) : null}
-                {contentMode === 'text' ? floatingOverflowBadge : null}
-                {!isEmptyDay ? (
+                {isPhotoMode ? (
                   <View
                     style={mergeStyles(
-                      styles.dayBody,
-                      compact ? styles.dayBodyCompact : null,
-                      !showDayNumber ? styles.dayBodyNoDayLabel : null,
-                      !showDayNumber && compact ? styles.dayBodyNoDayLabelCompact : null,
-                      isTextOnlyDay ? styles.dayBodyTextOnly : null
+                      styles.photoDayShell,
+                      compact ? styles.photoDayShellCompact : null
                     )}
                   >
-                    {contentMode === 'text' ? (
-                      <View
-                        style={mergeStyles(
-                          styles.textDaySheet,
-                          compact ? styles.textDaySheetCompact : null,
-                          !showDayNumber ? styles.textDaySheetContentOnly : null,
-                          !showDayNumber && compact ? styles.textDaySheetContentOnlyCompact : null,
-                          {
-                            backgroundColor: palette.primarySoft,
-                            borderColor: `${palette.border}D0`,
-                          }
-                        )}
-                        testID={day.dateKey ? `notes-recap-day-text-body-${day.dateKey}` : undefined}
-                      >
-                        <View style={styles.textDayIconWrap}>
-                          <Ionicons
-                            name="document-text"
-                            size={compact ? 16 : 18}
-                            color={isSelected ? palette.primary : palette.text}
-                          />
-                        </View>
-                      </View>
-                    ) : contentMode === 'marker' ? (
-                      <View
-                        style={mergeStyles(
-                          styles.markerRow,
-                          compact ? styles.markerRowCompact : null
-                        )}
-                      >
-                        {day.markers.slice(0, 1).map((marker) =>
-                          marker.type === 'polaroid' && marker.previewUri ? (
-                            <View
-                              key={marker.key}
-                              style={mergeStyles(
-                                styles.photoMarker,
-                                compact ? styles.photoMarkerCompact : null,
-                                {
-                                  borderColor: isSelected ? palette.primary : `${palette.border}AA`,
-                                  backgroundColor: palette.card,
-                                }
-                              )}
-                            >
-                              <Image
-                                source={{ uri: marker.previewUri }}
-                                style={styles.photoMarkerImage}
-                                contentFit="cover"
-                              />
-                            </View>
-                          ) : (
-                            <View
-                              key={marker.key}
-                              style={mergeStyles(
-                                styles.marker,
-                                compact ? styles.markerCompact : null,
-                                {
-                                  backgroundColor: marker.color,
-                                  borderColor: marker.color,
-                                }
-                              )}
-                            />
-                          )
-                        )}
-                        {overflowLabel ? (
+                    <View
+                      style={mergeStyles(
+                        styles.photoDayMediaArea,
+                        compact ? styles.photoDayMediaAreaCompact : null
+                      )}
+                    >
+                      {photoPreviewUris[1] ? (
+                        <View
+                          style={mergeStyles(
+                            styles.photoStackWrap,
+                            compact ? styles.photoStackWrapCompact : null
+                          )}
+                        >
                           <View
                             style={mergeStyles(
-                              styles.overflowBadge,
-                              compact ? styles.overflowBadgeCompact : null,
+                              styles.photoStackBackFrame,
+                              compact ? styles.photoStackBackFrameCompact : null,
                               {
-                                backgroundColor: hasPhotoPreview ? palette.card : palette.primarySoft,
-                                borderColor: hasPhotoPreview ? `${palette.border}88` : 'transparent',
+                                borderColor: `${palette.card}F0`,
+                                backgroundColor: palette.card,
+                                transform: [{ rotate: '-7deg' }],
                               }
                             )}
                           >
-                            <Text
-                              style={mergeStyles(
-                                styles.overflowText,
-                                compact ? styles.overflowTextCompact : null,
-                                { color: hasPhotoPreview ? palette.text : palette.primary }
-                              )}
-                              adjustsFontSizeToFit
-                              minimumFontScale={0.82}
-                              numberOfLines={1}
-                            >
-                              {overflowLabel}
-                            </Text>
+                            <Image
+                              source={{ uri: photoPreviewUris[0] }}
+                              style={styles.photoStackImage}
+                              contentFit="cover"
+                            />
                           </View>
-                        ) : null}
+                          <View
+                            testID={day.dateKey ? `notes-recap-day-secondary-photo-${day.dateKey}` : undefined}
+                            style={mergeStyles(
+                              styles.photoStackFrontFrame,
+                              compact ? styles.photoStackFrontFrameCompact : null,
+                              {
+                                borderColor: `${palette.card}F8`,
+                                backgroundColor: palette.card,
+                                transform: [{ rotate: '6deg' }],
+                              }
+                            )}
+                          >
+                            <Image
+                              source={{ uri: photoPreviewUris[1] }}
+                              style={styles.photoStackImage}
+                              contentFit="cover"
+                            />
+                          </View>
+                          {overflowLabel ? (
+                            <View
+                              pointerEvents="none"
+                              style={mergeStyles(
+                                styles.photoStackCountBadge,
+                                compact ? styles.photoStackCountBadgeCompact : null,
+                                {
+                                  backgroundColor: palette.primary,
+                                  borderColor: `${palette.card}F0`,
+                                }
+                              )}
+                            >
+                              <Text
+                                style={mergeStyles(
+                                  styles.photoStackCountText,
+                                  compact ? styles.photoStackCountTextCompact : null
+                                )}
+                              >
+                                {overflowLabel}
+                              </Text>
+                            </View>
+                          ) : null}
+                        </View>
+                      ) : (
+                        <View
+                          style={mergeStyles(
+                            styles.photoSingleWrap,
+                            compact ? styles.photoSingleWrapCompact : null
+                          )}
+                        >
+                          <View
+                            style={mergeStyles(
+                              styles.photoSingleFrame,
+                              compact ? styles.photoSingleFrameCompact : null,
+                              {
+                                borderColor: `${palette.card}F2`,
+                                backgroundColor: palette.card,
+                                transform: [{ rotate: '-4deg' }],
+                              }
+                            )}
+                          >
+                            <Image
+                              source={{ uri: primaryPhotoUri }}
+                              style={styles.photoStackImage}
+                              contentFit="cover"
+                            />
+                          </View>
+                          {overflowLabel ? floatingOverflowBadge : null}
+                        </View>
+                      )}
+                    </View>
+                  </View>
+                ) : contentMode === 'text' ? (
+                  <>
+                    {floatingOverflowBadge}
+                    <View
+                      style={mergeStyles(
+                        styles.textDaySheet,
+                        compact ? styles.textDaySheetCompact : null,
+                        styles.textDaySheetContentOnly,
+                        compact ? styles.textDaySheetContentOnlyCompact : null,
+                        {
+                          backgroundColor: palette.primarySoft,
+                          borderColor: `${palette.border}D0`,
+                        }
+                      )}
+                      testID={day.dateKey ? `notes-recap-day-text-body-${day.dateKey}` : undefined}
+                    >
+                      <View style={styles.textDayIconWrap}>
+                        <Ionicons
+                          name="document-text"
+                          size={compact ? 16 : 18}
+                          color={isSelected ? palette.primary : palette.text}
+                        />
+                      </View>
+                    </View>
+                  </>
+                ) : contentMode === 'marker' ? (
+                  <View
+                    style={mergeStyles(
+                      styles.markerBoard,
+                      compact ? styles.markerBoardCompact : null,
+                      {
+                        backgroundColor: palette.surface,
+                        borderColor: `${palette.border}88`,
+                      }
+                    )}
+                  >
+                    <View
+                      style={mergeStyles(
+                        styles.markerRow,
+                        compact ? styles.markerRowCompact : null
+                      )}
+                    >
+                      {day.markers.slice(0, 3).map((marker) =>
+                        marker.type === 'polaroid' && marker.previewUri ? (
+                          <View
+                            key={marker.key}
+                            style={mergeStyles(
+                              styles.photoMarker,
+                              compact ? styles.photoMarkerCompact : null,
+                              {
+                                borderColor: isSelected ? palette.primary : `${palette.border}AA`,
+                                backgroundColor: palette.card,
+                              }
+                            )}
+                          >
+                            <Image
+                              source={{ uri: marker.previewUri }}
+                              style={styles.photoMarkerImage}
+                              contentFit="cover"
+                            />
+                          </View>
+                        ) : (
+                          <View
+                            key={marker.key}
+                            style={mergeStyles(
+                              styles.marker,
+                              compact ? styles.markerCompact : null,
+                              {
+                                backgroundColor: marker.color,
+                                borderColor: marker.color,
+                              }
+                            )}
+                          />
+                        )
+                      )}
+                    </View>
+                    {overflowLabel ? (
+                      <View
+                        style={mergeStyles(
+                          styles.overflowBadge,
+                          compact ? styles.overflowBadgeCompact : null,
+                          {
+                            backgroundColor: palette.primarySoft,
+                            borderColor: 'transparent',
+                          }
+                        )}
+                      >
+                        <Text
+                          style={mergeStyles(
+                            styles.overflowText,
+                            compact ? styles.overflowTextCompact : null,
+                            { color: palette.primary }
+                          )}
+                        >
+                          {overflowLabel}
+                        </Text>
                       </View>
                     ) : null}
                   </View>
-                ) : null}
+                ) : (
+                  <View
+                    style={mergeStyles(
+                      styles.emptyDayPill,
+                      compact ? styles.emptyDayPillCompact : null,
+                      {
+                        backgroundColor: day.isToday ? `${palette.primary}18` : `${palette.surface}DD`,
+                      }
+                    )}
+                  />
+                )}
               </View>
-            </>
-          )}
+            </View>
+
+            <View style={styles.dayMeta}>
+              <Text
+                style={mergeStyles(
+                  styles.dayMetaNumber,
+                  compact ? styles.dayMetaNumberCompact : null,
+                  {
+                    color: isSelected
+                      ? palette.primary
+                      : day.isToday
+                        ? palette.primary
+                        : isEmptyDay
+                          ? palette.secondaryText
+                          : palette.text,
+                  }
+                )}
+                numberOfLines={1}
+              >
+                {day.dayNumber}
+              </Text>
+              {day.isToday ? (
+                <View
+                  style={[
+                    styles.todayIndicator,
+                    compact ? styles.todayIndicatorCompact : null,
+                    { backgroundColor: palette.primary },
+                  ]}
+                />
+              ) : null}
+            </View>
+          </View>
         </Animated.View>
       </View>
     </Pressable>
@@ -526,14 +604,53 @@ const styles = StyleSheet.create({
   dayPressable: {
     width: '14.2857%',
     paddingHorizontal: 2.5,
-    marginBottom: 8,
+    marginBottom: 10,
   },
   dayPressableCompact: {
     paddingHorizontal: 1,
-    marginBottom: 4,
+    marginBottom: 6,
   },
   dayPressed: {
     transform: [{ scale: 0.975 }],
+  },
+  dayTileWrap: {
+    alignItems: 'center',
+    gap: 6,
+  },
+  dayTileFrame: {
+    position: 'relative',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dayTile: {
+    width: 48,
+    height: 48,
+    borderRadius: 18,
+    borderCurve: 'continuous',
+    borderWidth: StyleSheet.hairlineWidth,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  dayTileCompact: {
+    width: 44,
+    height: 44,
+    borderRadius: 16,
+  },
+  dayTilePhoto: {
+    overflow: 'visible',
+    backgroundColor: 'transparent',
+    borderWidth: 0,
+  },
+  dayTileText: {
+    padding: 0,
+  },
+  dayTileMarker: {
+    paddingHorizontal: 6,
+    paddingVertical: 6,
+  },
+  dayTileEmpty: {
+    overflow: 'hidden',
   },
   dayCard: {
     minHeight: 56,
@@ -576,26 +693,27 @@ const styles = StyleSheet.create({
     flex: 1,
     position: 'relative',
     overflow: 'visible',
+    alignItems: 'center',
   },
   daySelectionHalo: {
     position: 'absolute',
-    top: -2.5,
-    right: -2.5,
-    bottom: -2.5,
-    left: -2.5,
-    borderRadius: 23.5,
-    borderWidth: 2.5,
-  },
-  daySelectionHaloCompact: {
-    top: -2,
-    right: -2,
-    bottom: -2,
-    left: -2,
-    borderRadius: 20,
+    top: -4,
+    right: -4,
+    bottom: -4,
+    left: -4,
+    borderRadius: 22,
     borderWidth: 2,
   },
+  daySelectionHaloCompact: {
+    top: -3,
+    right: -3,
+    bottom: -3,
+    left: -3,
+    borderRadius: 19,
+    borderWidth: 1.5,
+  },
   emptySlot: {
-    minHeight: 56,
+    minHeight: 76,
   },
   dayPhotoFill: {
     ...StyleSheet.absoluteFillObject,
@@ -976,5 +1094,61 @@ const styles = StyleSheet.create({
   overflowTextCompact: {
     fontSize: 9,
     lineHeight: 10,
+  },
+  markerBoard: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 16,
+    borderCurve: 'continuous',
+    borderWidth: StyleSheet.hairlineWidth,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 6,
+  },
+  markerBoardCompact: {
+    borderRadius: 14,
+    paddingHorizontal: 5,
+    paddingVertical: 5,
+    gap: 3,
+  },
+  emptyDayPill: {
+    width: 100,
+    height: 100,
+    borderRadius: 18,
+    transform: [{ scale: 0.48 }],
+  },
+  emptyDayPillCompact: {
+    borderRadius: 16,
+    transform: [{ scale: 0.44 }],
+  },
+  dayMeta: {
+    minHeight: 22,
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+    gap: 2,
+  },
+  dayMetaNumber: {
+    ...Typography.pill,
+    fontSize: 15,
+    lineHeight: 17,
+    fontWeight: '700',
+    textAlign: 'center',
+    includeFontPadding: false,
+  },
+  dayMetaNumberCompact: {
+    fontSize: 14,
+    lineHeight: 16,
+  },
+  todayIndicator: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  todayIndicatorCompact: {
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
   },
 });
