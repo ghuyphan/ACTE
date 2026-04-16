@@ -216,15 +216,6 @@ export const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  captureActionTextPill: {
-    width: 'auto',
-    minWidth: 58,
-    paddingHorizontal: 12,
-  },
-  captureActionPillLabel: {
-    fontSize: 11,
-    fontWeight: '700',
-  },
   livePhotoTogglePill: {
     width: TOP_CONTROL_HEIGHT,
     minWidth: TOP_CONTROL_HEIGHT,
