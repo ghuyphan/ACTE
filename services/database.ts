@@ -528,6 +528,34 @@ export async function migrateLocalNotesScopeToUser(userUid: string): Promise<voi
     await migrateNotesScope(LOCAL_NOTES_SCOPE, userUid);
 }
 
+export async function hasScopeOwnedData(scope: string): Promise<boolean> {
+    const normalizedScope = scope.trim();
+    if (!normalizedScope) {
+        return false;
+    }
+
+    const database = await getDB();
+    const row = await database.getFirstAsync<{
+        has_notes: number | null;
+        has_sync_queue: number | null;
+        has_sticker_assets: number | null;
+    }>(
+        `SELECT
+            EXISTS(SELECT 1 FROM notes WHERE owner_uid = ? LIMIT 1) AS has_notes,
+            EXISTS(SELECT 1 FROM sync_queue WHERE owner_uid = ? LIMIT 1) AS has_sync_queue,
+            EXISTS(SELECT 1 FROM sticker_assets WHERE owner_uid = ? LIMIT 1) AS has_sticker_assets`,
+        normalizedScope,
+        normalizedScope,
+        normalizedScope
+    );
+
+    return Boolean(
+        (row?.has_notes ?? 0) ||
+        (row?.has_sync_queue ?? 0) ||
+        (row?.has_sticker_assets ?? 0)
+    );
+}
+
 export async function resetLocalDatabase(): Promise<void> {
     const openDatabase = db ?? (await dbInitPromise?.catch(() => null)) ?? null;
 

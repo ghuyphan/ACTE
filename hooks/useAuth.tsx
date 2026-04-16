@@ -9,6 +9,7 @@ import {
 } from '../constants/auth';
 import i18n from '../constants/i18n';
 import {
+  hasScopeOwnedData,
   LOCAL_NOTES_SCOPE,
   migrateLocalNotesScopeToUser,
   setActiveNotesScope,
@@ -425,7 +426,10 @@ async function syncUserProfile(session: Session | null) {
   }
 
   try {
-    await migrateLocalNotesScopeToUser(user.uid);
+    const hasAnonymousLocalData = await hasScopeOwnedData(LOCAL_NOTES_SCOPE);
+    if (hasAnonymousLocalData) {
+      await migrateLocalNotesScopeToUser(user.uid);
+    }
   } catch (error) {
     console.warn('[auth] Failed to migrate local notes scope:', error);
     throw createSessionSyncError('migration_failed', error);
@@ -556,14 +560,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             return null;
           }
 
-          const reconciledUser = await reconcileUserProfile(nextUser, requestId);
-          if (authSessionSyncRequestIdRef.current !== requestId) {
-            return null;
-          }
-
-          setUser(reconciledUser);
+          setUser(nextUser);
           setIsReady(true);
-          return reconciledUser;
+          void reconcileUserProfile(nextUser, requestId)
+            .then((reconciledUser) => {
+              if (
+                reconciledUser &&
+                authSessionSyncRequestIdRef.current === requestId
+              ) {
+                setUser(reconciledUser);
+              }
+            })
+            .catch(() => undefined);
+          return nextUser;
         } catch (error) {
           console.warn(`[auth] Failed to ${errorContext}:`, error);
           if (authSessionSyncRequestIdRef.current !== requestId) {

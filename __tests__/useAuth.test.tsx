@@ -71,6 +71,7 @@ const mockUpdateOwnPhotoURL = jest.fn<
 const mockClearSharedFeedCache = jest.fn<Promise<void>, [string | null | undefined]>(async () => undefined);
 const mockUnregisterCurrentSocialPushToken = jest.fn<Promise<void>, []>(async () => undefined);
 const mockPurgeLocalAccountScope = jest.fn<Promise<void>, [string | null | undefined]>(async () => undefined);
+const mockHasScopeOwnedData = jest.fn<Promise<boolean>, []>(async () => true);
 const mockMigrateLocalNotesScopeToUser = jest.fn<Promise<void>, [string]>(async () => undefined);
 const mockSetActiveNotesScope = jest.fn<void, [string | null | undefined]>();
 const mockGetPersistedActiveNotesScopeSync = jest.fn<string | null | undefined, []>(() => null);
@@ -218,6 +219,7 @@ jest.mock('../services/accountCleanup', () => ({
 
 jest.mock('../services/database', () => ({
   LOCAL_NOTES_SCOPE: '__local__',
+  hasScopeOwnedData: () => mockHasScopeOwnedData(),
   getPersistedActiveNotesScopeSync: () => mockGetPersistedActiveNotesScopeSync(),
   migrateLocalNotesScopeToUser: (userUid: string) => mockMigrateLocalNotesScopeToUser(userUid),
   setActiveNotesScope: (scope: string | null | undefined) => mockSetActiveNotesScope(scope),
@@ -299,6 +301,7 @@ describe('useAuth', () => {
     mockInvokeFunction.mockResolvedValue({ data: { success: true }, error: null });
     mockUpdateOwnUsername.mockClear();
     mockUpdateOwnPhotoURL.mockClear();
+    mockHasScopeOwnedData.mockResolvedValue(true);
     mockMigrateLocalNotesScopeToUser.mockClear();
     mockGetPersistedActiveNotesScopeSync.mockReturnValue(null);
     mockSetActiveNotesScope.mockClear();
@@ -375,6 +378,63 @@ describe('useAuth', () => {
     expect(mockMigrateLocalNotesScopeToUser).toHaveBeenCalledWith('user-1');
     expect(mockSetActiveNotesScope).toHaveBeenCalledWith('user-1');
     expect(mockUpsertPublicUserProfile).toHaveBeenCalled();
+  });
+
+  it('skips local-scope migration work when there is no anonymous local data to move', async () => {
+    mockAuthState.initialSession = buildSession();
+    mockHasScopeOwnedData.mockResolvedValueOnce(false);
+
+    const hook = renderHook(() => useAuth(), { wrapper });
+
+    await waitFor(() => {
+      expect(hook.result.current.isReady).toBe(true);
+      expect(hook.result.current.user?.uid).toBe('user-1');
+    });
+
+    expect(mockMigrateLocalNotesScopeToUser).not.toHaveBeenCalled();
+    expect(mockSetActiveNotesScope).toHaveBeenCalledWith('user-1');
+  });
+
+  it('does not block auth readiness on profile reconciliation', async () => {
+    mockAuthState.initialSession = buildSession();
+    let resolveProfile!: (value: {
+      displayName: string | null;
+      username: string | null;
+      usernameSetAt: string | null;
+      photoURL: string | null;
+      updatedAt: string;
+    }) => void;
+    mockUpsertPublicUserProfile.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveProfile = resolve;
+        })
+    );
+
+    const hook = renderHook(() => useAuth(), { wrapper });
+
+    await waitFor(() => {
+      expect(hook.result.current.isReady).toBe(true);
+      expect(hook.result.current.user?.uid).toBe('user-1');
+    });
+
+    expect(hook.result.current.user?.photoURL).toBeNull();
+
+    await act(async () => {
+      resolveProfile({
+        displayName: 'Huy',
+        username: 'huy',
+        usernameSetAt: '2026-04-11T08:00:00.000Z',
+        photoURL: 'data:image/jpeg;base64:new-avatar',
+        updatedAt: '2026-04-11T00:00:00.000Z',
+      });
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(hook.result.current.user?.photoURL).toBe('data:image/jpeg;base64:new-avatar');
+      expect(hook.result.current.user?.username).toBe('huy');
+    });
   });
 
   it('hydrates the latest profile avatar during session bootstrap', async () => {
