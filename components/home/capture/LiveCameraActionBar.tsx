@@ -51,7 +51,6 @@ export function LiveCameraActionBar({
     isDark: colors.captureGlassColorScheme === 'dark',
     borderColor: colors.captureCardBorder,
   });
-  const isFilterToggleActive = filterModeEnabled || selectedPhotoFilterId !== 'original';
 
   return (
     <View style={styles.captureActionBarWrap}>
@@ -65,7 +64,7 @@ export function LiveCameraActionBar({
                 : t('capture.filters', 'Filters')
             }
             onPress={onToggleFilterMode}
-            active={isFilterToggleActive}
+            active={filterModeEnabled}
             activeIconName="options-outline"
             inactiveIconName="options-outline"
             renderActiveIcon={({ color, size }) => (
