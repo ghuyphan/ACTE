@@ -537,22 +537,11 @@ export function PhotoCaptureBottomBar({
             activeTranslateY={0}
             contentActiveScale={1}
             contentActiveTranslateY={0}
-            style={[
-              styles.textCardActionPill,
-              styles.livePhotoTogglePill,
-              {
-                backgroundColor: hasLivePhotoMotion
-                  ? glassPalette.activeControlBackgroundColor
-                  : glassPalette.subtleControlBackgroundColor,
-                borderColor: hasLivePhotoMotion
-                  ? glassPalette.controlBorderColor
-                  : glassPalette.subtleControlBorderColor,
-              },
-            ]}
+            style={styles.actionStripIconButton}
           >
             <LivePhotoIcon
               size={15}
-              color={colors.captureGlassText}
+              color={hasLivePhotoMotion ? colors.primary : colors.captureGlassText}
             />
           </CaptureAnimatedPressable>
         }

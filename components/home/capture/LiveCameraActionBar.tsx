@@ -1,13 +1,13 @@
 import type { TFunction } from 'i18next';
-import { Text, View } from 'react-native';
+import { ActivityIndicator, Text, View } from 'react-native';
 import type { PhotoFilterId } from '../../../services/photoFilters';
 import type { CaptureCardColors } from './captureShared';
-import { CaptureGlassActionButton } from './CaptureGlassActionButton';
+import { CaptureAnimatedPressable } from './CaptureAnimatedPressable';
 import { CaptureControlRail } from './CaptureControlRail';
 import { PhotoFilterPicker } from './PhotoFilterPicker';
 import { styles } from './captureCardStyles';
-import { getGlassSurfacePalette } from '../../ui/glassTokens';
 import LivePhotoIcon from '../../ui/LivePhotoIcon';
+import { Ionicons } from '@expo/vector-icons';
 
 interface LiveCameraActionBarProps {
   cameraInstructionText?: string | null;
@@ -40,10 +40,6 @@ export function LiveCameraActionBar({
     return null;
   }
 
-  const glassPalette = getGlassSurfacePalette({
-    isDark: colors.captureGlassColorScheme === 'dark',
-    borderColor: colors.captureCardBorder,
-  });
   const showLivePhotoGuide = Boolean(cameraInstructionText);
 
   return (
@@ -68,7 +64,7 @@ export function LiveCameraActionBar({
               t={t}
             />
           </View>
-          <CaptureGlassActionButton
+          <CaptureAnimatedPressable
             testID="capture-library-button"
             accessibilityLabel={
               libraryImportLocked
@@ -77,13 +73,16 @@ export function LiveCameraActionBar({
             }
             onPress={onOpenPhotoLibrary}
             disabled={importingPhoto}
-            iconName="images-outline"
-            iconColor={colors.captureGlassText}
-            glassColorScheme={colors.captureGlassColorScheme}
-            fallbackColor={glassPalette.controlBackgroundColor}
-            borderColor={glassPalette.controlBorderColor}
-            style={styles.liveCameraLibraryButton}
-          />
+            disabledOpacity={0.55}
+            pressedScale={0.96}
+            style={styles.actionStripIconButton}
+          >
+            {importingPhoto ? (
+              <ActivityIndicator size="small" color={colors.captureGlassText} />
+            ) : (
+              <Ionicons name="images-outline" size={19} color={colors.captureGlassText} />
+            )}
+          </CaptureAnimatedPressable>
         </View>
       </CaptureControlRail>
     </View>

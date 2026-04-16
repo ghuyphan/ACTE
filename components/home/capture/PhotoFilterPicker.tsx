@@ -53,20 +53,16 @@ export const PhotoFilterPicker = memo(function PhotoFilterPicker({
               onSelectFilter(preset.id);
             }}
             pressedScale={0.985}
-            style={[
-              styles.liveFilterPill,
-              {
-                borderColor: isSelected ? colors.primary : colors.captureGlassBorder,
-                backgroundColor: isSelected ? colors.primary : colors.captureGlassFill,
-                opacity: isLocked ? 0.78 : 1,
-              },
-            ]}
+            style={styles.liveFilterOption}
           >
             <View style={styles.liveFilterPillContent}>
               <Text
                 style={[
                   styles.liveFilterPillLabel,
-                  { color: isSelected ? '#FFFDFC' : colors.captureGlassText },
+                  {
+                    color: isSelected ? colors.primary : colors.captureGlassText,
+                    opacity: isLocked ? 0.72 : 1,
+                  },
                 ]}
               >
                 {label}
@@ -75,10 +71,18 @@ export const PhotoFilterPicker = memo(function PhotoFilterPicker({
                 <Ionicons
                   name="lock-closed"
                   size={11}
-                  color={isSelected ? '#FFFDFC' : colors.captureGlassText}
+                  color={isSelected ? colors.primary : colors.captureGlassText}
                 />
               ) : null}
             </View>
+            {isSelected ? (
+              <View
+                style={[
+                  styles.liveFilterIndicator,
+                  { backgroundColor: colors.primary },
+                ]}
+              />
+            ) : null}
           </CaptureAnimatedPressable>
         );
       })}

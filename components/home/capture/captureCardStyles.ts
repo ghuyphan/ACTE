@@ -216,12 +216,6 @@ export const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  livePhotoTogglePill: {
-    width: TOP_CONTROL_HEIGHT,
-    minWidth: TOP_CONTROL_HEIGHT,
-    paddingHorizontal: 0,
-    justifyContent: 'center',
-  },
   doodleColorPalette: {
     width: 96,
     overflow: 'hidden',
@@ -470,7 +464,14 @@ export const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0,
   },
-  liveCameraLibraryButton: {
+  actionStripIconButton: {
+    width: TOP_CONTROL_HEIGHT,
+    height: TOP_CONTROL_HEIGHT,
+    borderRadius: TOP_CONTROL_RADIUS,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'transparent',
+    borderWidth: 0,
     flexShrink: 0,
   },
   liveFilterScroll: {
@@ -482,11 +483,9 @@ export const styles = StyleSheet.create({
     gap: 6,
     paddingRight: 2,
   },
-  liveFilterPill: {
+  liveFilterOption: {
     minHeight: 30,
-    borderRadius: 999,
-    borderWidth: StyleSheet.hairlineWidth,
-    paddingHorizontal: 12,
+    paddingHorizontal: 8,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -500,6 +499,12 @@ export const styles = StyleSheet.create({
     lineHeight: 14,
     fontWeight: '700',
     fontFamily: 'Noto Sans',
+  },
+  liveFilterIndicator: {
+    marginTop: 5,
+    width: 16,
+    height: 2,
+    borderRadius: 999,
   },
   textBottomToolsBar: {
     alignSelf: 'center',
