@@ -51,16 +51,11 @@ export default function AppBottomSheet({
   const initialIndexProps = resolvedInitialIndex === 0 ? {} : { index: resolvedInitialIndex };
 
   useEffect(() => {
-    if (Platform.OS !== 'android') {
+    if (Platform.OS !== 'android' || !visible) {
       return;
     }
 
-    if (visible) {
-      modalRef.current?.present();
-      return;
-    }
-
-    modalRef.current?.dismiss();
+    modalRef.current?.present();
   }, [visible]);
 
   useEffect(() => {
@@ -79,6 +74,10 @@ export default function AppBottomSheet({
   }, [visible, dismissible, onClose]);
 
   if (Platform.OS !== 'android') {
+    return null;
+  }
+
+  if (!visible) {
     return null;
   }
 

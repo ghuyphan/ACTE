@@ -93,7 +93,6 @@ import { isIOS26OrNewer } from '../../utils/platform';
 
 const LIVE_PHOTO_CAMERA_HINT_SEEN_KEY = 'noto.capture.live-photo-hint-seen.v1';
 const CAPTURE_DRAFT_STORAGE_KEY = 'noto.capture.home-draft.v1';
-const REMINDER_RECOVERY_PROMPT_STORAGE_KEY_PREFIX = 'noto.home.reminder-recovery-prompt.v1';
 const PLACE_PULSE_RADIUS_METERS = 500;
 const SHARED_PLACE_PULSE_MAX_AVATARS = 3;
 const SHARED_PLACE_PULSE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
@@ -116,11 +115,6 @@ function isPersistableCaptureDraft(draft: CaptureDraftState) {
 
 function hasFiniteCoordinate(value: number | null | undefined): value is number {
   return typeof value === 'number' && Number.isFinite(value);
-}
-
-function getReminderRecoveryPromptStorageKey(userUid: string | null | undefined) {
-  const normalizedUserUid = typeof userUid === 'string' ? userUid.trim() : '';
-  return `${REMINDER_RECOVERY_PROMPT_STORAGE_KEY_PREFIX}.${normalizedUserUid || 'local'}`;
 }
 
 function getSharedPlacePulseFallbackLabel(post: SharedPost) {
@@ -284,7 +278,6 @@ export default function HomeScreen() {
   const [showSharedManageSheet, setShowSharedManageSheet] = useState(false);
   const [savedNoteRevealNote, setSavedNoteRevealNote] = useState<Note | null>(null);
   const [savedNoteRevealToken, setSavedNoteRevealToken] = useState(0);
-  const reminderRecoveryPromptSessionKeyRef = useRef<string | null>(null);
   const lockedPremiumNoteColorIds = useMemo(
     () => (tier === 'plus' ? [] : PREMIUM_NOTE_COLOR_IDS),
     [tier]
@@ -1011,11 +1004,6 @@ export default function HomeScreen() {
       setSuppressedHomeNoteIds([]);
     },
   });
-  const hasReminderEligiblePlaces = useMemo(() => getReminderPlaceGroups(notes).length > 0, [notes]);
-  const reminderRecoveryPromptStorageKey = useMemo(
-    () => getReminderRecoveryPromptStorageKey(user?.uid),
-    [user?.uid]
-  );
 
   const showDoneSheet = useCallback(
     (
@@ -1105,71 +1093,6 @@ export default function HomeScreen() {
       },
     });
   }, [requestReminderPermissions, showAlert, showDoneSheet, t]);
-
-  useEffect(() => {
-    reminderRecoveryPromptSessionKeyRef.current = null;
-  }, [reminderRecoveryPromptStorageKey]);
-
-  useEffect(() => {
-    if (
-      !user ||
-      !isScreenFocused ||
-      !notesInitialLoadComplete ||
-      isInitialSyncPending ||
-      remindersEnabled ||
-      !hasReminderEligiblePlaces ||
-      reminderRecoveryPromptSessionKeyRef.current === reminderRecoveryPromptStorageKey
-    ) {
-      return;
-    }
-
-    let cancelled = false;
-    reminderRecoveryPromptSessionKeyRef.current = reminderRecoveryPromptStorageKey;
-
-    void getPersistentItem(reminderRecoveryPromptStorageKey)
-      .then((storedValue) => {
-        if (cancelled || storedValue === '1') {
-          return;
-        }
-
-        void setPersistentItem(reminderRecoveryPromptStorageKey, '1').catch(() => undefined);
-        showAlert({
-          variant: 'info',
-          title: t(
-            'capture.reminderRecoveryTitle',
-            'Enable reminders for your saved places'
-          ),
-          message: t(
-            'capture.reminderRecoveryMsg',
-            'Noto found saved places in your journal. Turn on background location and notifications if you want a reminder when you return.'
-          ),
-          primaryAction: {
-            label: t('capture.enableReminders', 'Enable reminders'),
-            onPress: promptReminderPermissionsFromDisclosure,
-          },
-          secondaryAction: {
-            label: t('common.notNow', 'Not now'),
-            variant: 'secondary',
-          },
-        });
-      })
-      .catch(() => undefined);
-
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    hasReminderEligiblePlaces,
-    isInitialSyncPending,
-    isScreenFocused,
-    notesInitialLoadComplete,
-    promptReminderPermissionsFromDisclosure,
-    reminderRecoveryPromptStorageKey,
-    remindersEnabled,
-    showAlert,
-    t,
-    user,
-  ]);
 
   const showSharedUnavailableSheet = useCallback(() => {
     showAlert({
