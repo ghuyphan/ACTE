@@ -2520,30 +2520,32 @@ export default function HomeScreen() {
         showDockedBlur
       />
 
-      <SharedManageSheet
-        visible={showSharedManageSheet}
-        friends={friends}
-        activeInvite={activeInvite}
-        creatingInvite={inviteActionInFlight === 'create'}
-        loading={sharedLoading}
-        onClose={dismissSharedManageSheet}
-        onCreateInvite={() => {
-          void handleCreateInvite();
-        }}
-        onShareInvite={() => {
-          void handleShareInvite();
-        }}
-        onRevokeInvite={() => {
-          void handleRevokeInvite();
-        }}
-        onOpenFriendSearch={() => {
-          dismissSharedManageSheet();
-          router.push('/friends/join' as Href);
-        }}
-        onRemoveFriend={handleRemoveFriend}
-      />
+      {showSharedManageSheet ? (
+        <SharedManageSheet
+          visible={showSharedManageSheet}
+          friends={friends}
+          activeInvite={activeInvite}
+          creatingInvite={inviteActionInFlight === 'create'}
+          loading={sharedLoading}
+          onClose={dismissSharedManageSheet}
+          onCreateInvite={() => {
+            void handleCreateInvite();
+          }}
+          onShareInvite={() => {
+            void handleShareInvite();
+          }}
+          onRevokeInvite={() => {
+            void handleRevokeInvite();
+          }}
+          onOpenFriendSearch={() => {
+            dismissSharedManageSheet();
+            router.push('/friends/join' as Href);
+          }}
+          onRemoveFriend={handleRemoveFriend}
+        />
+      ) : null}
 
-      <AppSheetAlert {...alertProps} />
+      {alertProps.visible ? <AppSheetAlert {...alertProps} /> : null}
     </View>
   );
 }

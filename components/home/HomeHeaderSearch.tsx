@@ -778,7 +778,8 @@ export default function HomeHeaderSearch({
       {Platform.OS === "android" &&
       sharedButtonMode === "filter" &&
       onChangeSharedFilter &&
-      hasFriendsForFilter ? (
+      hasFriendsForFilter &&
+      showAndroidSharedMenuSheet ? (
         <AppSheet
           visible={showAndroidSharedMenuSheet}
           onClose={() => setShowAndroidSharedMenuSheet(false)}

@@ -64,6 +64,13 @@ export function LiveCameraActionBar({
               t={t}
             />
           </View>
+          <View
+            pointerEvents="none"
+            style={[
+              styles.liveCameraActionDivider,
+              { backgroundColor: colors.captureGlassBorder },
+            ]}
+          />
           <CaptureAnimatedPressable
             testID="capture-library-button"
             accessibilityLabel={
@@ -75,7 +82,13 @@ export function LiveCameraActionBar({
             disabled={importingPhoto}
             disabledOpacity={0.55}
             pressedScale={0.96}
-            style={styles.actionStripIconButton}
+            style={[
+              styles.liveCameraImportButton,
+              {
+                backgroundColor: colors.captureGlassFill,
+                borderColor: colors.captureGlassBorder,
+              },
+            ]}
           >
             {importingPhoto ? (
               <ActivityIndicator size="small" color={colors.captureGlassText} />
