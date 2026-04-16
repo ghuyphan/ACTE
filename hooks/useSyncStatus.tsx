@@ -1,6 +1,7 @@
 import { AppState } from 'react-native';
 import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import i18n from '../constants/i18n';
+import { useStartupInteraction } from './app/useHomeStartupReady';
 import { useConnectivity } from './useConnectivity';
 import {
   getSyncRepository,
@@ -12,6 +13,7 @@ import {
 import { useAuth } from './useAuth';
 import { useNotes } from './useNotes';
 import { getPersistentItem, setPersistentItem } from '../utils/appStorage';
+import { logStartupEvent, traceStartupAsync } from '../utils/startupTrace';
 
 type SyncState = 'idle' | 'syncing' | 'success' | 'error';
 export type SyncPhase = 'idle' | 'bootstrapping' | 'syncing' | 'success' | 'error';
@@ -54,6 +56,7 @@ const SyncStatusContext = createContext<SyncStatusContextValue | undefined>(unde
 
 export function SyncStatusProvider({ children }: { children: ReactNode }) {
   const { user, isReady, isAuthAvailable } = useAuth();
+  const { startupInteractive } = useStartupInteraction();
   const {
     notes,
     refreshNotes,
@@ -81,6 +84,7 @@ export function SyncStatusProvider({ children }: { children: ReactNode }) {
   const syncRequestIdRef = useRef(0);
   const pendingRunModeRef = useRef<SyncMode | null>(null);
   const previousUserUidRef = useRef<string | null>(null);
+  const deferredInitialSyncUserUidRef = useRef<string | null>(null);
   const skipNextNotesEffectRef = useRef(false);
   const suppressNextNotesEffectRef = useRef(false);
   const runSyncNowRef = useRef<(mode?: SyncMode) => Promise<void>>(async () => undefined);
@@ -265,7 +269,16 @@ export function SyncStatusProvider({ children }: { children: ReactNode }) {
       setStatus('syncing');
       setLastMessage(null);
 
-      const result = await syncNotes(currentUser, notes, { mode: effectiveMode });
+      const result = await traceStartupAsync(
+        'sync.run',
+        () => syncNotes(currentUser, notes, { mode: effectiveMode }),
+        {
+          startupInteractive,
+          mode: effectiveMode,
+          noteCount: notes.length,
+          userUid: requestUserUid,
+        }
+      );
       const queueStats = await refreshQueueStats();
       if (!isCurrentSyncRequest(requestId, requestUserUid)) {
         return;
@@ -380,6 +393,7 @@ export function SyncStatusProvider({ children }: { children: ReactNode }) {
       skipNextNotesEffectRef.current = false;
       suppressNextNotesEffectRef.current = false;
       previousUserUidRef.current = user?.uid ?? null;
+      deferredInitialSyncUserUidRef.current = null;
       initialSyncPendingRef.current = false;
       setIsInitialSyncPending(false);
       setIsInitialSyncStateReady(true);
@@ -399,10 +413,33 @@ export function SyncStatusProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      previousUserUidRef.current = user.uid;
+      deferredInitialSyncUserUidRef.current = user.uid;
       skipNextNotesEffectRef.current = true;
       setLastMessage(null);
       setLastSyncedAt(null);
+      if (!startupInteractive) {
+        logStartupEvent('sync.deferred-until-startup-interactive', {
+          reason: 'initial-account-sync',
+          userUid: user.uid,
+        });
+        return;
+      }
+
+      previousUserUidRef.current = user.uid;
+      deferredInitialSyncUserUidRef.current = null;
+      void recoverBlockedSessionErrors().finally(() => {
+        queueSync(true, getPreferredSyncMode('incremental'));
+      });
+      return;
+    }
+
+    if (
+      startupInteractive &&
+      deferredInitialSyncUserUidRef.current &&
+      deferredInitialSyncUserUidRef.current === user.uid
+    ) {
+      previousUserUidRef.current = user.uid;
+      deferredInitialSyncUserUidRef.current = null;
       void recoverBlockedSessionErrors().finally(() => {
         queueSync(true, getPreferredSyncMode('incremental'));
       });
@@ -419,6 +456,7 @@ export function SyncStatusProvider({ children }: { children: ReactNode }) {
     queueSync,
     recoverBlockedSessionErrors,
     refreshQueueStats,
+    startupInteractive,
     syncEnabledState,
     user,
   ]);
@@ -429,7 +467,8 @@ export function SyncStatusProvider({ children }: { children: ReactNode }) {
       !user ||
       !isAuthAvailable ||
       !isInitialSyncStateReady ||
-      !notesInitialLoadComplete
+      !notesInitialLoadComplete ||
+      !startupInteractive
     ) {
       return;
     }
@@ -455,12 +494,13 @@ export function SyncStatusProvider({ children }: { children: ReactNode }) {
     notes,
     queueSync,
     refreshQueueStats,
+    startupInteractive,
     user,
   ]);
 
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (nextState) => {
-      if (nextState === 'active') {
+      if (nextState === 'active' && startupInteractive) {
         void recoverBlockedSessionErrors().finally(() => {
           queueSync(true, 'incremental');
         });
@@ -470,7 +510,7 @@ export function SyncStatusProvider({ children }: { children: ReactNode }) {
     return () => {
       subscription.remove();
     };
-  }, [queueSync, recoverBlockedSessionErrors]);
+  }, [queueSync, recoverBlockedSessionErrors, startupInteractive]);
 
   useEffect(() => {
     return () => {
@@ -499,7 +539,7 @@ export function SyncStatusProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    if (pendingCount > 0 || failedCount > 0) {
+    if ((pendingCount > 0 || failedCount > 0) && startupInteractive) {
       queueSync(true, 'incremental');
       return;
     }
@@ -509,7 +549,7 @@ export function SyncStatusProvider({ children }: { children: ReactNode }) {
         ? null
         : currentMessage
     );
-  }, [connectivityStatus, failedCount, pendingCount, queueSync]);
+  }, [connectivityStatus, failedCount, pendingCount, queueSync, startupInteractive]);
 
   const bootstrapState: SyncBootstrapState = useMemo(() => {
     if (!user || !isAuthAvailable) {
@@ -521,6 +561,10 @@ export function SyncStatusProvider({ children }: { children: ReactNode }) {
     }
 
     if (!notesInitialLoadComplete || !isSyncPrefReady || !isInitialSyncStateReady) {
+      return 'preparing';
+    }
+
+    if (!startupInteractive) {
       return 'preparing';
     }
 
@@ -549,6 +593,7 @@ export function SyncStatusProvider({ children }: { children: ReactNode }) {
     isSyncPrefReady,
     notesInitialLoadComplete,
     status,
+    startupInteractive,
     syncEnabledState,
     user,
   ]);

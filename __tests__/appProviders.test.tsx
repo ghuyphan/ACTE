@@ -58,6 +58,10 @@ jest.mock('../hooks', () => {
 });
 
 jest.mock('../hooks/app/useHomeStartupReady', () => ({
+  StartupInteractionProvider: ({ children }: { children?: React.ReactNode }) => {
+    mockRenderedProviders.push('StartupInteractionProvider');
+    return children ?? null;
+  },
   HomeStartupReadyProvider: ({ children }: { children?: React.ReactNode }) => {
     mockRenderedProviders.push('HomeStartupReadyProvider');
     return children ?? null;
@@ -165,7 +169,7 @@ describe('AppProviders', () => {
       'ActiveNoteProvider',
       'ActiveFeedTargetProvider',
       'FeedFocusProvider',
-      'HomeStartupReadyProvider',
+      'StartupInteractionProvider',
       'NotesProvider',
       'SyncStatusProvider',
       'SharedFeedProvider',

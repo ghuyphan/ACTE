@@ -19,6 +19,7 @@ import { useAuth } from '../hooks/useAuth';
 import { useTheme } from '../hooks/useTheme';
 import { useAppSplashGate } from '../hooks/app/useAppSplashGate';
 import { useAppNotificationRouting } from '../hooks/app/useAppNotificationRouting';
+import { useStartupInteraction } from '../hooks/app/useHomeStartupReady';
 import { useAppStartupBootstrap } from '../hooks/app/useAppStartupBootstrap';
 import { useAppWidgetRefresh } from '../hooks/app/useAppWidgetRefresh';
 import { useSocialPushRegistration } from '../hooks/app/useSocialPushRegistration';
@@ -34,6 +35,7 @@ SplashScreen.preventAutoHideAsync();
 function AppContent() {
   const { colors, isDark, themeReady } = useTheme();
   const { isReady: authReady } = useAuth();
+  const { startupInteractive, markStartupInteractive, resetStartupInteraction } = useStartupInteraction();
   const { phase: notesPhase } = useNotesStore();
   const { t } = useTranslation();
   const {
@@ -47,7 +49,7 @@ function AppContent() {
   useAppWidgetRefresh({ enabled: isDatabaseReady });
   useAppNotificationRouting();
   useSocialPushRegistration();
-  useAppSplashGate({
+  const { startupGateReady } = useAppSplashGate({
     authReady,
     isDatabaseReady,
     isStartupRouteReady,
@@ -55,6 +57,37 @@ function AppContent() {
     startupError,
     themeReady,
   });
+
+  useEffect(() => {
+    if (!startupGateReady) {
+      if (!startupInteractive) {
+        resetStartupInteraction('app-startup');
+      }
+      return;
+    }
+
+    if (startupInteractive) {
+      return;
+    }
+
+    let cancelled = false;
+    let secondFrameId: number | null = null;
+    const firstFrameId = requestAnimationFrame(() => {
+      secondFrameId = requestAnimationFrame(() => {
+        if (!cancelled) {
+          markStartupInteractive('app-shell');
+        }
+      });
+    });
+
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(firstFrameId);
+      if (secondFrameId != null) {
+        cancelAnimationFrame(secondFrameId);
+      }
+    };
+  }, [markStartupInteractive, resetStartupInteraction, startupGateReady, startupInteractive]);
 
   useEffect(() => {
     void SystemUI.setBackgroundColorAsync(colors.background);

@@ -41,8 +41,10 @@ import {
   SHARED_POST_MEDIA_BUCKET,
 } from '../services/remoteMedia';
 import { scheduleWidgetDataUpdate } from '../services/widgetService';
+import { useStartupInteraction } from './app/useHomeStartupReady';
 import { useAuth } from './useAuth';
 import { useConnectivity } from './useConnectivity';
+import { logStartupEvent, traceStartupAsync } from '../utils/startupTrace';
 
 export type SharedFeedLoadPhase = 'bootstrapping' | 'cache-ready' | 'ready' | 'refreshing';
 
@@ -89,9 +91,24 @@ function upsertFriendConnection(
   ]);
 }
 
+function buildSharedMediaHydrationKey(
+  sessionId: number,
+  source: 'live' | 'cache',
+  updatedAt: string | null,
+  posts: SharedPost[]
+) {
+  return [
+    sessionId,
+    source,
+    updatedAt ?? 'unknown',
+    ...posts.map((post) => `${post.id}:${post.photoPath ?? ''}:${post.pairedVideoPath ?? ''}`),
+  ].join('|');
+}
+
 function useSharedFeedStoreValue(): SharedFeedStoreValue {
   const { user, isAuthAvailable, isReady } = useAuth();
   const { isOnline } = useConnectivity();
+  const { startupInteractive } = useStartupInteraction();
   const [friends, setFriends] = useState<FriendConnection[]>([]);
   const [sharedPosts, setSharedPosts] = useState<SharedPost[]>([]);
   const [activeInvite, setActiveInvite] = useState<FriendInvite | null>(null);
@@ -110,6 +127,8 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
   const refreshRequestIdRef = useRef(0);
   const refreshInFlightRef = useRef<Promise<void> | null>(null);
   const pendingForcedRefreshRef = useRef(false);
+  const sharedMediaHydrationKeyRef = useRef<string | null>(null);
+  const sharedMediaHydrationPromiseRef = useRef<Promise<void> | null>(null);
 
   const isCurrentSharedFeedSession = useCallback(
     (sessionId: number, userUid: string) =>
@@ -333,6 +352,60 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
     ]
   );
 
+  const hydrateSharedPostMediaWhenReady = useCallback(
+    async (
+      userUid: string,
+      sessionId: number,
+      source: 'live' | 'cache',
+      updatedAt: string | null,
+      posts: SharedPost[]
+    ) => {
+      if (posts.length === 0) {
+        return;
+      }
+
+      if (!startupInteractive) {
+        logStartupEvent('shared-feed.media-hydration:deferred', {
+          postCount: posts.length,
+          source,
+          userUid,
+        });
+        return;
+      }
+
+      const hydrationKey = buildSharedMediaHydrationKey(sessionId, source, updatedAt, posts);
+      if (sharedMediaHydrationKeyRef.current === hydrationKey) {
+        return sharedMediaHydrationPromiseRef.current ?? Promise.resolve();
+      }
+
+      sharedMediaHydrationKeyRef.current = hydrationKey;
+      const hydrationPromise = traceStartupAsync(
+        'shared-feed.media-hydration',
+        () => hydrateSharedPostMedia(userUid, sessionId, source, updatedAt, posts),
+        {
+          postCount: posts.length,
+          source,
+          userUid,
+        }
+      )
+        .catch((error) => {
+          if (sharedMediaHydrationKeyRef.current === hydrationKey) {
+            sharedMediaHydrationKeyRef.current = null;
+          }
+          throw error;
+        })
+        .finally(() => {
+          if (sharedMediaHydrationPromiseRef.current === hydrationPromise) {
+            sharedMediaHydrationPromiseRef.current = null;
+          }
+        });
+
+      sharedMediaHydrationPromiseRef.current = hydrationPromise;
+      await hydrationPromise;
+    },
+    [hydrateSharedPostMedia, startupInteractive]
+  );
+
   const commitSnapshotAndPersist = useCallback(
     (
       userUid: string,
@@ -396,13 +469,17 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
   );
 
   const hydrateFromCache = useCallback(async (userUid: string, sessionId: number) => {
-    const snapshot = await getCachedSharedFeedSnapshot(userUid);
+    const snapshot = await traceStartupAsync(
+      'shared-feed.cache-hydration',
+      () => getCachedSharedFeedSnapshot(userUid),
+      { userUid }
+    );
     if (!isCurrentSharedFeedSession(sessionId, userUid)) {
       return false;
     }
     applySnapshot(snapshot, 'cache', snapshot.lastUpdatedAt);
     setReady(true);
-    void hydrateSharedPostMedia(
+    void hydrateSharedPostMediaWhenReady(
       userUid,
       sessionId,
       'cache',
@@ -410,7 +487,7 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
       snapshot.sharedPosts
     );
     return true;
-  }, [applySnapshot, hydrateSharedPostMedia, isCurrentSharedFeedSession]);
+  }, [applySnapshot, hydrateSharedPostMediaWhenReady, isCurrentSharedFeedSession]);
 
   const refreshAll = useCallback(async (options?: { force?: boolean }) => {
     if (!enabled || !user) {
@@ -451,7 +528,14 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
     const refreshPromise = (async () => {
       setLoading(true);
       try {
-        const snapshot = await fetchSharedFeed(user, options);
+        const snapshot = await traceStartupAsync(
+          'shared-feed.refresh',
+          () => fetchSharedFeed(user, options),
+          {
+            force: Boolean(options?.force),
+            userUid,
+          }
+        );
         if (
           !isCurrentSharedFeedSession(sessionId, userUid) ||
           refreshRequestIdRef.current !== requestId
@@ -461,7 +545,7 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
 
         const updatedAt = new Date().toISOString();
         commitSnapshotAndPersist(userUid, snapshot, updatedAt);
-        void hydrateSharedPostMedia(userUid, sessionId, 'live', updatedAt, snapshot.sharedPosts);
+        void hydrateSharedPostMediaWhenReady(userUid, sessionId, 'live', updatedAt, snapshot.sharedPosts);
       } finally {
         if (
           isCurrentSharedFeedSession(sessionId, userUid) &&
@@ -493,7 +577,7 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
     commitSnapshot,
     commitSnapshotAndPersist,
     enabled,
-    hydrateSharedPostMedia,
+    hydrateSharedPostMediaWhenReady,
     isCurrentSharedFeedSession,
     isOnline,
     user,
@@ -550,6 +634,8 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
       setInitialLoadComplete(true);
       pendingForcedRefreshRef.current = false;
       refreshInFlightRef.current = null;
+      sharedMediaHydrationKeyRef.current = null;
+      sharedMediaHydrationPromiseRef.current = null;
       if (previousUserUidRef.current) {
         void clearSharedFeedCache(previousUserUidRef.current);
         invalidateSharedFeedRefresh(previousUserUidRef.current);
@@ -564,6 +650,8 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
     }
 
     previousUserUidRef.current = user.uid;
+    sharedMediaHydrationKeyRef.current = null;
+    sharedMediaHydrationPromiseRef.current = null;
     commitSnapshot(
       {
         friends: [],
@@ -600,7 +688,11 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
         }
         const updatedAt = new Date().toISOString();
         commitSnapshotAndPersist(user.uid, snapshot, updatedAt);
-        void hydrateSharedPostMedia(
+        logStartupEvent('shared-feed.subscription-snapshot', {
+          postCount: snapshot.sharedPosts.length,
+          userUid: user.uid,
+        });
+        void hydrateSharedPostMediaWhenReady(
           user.uid,
           sessionId,
           'live',
@@ -623,7 +715,30 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
     });
 
     return unsubscribe;
-  }, [commitSnapshotAndPersist, enabled, hydrateFromCache, isOnline, isReady, user]);
+  }, [commitSnapshotAndPersist, enabled, hydrateFromCache, hydrateSharedPostMediaWhenReady, isOnline, isReady, user]);
+
+  useEffect(() => {
+    if (!enabled || !user || !ready || !startupInteractive || sharedPosts.length === 0) {
+      return;
+    }
+
+    void hydrateSharedPostMediaWhenReady(
+      user.uid,
+      sharedFeedSessionRef.current,
+      dataSource,
+      lastUpdatedAt,
+      sharedPosts
+    );
+  }, [
+    dataSource,
+    enabled,
+    hydrateSharedPostMediaWhenReady,
+    lastUpdatedAt,
+    ready,
+    sharedPosts,
+    startupInteractive,
+    user,
+  ]);
 
   useEffect(() => {
     if (!enabled || !user || !isReady) {

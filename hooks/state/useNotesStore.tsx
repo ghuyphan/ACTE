@@ -36,6 +36,7 @@ import { getNotePairedVideoUri } from '../../services/livePhotoStorage';
 import { scheduleWidgetDataUpdate } from '../../services/widgetService';
 import type { UpdateWidgetDataOptions } from '../../services/widgetService';
 import { scheduleOnIdle } from '../../utils/scheduleOnIdle';
+import { traceStartupAsync } from '../../utils/startupTrace';
 
 export type NotesLoadPhase = 'bootstrapping' | 'hydrating' | 'ready' | 'refreshing';
 
@@ -235,11 +236,19 @@ function useNotesStoreValue(): NotesStoreValue {
     loadedScopeRef.current = nextScope;
 
     void (async () => {
-      await refreshNotes(true, {
-        scope: nextScope,
-        syncGeofences: true,
-        updateWidget: true,
-      });
+      await traceStartupAsync(
+        'notes.initial-load',
+        () =>
+          refreshNotes(true, {
+            scope: nextScope,
+            syncGeofences: true,
+            updateWidget: true,
+          }),
+        {
+          scope: nextScope,
+          signedIn: nextScope !== LOCAL_NOTES_SCOPE,
+        }
+      );
       cleanupIdleHandle = scheduleOnIdle(() => {
         cleanupTimeout = setTimeout(() => {
           if (cancelled) {

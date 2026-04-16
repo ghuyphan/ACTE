@@ -1,44 +1,97 @@
-import { createContext, ReactNode, useCallback, useContext, useMemo, useState } from 'react';
+import { createContext, ReactNode, useCallback, useContext, useMemo, useRef, useState } from 'react';
+import { logStartupEvent } from '../../utils/startupTrace';
 
-interface HomeStartupReadyContextValue {
+interface StartupInteractionContextValue {
+  startupInteractive: boolean;
+  markStartupInteractive: (reason?: string) => void;
+  resetStartupInteraction: (reason?: string) => void;
+}
+
+interface LegacyHomeStartupReadyContextValue {
   homeFeedReady: boolean;
   markHomeFeedReady: () => void;
   resetHomeFeedReady: () => void;
 }
 
-const HomeStartupReadyContext = createContext<HomeStartupReadyContextValue | undefined>(undefined);
+const StartupInteractionContext = createContext<StartupInteractionContextValue | undefined>(undefined);
 
-export function HomeStartupReadyProvider({ children }: { children: ReactNode }) {
-  const [homeFeedReady, setHomeFeedReady] = useState(false);
+export function StartupInteractionProvider({ children }: { children: ReactNode }) {
+  const [startupInteractive, setStartupInteractive] = useState(false);
+  const startupWaitStartedAtRef = useRef<number | null>(null);
 
-  const markHomeFeedReady = useCallback(() => {
-    setHomeFeedReady(true);
+  const markStartupInteractive = useCallback((reason = 'unknown') => {
+    setStartupInteractive((currentValue) => {
+      if (currentValue) {
+        return currentValue;
+      }
+
+      const startedAtMs = startupWaitStartedAtRef.current;
+      logStartupEvent('startup.interactive', {
+        durationMs: startedAtMs == null ? undefined : Date.now() - startedAtMs,
+        reason,
+      });
+      startupWaitStartedAtRef.current = null;
+      return true;
+    });
   }, []);
 
-  const resetHomeFeedReady = useCallback(() => {
-    setHomeFeedReady(false);
+  const resetStartupInteraction = useCallback((reason = 'unknown') => {
+    setStartupInteractive((currentValue) => {
+      if (!currentValue && startupWaitStartedAtRef.current != null) {
+        return currentValue;
+      }
+
+      startupWaitStartedAtRef.current = Date.now();
+      logStartupEvent('startup.interactive:waiting', {
+        reason,
+      });
+      return false;
+    });
   }, []);
 
   const value = useMemo(
     () => ({
-      homeFeedReady,
-      markHomeFeedReady,
-      resetHomeFeedReady,
+      startupInteractive,
+      markStartupInteractive,
+      resetStartupInteraction,
     }),
-    [homeFeedReady, markHomeFeedReady, resetHomeFeedReady]
+    [markStartupInteractive, resetStartupInteraction, startupInteractive]
   );
 
   return (
-    <HomeStartupReadyContext.Provider value={value}>
+    <StartupInteractionContext.Provider value={value}>
       {children}
-    </HomeStartupReadyContext.Provider>
+    </StartupInteractionContext.Provider>
   );
 }
 
-export function useHomeStartupReady() {
-  const context = useContext(HomeStartupReadyContext);
+export function useStartupInteraction() {
+  const context = useContext(StartupInteractionContext);
   if (!context) {
-    throw new Error('useHomeStartupReady must be used within a HomeStartupReadyProvider');
+    throw new Error('useStartupInteraction must be used within a StartupInteractionProvider');
   }
   return context;
+}
+
+export const HomeStartupReadyProvider = StartupInteractionProvider;
+
+export function useHomeStartupReady(): LegacyHomeStartupReadyContextValue {
+  const {
+    startupInteractive,
+    markStartupInteractive,
+    resetStartupInteraction,
+  } = useStartupInteraction();
+
+  return useMemo(
+    () => ({
+      homeFeedReady: startupInteractive,
+      markHomeFeedReady: () => {
+        markStartupInteractive('home-feed');
+      },
+      resetHomeFeedReady: () => {
+        resetStartupInteraction('home-feed');
+      },
+    }),
+    [markStartupInteractive, resetStartupInteraction, startupInteractive]
+  );
 }

@@ -18,6 +18,9 @@ const mockAuthState = {
 const mockConnectivityState = {
   isOnline: true,
 };
+const mockStartupInteractionState = {
+  startupInteractive: true,
+};
 
 let mockCachedSnapshot: {
   friends: any[];
@@ -75,6 +78,10 @@ jest.mock('../hooks/useAuth', () => ({
 
 jest.mock('../hooks/useConnectivity', () => ({
   useConnectivity: () => mockConnectivityState,
+}));
+
+jest.mock('../hooks/app/useHomeStartupReady', () => ({
+  useStartupInteraction: () => mockStartupInteractionState,
 }));
 
 jest.mock('../services/sharedFeedCache', () => ({
@@ -191,6 +198,7 @@ describe('useSharedFeedStore', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     appStateListener = null;
+    mockStartupInteractionState.startupInteractive = true;
     mockAuthState.isReady = true;
     mockAuthState.isAuthAvailable = true;
     mockAuthState.user = {
@@ -444,6 +452,62 @@ describe('useSharedFeedStore', () => {
         ],
       })
     );
+  });
+
+  it('defers shared photo media hydration until the home feed is ready', async () => {
+    mockStartupInteractionState.startupInteractive = false;
+    mockCachedSnapshot = {
+      friends: [],
+      sharedPosts: [
+        createSharedPost({
+          id: 'friend-photo-1',
+          authorUid: 'friend-1',
+          type: 'photo',
+          text: '',
+          photoPath: 'friend-1/friend-photo-1.jpg',
+          photoLocalUri: null,
+          isLivePhoto: true,
+          pairedVideoPath: 'friend-1/friend-photo-1.mov',
+          pairedVideoLocalUri: null,
+        }),
+      ],
+      activeInvite: null,
+      lastUpdatedAt: '2026-03-24T00:00:00.000Z',
+    };
+    mockDownloadPhotoFromStorage.mockResolvedValue('file:///shared/friend-photo-1.jpg');
+    mockDownloadPairedVideoFromStorage.mockResolvedValue('file:///shared/friend-photo-1.mov');
+
+    const { result, rerender } = renderHook(({ marker }: { marker: number }) => {
+      void marker;
+      return useSharedFeedStore();
+    }, { wrapper, initialProps: { marker: 0 } });
+
+    await waitFor(() => {
+      expect(result.current.ready).toBe(true);
+      expect(result.current.sharedPosts).toEqual([
+        expect.objectContaining({
+          id: 'friend-photo-1',
+          photoLocalUri: null,
+          pairedVideoLocalUri: null,
+        }),
+      ]);
+    });
+
+    expect(mockDownloadPhotoFromStorage).not.toHaveBeenCalled();
+    expect(mockDownloadPairedVideoFromStorage).not.toHaveBeenCalled();
+
+    mockStartupInteractionState.startupInteractive = true;
+    rerender({ marker: 1 });
+
+    await waitFor(() => {
+      expect(result.current.sharedPosts).toEqual([
+        expect.objectContaining({
+          id: 'friend-photo-1',
+          photoLocalUri: 'file:///shared/friend-photo-1.jpg',
+          pairedVideoLocalUri: 'file:///shared/friend-photo-1.mov',
+        }),
+      ]);
+    });
   });
 
   it('prunes authored shared projections when local notes are deleted', async () => {

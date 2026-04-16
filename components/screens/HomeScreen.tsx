@@ -3,7 +3,7 @@ import * as FileSystem from '../../utils/fileSystem';
 import * as Haptics from '../../hooks/useHaptics';
 import * as ImagePicker from 'expo-image-picker';
 import { Href, useLocalSearchParams, useRouter } from 'expo-router';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, type ComponentProps, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   AppState,
@@ -97,6 +97,11 @@ const PLACE_PULSE_RADIUS_METERS = 500;
 const SHARED_PLACE_PULSE_MAX_AVATARS = 3;
 const SHARED_PLACE_PULSE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 type SaveButtonState = 'idle' | 'saving' | 'success';
+type HomeFeedSurfaceProps = {
+  blurBackgroundColor: string;
+  notesFeedProps: ComponentProps<typeof NotesFeed>;
+  savedRevealProps: ComponentProps<typeof SavedNotePolaroidReveal>;
+};
 
 type PersistedCaptureDraft = CaptureDraftState & {
   version: 1;
@@ -112,6 +117,22 @@ function isPersistableCaptureDraft(draft: CaptureDraftState) {
 
   return draft.noteText.trim().length > 0;
 }
+
+const HomeFeedSurface = memo(function HomeFeedSurface({
+  blurBackgroundColor,
+  notesFeedProps,
+  savedRevealProps,
+}: HomeFeedSurfaceProps) {
+  return (
+    <>
+      <View style={[styles.blurTarget, { backgroundColor: blurBackgroundColor }]}>
+        <NotesFeed {...notesFeedProps} />
+      </View>
+
+      <SavedNotePolaroidReveal {...savedRevealProps} />
+    </>
+  );
+});
 
 function hasFiniteCoordinate(value: number | null | undefined): value is number {
   return typeof value === 'number' && Number.isFinite(value);
@@ -1000,6 +1021,9 @@ export default function HomeScreen() {
       setSuppressedHomeNoteIds([]);
     },
   });
+  const handleRefreshHome = useCallback(() => {
+    void refreshHome();
+  }, [refreshHome]);
 
   const showDoneSheet = useCallback(
     (
@@ -2343,47 +2367,80 @@ export default function HomeScreen() {
       takePicture,
     ]
   );
+  const notesFeedProps = useMemo<ComponentProps<typeof NotesFeed>>(
+    () => ({
+      flatListRef,
+      captureHeader,
+      emptyState: homeFeedEmptyState,
+      captureMode,
+      screenActive: isScreenFocused,
+      items: visibleFeedItems,
+      ownedSharedNoteIds,
+      refreshing: feedRefreshing,
+      onRefresh: handleRefreshHome,
+      topInset: insets.top,
+      snapHeight,
+      onOpenNote: openNote,
+      onOpenSharedPost: openSharedPost,
+      colors,
+      t,
+      onSettledArchiveItemChange: handleSettledArchiveItemChange,
+      onCaptureVisibilityChange: setIsCaptureVisible,
+      onCaptureScrollSettledChange: setIsCaptureScrollSettled,
+      onInitialContentDraw: markHomeFeedReady,
+      scrollEnabled:
+        !isCaptureTextEntryFocused &&
+        !isLivePhotoCaptureInProgress,
+      capturePageLocked: shouldLockCapturePage,
+    }),
+    [
+      captureHeader,
+      captureMode,
+      colors,
+      feedRefreshing,
+      handleRefreshHome,
+      handleSettledArchiveItemChange,
+      homeFeedEmptyState,
+      insets.top,
+      isCaptureTextEntryFocused,
+      isLivePhotoCaptureInProgress,
+      isScreenFocused,
+      markHomeFeedReady,
+      openNote,
+      openSharedPost,
+      ownedSharedNoteIds,
+      shouldLockCapturePage,
+      snapHeight,
+      t,
+      visibleFeedItems,
+    ]
+  );
+  const savedRevealProps = useMemo<ComponentProps<typeof SavedNotePolaroidReveal>>(
+    () => ({
+      note: savedNoteRevealNote,
+      isSharedByMe: savedNoteRevealIsSharedByMe,
+      revealToken: savedNoteRevealToken,
+      bottomTabInset: bottomTabVisualInset,
+      colors,
+      t,
+      onFinished: handleSavedNoteRevealFinished,
+    }),
+    [
+      bottomTabVisualInset,
+      colors,
+      handleSavedNoteRevealFinished,
+      savedNoteRevealIsSharedByMe,
+      savedNoteRevealNote,
+      savedNoteRevealToken,
+      t,
+    ]
+  );
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <View style={styles.blurTarget}>
-        <NotesFeed
-          flatListRef={flatListRef}
-          captureHeader={captureHeader}
-          emptyState={homeFeedEmptyState}
-          captureMode={captureMode}
-          screenActive={isScreenFocused}
-          items={visibleFeedItems}
-          ownedSharedNoteIds={ownedSharedNoteIds}
-          refreshing={feedRefreshing}
-          onRefresh={() => {
-            void refreshHome();
-          }}
-          topInset={insets.top}
-          snapHeight={snapHeight}
-          onOpenNote={openNote}
-          onOpenSharedPost={openSharedPost}
-          colors={colors}
-          t={t}
-          onSettledArchiveItemChange={handleSettledArchiveItemChange}
-          onCaptureVisibilityChange={setIsCaptureVisible}
-          onCaptureScrollSettledChange={setIsCaptureScrollSettled}
-          onInitialContentDraw={markHomeFeedReady}
-          scrollEnabled={
-            !isCaptureTextEntryFocused &&
-            !isLivePhotoCaptureInProgress
-          }
-          capturePageLocked={shouldLockCapturePage}
-        />
-      </View>
-
-      <SavedNotePolaroidReveal
-        note={savedNoteRevealNote}
-        isSharedByMe={savedNoteRevealIsSharedByMe}
-        revealToken={savedNoteRevealToken}
-        bottomTabInset={bottomTabVisualInset}
-        colors={colors}
-        t={t}
-        onFinished={handleSavedNoteRevealFinished}
+      <HomeFeedSurface
+        blurBackgroundColor={colors.background}
+        notesFeedProps={notesFeedProps}
+        savedRevealProps={savedRevealProps}
       />
 
       <HomeHeaderSearch

@@ -53,6 +53,9 @@ const mockConnectivityState = {
   isInternetReachable: true as boolean | null,
   lastChangedAt: null as string | null,
 };
+const mockStartupInteractionState = {
+  startupInteractive: true,
+};
 
 jest.mock('../hooks/useAuth', () => ({
   useAuth: () => mockAuthState,
@@ -64,6 +67,10 @@ jest.mock('../hooks/useConnectivity', () => ({
 
 jest.mock('../hooks/useNotes', () => ({
   useNotes: () => mockNotesState,
+}));
+
+jest.mock('../hooks/app/useHomeStartupReady', () => ({
+  useStartupInteraction: () => mockStartupInteractionState,
 }));
 
 jest.mock('../services/syncService', () => ({
@@ -133,6 +140,7 @@ beforeEach(() => {
   mockConnectivityState.isOnline = true;
   mockConnectivityState.isInternetReachable = true;
   mockConnectivityState.lastChangedAt = null;
+  mockStartupInteractionState.startupInteractive = true;
   mockQueueStats.pendingCount = 0;
   mockQueueStats.failedCount = 0;
   mockQueueStats.blockedCount = 0;
@@ -196,6 +204,31 @@ describe('useSyncStatus', () => {
     await waitFor(() => {
       expect(mockSyncNotes).toHaveBeenCalledTimes(1);
       expect(result.current.status).toBe('success');
+    });
+  });
+
+  it('defers the initial signed-in sync until the home feed is ready', async () => {
+    mockAuthState.user = {
+      uid: 'user-1',
+      displayName: 'Huy',
+      email: 'huy@example.com',
+      photoURL: null,
+    };
+    mockStartupInteractionState.startupInteractive = false;
+
+    const { rerender } = renderHook(({ marker }: { marker: number }) => {
+      void marker;
+      return useSyncStatus();
+    }, { wrapper, initialProps: { marker: 0 } });
+    await flushSyncPref();
+
+    expect(mockSyncNotes).not.toHaveBeenCalled();
+
+    mockStartupInteractionState.startupInteractive = true;
+    rerender({ marker: 1 });
+
+    await waitFor(() => {
+      expect(mockSyncNotes).toHaveBeenCalledTimes(1);
     });
   });
 

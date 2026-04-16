@@ -16,7 +16,7 @@ import {
   SyncStatusProvider,
   ThemeProvider,
 } from '../../hooks';
-import { HomeStartupReadyProvider } from '../../hooks/app/useHomeStartupReady';
+import { StartupInteractionProvider } from '../../hooks/app/useHomeStartupReady';
 import { SavedNoteRevealUiProvider } from '../../hooks/ui/useSavedNoteRevealUi';
 import { AppAlertProvider } from '../ui/AppAlertProvider';
 
@@ -36,7 +36,7 @@ const providerChain: ProviderComponent[] = [
   ActiveNoteProvider,
   ActiveFeedTargetProvider,
   FeedFocusProvider,
-  HomeStartupReadyProvider,
+  StartupInteractionProvider,
   NotesProvider,
   SyncStatusProvider,
   SharedFeedProvider,
