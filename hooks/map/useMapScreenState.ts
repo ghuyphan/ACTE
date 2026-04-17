@@ -175,6 +175,7 @@ export function useMapScreenState({
     }
 
     setVisibleRegion(region);
+    setNearbyBrowseRegion(region);
   }, []);
 
   const clearSelectedGroup = useCallback(() => {

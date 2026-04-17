@@ -123,7 +123,7 @@ describe('useAppNotificationRouting', () => {
     renderHook(() => useAppNotificationRouting());
 
     await waitFor(() => {
-      expect(mockPush).toHaveBeenCalledWith('/(tabs)?openSharedManageAt=friend-accepted-1');
+      expect(mockDismissTo).toHaveBeenCalledWith('/(tabs)?openSharedManageAt=friend-accepted-1');
       expect(mockClearLastNotificationResponseAsync).toHaveBeenCalledTimes(1);
     });
   });

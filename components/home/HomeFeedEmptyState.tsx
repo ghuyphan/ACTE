@@ -2,9 +2,11 @@ import { Ionicons } from '@expo/vector-icons';
 import { TFunction } from 'i18next';
 import { memo } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
-import type { HomeFeedBootstrapState } from '../../hooks/app/useHomeFeedViewModel';
+import type {
+  HomeFeedBootstrapState,
+  HomeFeedMode,
+} from '../../hooks/app/useHomeFeedViewModel';
 import * as Haptics from '../../hooks/useHaptics';
-import type { HomeFeedMode } from '../../hooks/app/useHomeFeedViewModel';
 import CatBoxIcon from '../ui/CatBoxIcon';
 
 interface HomeFeedEmptyStateProps {

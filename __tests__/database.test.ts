@@ -353,6 +353,46 @@ describe('database migrations', () => {
     );
   });
 
+  it('refuses to overwrite a note that belongs to another scope', async () => {
+    let getDB!: () => Promise<unknown>;
+    let upsertNoteForScope!: (input: Record<string, unknown>, scope: string) => Promise<unknown>;
+
+    jest.isolateModules(() => {
+      ({ getDB, upsertNoteForScope } = require('../services/database'));
+    });
+
+    await getDB();
+    mockRunAsync.mockClear();
+    mockGetFirstAsync.mockImplementation(async (sql: string) => {
+      if (sql.includes('PRAGMA user_version')) {
+        return { user_version: 0 };
+      }
+
+      if (sql.includes('SELECT owner_uid FROM notes WHERE id = ?')) {
+        return { owner_uid: 'user-1' };
+      }
+
+      return null;
+    });
+
+    await expect(
+      upsertNoteForScope(
+        {
+          id: 'shared-id',
+          type: 'text',
+          content: 'Conflicting note',
+          locationName: 'Cafe',
+          latitude: 10.77,
+          longitude: 106.69,
+          createdAt: '2026-04-02T00:00:00.000Z',
+        },
+        'user-2'
+      )
+    ).rejects.toThrow('Refusing to overwrite note shared-id from scope user-1 with scope user-2.');
+
+    expect(mockRunAsync).not.toHaveBeenCalledWith(expect.stringContaining('INSERT INTO notes'));
+  });
+
   it('uses explicit native begin/commit/rollback transactions', async () => {
     let getDB!: () => Promise<unknown>;
     let withDatabaseTransaction!: <T>(task: (txn: { runAsync: typeof mockRunAsync }) => Promise<T>) => Promise<T>;

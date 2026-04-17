@@ -40,8 +40,7 @@ data class NotoWidgetSnapshot(
   val authorInitials: String,
   val authorAvatarImageUrl: String?,
   val authorAvatarImageBase64: String?,
-  val primaryActionUrl: String,
-  val badgeActionUrl: String?
+  val primaryActionUrl: String
 )
 
 object NotoWidgetStorage {

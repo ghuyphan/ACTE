@@ -18,6 +18,13 @@ const mockUseAuth = jest.fn(() => ({
   user: null,
   isReady: true,
 }));
+const mockDbSearchNotes = jest.fn(async (query: string, _scope?: string) =>
+  mockNotesDb.filter(
+    (note) =>
+      note.content.toLowerCase().includes(query.toLowerCase()) ||
+      note.locationName?.toLowerCase().includes(query.toLowerCase())
+  )
+);
 const mockDbCreateNote = jest.fn(async (input: any) => {
   const nextNote: Note = {
     id: input.id ?? `note-${mockIdCounter++}`,
@@ -89,13 +96,7 @@ jest.mock('../services/database', () => ({
     });
     return nextFavorite;
   }),
-  searchNotes: jest.fn(async (query: string) =>
-    mockNotesDb.filter(
-      (note) =>
-        note.content.toLowerCase().includes(query.toLowerCase()) ||
-        note.locationName?.toLowerCase().includes(query.toLowerCase())
-    )
-  ),
+  searchNotes: (query: string, scope?: string) => mockDbSearchNotes(query, scope),
   deleteNote: jest.fn(async (id: string) => {
     mockNotesDb = mockNotesDb.filter((note) => note.id !== id);
   }),
@@ -139,6 +140,13 @@ beforeEach(() => {
   );
   mockGetPersistedActiveNotesScopeSync.mockReturnValue(null);
   mockGetActiveNotesScope.mockReturnValue('__local__');
+  mockDbSearchNotes.mockImplementation(async (query: string) =>
+    mockNotesDb.filter(
+      (note) =>
+        note.content.toLowerCase().includes(query.toLowerCase()) ||
+        note.locationName?.toLowerCase().includes(query.toLowerCase())
+    )
+  );
 });
 
 describe('useNotesStore', () => {
@@ -175,6 +183,36 @@ describe('useNotesStore', () => {
     await waitFor(() => {
       expect(mockScheduleWidgetDataUpdate).toHaveBeenCalled();
     });
+  });
+
+  it('passes the active scope through to database search queries', async () => {
+    mockUseAuth.mockReturnValue({
+      user: { uid: 'user-42' },
+      isReady: true,
+    } as any);
+    mockNotesDb = [
+      {
+        id: 'note-1',
+        type: 'text',
+        content: 'Scoped coffee note',
+        locationName: 'District 1',
+        latitude: 10.7,
+        longitude: 106.6,
+        radius: 150,
+        isFavorite: false,
+        createdAt: '2026-04-01T00:00:00.000Z',
+        updatedAt: null,
+      },
+    ];
+
+    const { result } = renderHook(() => useNotesStore(), { wrapper: TestWrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    await act(async () => {
+      await result.current.searchNotes('coffee');
+    });
+
+    expect(mockDbSearchNotes).toHaveBeenCalledWith('coffee', 'user-42');
   });
 
   it('surfaces the newest notes first, then hydrates the full archive in the background', async () => {

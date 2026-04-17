@@ -248,7 +248,6 @@ export default function HomeScreen() {
           : 'bootstrapping');
   const {
     bootstrapState: syncBootstrapState,
-    isInitialSyncPending,
     requestSync,
   } = useSyncStatus();
   const {
@@ -273,6 +272,7 @@ export default function HomeScreen() {
   const { markHomeFeedReady, resetHomeFeedReady } = useHomeStartupReady();
   const {
     clearFeedFocus,
+    pendingFeedFocusRequest,
     peekFeedFocus,
     requestFeedFocus,
   } = useFeedFocus();
@@ -515,8 +515,6 @@ export default function HomeScreen() {
   const {
     feedMode,
     bootstrapState,
-    isFeedBootstrapPending,
-    homeFeedItemsCount,
     visibleFeedItems,
     ownedSharedNoteIds,
     savedNoteRevealIsSharedByMe,
@@ -953,65 +951,91 @@ export default function HomeScreen() {
     }, [dismissSharedManageSheet])
   );
 
-  useFocusEffect(
-    useCallback(() => {
-      const target = peekFeedFocus?.() ?? null;
-      if (!target) {
-        return undefined;
+  const pendingFeedFocusTarget = pendingFeedFocusRequest?.target ?? peekFeedFocus?.() ?? null;
+  const pendingFeedFocusRequestId = pendingFeedFocusRequest?.requestId;
+
+  useEffect(() => {
+    if (!isScreenFocused || !pendingFeedFocusTarget) {
+      return;
+    }
+
+    const target = pendingFeedFocusTarget;
+    const isTargetDataReady =
+      notesInitialLoadComplete &&
+      (target.kind !== 'shared-post' || !sharedLoading);
+    if (!isTargetDataReady) {
+      return;
+    }
+
+    const settledItem = settledArchiveItemRef.current;
+    if (settledItem?.kind === target.kind && settledItem.id === target.id) {
+      clearFeedFocus?.(pendingFeedFocusRequestId);
+      return;
+    }
+
+    const targetIndex = findHomeFeedItemIndex(visibleFeedItems, target);
+    if (targetIndex < 0) {
+      const targetExistsInHomeData =
+        target.kind === 'note'
+          ? notes.some((note) => note.id === target.id)
+          : sharedPosts.some(
+              (post) =>
+                post.id === target.id &&
+                (!sharedEnabled || !user?.uid || post.authorUid !== user.uid)
+            );
+
+      if (target.kind === 'note' && isFriendsFilterEnabled && targetExistsInHomeData) {
+        setIsFriendsFilterEnabled(false);
+        return;
       }
 
-      const isTargetDataReady =
-        notesInitialLoadComplete &&
-        (target.kind !== 'shared-post' || !sharedLoading);
-      if (!isTargetDataReady) {
-        return undefined;
+      if (targetExistsInHomeData) {
+        return;
       }
 
-      const settledItem = settledArchiveItemRef.current;
-      if (settledItem?.kind === target.kind && settledItem.id === target.id) {
-        clearFeedFocus?.();
-        return undefined;
-      }
+      clearFeedFocus?.(pendingFeedFocusRequestId);
+      return;
+    }
 
-      const targetIndex = findHomeFeedItemIndex(visibleFeedItems, target);
-      if (targetIndex < 0) {
-        clearFeedFocus?.();
-        return undefined;
-      }
-
-      let focusTimeout: ReturnType<typeof setTimeout> | null = null;
-      let idleHandle: ReturnType<typeof scheduleOnIdle> | null = null;
-      let cancelled = false;
-      idleHandle = scheduleOnIdle(() => {
-        focusTimeout = setTimeout(() => {
-          if (cancelled) {
-            return;
-          }
-
-          clearFeedFocus?.();
-          flatListRef.current?.scrollToOffset({
-            offset: (targetIndex + 1) * snapHeight,
-            animated: true,
-          });
-        }, 0);
-      });
-
-      return () => {
-        cancelled = true;
-        idleHandle?.cancel();
-        if (focusTimeout) {
-          clearTimeout(focusTimeout);
+    let focusTimeout: ReturnType<typeof setTimeout> | null = null;
+    let idleHandle: ReturnType<typeof scheduleOnIdle> | null = null;
+    let cancelled = false;
+    idleHandle = scheduleOnIdle(() => {
+      focusTimeout = setTimeout(() => {
+        if (cancelled) {
+          return;
         }
-      };
-    }, [
-      clearFeedFocus,
-      notesInitialLoadComplete,
-      peekFeedFocus,
-      sharedLoading,
-      snapHeight,
-      visibleFeedItems,
-    ])
-  );
+
+        clearFeedFocus?.(pendingFeedFocusRequestId);
+        flatListRef.current?.scrollToOffset({
+          offset: (targetIndex + 1) * snapHeight,
+          animated: true,
+        });
+      }, 0);
+    });
+
+    return () => {
+      cancelled = true;
+      idleHandle?.cancel();
+      if (focusTimeout) {
+        clearTimeout(focusTimeout);
+      }
+    };
+  }, [
+    clearFeedFocus,
+    isFriendsFilterEnabled,
+    isScreenFocused,
+    notes,
+    notesInitialLoadComplete,
+    pendingFeedFocusRequestId,
+    pendingFeedFocusTarget,
+    sharedEnabled,
+    sharedLoading,
+    sharedPosts,
+    snapHeight,
+    user?.uid,
+    visibleFeedItems,
+  ]);
 
   const { refreshing, refreshHome } = useHomeRefresh({
     hasNetworkRefreshWork: Boolean(user && sharedEnabled),

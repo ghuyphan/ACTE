@@ -52,10 +52,9 @@ type SharedPostRow = {
   place_name: string | null;
 };
 
-type NotificationEventRow = {
-  event_type: string;
-  actor_user_id: string;
+type ClaimedNotificationEvent = {
   resource_id: string;
+  recipient_user_id: string | null;
 };
 
 const ANDROID_SOCIAL_CHANNEL_ID = 'social-v2';
@@ -272,39 +271,85 @@ async function prunePushTokens(
   }
 }
 
-async function recordNotificationEvent(
+async function claimNotificationEvent(
   adminClient: ReturnType<typeof createClient>,
-  actorUserId: string,
-  body: Partial<SocialNotificationRequest>
+  options:
+    | {
+        type: 'friend_accepted';
+        actorUserId: string;
+        recipientUserId: string;
+      }
+    | {
+        type: 'shared_post_created';
+        actorUserId: string;
+        resourceId: string;
+      }
 ) {
+  const { data, error } = await adminClient.rpc('claim_social_notification_event', {
+    event_type_input: options.type,
+    actor_user_id_input: options.actorUserId,
+    resource_id_input: options.type === 'shared_post_created' ? options.resourceId : null,
+    recipient_user_id_input:
+      options.type === 'friend_accepted' ? options.recipientUserId : null,
+  });
+
+  if (error) {
+    throw error;
+  }
+
+  const row = Array.isArray(data) ? data[0] : data;
   const resourceId =
-    body.type === 'friend_accepted'
-      ? body.friendUserId?.trim() ?? ''
-      : body.type === 'shared_post_created'
-        ? body.postId?.trim() ?? ''
-        : '';
+    row && typeof row === 'object' && 'resource_id' in row && typeof row.resource_id === 'string'
+      ? row.resource_id.trim()
+      : '';
 
-  if (!body.type || !resourceId) {
-    return false;
+  if (!resourceId) {
+    return null;
   }
 
-  const { error } = await adminClient
-    .from('social_notification_events')
-    .insert({
-      event_type: body.type,
-      actor_user_id: actorUserId,
-      resource_id: resourceId,
-    } satisfies NotificationEventRow);
+  return {
+    resource_id: resourceId,
+    recipient_user_id:
+      row && typeof row === 'object' && 'recipient_user_id' in row
+        ? typeof row.recipient_user_id === 'string' && row.recipient_user_id.trim()
+          ? row.recipient_user_id.trim()
+          : null
+        : null,
+  } satisfies ClaimedNotificationEvent;
+}
 
-  if (!error) {
-    return true;
+async function releaseNotificationEvent(
+  adminClient: ReturnType<typeof createClient>,
+  type: SocialNotificationRequest['type'],
+  actorUserId: string,
+  resourceId: string
+) {
+  const { error } = await adminClient.rpc('release_social_notification_event', {
+    event_type_input: type,
+    actor_user_id_input: actorUserId,
+    resource_id_input: resourceId,
+  });
+
+  if (error) {
+    throw error;
   }
+}
 
-  if (typeof error === 'object' && error && 'code' in error && String(error.code) === '23505') {
-    return false;
+async function markNotificationEventDelivered(
+  adminClient: ReturnType<typeof createClient>,
+  type: SocialNotificationRequest['type'],
+  actorUserId: string,
+  resourceId: string
+) {
+  const { error } = await adminClient.rpc('mark_social_notification_event_delivered', {
+    event_type_input: type,
+    actor_user_id_input: actorUserId,
+    resource_id_input: resourceId,
+  });
+
+  if (error) {
+    throw error;
   }
-
-  throw error;
 }
 
 async function sendExpoPushMessages(
@@ -394,6 +439,9 @@ Deno.serve(async (request) => {
     const user = await getAuthenticatedUser(request, supabaseUrl, anonKey);
     const adminClient = createClient(supabaseUrl, serviceRoleKey);
     const body = (await request.json()) as Partial<SocialNotificationRequest>;
+    let claimedEvent: ClaimedNotificationEvent | null = null;
+    let shouldReleaseEvent = false;
+    let deliverySucceeded = false;
 
     if (!body?.type) {
       return jsonResponse(
@@ -405,80 +453,171 @@ Deno.serve(async (request) => {
       );
     }
 
-    const payload =
-      body.type === 'friend_accepted'
-        ? await loadFriendAcceptedPayload(adminClient, user.id, body.friendUserId ?? '')
-        : body.type === 'shared_post_created'
-          ? await loadSharedPostPayload(adminClient, user.id, body.postId ?? '')
-          : null;
+    try {
+      const payload =
+        body.type === 'friend_accepted'
+          ? (() => {
+              const recipientUserId = body.friendUserId?.trim() ?? '';
+              if (!recipientUserId) {
+                throw new Error('Friend required.');
+              }
 
-    if (!payload) {
-      return jsonResponse(
-        {
-          success: false,
-          error: 'Unsupported notification type.',
-        },
-        400
-      );
-    }
+              return claimNotificationEvent(adminClient, {
+                type: 'friend_accepted',
+                actorUserId: user.id,
+                recipientUserId,
+              }).then(async (claimed) => {
+                if (!claimed?.recipient_user_id) {
+                  return { claimedEvent: null, payload: null };
+                }
 
-    const shouldDeliver = await recordNotificationEvent(adminClient, user.id, body);
-    if (!shouldDeliver) {
-      return jsonResponse({
-        success: true,
-        recipients: payload.recipientUserIds.length,
-        delivered: 0,
-      });
-    }
+                return {
+                  claimedEvent: claimed,
+                  payload: await loadFriendAcceptedPayload(
+                    adminClient,
+                    user.id,
+                    claimed.recipient_user_id
+                  ),
+                };
+              });
+            })()
+          : body.type === 'shared_post_created'
+            ? (() => {
+                const postId = body.postId?.trim() ?? '';
+                return loadSharedPostPayload(adminClient, user.id, postId).then(
+                  async (sharedPostPayload) => ({
+                    claimedEvent: await claimNotificationEvent(adminClient, {
+                      type: 'shared_post_created',
+                      actorUserId: user.id,
+                      resourceId: postId,
+                    }),
+                    payload: sharedPostPayload,
+                  })
+                );
+              })()
+            : Promise.resolve(null);
 
-    const pushTargets = await loadPushTargets(adminClient, payload.recipientUserIds);
-    if (pushTargets.length === 0) {
-      return jsonResponse({
-        success: true,
-        recipients: payload.recipientUserIds.length,
-        delivered: 0,
-      });
-    }
+      if (!payload) {
+        return jsonResponse(
+          {
+            success: false,
+            error: 'Unsupported notification type.',
+          },
+          400
+        );
+      }
 
-    const messages: PushMessage[] = pushTargets.map(({ token, platform }) => {
-      if (platform === 'android' && payload.data.notificationType === 'shared-post') {
+      claimedEvent = payload.claimedEvent;
+      const notificationPayload = payload.payload;
+      if (!claimedEvent || !notificationPayload) {
+        return jsonResponse({
+          success: true,
+          recipients: 0,
+          delivered: 0,
+        });
+      }
+
+      shouldReleaseEvent = true;
+
+      if (notificationPayload.recipientUserIds.length === 0) {
+        await markNotificationEventDelivered(
+          adminClient,
+          body.type,
+          user.id,
+          claimedEvent.resource_id
+        );
+        shouldReleaseEvent = false;
+
+        return jsonResponse({
+          success: true,
+          recipients: 0,
+          delivered: 0,
+        });
+      }
+
+      const pushTargets = await loadPushTargets(adminClient, notificationPayload.recipientUserIds);
+      if (pushTargets.length === 0) {
+        await releaseNotificationEvent(adminClient, body.type, user.id, claimedEvent.resource_id);
+        shouldReleaseEvent = false;
+
+        return jsonResponse({
+          success: true,
+          recipients: notificationPayload.recipientUserIds.length,
+          delivered: 0,
+        });
+      }
+
+      const messages: PushMessage[] = pushTargets.map(({ token, platform }) => {
+        if (platform === 'android' && notificationPayload.data.notificationType === 'shared-post') {
+          return {
+            to: token,
+            data: {
+              ...notificationPayload.data,
+              notificationTitle: notificationPayload.title,
+              notificationBody: notificationPayload.body,
+              notificationChannelId: ANDROID_SOCIAL_CHANNEL_ID,
+            },
+          };
+        }
+
         return {
           to: token,
-          data: {
-            ...payload.data,
-            notificationTitle: payload.title,
-            notificationBody: payload.body,
-            notificationChannelId: ANDROID_SOCIAL_CHANNEL_ID,
-          },
+          sound: 'default' as const,
+          title: notificationPayload.title,
+          body: notificationPayload.body,
+          channelId: ANDROID_SOCIAL_CHANNEL_ID,
+          _contentAvailable: notificationPayload.data.notificationType === 'shared-post',
+          data: notificationPayload.data,
         };
+      });
+
+      const delivery = await sendExpoPushMessages(messages, expoAccessToken);
+
+      if (delivery.invalidTokens.length > 0) {
+        try {
+          await prunePushTokens(adminClient, delivery.invalidTokens);
+        } catch (error) {
+          console.warn('Failed to prune invalid Expo push tokens:', error);
+        }
       }
 
-      return {
-        to: token,
-        sound: 'default' as const,
-        title: payload.title,
-        body: payload.body,
-        channelId: ANDROID_SOCIAL_CHANNEL_ID,
-        _contentAvailable: payload.data.notificationType === 'shared-post',
-        data: payload.data,
-      };
-    });
+      if (delivery.delivered === 0) {
+        await releaseNotificationEvent(adminClient, body.type, user.id, claimedEvent.resource_id);
+        shouldReleaseEvent = false;
 
-    const delivery = await sendExpoPushMessages(messages, expoAccessToken);
-
-    if (delivery.invalidTokens.length > 0) {
-      try {
-        await prunePushTokens(adminClient, delivery.invalidTokens);
-      } catch (error) {
-        console.warn('Failed to prune invalid Expo push tokens:', error);
+        return jsonResponse({
+          success: true,
+          recipients: notificationPayload.recipientUserIds.length,
+          delivered: 0,
+        });
       }
+
+      deliverySucceeded = true;
+
+      await markNotificationEventDelivered(
+        adminClient,
+        body.type,
+        user.id,
+        claimedEvent.resource_id
+      );
+      shouldReleaseEvent = false;
+
+      return jsonResponse({
+        success: true,
+        recipients: notificationPayload.recipientUserIds.length,
+        delivered: delivery.delivered,
+      });
+    } catch (error) {
+      if (claimedEvent && shouldReleaseEvent && !deliverySucceeded) {
+        try {
+          await releaseNotificationEvent(adminClient, body.type, user.id, claimedEvent.resource_id);
+        } catch (releaseError) {
+          console.warn('Failed to release social notification event claim:', releaseError);
+        }
+      }
+
+      throw error;
     }
-
-    return jsonResponse({
-      success: true,
-      recipients: payload.recipientUserIds.length,
-      delivered: delivery.delivered,
-    });
   } catch (error) {
     const message =
       error instanceof Error ? error.message : 'Unexpected social notification failure.';

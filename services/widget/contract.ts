@@ -34,7 +34,6 @@ export interface WidgetProps {
   authorAvatarImageUrl?: string;
   authorAvatarImageBase64?: string;
   primaryActionUrl: string;
-  badgeActionUrl?: string;
 }
 
 export interface WidgetTimelineEntry {
@@ -84,7 +83,6 @@ export const WIDGET_PAYLOAD_FIELD_NAMES = [
   'authorAvatarImageUrl',
   'authorAvatarImageBase64',
   'primaryActionUrl',
-  'badgeActionUrl',
 ] as const;
 
 export function sanitizeWidgetPropsForBridge(props: WidgetProps) {

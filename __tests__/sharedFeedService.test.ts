@@ -8,6 +8,7 @@ const mockPublicProfiles = new Map<
   string,
   { username: string | null; displayNameSnapshot: string | null; photoURLSnapshot: string | null }
 >();
+const mockPublicProfileErrors = new Map<string, Error>();
 const mockCachedActiveInvites = new Map<string, any>();
 let mockUuidCounter = 0;
 let mockSessionUserId = 'owner-1';
@@ -309,12 +310,20 @@ jest.mock('../services/remoteMedia', () => ({
 
 jest.mock('../services/publicProfileService', () => ({
   normalizeUsernameInput: (value: string) => value.trim().replace(/^@+/, '').toLowerCase(),
-  getPublicUserProfile: async (userUid: string) =>
-    mockPublicProfiles.get(userUid) ?? {
-      username: null,
-      displayNameSnapshot: null,
-      photoURLSnapshot: null,
-    },
+  getPublicUserProfile: async (userUid: string) => {
+    const error = mockPublicProfileErrors.get(userUid);
+    if (error) {
+      throw error;
+    }
+
+    return (
+      mockPublicProfiles.get(userUid) ?? {
+        username: null,
+        displayNameSnapshot: null,
+        photoURLSnapshot: null,
+      }
+    );
+  },
   upsertPublicUserProfile: jest.fn(async (input: { userUid: string; displayName: string | null; photoURL: string | null }) => {
     const current = mockPublicProfiles.get(input.userUid);
     mockPublicProfiles.set(input.userUid, {
@@ -884,29 +893,30 @@ const secondFriendUser = {
     mockStickerAssets.clear();
     mockStickerAssetRefs.clear();
     mockFriendships.clear();
-  mockPublicProfiles.clear();
-  mockCachedActiveInvites.clear();
-  mockGetNoteDoodle.mockReset();
-  mockGetNoteDoodle.mockResolvedValue(null);
-  mockGetNoteStickers.mockReset();
-  mockGetNoteStickers.mockResolvedValue(null);
-  mockSerializeStickerPlacementsForStorage.mockReset();
-  mockSerializeStickerPlacementsForStorage.mockImplementation(async (placements) => JSON.stringify(placements));
-  mockPublicProfiles.set(ownerUser.id, {
-    username: ownerUser.username,
-    displayNameSnapshot: ownerUser.username,
-    photoURLSnapshot: ownerUser.photoURL,
-  });
-  mockPublicProfiles.set(friendUser.id, {
-    username: friendUser.username,
-    displayNameSnapshot: friendUser.username,
-    photoURLSnapshot: friendUser.photoURL,
-  });
-  mockPublicProfiles.set(secondFriendUser.id, {
-    username: secondFriendUser.username,
-    displayNameSnapshot: secondFriendUser.username,
-    photoURLSnapshot: secondFriendUser.photoURL,
-  });
+    mockPublicProfiles.clear();
+    mockPublicProfileErrors.clear();
+    mockCachedActiveInvites.clear();
+    mockGetNoteDoodle.mockReset();
+    mockGetNoteDoodle.mockResolvedValue(null);
+    mockGetNoteStickers.mockReset();
+    mockGetNoteStickers.mockResolvedValue(null);
+    mockSerializeStickerPlacementsForStorage.mockReset();
+    mockSerializeStickerPlacementsForStorage.mockImplementation(async (placements) => JSON.stringify(placements));
+    mockPublicProfiles.set(ownerUser.id, {
+      username: ownerUser.username,
+      displayNameSnapshot: ownerUser.username,
+      photoURLSnapshot: ownerUser.photoURL,
+    });
+    mockPublicProfiles.set(friendUser.id, {
+      username: friendUser.username,
+      displayNameSnapshot: friendUser.username,
+      photoURLSnapshot: friendUser.photoURL,
+    });
+    mockPublicProfiles.set(secondFriendUser.id, {
+      username: secondFriendUser.username,
+      displayNameSnapshot: secondFriendUser.username,
+      photoURLSnapshot: secondFriendUser.photoURL,
+    });
 });
 
 describe('sharedFeedService', () => {
@@ -931,6 +941,30 @@ describe('sharedFeedService', () => {
       type: 'friend_accepted',
       friendUserId: ownerUser.id,
     });
+  });
+
+  it('treats invite acceptance RPC success as authoritative when profile hydration fails', async () => {
+    const invite = await createFriendInvite(ownerUser);
+    mockPublicProfileErrors.set(ownerUser.id, new Error('profile lookup failed'));
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+    try {
+      const connection = await acceptFriendInvite(friendUser, invite.url);
+
+      expect(connection).toEqual(
+        expect.objectContaining({
+          userId: ownerUser.id,
+          displayNameSnapshot: ownerUser.username,
+          createdByInviteId: invite.id,
+        })
+      );
+      expect(mockSendSocialNotificationEvent).toHaveBeenCalledWith({
+        type: 'friend_accepted',
+        friendUserId: ownerUser.id,
+      });
+    } finally {
+      warnSpy.mockRestore();
+    }
   });
 
   it('accepts an invite pasted from share text instead of only a raw deeplink', async () => {

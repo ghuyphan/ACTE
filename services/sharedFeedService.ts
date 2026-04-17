@@ -1170,14 +1170,19 @@ export async function acceptFriendInvite(
   }
 
   const connection = mapFriend(row as FriendshipRow);
-  const inviterProfile = await getUserProfileSnapshot(connection.userId);
+  let resolvedConnection = connection;
 
-  const resolvedConnection = {
-    ...connection,
-    username: inviterProfile.username ?? connection.username,
-    displayNameSnapshot: inviterProfile.displayNameSnapshot ?? connection.displayNameSnapshot,
-    photoURLSnapshot: inviterProfile.photoURLSnapshot ?? connection.photoURLSnapshot,
-  };
+  try {
+    const inviterProfile = await getUserProfileSnapshot(connection.userId);
+    resolvedConnection = {
+      ...connection,
+      username: inviterProfile.username ?? connection.username,
+      displayNameSnapshot: inviterProfile.displayNameSnapshot ?? connection.displayNameSnapshot,
+      photoURLSnapshot: inviterProfile.photoURLSnapshot ?? connection.photoURLSnapshot,
+    };
+  } catch (error) {
+    console.warn('[shared-feed] Failed to hydrate inviter profile after invite acceptance:', error);
+  }
 
   void sendSocialNotificationEvent({
     type: 'friend_accepted',

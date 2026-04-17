@@ -32,7 +32,7 @@ export function useAppNotificationRouting() {
       const route = response.notification.request.content.data?.route;
       if (notificationType === 'friend-accepted') {
         prepareForExternalNavigation();
-        router.push(`/(tabs)?openSharedManageAt=${encodeURIComponent(notificationId)}` as any);
+        router.dismissTo(`/(tabs)?openSharedManageAt=${encodeURIComponent(notificationId)}` as any);
       } else if (noteId && typeof noteId === 'string') {
         focusFeedTargetFromExternalEntry({ kind: 'note', id: noteId });
       } else if (sharedPostId && typeof sharedPostId === 'string') {

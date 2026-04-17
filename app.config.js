@@ -228,12 +228,11 @@ const config = {
         faceIDPermission: 'Allow Noto to securely access your saved account session.',
       },
     ],
-    './plugins/withExpoWidgetsBundleFix.js',
     './plugins/withAndroidAdaptiveIconColor.js',
     './plugins/withAndroidReleaseHardening.js',
     './plugins/withAndroidWindowBehavior.js',
-    './plugins/withAndroidWidgetTypography.js',
     './plugins/withCustomAndroidWidget.js',
+    './plugins/withAndroidWidgetTypography.js',
     './plugins/withLivePhotoMotionTranscoder.js',
     [
       'expo-widgets',
@@ -257,6 +256,7 @@ const config = {
         ],
       },
     ],
+    './plugins/withExpoWidgetsBundleFix.js',
     './plugins/withCustomWidgetSwift.js',
     './plugins/withExpoWidgetsProjectDedup.js',
     [

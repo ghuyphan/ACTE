@@ -9,7 +9,7 @@ import Animated, {
   useSharedValue,
   withTiming,
 } from 'react-native-reanimated';
-import { Layout, Radii, Typography } from '../../constants/theme';
+import { Layout, Typography } from '../../constants/theme';
 import { useRelativeTimeNow } from '../../hooks/useRelativeTimeNow';
 import { useTheme } from '../../hooks/useTheme';
 import { Note } from '../../services/database';

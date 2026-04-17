@@ -53,6 +53,13 @@ describe('supabase migration hardening', () => {
     resolve(__dirname, '../supabase/migrations/20260414101500_fix_invite_hash_digest_lookup.sql'),
     'utf8'
   );
+  const socialNotificationDeliveryHardeningMigration = readFileSync(
+    resolve(
+      __dirname,
+      '../supabase/migrations/20260417101500_harden_social_notification_delivery_and_push_registration.sql'
+    ),
+    'utf8'
+  );
   const normalizedRemoveStorageCleanupTriggersMigration =
     removeStorageCleanupTriggersMigration.toLowerCase();
 
@@ -130,6 +137,39 @@ describe('supabase migration hardening', () => {
     );
     expect(pushTokenInstallDedupMigration).toContain(
       'grant execute on function public.register_push_token(text, text, text, text) to authenticated;'
+    );
+  });
+
+  it('queues invite acceptance notifications server-side and finalizes dedupe only after delivery', () => {
+    expect(socialNotificationDeliveryHardeningMigration).toContain(
+      'add column if not exists recipient_user_id uuid references auth.users(id) on delete cascade;'
+    );
+    expect(socialNotificationDeliveryHardeningMigration).toContain(
+      'add column if not exists delivery_state text not null default'
+    );
+    expect(socialNotificationDeliveryHardeningMigration).toContain(
+      'create or replace function public.claim_social_notification_event'
+    );
+    expect(socialNotificationDeliveryHardeningMigration).toContain(
+      'create or replace function public.release_social_notification_event'
+    );
+    expect(socialNotificationDeliveryHardeningMigration).toContain(
+      'create or replace function public.mark_social_notification_event_delivered'
+    );
+    expect(socialNotificationDeliveryHardeningMigration).toContain(
+      "values (\n    'friend_accepted',"
+    );
+  });
+
+  it('hardens installation-aware push registration against cross-account hijacking', () => {
+    expect(socialNotificationDeliveryHardeningMigration).toContain(
+      'existing_installation_row.expo_push_token <> normalized_token'
+    );
+    expect(socialNotificationDeliveryHardeningMigration).toContain(
+      'existing_token_row.installation_id <> normalized_installation_id'
+    );
+    expect(socialNotificationDeliveryHardeningMigration).toContain(
+      'public.device_push_tokens.installation_id = excluded.installation_id'
     );
   });
 

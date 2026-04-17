@@ -654,7 +654,7 @@ class NotoWidgetProvider : AppWidgetProvider() {
         )
         views.setOnClickPendingIntent(
           R.id.widget_badge,
-          createWidgetPendingIntent(context, (appWidgetId * 10) + 1, snapshot.badgeActionUrl)
+          createWidgetPendingIntent(context, (appWidgetId * 10) + 1, snapshot.primaryActionUrl)
         )
       }
     }
@@ -1343,8 +1343,7 @@ class NotoWidgetProvider : AppWidgetProvider() {
         authorInitials = json.optString("authorInitials", ""),
         authorAvatarImageUrl = json.optString("authorAvatarImageUrl", "").takeIf { it.isNotBlank() },
         authorAvatarImageBase64 = json.optString("authorAvatarImageBase64", "").takeIf { it.isNotBlank() },
-        primaryActionUrl = json.optString("primaryActionUrl", "noto:///").ifBlank { "noto:///" },
-        badgeActionUrl = json.optString("badgeActionUrl", "").takeIf { it.isNotBlank() }
+        primaryActionUrl = json.optString("primaryActionUrl", "noto:///").ifBlank { "noto:///" }
       )
     }
 

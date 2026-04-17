@@ -1805,9 +1805,9 @@ export async function toggleFavorite(
     return newValue === 1;
 }
 
-export async function searchNotes(query: string): Promise<Note[]> {
+export async function searchNotes(query: string, scopeOverride?: string): Promise<Note[]> {
     const database = await getDB();
-    const scope = getCurrentScope();
+    const scope = scopeOverride ?? getCurrentScope();
     const matchExpression = buildFtsMatchExpression(query);
 
     if (!matchExpression) {
@@ -2074,6 +2074,16 @@ export async function upsertNoteForScope(input: UpsertNoteInput, scope: string):
     const updatedAt = input.updatedAt ?? input.createdAt;
 
     await withDatabaseTransaction(async (txn) => {
+        const existingRow = await txn.getFirstAsync<{ owner_uid: string }>(
+            `SELECT owner_uid FROM notes WHERE id = ?`,
+            input.id
+        );
+        if (existingRow && existingRow.owner_uid !== scope) {
+            throw new Error(
+                `Refusing to overwrite note ${input.id} from scope ${existingRow.owner_uid} with scope ${scope}.`
+            );
+        }
+
         await txn.runAsync(
             `INSERT INTO notes (
                 id,

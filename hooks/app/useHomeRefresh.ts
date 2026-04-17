@@ -16,16 +16,14 @@ export function useHomeRefresh({
   const [refreshing, setRefreshing] = useState(false);
 
   const refreshHome = useCallback(async () => {
-    if (!hasNetworkRefreshWork) {
-      await refreshNotes(false);
-      onAfterLocalRefresh?.();
-      return;
-    }
-
     setRefreshing(true);
     try {
       await refreshNotes(false);
       onAfterLocalRefresh?.();
+
+      if (!hasNetworkRefreshWork) {
+        return;
+      }
 
       if (refreshSharedFeed) {
         try {

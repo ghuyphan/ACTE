@@ -51,7 +51,6 @@ private struct LocketWidgetPayload {
     let authorAvatarImageUrl: String?
     let authorAvatarImageBase64: String?
     let primaryActionUrl: String
-    let badgeActionUrl: String?
 
     static let placeholder = LocketWidgetPayload(
         noteType: "text",
@@ -88,8 +87,7 @@ private struct LocketWidgetPayload {
         authorInitials: "",
         authorAvatarImageUrl: nil,
         authorAvatarImageBase64: nil,
-        primaryActionUrl: "noto:///",
-        badgeActionUrl: nil
+        primaryActionUrl: "noto:///"
     )
 
     init(
@@ -127,8 +125,7 @@ private struct LocketWidgetPayload {
         authorInitials: String,
         authorAvatarImageUrl: String?,
         authorAvatarImageBase64: String?,
-        primaryActionUrl: String,
-        badgeActionUrl: String?
+        primaryActionUrl: String
     ) {
         self.noteType = noteType
         self.text = text
@@ -165,7 +162,6 @@ private struct LocketWidgetPayload {
         self.authorAvatarImageUrl = authorAvatarImageUrl
         self.authorAvatarImageBase64 = authorAvatarImageBase64
         self.primaryActionUrl = primaryActionUrl
-        self.badgeActionUrl = badgeActionUrl
     }
 
     init(rawProps: [String: Any]) {
@@ -206,7 +202,6 @@ private struct LocketWidgetPayload {
         authorAvatarImageUrl = LocketWidgetPayload.optionalStringValue(payload["authorAvatarImageUrl"])
         authorAvatarImageBase64 = LocketWidgetPayload.optionalStringValue(payload["authorAvatarImageBase64"])
         primaryActionUrl = LocketWidgetPayload.stringValue(payload["primaryActionUrl"])
-        badgeActionUrl = LocketWidgetPayload.optionalStringValue(payload["badgeActionUrl"])
     }
 
     private static func unwrapPayload(from rawProps: [String: Any]) -> [String: Any] {

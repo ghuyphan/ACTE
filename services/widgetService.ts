@@ -141,10 +141,6 @@ function getWidgetPrimaryActionUrl(candidate: Pick<WidgetCandidate, 'id' | 'sour
     return buildWidgetUrl(`/widget/note/${encodeURIComponent(candidate.id)}`);
 }
 
-function getWidgetBadgeActionUrl(noteCount: number) {
-    return noteCount > 0 ? buildWidgetUrl('/notes') : undefined;
-}
-
 function buildWidgetNotesFingerprint(notes: Note[]) {
     return notes
         .map((note) =>
@@ -328,7 +324,6 @@ function buildIdleWidgetProps(noteCount: number, selectionMode: WidgetSelectionM
         authorDisplayName: '',
         authorInitials: '',
         primaryActionUrl: getWidgetPrimaryActionUrl(null, noteCount),
-        badgeActionUrl: getWidgetBadgeActionUrl(noteCount),
         ...getTranslatedWidgetStrings(noteCount, 0, selectionMode),
     };
 }
@@ -532,7 +527,6 @@ async function buildWidgetPropsFromSelection(
     authorDisplayName: candidate.authorDisplayName ?? '',
     authorInitials: getAuthorInitials(candidate.authorDisplayName),
     primaryActionUrl: getWidgetPrimaryActionUrl(candidate, noteCount),
-    badgeActionUrl: getWidgetBadgeActionUrl(noteCount),
     ...translatedStrings,
   };
 

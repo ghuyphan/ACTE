@@ -6,7 +6,6 @@ import { useTheme } from '../../hooks/useTheme';
 import { isOlderIOS } from '../../utils/platform';
 import MapPreviewSheet from './MapPreviewSheet';
 import {
-  getOverlayBorderColor,
   getOverlayFallbackColor,
   getOverlayScrimColor,
   mapOverlayTokens,
@@ -23,7 +22,6 @@ interface MapStatusCardProps {
   onAction?: () => void;
   onInteraction?: () => void;
   reduceMotionEnabled: boolean;
-  shadowVisible?: boolean;
 }
 
 const PREVIEW_HORIZONTAL_INSET = 14;
@@ -47,7 +45,6 @@ export default function MapStatusCard({
   onAction,
   onInteraction,
   reduceMotionEnabled,
-  shadowVisible = true,
 }: MapStatusCardProps) {
   const { colors, isDark } = useTheme();
   const { width: windowWidth } = useWindowDimensions();
@@ -74,11 +71,11 @@ export default function MapStatusCard({
       styles.surface,
       {
         width: shellWidth,
-        borderColor: shadowVisible ? getOverlayBorderColor(isDark) : getNoShadowBorderColor(isDark),
+        borderColor: getNoShadowBorderColor(isDark),
         backgroundColor: getOverlayFallbackColor(isDark),
       },
     ],
-    [isDark, shadowVisible, shellWidth]
+    [isDark, shellWidth]
   );
 
   if ((!isMounted && !visible) || (!title && !actionLabel)) {
@@ -100,10 +97,7 @@ export default function MapStatusCard({
       handleVisible={false}
     >
       <View style={styles.surfaceHost} pointerEvents="box-none">
-        <View
-          testID="map-status-surface"
-          style={[shellStyle, shadowVisible ? null : styles.surfaceNoShadow]}
-        >
+        <View testID="map-status-surface" style={[shellStyle, styles.surfaceNoShadow]}>
           <GlassView
             pointerEvents="none"
             glassEffectStyle="regular"

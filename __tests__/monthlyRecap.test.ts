@@ -154,6 +154,7 @@ describe('monthlyRecap', () => {
         assetHeight: 100,
         outlineEnabled: true,
         renderMode: 'stamp',
+        stampStyle: 'classic',
       },
     ]);
     expect(recap.objects.map((object) => object.kind)).toEqual([

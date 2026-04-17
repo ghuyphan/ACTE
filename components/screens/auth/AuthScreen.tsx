@@ -179,6 +179,7 @@ export default function LoginScreen() {
   const [authMessage, setAuthMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [activeAction, setActiveAction] = useState<'google' | 'signIn' | 'register' | 'reset' | null>(null);
+  const [isLeavingFormFlow, setIsLeavingFormFlow] = useState(false);
   const [formContentHeight, setFormContentHeight] = useState(0);
   const [previousFormContentHeight, setPreviousFormContentHeight] = useState(0);
   const formProgress = useSharedValue(0);
@@ -241,9 +242,15 @@ export default function LoginScreen() {
     setScreenMode('landing');
   }, [resetMessages]);
 
-  usePreventRemove(isFormVisible, () => {
+  usePreventRemove(isFormVisible && !isLeavingFormFlow, () => {
     goBackInFlow();
   });
+
+  useEffect(() => {
+    if (!isFormVisible && isLeavingFormFlow) {
+      setIsLeavingFormFlow(false);
+    }
+  }, [isFormVisible, isLeavingFormFlow]);
 
   useEffect(() => {
     formProgress.value = withTiming(isFormVisible ? 1 : 0, {
@@ -313,20 +320,36 @@ export default function LoginScreen() {
     }
   };
 
+  const releaseFormNavigationGuard = useCallback(async () => {
+    if (!isFormVisible) {
+      return;
+    }
+
+    setIsLeavingFormFlow(true);
+    await new Promise<void>((resolve) => {
+      setTimeout(resolve, 0);
+    });
+  }, [isFormVisible]);
+
   const handleAuthSuccess = async () => {
     resetMessages();
     try {
       if (returnToRoute) {
         await markOnboardingComplete();
+        await releaseFormNavigationGuard();
         router.replace(returnToRoute as Href);
         return true;
       }
 
+      let nextRoute: string | null = null;
       await completeOnboardingAndEnterApp((route) => {
-        router.replace(route as Href);
+        nextRoute = route;
       });
+      await releaseFormNavigationGuard();
+      router.replace((nextRoute ?? '/') as Href);
       return true;
     } catch (error) {
+      setIsLeavingFormFlow(false);
       console.warn('Failed to persist onboarding state after auth:', error);
       setAuthMessage(
         t('auth.continueFailed', 'We could not finish setup right now. Please try again.')

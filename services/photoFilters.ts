@@ -81,12 +81,27 @@ const IDENTITY_MATRIX = [
   0, 0, 0, 1, 0,
 ];
 
-const BLEND_MODE_MAP: Record<PhotoFilterBlendMode, BlendMode> = {
-  srcOver: BlendMode.SrcOver,
-  screen: BlendMode.Screen,
-  softLight: BlendMode.SoftLight,
-  multiply: BlendMode.Multiply,
-};
+function resolveBlendMode(mode: PhotoFilterBlendMode): BlendMode | undefined {
+  const runtimeBlendMode = BlendMode as
+    | Partial<Record<'SrcOver' | 'Screen' | 'SoftLight' | 'Multiply', BlendMode>>
+    | undefined;
+
+  if (!runtimeBlendMode) {
+    return undefined;
+  }
+
+  switch (mode) {
+    case 'screen':
+      return runtimeBlendMode.Screen;
+    case 'softLight':
+      return runtimeBlendMode.SoftLight;
+    case 'multiply':
+      return runtimeBlendMode.Multiply;
+    case 'srcOver':
+    default:
+      return runtimeBlendMode.SrcOver;
+  }
+}
 
 const MATTE_CAFE_LAYERS: PhotoFilterLayer[] = [
   {
@@ -428,7 +443,10 @@ function createLayerPaint(width: number, height: number, layer: PhotoFilterLayer
   paint.setAntiAlias(true);
   paint.setDither(true);
   paint.setAlphaf(layer.opacity);
-  paint.setBlendMode(BLEND_MODE_MAP[layer.blendMode]);
+  const blendMode = resolveBlendMode(layer.blendMode);
+  if (blendMode !== undefined) {
+    paint.setBlendMode(blendMode);
+  }
 
   if (layer.type === 'solid') {
     paint.setColor(Skia.Color(layer.color));
@@ -479,7 +497,10 @@ function createImagePassPaint(pass: PhotoFilterImagePass) {
   paint.setAntiAlias(true);
   paint.setDither(true);
   paint.setAlphaf(pass.opacity);
-  paint.setBlendMode(BLEND_MODE_MAP[pass.blendMode]);
+  const blendMode = resolveBlendMode(pass.blendMode);
+  if (blendMode !== undefined) {
+    paint.setBlendMode(blendMode);
+  }
 
   if (pass.colorMatrix) {
     paint.setColorFilter(Skia.ColorFilter.MakeMatrix(pass.colorMatrix));

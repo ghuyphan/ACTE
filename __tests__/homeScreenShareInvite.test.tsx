@@ -308,7 +308,7 @@ describe('HomeScreen share invite handoff', () => {
   });
 
   it('dismisses the friends sheet before opening the native share dialog', async () => {
-    const { getByTestId } = renderHomeScreen();
+    const { getByTestId, queryByTestId } = renderHomeScreen();
 
     fireEvent.press(getByTestId('home-open-shared'));
 
@@ -319,12 +319,11 @@ describe('HomeScreen share invite handoff', () => {
     fireEvent.press(getByTestId('shared-manage-share'));
 
     await waitFor(() => {
-      expect(getByTestId('shared-manage-visible').props.children).toBe('hidden');
+      expect(queryByTestId('shared-manage-visible')).toBeNull();
     });
 
     expect(Share.share).not.toHaveBeenCalled();
     expect(mockCreateFriendInvite).toHaveBeenCalledTimes(1);
-    expect(mockSharedManageSheetProps.visible).toBe(false);
 
     await act(async () => {
       jest.advanceTimersByTime(220);

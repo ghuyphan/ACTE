@@ -63,6 +63,17 @@ export default function SearchScreen() {
   }, [notes]);
 
   useEffect(() => {
+    if (!hasQuery) {
+      setFilteredNotes([]);
+      setSearchFailed(false);
+      return;
+    }
+
+    setFilteredNotes([]);
+    setSearchFailed(false);
+  }, [hasQuery, activeQuery]);
+
+  useEffect(() => {
     if (!hasDeferredQuery) {
       setFilteredNotes([]);
       setSearchFailed(false);

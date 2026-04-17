@@ -104,7 +104,6 @@ const DEFAULT_CAPTURE_TEXT_PLACEHOLDERS = [
   'Anything here worth saving for later?',
   'Drop a small memory here...',
 ];
-const LIGHT_CAPTURE_ACTIVE_ICON_COLOR = '#FFFFFF';
 const HOME_PAGE_VISUAL_BOTTOM_INSET = 90;
 
 function getCaptureTextPlaceholderVariants(t: TFunction) {
@@ -276,10 +275,6 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
 }, ref) {
   const reduceMotionEnabled = useReducedMotion();
   const isSharedTarget = shareTarget === 'shared';
-  const isDarkCaptureTheme = colors.captureGlassColorScheme === 'dark';
-  const textCardActiveIconColor = isDarkCaptureTheme
-    ? colors.captureCardText
-    : LIGHT_CAPTURE_ACTIVE_ICON_COLOR;
   const effectiveTextModeNoteColor =
     captureMode === 'text' ? (noteColor ?? DEFAULT_NOTE_COLOR_ID) : noteColor;
   const hasLivePhotoMotion = Boolean(capturedPairedVideo);

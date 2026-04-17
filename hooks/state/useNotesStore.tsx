@@ -365,8 +365,10 @@ function useNotesStoreValue(): NotesStoreValue {
       return notesRef.current;
     }
 
-    const dbResults = await dbSearchNotes(trimmedQuery);
-    const fallbackMatches = filterNotesByQuery(notesRef.current, trimmedQuery);
+    const scope = activeScopeRef.current;
+    const notesSnapshot = notesRef.current;
+    const dbResults = await dbSearchNotes(trimmedQuery, scope);
+    const fallbackMatches = filterNotesByQuery(notesSnapshot, trimmedQuery);
 
     if (fallbackMatches.length === 0) {
       return dbResults;

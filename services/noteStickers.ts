@@ -1120,6 +1120,16 @@ export async function getStickerAssetById(assetId: string): Promise<StickerAsset
 
 export async function upsertStickerAsset(asset: StickerAsset, txn?: SQLiteTransactionExecutor) {
   const executor = txn ?? (await getDB());
+  const existingRow = await executor.getFirstAsync<{ owner_uid: string }>(
+    `SELECT owner_uid FROM sticker_assets WHERE id = ?`,
+    asset.id
+  );
+  if (existingRow && existingRow.owner_uid !== asset.ownerUid) {
+    throw new Error(
+      `Refusing to overwrite sticker asset ${asset.id} from scope ${existingRow.owner_uid} with scope ${asset.ownerUid}.`
+    );
+  }
+
   await executor.runAsync(
     `INSERT INTO sticker_assets (
       id,
