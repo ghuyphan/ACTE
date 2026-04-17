@@ -126,12 +126,34 @@ function useNotesStoreValue(): NotesStoreValue {
   const deletePhotoFileIfPresent = useCallback(async (note: Note | null | undefined) => {
     const photoUri = getNotePhotoUri(note);
     const pairedVideoUri = getNotePairedVideoUri(note);
-    if (note?.type !== 'photo' || (!photoUri && !pairedVideoUri)) {
+    const dualPrimaryPhotoUri = note?.dualPrimaryPhotoLocalUri ?? '';
+    const dualSecondaryPhotoUri = note?.dualSecondaryPhotoLocalUri ?? '';
+    const dualComposedPhotoUri = note?.dualComposedPhotoLocalUri ?? '';
+    if (
+      note?.type !== 'photo' ||
+      (!photoUri &&
+        !pairedVideoUri &&
+        !dualPrimaryPhotoUri &&
+        !dualSecondaryPhotoUri &&
+        !dualComposedPhotoUri)
+    ) {
       return;
     }
 
     try {
-      for (const mediaUri of [photoUri, pairedVideoUri].filter(Boolean)) {
+      const uniqueMediaUris = Array.from(
+        new Set(
+          [
+            photoUri,
+            pairedVideoUri,
+            dualPrimaryPhotoUri,
+            dualSecondaryPhotoUri,
+            dualComposedPhotoUri,
+          ].filter(Boolean)
+        )
+      );
+
+      for (const mediaUri of uniqueMediaUris) {
         const fileInfo = await FileSystem.getInfoAsync(mediaUri);
         if (fileInfo.exists) {
           await FileSystem.deleteAsync(mediaUri, { idempotent: true });

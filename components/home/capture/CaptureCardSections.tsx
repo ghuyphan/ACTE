@@ -1,8 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Canvas, Path as SkiaPath } from '@shopify/react-native-skia';
+import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import type { TFunction } from 'i18next';
-import { type ComponentProps, type RefObject } from 'react';
+import { type ComponentProps, type RefObject, useCallback } from 'react';
 import {
   Pressable,
   Text,
@@ -26,6 +27,10 @@ import PremiumNoteFinishOverlay from '../../ui/PremiumNoteFinishOverlay';
 import PrimaryButton from '../../ui/PrimaryButton';
 import StickerPastePopover from '../../ui/StickerPastePopover';
 import LivePhotoIcon from '../../ui/LivePhotoIcon';
+import {
+  DualCameraPreview,
+  type DualCameraPreviewHandle,
+} from './DualCameraPreview';
 import { FilteredPhotoCanvas } from './CaptureControls';
 import { LiveCameraFilterOverlay } from './LiveCameraFilterOverlay';
 import {
@@ -487,6 +492,11 @@ interface LiveCameraSurfaceProps {
   cameraPermissionRequiresSettings: boolean;
   cameraPreviewZoom: number;
   cameraRef: RefObject<Camera | null>;
+  dualCameraPreviewRef?: RefObject<DualCameraPreviewHandle | null>;
+  dualCaptureFirstShotUri?: string | null;
+  dualCaptureStatusText?: string | null;
+  dualCameraSupported?: boolean;
+  dualModeEnabled?: boolean;
   cameraTransitionMaskAnimatedStyle: CaptureCardAnimatedStyle;
   cameraUnavailableDetail: string;
   cameraZoomGesture: ComponentProps<typeof GestureDetector>['gesture'];
@@ -521,6 +531,11 @@ export function LiveCameraSurface({
   cameraPermissionRequiresSettings,
   cameraPreviewZoom,
   cameraRef,
+  dualCameraPreviewRef,
+  dualCaptureFirstShotUri = null,
+  dualCaptureStatusText = null,
+  dualCameraSupported = false,
+  dualModeEnabled = false,
   cameraTransitionMaskAnimatedStyle,
   cameraUnavailableDetail,
   cameraZoomGesture,
@@ -548,16 +563,48 @@ export function LiveCameraSurface({
   const shouldShowZoomBadge = showCameraZoomBadge || cameraPreviewZoom > 1.01;
   const showLivePhotoGuide =
     Boolean(cameraInstructionText) &&
+    !dualModeEnabled &&
     !needsCameraPermission &&
     !showCameraUnavailableState &&
     !isLivePhotoCaptureInProgress;
+  const showDualCaptureInset = Boolean(dualCaptureFirstShotUri);
+  const showDualCaptureStatus = Boolean(dualCaptureStatusText);
+
+  const showDualCameraPreview =
+    dualModeEnabled &&
+    !needsCameraPermission &&
+    !showCameraUnavailableState;
+  const shouldRenderSingleCameraPreview = !dualModeEnabled && shouldRenderCameraPreview;
+  const handleDualCameraPreviewReady = useCallback(() => {
+    handleCameraInitialized();
+    handleCameraPreviewStarted();
+  }, [handleCameraInitialized, handleCameraPreviewStarted]);
+  const handleDualCameraCaptureError = useCallback(
+    (event: { nativeEvent?: { message?: string } }) => {
+      handleCameraStartupFailure(
+        event.nativeEvent?.message ?? 'Dual camera preview could not start.'
+      );
+    },
+    [handleCameraStartupFailure]
+  );
 
   return (
     <View
       style={[styles.cameraContainer, { backgroundColor: colors.captureCameraOverlay }]}
       collapsable={false}
     >
-      {shouldRenderCameraPreview ? (
+      {showDualCameraPreview && dualCameraSupported ? (
+        <View style={styles.cameraGestureLayer} collapsable={false}>
+          <DualCameraPreview
+            ref={dualCameraPreviewRef}
+            active={canShowLiveCameraPreview}
+            primaryFacing={facing}
+            onPreviewReady={handleDualCameraPreviewReady}
+            onCaptureError={handleDualCameraCaptureError}
+            style={styles.cameraPreview}
+          />
+        </View>
+      ) : shouldRenderSingleCameraPreview ? (
         <GestureDetector gesture={cameraZoomGesture}>
           <View style={styles.cameraGestureLayer} collapsable={false}>
             <Camera
@@ -632,6 +679,51 @@ export function LiveCameraSurface({
             ) : null}
           </View>
         </GestureDetector>
+      ) : null}
+      {showDualCaptureStatus ? (
+        <View pointerEvents="none" style={styles.cameraDualPreviewOnlyBadgeWrap}>
+          <View
+            style={[
+              styles.cameraDualPreviewOnlyBadge,
+              {
+                backgroundColor: colors.captureGlassFill,
+                borderColor: colors.captureGlassBorder,
+              },
+            ]}
+          >
+            <Ionicons name="copy-outline" size={13} color={colors.captureGlassText} />
+            <Text
+              style={[
+                styles.cameraDualPreviewOnlyBadgeText,
+                { color: colors.captureGlassText },
+              ]}
+            >
+              {dualCaptureStatusText}
+            </Text>
+          </View>
+        </View>
+      ) : null}
+      {showDualCaptureInset ? (
+        <View
+          pointerEvents="none"
+          testID="capture-dual-inset-preview"
+          style={[
+            styles.cameraDualPreviewInset,
+            {
+              backgroundColor: colors.captureGlassFill,
+              borderColor: colors.captureGlassBorder,
+            },
+          ]}
+        >
+          <Image
+            source={{ uri: dualCaptureFirstShotUri! }}
+            style={styles.cameraPreview}
+            contentFit="cover"
+            transition={0}
+            cachePolicy="none"
+          />
+          <View style={styles.cameraDualPreviewInsetScrim} />
+        </View>
       ) : null}
       <Reanimated.View
         testID="camera-transition-overlay"

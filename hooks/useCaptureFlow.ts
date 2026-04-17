@@ -10,15 +10,22 @@ import {
   CAPTURE_MODE_SWITCH_OUT,
 } from '../components/home/capture/captureMotion';
 import { DEFAULT_NOTE_RADIUS } from '../constants/noteRadius';
+import type { DualCameraFacing } from '../services/dualCamera';
 import type { PhotoFilterId } from '../services/photoFilters';
 import { LIVE_PHOTO_MAX_DURATION_SECONDS } from '../services/livePhotoProcessing';
 
 export type CaptureMode = 'text' | 'camera';
+export type CameraSubmode = 'single' | 'dual';
 export type CaptureDraftState = {
   captureMode: CaptureMode;
+  cameraSubmode: CameraSubmode;
   noteText: string;
   capturedPhoto: string | null;
   capturedPairedVideo: string | null;
+  dualPrimaryPhoto: string | null;
+  dualSecondaryPhoto: string | null;
+  dualPrimaryFacing: DualCameraFacing | null;
+  dualSecondaryFacing: DualCameraFacing | null;
   radius: number;
   selectedPhotoFilterId: PhotoFilterId;
 };
@@ -53,11 +60,16 @@ function getCaptureErrorCode(error: unknown) {
 
 export function useCaptureFlow() {
   const [captureMode, setCaptureMode] = useState<CaptureMode>('text');
+  const [cameraSubmode, setCameraSubmode] = useState<CameraSubmode>('single');
   const [isModeSwitchAnimating, setIsModeSwitchAnimating] = useState(false);
   const [cameraSessionKey, setCameraSessionKey] = useState(0);
   const [noteText, setNoteText] = useState('');
   const [capturedPhoto, setCapturedPhoto] = useState<string | null>(null);
   const [capturedPairedVideo, setCapturedPairedVideo] = useState<string | null>(null);
+  const [dualPrimaryPhoto, setDualPrimaryPhoto] = useState<string | null>(null);
+  const [dualSecondaryPhoto, setDualSecondaryPhoto] = useState<string | null>(null);
+  const [dualPrimaryFacing, setDualPrimaryFacing] = useState<DualCameraFacing | null>(null);
+  const [dualSecondaryFacing, setDualSecondaryFacing] = useState<DualCameraFacing | null>(null);
   const [isStillPhotoCaptureInProgress, setIsStillPhotoCaptureInProgress] = useState(false);
   const [isLivePhotoCaptureInProgress, setIsLivePhotoCaptureInProgress] = useState(false);
   const [isLivePhotoCaptureSettling, setIsLivePhotoCaptureSettling] = useState(false);
@@ -66,12 +78,11 @@ export function useCaptureFlow() {
   const [facing, setFacing] = useState<'back' | 'front'>('back');
   const [selectedPhotoFilterId, setSelectedPhotoFilterId] = useState<PhotoFilterId>('original');
   const { hasPermission, requestPermission: requestCameraPermission } = useCameraPermission();
-  const cameraDevice = useCameraDevice(
-    facing,
-    facing === 'back'
-      ? { physicalDevices: ['wide-angle-camera'] }
-      : undefined
-  );
+  const backCameraDevice = useCameraDevice('back', {
+    physicalDevices: ['wide-angle-camera'],
+  });
+  const frontCameraDevice = useCameraDevice('front');
+  const cameraDevice = facing === 'back' ? backCameraDevice : frontCameraDevice;
   const [cameraPermissionGranted, setCameraPermissionGranted] = useState(() => hasPermission);
   const [cameraPermissionStatus, setCameraPermissionStatus] = useState<CameraPermissionStatus>(() =>
     Camera.getCameraPermissionStatus()
@@ -161,6 +172,13 @@ export function useCaptureFlow() {
 
   const clearLivePhotoTapSuppression = useCallback(() => {
     suppressNextPhotoTapRef.current = false;
+  }, []);
+
+  const clearDualCaptureState = useCallback(() => {
+    setDualPrimaryPhoto(null);
+    setDualSecondaryPhoto(null);
+    setDualPrimaryFacing(null);
+    setDualSecondaryFacing(null);
   }, []);
 
   const resetLivePhotoCaptureRefs = useCallback(() => {
@@ -271,12 +289,13 @@ export function useCaptureFlow() {
       void cancelLivePhotoCapture();
       setCapturedPhoto(null);
       setCapturedPairedVideo(null);
+      clearDualCaptureState();
       setIsStillPhotoCaptureInProgress(false);
       setIsLivePhotoCaptureInProgress(false);
       setIsLivePhotoCaptureSettling(false);
       setIsLivePhotoSaveGuardActive(false);
     });
-  }, [animateModeSwitch, cancelLivePhotoCapture, isModeSwitchAnimating]);
+  }, [animateModeSwitch, cancelLivePhotoCapture, clearDualCaptureState, isModeSwitchAnimating]);
 
   const refreshCameraSession = useCallback(() => {
     setCameraSessionKey((current) => current + 1);
@@ -385,11 +404,39 @@ export function useCaptureFlow() {
       shutterScale.value = 1;
       if (photo?.path) {
         clearLivePhotoSaveGuard();
+        clearDualCaptureState();
         setIsLivePhotoCaptureInProgress(false);
         setIsLivePhotoCaptureSettling(false);
         setCapturedPairedVideo(null);
         setCapturedPhoto(normalizeCapturedFileUri(photo.path));
       }
+    } finally {
+      setIsStillPhotoCaptureInProgress(false);
+    }
+  }, [cameraRef, clearDualCaptureState, clearLivePhotoSaveGuard, shutterScale]);
+
+  const capturePhotoFile = useCallback(async () => {
+    if (suppressNextPhotoTapRef.current) {
+      suppressNextPhotoTapRef.current = false;
+      return null;
+    }
+
+    if (!cameraRef.current) {
+      return null;
+    }
+
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    setIsStillPhotoCaptureInProgress(true);
+
+    try {
+      const photo = await cameraRef.current.takePhoto({
+        enableShutterSound: false,
+      });
+      shutterScale.value = 1;
+      clearLivePhotoSaveGuard();
+      setIsLivePhotoCaptureInProgress(false);
+      setIsLivePhotoCaptureSettling(false);
+      return photo?.path ? normalizeCapturedFileUri(photo.path) : null;
     } finally {
       setIsStillPhotoCaptureInProgress(false);
     }
@@ -509,20 +556,26 @@ export function useCaptureFlow() {
     void cancelLivePhotoCapture();
     setCapturedPhoto(null);
     setCapturedPairedVideo(null);
+    clearDualCaptureState();
     setIsStillPhotoCaptureInProgress(false);
     setIsLivePhotoCaptureInProgress(false);
     setIsLivePhotoCaptureSettling(false);
     setIsLivePhotoSaveGuardActive(false);
     clearLivePhotoTapSuppression();
     setRadius(DEFAULT_NOTE_RADIUS);
-  }, [cancelLivePhotoCapture]);
+  }, [cancelLivePhotoCapture, clearDualCaptureState, clearLivePhotoTapSuppression]);
 
   const restoreCaptureState = useCallback((draft: CaptureDraftState) => {
     void cancelLivePhotoCapture();
     setCaptureMode(draft.captureMode);
+    setCameraSubmode(draft.cameraSubmode ?? 'single');
     setNoteText(draft.noteText);
     setCapturedPhoto(draft.capturedPhoto);
     setCapturedPairedVideo(draft.capturedPairedVideo);
+    setDualPrimaryPhoto(draft.dualPrimaryPhoto ?? null);
+    setDualSecondaryPhoto(draft.dualSecondaryPhoto ?? null);
+    setDualPrimaryFacing(draft.dualPrimaryFacing ?? null);
+    setDualSecondaryFacing(draft.dualSecondaryFacing ?? null);
     setIsStillPhotoCaptureInProgress(false);
     setIsLivePhotoCaptureInProgress(false);
     setIsLivePhotoCaptureSettling(false);
@@ -540,8 +593,10 @@ export function useCaptureFlow() {
 
   return {
     captureMode,
+    cameraSubmode,
     cameraSessionKey,
     setCaptureMode,
+    setCameraSubmode,
     noteText,
     setNoteText,
     capturedPhoto,
@@ -549,6 +604,14 @@ export function useCaptureFlow() {
     capturedPairedVideo,
     isStillPhotoCaptureInProgress,
     setCapturedPairedVideo,
+    dualPrimaryPhoto,
+    setDualPrimaryPhoto,
+    dualSecondaryPhoto,
+    setDualSecondaryPhoto,
+    dualPrimaryFacing,
+    setDualPrimaryFacing,
+    dualSecondaryFacing,
+    setDualSecondaryFacing,
     isLivePhotoCaptureInProgress,
     isLivePhotoCaptureSettling,
     isLivePhotoSaveGuardActive,
@@ -559,6 +622,8 @@ export function useCaptureFlow() {
     selectedPhotoFilterId,
     setSelectedPhotoFilterId,
     cameraDevice,
+    backCameraDeviceId: backCameraDevice?.id ?? null,
+    frontCameraDeviceId: frontCameraDevice?.id ?? null,
     permission,
     requestPermission,
     cameraRef,
@@ -572,10 +637,12 @@ export function useCaptureFlow() {
     handleShutterPressIn,
     handleShutterPressOut,
     takePicture,
+    capturePhotoFile,
     startLivePhotoCapture,
     finishLivePhotoCapture,
     needsCameraPermission,
     resetCapture,
     restoreCaptureState,
+    clearDualCaptureState,
   };
 }

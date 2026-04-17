@@ -16,8 +16,16 @@ const mockRequestPermission = jest.fn(async () => ({ granted: true, canAskAgain:
 const mockShowAlert = jest.fn();
 const mockUseCaptureFlow = jest.fn();
 const mockGetPersistentItem = jest.fn(async (_key: string) => null);
+const mockRemovePersistentItem = jest.fn(async (_key: string) => undefined);
 const mockSetPersistentItem = jest.fn(async (_key: string, _value: string) => undefined);
 const mockScrollToOffset = jest.fn();
+let mockSyncBootstrapState:
+  | 'complete'
+  | 'preparing'
+  | 'syncing'
+  | 'disabled'
+  | 'offline'
+  | 'error' = 'complete';
 const originalRequestAnimationFrame = global.requestAnimationFrame;
 const originalRequestIdleCallback = (global as any).requestIdleCallback;
 const originalCancelIdleCallback = (global as any).cancelIdleCallback;
@@ -65,6 +73,20 @@ jest.mock('../hooks/useAuth', () => ({
     user: mockUser,
     isAuthAvailable: true,
   }),
+}));
+
+jest.mock('../hooks/useSyncStatus', () => ({
+  useSyncStatus: () => ({
+    phase: 'idle',
+    bootstrapState: mockSyncBootstrapState,
+    status: 'idle',
+    isInitialSyncPending: false,
+    requestSync: jest.fn(),
+  }),
+}));
+
+jest.mock('../hooks/useReducedMotion', () => ({
+  useReducedMotion: () => false,
 }));
 
 jest.mock('../hooks/useTheme', () => ({
@@ -152,7 +174,16 @@ jest.mock('../hooks/useCaptureFlow', () => ({
 
 jest.mock('../utils/appStorage', () => ({
   getPersistentItem: (key: string) => mockGetPersistentItem(key),
+  removePersistentItem: (key: string) => mockRemovePersistentItem(key),
   setPersistentItem: (key: string, value: string) => mockSetPersistentItem(key, value),
+}));
+
+jest.mock('../services/dualCamera', () => ({
+  getDualCameraAvailability: jest.fn(async () => ({
+    available: false,
+    supported: false,
+    reason: 'unsupported',
+  })),
 }));
 
 jest.mock('../hooks/useNotes', () => ({
@@ -220,7 +251,7 @@ jest.mock('../components/home/CaptureCard', () => {
         getStickerSnapshot: jest.fn(() => ({ enabled: false, placements: [] })),
         resetDoodle: jest.fn(),
         resetStickers: jest.fn(),
-        closeDecorateControls: jest.fn(() => props.onInteractionLockChange?.(false)),
+        closeDecorateControls: jest.fn(() => props.onTextEntryFocusChange?.(false)),
       };
       React.useImperativeHandle(ref, () => mockCaptureCardHandle, [props]);
       return <Text testID="camera-preview-state">{String(props.isCameraPreviewActive)}</Text>;
@@ -326,8 +357,10 @@ describe('HomeScreen camera lifecycle', () => {
     mockRequestPermission.mockClear();
     mockShowAlert.mockClear();
     mockGetPersistentItem.mockReset();
+    mockRemovePersistentItem.mockClear();
     mockSetPersistentItem.mockClear();
     mockScrollToOffset.mockClear();
+    mockSyncBootstrapState = 'complete';
     mockRequestPermission.mockResolvedValue({ granted: true, canAskAgain: true });
     mockGetPersistentItem.mockResolvedValue(null);
     mockUseCaptureFlow.mockImplementation(() => {
@@ -337,26 +370,48 @@ describe('HomeScreen camera lifecycle', () => {
         captureTranslateY: createSharedValue(0),
         shutterScale: createSharedValue(1),
         captureMode: 'camera',
+        cameraSubmode: 'single',
         cameraSessionKey: 1,
         setCaptureMode: jest.fn(),
+        setCameraSubmode: jest.fn(),
         noteText: '',
         setNoteText: jest.fn(),
         capturedPhoto: null,
         setCapturedPhoto: jest.fn(),
+        capturedPairedVideo: null,
+        setCapturedPairedVideo: jest.fn(),
+        dualPrimaryPhoto: null,
+        setDualPrimaryPhoto: jest.fn(),
+        dualSecondaryPhoto: null,
+        setDualSecondaryPhoto: jest.fn(),
+        dualPrimaryFacing: null,
+        setDualPrimaryFacing: jest.fn(),
+        dualSecondaryFacing: null,
+        setDualSecondaryFacing: jest.fn(),
         radius: 150,
         setRadius: jest.fn(),
         facing: 'back',
         setFacing: jest.fn(),
+        selectedPhotoFilterId: 'original',
+        setSelectedPhotoFilterId: jest.fn(),
+        cameraDevice: undefined,
         permission: { granted: true, canAskAgain: true },
         requestPermission: mockRequestPermission,
         cameraRef: { current: null },
-        animateModeSwitch: jest.fn(),
+        isModeSwitchAnimating: false,
         toggleCaptureMode: jest.fn(),
         handleShutterPressIn: jest.fn(),
         handleShutterPressOut: jest.fn(),
         takePicture: jest.fn(),
+        startLivePhotoCapture: jest.fn(),
+        isStillPhotoCaptureInProgress: false,
+        isLivePhotoCaptureInProgress: false,
+        isLivePhotoCaptureSettling: false,
+        isLivePhotoSaveGuardActive: false,
         needsCameraPermission: false,
         resetCapture: jest.fn(),
+        restoreCaptureState: jest.fn(),
+        clearDualCaptureState: jest.fn(),
       };
     });
   });
@@ -425,7 +480,7 @@ describe('HomeScreen camera lifecycle', () => {
     expect(getByTestId('capture-scroll-enabled')).toHaveTextContent('true');
 
     act(() => {
-      mockCaptureCardProps?.onInteractionLockChange?.(true);
+      mockCaptureCardProps?.onTextEntryFocusChange?.(true);
     });
     expect(getByTestId('capture-scroll-enabled')).toHaveTextContent('false');
 
@@ -487,26 +542,48 @@ describe('HomeScreen camera lifecycle', () => {
         captureTranslateY: createSharedValue(0),
         shutterScale: createSharedValue(1),
         captureMode: 'camera',
+        cameraSubmode: 'single',
         cameraSessionKey: 1,
         setCaptureMode: jest.fn(),
+        setCameraSubmode: jest.fn(),
         noteText: '',
         setNoteText: jest.fn(),
         capturedPhoto: null,
         setCapturedPhoto: jest.fn(),
+        capturedPairedVideo: null,
+        setCapturedPairedVideo: jest.fn(),
+        dualPrimaryPhoto: null,
+        setDualPrimaryPhoto: jest.fn(),
+        dualSecondaryPhoto: null,
+        setDualSecondaryPhoto: jest.fn(),
+        dualPrimaryFacing: null,
+        setDualPrimaryFacing: jest.fn(),
+        dualSecondaryFacing: null,
+        setDualSecondaryFacing: jest.fn(),
         radius: 150,
         setRadius: jest.fn(),
         facing: 'back',
         setFacing: jest.fn(),
+        selectedPhotoFilterId: 'original',
+        setSelectedPhotoFilterId: jest.fn(),
+        cameraDevice: undefined,
         permission: { granted: false, canAskAgain: false },
         requestPermission: mockRequestPermission,
         cameraRef: { current: null },
-        animateModeSwitch: jest.fn(),
+        isModeSwitchAnimating: false,
         toggleCaptureMode: jest.fn(),
         handleShutterPressIn: jest.fn(),
         handleShutterPressOut: jest.fn(),
         takePicture: jest.fn(),
+        startLivePhotoCapture: jest.fn(),
+        isStillPhotoCaptureInProgress: false,
+        isLivePhotoCaptureInProgress: false,
+        isLivePhotoCaptureSettling: false,
+        isLivePhotoSaveGuardActive: false,
         needsCameraPermission: true,
         resetCapture: jest.fn(),
+        restoreCaptureState: jest.fn(),
+        clearDualCaptureState: jest.fn(),
       };
     });
 
@@ -543,19 +620,21 @@ describe('HomeScreen camera lifecycle', () => {
     expect(getByTestId('notes-feed-has-empty-state')).toHaveTextContent('true');
     expect(getByText('Your journal is waiting')).toBeTruthy();
     expect(getByText('Save your first note or photo to start filling this space.')).toBeTruthy();
-    expect(getByText('Save your first memory')).toBeTruthy();
+    expect(getByText('Write')).toBeTruthy();
+    expect(getByText('Photo')).toBeTruthy();
   });
 
   it('scrolls back to the capture page from the first-note empty state CTA', () => {
     const { getByText } = render(<HomeScreen />);
 
-    fireEvent.press(getByText('Save your first memory'));
+    fireEvent.press(getByText('Write'));
 
     expect(mockScrollToOffset).toHaveBeenCalledWith({ offset: 0, animated: true });
   });
 
   it('shows a syncing empty state after login while content is still hydrating', () => {
     mockUser = { uid: 'me' };
+    mockSyncBootstrapState = 'preparing';
     mockNotesLoading = true;
     mockNotesInitialLoadComplete = false;
     mockSharedLoading = true;
@@ -564,10 +643,11 @@ describe('HomeScreen camera lifecycle', () => {
     const { getByTestId, getByText } = render(<HomeScreen />);
 
     expect(getByTestId('notes-feed-has-empty-state')).toHaveTextContent('true');
-    expect(getByText('Syncing your memories')).toBeTruthy();
+    expect(getByText('Importing your cloud notes')).toBeTruthy();
   });
 
   it('keeps the first-time live photo hint visible until a capture exists', async () => {
+    jest.useFakeTimers();
     let currentCapturedPhoto: string | null = null;
 
     mockUseCaptureFlow.mockImplementation(() => {
@@ -577,30 +657,60 @@ describe('HomeScreen camera lifecycle', () => {
         captureTranslateY: createSharedValue(0),
         shutterScale: createSharedValue(1),
         captureMode: 'camera',
+        cameraSubmode: 'single',
         cameraSessionKey: 1,
         setCaptureMode: jest.fn(),
+        setCameraSubmode: jest.fn(),
         noteText: '',
         setNoteText: jest.fn(),
         capturedPhoto: currentCapturedPhoto,
         setCapturedPhoto: jest.fn(),
+        capturedPairedVideo: null,
+        setCapturedPairedVideo: jest.fn(),
+        dualPrimaryPhoto: null,
+        setDualPrimaryPhoto: jest.fn(),
+        dualSecondaryPhoto: null,
+        setDualSecondaryPhoto: jest.fn(),
+        dualPrimaryFacing: null,
+        setDualPrimaryFacing: jest.fn(),
+        dualSecondaryFacing: null,
+        setDualSecondaryFacing: jest.fn(),
         radius: 150,
         setRadius: jest.fn(),
         facing: 'back',
         setFacing: jest.fn(),
+        selectedPhotoFilterId: 'original',
+        setSelectedPhotoFilterId: jest.fn(),
+        cameraDevice: undefined,
         permission: { granted: true, canAskAgain: true },
         requestPermission: mockRequestPermission,
         cameraRef: { current: null },
-        animateModeSwitch: jest.fn(),
+        isModeSwitchAnimating: false,
         toggleCaptureMode: jest.fn(),
         handleShutterPressIn: jest.fn(),
         handleShutterPressOut: jest.fn(),
         takePicture: jest.fn(),
+        startLivePhotoCapture: jest.fn(),
+        isStillPhotoCaptureInProgress: false,
+        isLivePhotoCaptureInProgress: false,
+        isLivePhotoCaptureSettling: false,
+        isLivePhotoSaveGuardActive: false,
         needsCameraPermission: false,
         resetCapture: jest.fn(),
+        restoreCaptureState: jest.fn(),
+        clearDualCaptureState: jest.fn(),
       };
     });
 
     const { rerender } = render(<HomeScreen />);
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    act(() => {
+      jest.advanceTimersByTime(160);
+    });
 
     await waitFor(() => {
       expect(mockCaptureCardProps?.cameraInstructionText).toBe(
@@ -620,5 +730,7 @@ describe('HomeScreen camera lifecycle', () => {
       );
       expect(mockCaptureCardProps?.cameraInstructionText).toBeNull();
     });
+
+    jest.useRealTimers();
   });
 });

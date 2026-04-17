@@ -55,6 +55,7 @@ interface UseCaptureCardCameraControllerOptions {
   facing: 'back' | 'front';
   cameraInstructionText?: string | null;
   isLivePhotoCaptureInProgress: boolean;
+  allowShutterLongPress?: boolean;
   interactionsDisabled: boolean;
   reduceMotionEnabled: boolean;
   shutterScale: SharedValue<number>;
@@ -81,6 +82,7 @@ export function useCaptureCardCameraController({
   facing,
   cameraInstructionText = null,
   isLivePhotoCaptureInProgress,
+  allowShutterLongPress = true,
   interactionsDisabled,
   reduceMotionEnabled,
   shutterScale,
@@ -310,10 +312,19 @@ export function useCaptureCardCameraController({
     setCameraIssueDetail(null);
     setIsCameraReady(false);
     setCameraRetryNonce((current) => current + 1);
-  }, [cameraTransitionMaskOpacity, reduceMotionEnabled]);
+  }, [
+    cameraActivationNonce,
+    cameraRetryNonce,
+    cameraTransitionMaskOpacity,
+    canShowLiveCameraPreview,
+    facing,
+    isCameraPreviewActive,
+    reduceMotionEnabled,
+  ]);
 
   const handleCameraStartupFailure = useCallback(
     (detail?: string | null) => {
+      const normalizedDetail = detail?.trim() ?? null;
       if (cameraAutoRecoveryCountRef.current < CAMERA_AUTO_RECOVERY_ATTEMPTS) {
         cameraAutoRecoveryCountRef.current += 1;
         restartCameraPreview();
@@ -322,7 +333,7 @@ export function useCaptureCardCameraController({
 
       setCameraUnavailable(true);
       setCameraIssueDetail(
-        detail?.trim() ||
+        normalizedDetail ||
         t(
           'capture.cameraUnavailableTimeoutHint',
           'The camera preview took too long to start. Try again to restart the camera session.'
@@ -332,7 +343,11 @@ export function useCaptureCardCameraController({
       cameraSwitchInFlightRef.current = false;
       cameraTransitionMaskOpacity.value = withTiming(0, { duration: 0 });
     },
-    [cameraTransitionMaskOpacity, restartCameraPreview, t]
+    [
+      cameraTransitionMaskOpacity,
+      restartCameraPreview,
+      t,
+    ]
   );
 
   const handleCameraInitialized = useCallback(() => {
@@ -531,7 +546,9 @@ export function useCaptureCardCameraController({
       handleCameraStartupFailure();
     }, CAMERA_START_TIMEOUT_MS);
 
-    return () => clearTimeout(timer);
+    return () => {
+      clearTimeout(timer);
+    };
   }, [
     cameraDevice?.id,
     cameraRetryNonce,
@@ -677,12 +694,19 @@ export function useCaptureCardCameraController({
     });
     setIsCameraReady(false);
     onToggleFacing();
-  }, [cameraTransitionMaskOpacity, onToggleFacing, reduceMotionEnabled]);
+  }, [
+    cameraTransitionMaskOpacity,
+    onToggleFacing,
+    reduceMotionEnabled,
+  ]);
 
   const handleShutterLongPress = useCallback(() => {
+    if (!allowShutterLongPress) {
+      return;
+    }
     shutterLongPressTriggeredRef.current = true;
     onStartLivePhotoCapture();
-  }, [onStartLivePhotoCapture]);
+  }, [allowShutterLongPress, onStartLivePhotoCapture]);
 
   const handleShutterPress = useCallback(() => {
     if (shutterLongPressTriggeredRef.current) {

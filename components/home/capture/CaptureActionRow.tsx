@@ -67,6 +67,7 @@ interface CaptureActionRowProps {
   handleShutterPress: () => void;
   handleShutterRelease: () => void;
   handleSwitchCameraPress: () => void;
+  dualCaptureAwaitingSecondShot?: boolean;
   isLivePhotoCaptureInProgress: boolean;
   isSaveBusy: boolean;
   isSaveDisabled: boolean;
@@ -74,6 +75,7 @@ interface CaptureActionRowProps {
   isSharedTarget: boolean;
   livePhotoCountdownSeconds: number;
   onChangeShareTarget: (nextTarget: 'private' | 'shared') => void;
+  onResetDualCaptureSequence?: () => void;
   onRetakePhoto: () => void;
   onSaveNote: () => void;
   onShutterPressIn: () => void;
@@ -100,6 +102,7 @@ export function CaptureActionRow({
   handleShutterPress,
   handleShutterRelease,
   handleSwitchCameraPress,
+  dualCaptureAwaitingSecondShot = false,
   isLivePhotoCaptureInProgress,
   isSaveBusy,
   isSaveDisabled,
@@ -107,6 +110,7 @@ export function CaptureActionRow({
   isSharedTarget,
   livePhotoCountdownSeconds,
   onChangeShareTarget,
+  onResetDualCaptureSequence = () => undefined,
   onRetakePhoto,
   onSaveNote,
   onShutterPressIn,
@@ -209,9 +213,17 @@ export function CaptureActionRow({
           ) : null}
           {!showCameraUnavailableState && permissionGranted ? (
             <CaptureGlassActionButton
-              accessibilityLabel={t('capture.switchCamera', 'Switch camera')}
-              onPress={handleSwitchCameraPress}
-              iconName="camera-reverse"
+              accessibilityLabel={
+                dualCaptureAwaitingSecondShot
+                  ? t('capture.dualReset', 'Start over')
+                  : t('capture.switchCamera', 'Switch camera')
+              }
+              onPress={
+                dualCaptureAwaitingSecondShot
+                  ? onResetDualCaptureSequence
+                  : handleSwitchCameraPress
+              }
+              iconName={dualCaptureAwaitingSecondShot ? 'refresh' : 'camera-reverse'}
               iconColor={colors.captureGlassText}
               glassColorScheme={colors.captureGlassColorScheme}
               fallbackColor={glassPalette.controlBackgroundColor}

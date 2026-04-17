@@ -1,11 +1,18 @@
 import { Dimensions, Platform, StyleSheet } from 'react-native';
 import { STICKER_ARTBOARD_FRAME } from '../../../constants/doodleLayout';
 import { Layout, Radii, Shadows, Sheet, Typography } from '../../../constants/theme';
+import { getDualCameraInsetMetrics } from './dualCameraLayout';
 
 const { width } = Dimensions.get('window');
 
 export const HORIZONTAL_PADDING = Layout.screenPadding - 8;
 export const CARD_SIZE = width - HORIZONTAL_PADDING * 2;
+const {
+  insetBorderWidth: DUAL_CAMERA_INSET_BORDER_WIDTH,
+  insetMargin: DUAL_CAMERA_INSET_MARGIN,
+  insetRadius: DUAL_CAMERA_INSET_RADIUS,
+  insetSize: DUAL_CAMERA_INSET_SIZE,
+} = getDualCameraInsetMetrics(CARD_SIZE);
 export const TOP_CONTROL_INSET = 24;
 export const TOP_CONTROL_HEIGHT = 38;
 export const TOP_CONTROL_RADIUS = 19;
@@ -342,6 +349,61 @@ export const styles = StyleSheet.create({
     right: 16,
     alignItems: 'center',
     zIndex: 10,
+  },
+  cameraDualPreviewOnlyBadgeWrap: {
+    position: 'absolute',
+    top: CARD_CHROME_SAFE_TOP,
+    left: 16,
+    right: 16,
+    alignItems: 'center',
+    zIndex: 10,
+  },
+  cameraDualPreviewOnlyBadge: {
+    minHeight: 30,
+    borderRadius: 15,
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  cameraDualPreviewOnlyBadgeText: {
+    fontSize: 12,
+    fontWeight: '700',
+    fontFamily: 'Noto Sans',
+    flexShrink: 1,
+  },
+  cameraDualPreviewInset: {
+    position: 'absolute',
+    top: DUAL_CAMERA_INSET_MARGIN,
+    left: DUAL_CAMERA_INSET_MARGIN,
+    width: DUAL_CAMERA_INSET_SIZE,
+    height: DUAL_CAMERA_INSET_SIZE,
+    borderRadius: DUAL_CAMERA_INSET_RADIUS,
+    borderWidth: DUAL_CAMERA_INSET_BORDER_WIDTH,
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    zIndex: 9,
+  },
+  cameraDualPreviewInsetScrim: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+  },
+  cameraDualPreviewInsetTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    fontFamily: 'Noto Sans',
+    zIndex: 1,
+  },
+  cameraDualPreviewInsetSubtitle: {
+    fontSize: 11,
+    fontWeight: '600',
+    fontFamily: 'Noto Sans',
+    zIndex: 1,
   },
   cameraLivePhotoGuidePill: {
     minHeight: 30,

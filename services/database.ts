@@ -22,6 +22,9 @@ import {
 
 // ─── Types ──────────────────────────────────────────────────────────
 export type NoteType = 'text' | 'photo';
+export type NoteCaptureVariant = 'single' | 'dual';
+export type NoteDualFacing = 'front' | 'back';
+export type NoteDualLayoutPreset = 'top-left';
 
 export interface Note {
     id: string;
@@ -41,6 +44,13 @@ export interface Note {
     promptAnswer?: string | null;
     moodEmoji?: string | null;
     noteColor?: string | null;
+    captureVariant?: NoteCaptureVariant | null;
+    dualPrimaryPhotoLocalUri?: string | null;
+    dualSecondaryPhotoLocalUri?: string | null;
+    dualPrimaryFacing?: NoteDualFacing | null;
+    dualSecondaryFacing?: NoteDualFacing | null;
+    dualLayoutPreset?: NoteDualLayoutPreset | null;
+    dualComposedPhotoLocalUri?: string | null;
     latitude: number;
     longitude: number;
     radius: number;           // geofence radius in meters
@@ -71,6 +81,13 @@ export interface CreateNoteInput {
     promptAnswer?: string | null;
     moodEmoji?: string | null;
     noteColor?: string | null;
+    captureVariant?: NoteCaptureVariant | null;
+    dualPrimaryPhotoLocalUri?: string | null;
+    dualSecondaryPhotoLocalUri?: string | null;
+    dualPrimaryFacing?: NoteDualFacing | null;
+    dualSecondaryFacing?: NoteDualFacing | null;
+    dualLayoutPreset?: NoteDualLayoutPreset | null;
+    dualComposedPhotoLocalUri?: string | null;
     latitude: number;
     longitude: number;
     radius?: number;
@@ -98,6 +115,13 @@ export type NoteUpdates = Partial<
         | 'promptAnswer'
         | 'moodEmoji'
         | 'noteColor'
+        | 'captureVariant'
+        | 'dualPrimaryPhotoLocalUri'
+        | 'dualSecondaryPhotoLocalUri'
+        | 'dualPrimaryFacing'
+        | 'dualSecondaryFacing'
+        | 'dualLayoutPreset'
+        | 'dualComposedPhotoLocalUri'
         | 'radius'
         | 'hasDoodle'
         | 'doodleStrokesJson'
@@ -132,6 +156,13 @@ interface NoteRow {
     prompt_answer: string | null;
     mood_emoji: string | null;
     note_color: string | null;
+    capture_variant: NoteCaptureVariant | null;
+    dual_primary_photo_local_uri: string | null;
+    dual_secondary_photo_local_uri: string | null;
+    dual_primary_facing: NoteDualFacing | null;
+    dual_secondary_facing: NoteDualFacing | null;
+    dual_layout_preset: NoteDualLayoutPreset | null;
+    dual_composed_photo_local_uri: string | null;
     latitude: number;
     longitude: number;
     radius: number;
@@ -150,7 +181,7 @@ let db: SQLite.SQLiteDatabase | null = null;
 let dbInitPromise: Promise<SQLite.SQLiteDatabase> | null = null;
 let transactionQueue: Promise<void> = Promise.resolve();
 let androidDatabaseQueue: Promise<void> = Promise.resolve();
-const APP_SCHEMA_VERSION = 16;
+const APP_SCHEMA_VERSION = 17;
 const DATABASE_NAME = 'acte_notes.db';
 export const LOCAL_NOTES_SCOPE = '__local__';
 const ACTIVE_NOTES_SCOPE_STORAGE_KEY = 'notes.activeScope';
@@ -613,6 +644,13 @@ export async function getDB(): Promise<SQLite.SQLiteDatabase> {
         prompt_answer TEXT,
         mood_emoji TEXT,
         note_color TEXT,
+        capture_variant TEXT CHECK(capture_variant IN ('single', 'dual')),
+        dual_primary_photo_local_uri TEXT,
+        dual_secondary_photo_local_uri TEXT,
+        dual_primary_facing TEXT CHECK(dual_primary_facing IN ('front', 'back')),
+        dual_secondary_facing TEXT CHECK(dual_secondary_facing IN ('front', 'back')),
+        dual_layout_preset TEXT CHECK(dual_layout_preset IN ('top-left')),
+        dual_composed_photo_local_uri TEXT,
         search_text TEXT NOT NULL DEFAULT '',
         latitude REAL NOT NULL,
         longitude REAL NOT NULL,
@@ -820,6 +858,27 @@ export async function getDB(): Promise<SQLite.SQLiteDatabase> {
             }
             if (!columns.includes('note_color')) {
                 await database.execAsync(`ALTER TABLE notes ADD COLUMN note_color TEXT`);
+            }
+            if (!columns.includes('capture_variant')) {
+                await database.execAsync(`ALTER TABLE notes ADD COLUMN capture_variant TEXT`);
+            }
+            if (!columns.includes('dual_primary_photo_local_uri')) {
+                await database.execAsync(`ALTER TABLE notes ADD COLUMN dual_primary_photo_local_uri TEXT`);
+            }
+            if (!columns.includes('dual_secondary_photo_local_uri')) {
+                await database.execAsync(`ALTER TABLE notes ADD COLUMN dual_secondary_photo_local_uri TEXT`);
+            }
+            if (!columns.includes('dual_primary_facing')) {
+                await database.execAsync(`ALTER TABLE notes ADD COLUMN dual_primary_facing TEXT`);
+            }
+            if (!columns.includes('dual_secondary_facing')) {
+                await database.execAsync(`ALTER TABLE notes ADD COLUMN dual_secondary_facing TEXT`);
+            }
+            if (!columns.includes('dual_layout_preset')) {
+                await database.execAsync(`ALTER TABLE notes ADD COLUMN dual_layout_preset TEXT`);
+            }
+            if (!columns.includes('dual_composed_photo_local_uri')) {
+                await database.execAsync(`ALTER TABLE notes ADD COLUMN dual_composed_photo_local_uri TEXT`);
             }
 
             await database.execAsync(`CREATE INDEX IF NOT EXISTS idx_notes_search_text ON notes(search_text)`);
@@ -1219,6 +1278,27 @@ function normalizePhotoCaption(value: string | null | undefined) {
     return trimmed.length > 0 ? trimmed : null;
 }
 
+function normalizeNoteCaptureVariant(
+    type: NoteType,
+    value: NoteCaptureVariant | null | undefined
+): NoteCaptureVariant | null {
+    if (type !== 'photo') {
+        return null;
+    }
+
+    return value === 'dual' ? 'dual' : 'single';
+}
+
+function normalizeNoteDualFacing(value: NoteDualFacing | null | undefined): NoteDualFacing | null {
+    return value === 'front' || value === 'back' ? value : null;
+}
+
+function normalizeNoteDualLayoutPreset(
+    value: NoteDualLayoutPreset | null | undefined
+): NoteDualLayoutPreset | null {
+    return value === 'top-left' ? value : null;
+}
+
 function buildSearchText(input: {
     type: NoteType;
     content: string;
@@ -1274,6 +1354,7 @@ async function deleteNoteSearchDocumentsForScope(
 function rowToNote(row: NoteRow): Note {
     const photoLocalUri = getResolvedPhotoLocalUri(row);
     const pairedVideoLocalUri = resolveStoredPairedVideoUri(row.paired_video_local_uri);
+    const captureVariant = normalizeNoteCaptureVariant(row.type as NoteType, row.capture_variant);
     return {
         id: row.id,
         type: row.type as NoteType,
@@ -1292,6 +1373,23 @@ function rowToNote(row: NoteRow): Note {
         promptAnswer: row.prompt_answer,
         moodEmoji: row.mood_emoji,
         noteColor: row.note_color ?? null,
+        captureVariant,
+        dualPrimaryPhotoLocalUri:
+            captureVariant === 'dual'
+                ? resolveStoredPhotoUri(row.dual_primary_photo_local_uri)
+                : null,
+        dualSecondaryPhotoLocalUri:
+            captureVariant === 'dual'
+                ? resolveStoredPhotoUri(row.dual_secondary_photo_local_uri)
+                : null,
+        dualPrimaryFacing: captureVariant === 'dual' ? normalizeNoteDualFacing(row.dual_primary_facing) : null,
+        dualSecondaryFacing: captureVariant === 'dual' ? normalizeNoteDualFacing(row.dual_secondary_facing) : null,
+        dualLayoutPreset:
+            captureVariant === 'dual' ? normalizeNoteDualLayoutPreset(row.dual_layout_preset) : null,
+        dualComposedPhotoLocalUri:
+            captureVariant === 'dual'
+                ? resolveStoredPhotoUri(row.dual_composed_photo_local_uri ?? photoLocalUri)
+                : null,
         latitude: row.latitude,
         longitude: row.longitude,
         radius: row.radius,
@@ -1321,6 +1419,13 @@ function rowToReminderSelectionNote(row: ReminderSelectionRow): Note {
         promptAnswer: null,
         moodEmoji: null,
         noteColor: null,
+        captureVariant: null,
+        dualPrimaryPhotoLocalUri: null,
+        dualSecondaryPhotoLocalUri: null,
+        dualPrimaryFacing: null,
+        dualSecondaryFacing: null,
+        dualLayoutPreset: null,
+        dualComposedPhotoLocalUri: null,
         latitude: row.latitude,
         longitude: row.longitude,
         radius: row.radius,
@@ -1443,6 +1548,25 @@ export async function createNote(
     const normalizedCaption = input.type === 'photo' ? normalizePhotoCaption(input.caption) : null;
     const normalizedNoteColor =
         input.type === 'text' ? normalizeSavedTextNoteColor(input.noteColor) : null;
+    const normalizedCaptureVariant = normalizeNoteCaptureVariant(input.type, input.captureVariant);
+    const normalizedDualPrimaryPhotoLocalUri =
+        normalizedCaptureVariant === 'dual'
+            ? resolveStoredPhotoUri(input.dualPrimaryPhotoLocalUri)
+            : null;
+    const normalizedDualSecondaryPhotoLocalUri =
+        normalizedCaptureVariant === 'dual'
+            ? resolveStoredPhotoUri(input.dualSecondaryPhotoLocalUri)
+            : null;
+    const normalizedDualPrimaryFacing =
+        normalizedCaptureVariant === 'dual' ? normalizeNoteDualFacing(input.dualPrimaryFacing) : null;
+    const normalizedDualSecondaryFacing =
+        normalizedCaptureVariant === 'dual' ? normalizeNoteDualFacing(input.dualSecondaryFacing) : null;
+    const normalizedDualLayoutPreset =
+        normalizedCaptureVariant === 'dual' ? normalizeNoteDualLayoutPreset(input.dualLayoutPreset) : null;
+    const normalizedDualComposedPhotoLocalUri =
+        normalizedCaptureVariant === 'dual'
+            ? resolveStoredPhotoUri(input.dualComposedPhotoLocalUri ?? photoLocalUri)
+            : null;
     const searchText = buildSearchText({
         type: input.type,
         content: normalizedContent,
@@ -1477,6 +1601,13 @@ export async function createNote(
                 prompt_answer,
                 mood_emoji,
                 note_color,
+                capture_variant,
+                dual_primary_photo_local_uri,
+                dual_secondary_photo_local_uri,
+                dual_primary_facing,
+                dual_secondary_facing,
+                dual_layout_preset,
+                dual_composed_photo_local_uri,
                 search_text,
                 latitude,
                 longitude,
@@ -1484,7 +1615,7 @@ export async function createNote(
                 is_favorite,
                 created_at
             )
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)`,
             id,
             scope,
             input.type,
@@ -1503,6 +1634,13 @@ export async function createNote(
             input.promptAnswer ?? null,
             input.moodEmoji ?? null,
             normalizedNoteColor,
+            normalizedCaptureVariant,
+            normalizedDualPrimaryPhotoLocalUri,
+            normalizedDualSecondaryPhotoLocalUri,
+            normalizedDualPrimaryFacing,
+            normalizedDualSecondaryFacing,
+            normalizedDualLayoutPreset,
+            normalizedDualComposedPhotoLocalUri,
             searchText,
             input.latitude,
             input.longitude,
@@ -1532,6 +1670,13 @@ export async function createNote(
         promptAnswer: input.promptAnswer ?? null,
         moodEmoji: input.moodEmoji ?? null,
         noteColor: normalizedNoteColor,
+        captureVariant: normalizedCaptureVariant,
+        dualPrimaryPhotoLocalUri: normalizedDualPrimaryPhotoLocalUri,
+        dualSecondaryPhotoLocalUri: normalizedDualSecondaryPhotoLocalUri,
+        dualPrimaryFacing: normalizedDualPrimaryFacing,
+        dualSecondaryFacing: normalizedDualSecondaryFacing,
+        dualLayoutPreset: normalizedDualLayoutPreset,
+        dualComposedPhotoLocalUri: normalizedDualComposedPhotoLocalUri,
         latitude: input.latitude,
         longitude: input.longitude,
         radius: input.radius ?? DEFAULT_NOTE_RADIUS,
@@ -1691,6 +1836,58 @@ export async function updateNote(
                 updates.noteColor !== undefined ? updates.noteColor : existing.noteColor ?? null
             )
             : null;
+    const nextCaptureVariant = normalizeNoteCaptureVariant(
+        nextType,
+        updates.captureVariant !== undefined ? updates.captureVariant : existing.captureVariant ?? null
+    );
+    const nextDualPrimaryPhotoLocalUri =
+        nextCaptureVariant === 'dual'
+            ? resolveStoredPhotoUri(
+                updates.dualPrimaryPhotoLocalUri !== undefined
+                    ? updates.dualPrimaryPhotoLocalUri
+                    : existing.dualPrimaryPhotoLocalUri ?? null
+            )
+            : null;
+    const nextDualSecondaryPhotoLocalUri =
+        nextCaptureVariant === 'dual'
+            ? resolveStoredPhotoUri(
+                updates.dualSecondaryPhotoLocalUri !== undefined
+                    ? updates.dualSecondaryPhotoLocalUri
+                    : existing.dualSecondaryPhotoLocalUri ?? null
+            )
+            : null;
+    const nextDualPrimaryFacing =
+        nextCaptureVariant === 'dual'
+            ? normalizeNoteDualFacing(
+                updates.dualPrimaryFacing !== undefined
+                    ? updates.dualPrimaryFacing
+                    : existing.dualPrimaryFacing ?? null
+            )
+            : null;
+    const nextDualSecondaryFacing =
+        nextCaptureVariant === 'dual'
+            ? normalizeNoteDualFacing(
+                updates.dualSecondaryFacing !== undefined
+                    ? updates.dualSecondaryFacing
+                    : existing.dualSecondaryFacing ?? null
+            )
+            : null;
+    const nextDualLayoutPreset =
+        nextCaptureVariant === 'dual'
+            ? normalizeNoteDualLayoutPreset(
+                updates.dualLayoutPreset !== undefined
+                    ? updates.dualLayoutPreset
+                    : existing.dualLayoutPreset ?? null
+            )
+            : null;
+    const nextDualComposedPhotoLocalUri =
+        nextCaptureVariant === 'dual'
+            ? resolveStoredPhotoUri(
+                updates.dualComposedPhotoLocalUri !== undefined
+                    ? updates.dualComposedPhotoLocalUri
+                    : existing.dualComposedPhotoLocalUri ?? nextPhotoLocalUri ?? null
+            )
+            : null;
     const nextRadius = updates.radius ?? existing.radius;
     const nextPhotoRemoteBase64 =
         updates.photoRemoteBase64 !== undefined
@@ -1736,6 +1933,13 @@ export async function updateNote(
                  prompt_answer = ?,
                  mood_emoji = ?,
                  note_color = ?,
+                 capture_variant = ?,
+                 dual_primary_photo_local_uri = ?,
+                 dual_secondary_photo_local_uri = ?,
+                 dual_primary_facing = ?,
+                 dual_secondary_facing = ?,
+                 dual_layout_preset = ?,
+                 dual_composed_photo_local_uri = ?,
                  search_text = ?,
                  radius = ?,
                  updated_at = ?
@@ -1755,6 +1959,13 @@ export async function updateNote(
             nextPromptAnswer,
             nextMoodEmoji,
             nextNoteColor,
+            nextCaptureVariant,
+            nextDualPrimaryPhotoLocalUri,
+            nextDualSecondaryPhotoLocalUri,
+            nextDualPrimaryFacing,
+            nextDualSecondaryFacing,
+            nextDualLayoutPreset,
+            nextDualComposedPhotoLocalUri,
             searchText,
             nextRadius,
             now,
@@ -2059,6 +2270,25 @@ export async function upsertNoteForScope(input: UpsertNoteInput, scope: string):
             : null;
     const normalizedContent = input.type === 'photo' ? photoLocalUri ?? '' : input.content;
     const normalizedCaption = input.type === 'photo' ? normalizePhotoCaption(input.caption) : null;
+    const normalizedCaptureVariant = normalizeNoteCaptureVariant(input.type, input.captureVariant);
+    const normalizedDualPrimaryPhotoLocalUri =
+        normalizedCaptureVariant === 'dual'
+            ? resolveStoredPhotoUri(input.dualPrimaryPhotoLocalUri)
+            : null;
+    const normalizedDualSecondaryPhotoLocalUri =
+        normalizedCaptureVariant === 'dual'
+            ? resolveStoredPhotoUri(input.dualSecondaryPhotoLocalUri)
+            : null;
+    const normalizedDualPrimaryFacing =
+        normalizedCaptureVariant === 'dual' ? normalizeNoteDualFacing(input.dualPrimaryFacing) : null;
+    const normalizedDualSecondaryFacing =
+        normalizedCaptureVariant === 'dual' ? normalizeNoteDualFacing(input.dualSecondaryFacing) : null;
+    const normalizedDualLayoutPreset =
+        normalizedCaptureVariant === 'dual' ? normalizeNoteDualLayoutPreset(input.dualLayoutPreset) : null;
+    const normalizedDualComposedPhotoLocalUri =
+        normalizedCaptureVariant === 'dual'
+            ? resolveStoredPhotoUri(input.dualComposedPhotoLocalUri ?? photoLocalUri)
+            : null;
     const searchText = buildSearchText({
         type: input.type,
         content: normalizedContent,
@@ -2104,6 +2334,13 @@ export async function upsertNoteForScope(input: UpsertNoteInput, scope: string):
                 prompt_answer,
                 mood_emoji,
                 note_color,
+                capture_variant,
+                dual_primary_photo_local_uri,
+                dual_secondary_photo_local_uri,
+                dual_primary_facing,
+                dual_secondary_facing,
+                dual_layout_preset,
+                dual_composed_photo_local_uri,
                 search_text,
                 latitude,
                 longitude,
@@ -2131,6 +2368,13 @@ export async function upsertNoteForScope(input: UpsertNoteInput, scope: string):
                 prompt_answer = excluded.prompt_answer,
                 mood_emoji = excluded.mood_emoji,
                 note_color = excluded.note_color,
+                capture_variant = excluded.capture_variant,
+                dual_primary_photo_local_uri = excluded.dual_primary_photo_local_uri,
+                dual_secondary_photo_local_uri = excluded.dual_secondary_photo_local_uri,
+                dual_primary_facing = excluded.dual_primary_facing,
+                dual_secondary_facing = excluded.dual_secondary_facing,
+                dual_layout_preset = excluded.dual_layout_preset,
+                dual_composed_photo_local_uri = excluded.dual_composed_photo_local_uri,
                 search_text = excluded.search_text,
                 latitude = excluded.latitude,
                 longitude = excluded.longitude,
@@ -2156,6 +2400,13 @@ export async function upsertNoteForScope(input: UpsertNoteInput, scope: string):
             input.promptAnswer ?? null,
             input.moodEmoji ?? null,
             input.noteColor ?? null,
+            normalizedCaptureVariant,
+            normalizedDualPrimaryPhotoLocalUri,
+            normalizedDualSecondaryPhotoLocalUri,
+            normalizedDualPrimaryFacing,
+            normalizedDualSecondaryFacing,
+            normalizedDualLayoutPreset,
+            normalizedDualComposedPhotoLocalUri,
             searchText,
             input.latitude,
             input.longitude,
@@ -2186,6 +2437,13 @@ export async function upsertNoteForScope(input: UpsertNoteInput, scope: string):
         promptAnswer: input.promptAnswer ?? null,
         moodEmoji: input.moodEmoji ?? null,
         noteColor: input.noteColor ?? null,
+        captureVariant: normalizedCaptureVariant,
+        dualPrimaryPhotoLocalUri: normalizedDualPrimaryPhotoLocalUri,
+        dualSecondaryPhotoLocalUri: normalizedDualSecondaryPhotoLocalUri,
+        dualPrimaryFacing: normalizedDualPrimaryFacing,
+        dualSecondaryFacing: normalizedDualSecondaryFacing,
+        dualLayoutPreset: normalizedDualLayoutPreset,
+        dualComposedPhotoLocalUri: normalizedDualComposedPhotoLocalUri,
         latitude: input.latitude,
         longitude: input.longitude,
         radius: input.radius ?? DEFAULT_NOTE_RADIUS,

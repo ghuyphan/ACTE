@@ -19,6 +19,10 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AppSheetAlert from '../sheets/AppSheetAlert';
 import CaptureAudienceStrip from '../home/CaptureAudienceStrip';
 import CaptureCard, { type CaptureCardHandle } from '../home/CaptureCard';
+import DualCaptureComposer, {
+  type DualCaptureComposeRequest,
+} from '../home/capture/DualCaptureComposer';
+import type { DualCameraPreviewHandle } from '../home/capture/DualCameraPreview';
 import {
   findHomeFeedItemIndex,
   getHomeFeedItemKey,
@@ -82,6 +86,7 @@ import {
   PREVIEWABLE_PREMIUM_NOTE_COLOR_IDS,
 } from '../../services/premiumNoteFinish';
 import { generateNoteId, type Note } from '../../services/database';
+import { getDualCameraAvailability, type DualCameraStillCapture } from '../../services/dualCamera';
 import { getDistanceMeters, getReminderPlaceGroups } from '../../services/reminderSelection';
 import { getSharedFeedErrorMessage, type SharedPost } from '../../services/sharedFeedService';
 import type { NotesRouteTransitionRect } from '../../utils/notesRouteTransition';
@@ -159,6 +164,7 @@ function parsePersistedCaptureDraft(rawValue: string | null): PersistedCaptureDr
     }
 
     const captureMode = parsed.captureMode === 'camera' ? 'camera' : 'text';
+    const cameraSubmode = parsed.cameraSubmode === 'dual' ? 'dual' : 'single';
     const noteText = typeof parsed.noteText === 'string' ? parsed.noteText : '';
     const capturedPhoto =
       typeof parsed.capturedPhoto === 'string' && parsed.capturedPhoto.trim().length > 0
@@ -168,6 +174,16 @@ function parsePersistedCaptureDraft(rawValue: string | null): PersistedCaptureDr
       typeof parsed.capturedPairedVideo === 'string' && parsed.capturedPairedVideo.trim().length > 0
         ? parsed.capturedPairedVideo
         : null;
+    const dualPrimaryPhoto =
+      typeof parsed.dualPrimaryPhoto === 'string' && parsed.dualPrimaryPhoto.trim().length > 0
+        ? parsed.dualPrimaryPhoto
+        : null;
+    const dualSecondaryPhoto =
+      typeof parsed.dualSecondaryPhoto === 'string' && parsed.dualSecondaryPhoto.trim().length > 0
+        ? parsed.dualSecondaryPhoto
+        : null;
+    const dualPrimaryFacing = parsed.dualPrimaryFacing === 'front' ? 'front' : parsed.dualPrimaryFacing === 'back' ? 'back' : null;
+    const dualSecondaryFacing = parsed.dualSecondaryFacing === 'front' ? 'front' : parsed.dualSecondaryFacing === 'back' ? 'back' : null;
     const radius = typeof parsed.radius === 'number' && Number.isFinite(parsed.radius)
       ? parsed.radius
       : DEFAULT_NOTE_RADIUS;
@@ -186,9 +202,14 @@ function parsePersistedCaptureDraft(rawValue: string | null): PersistedCaptureDr
     const normalizedDraft: PersistedCaptureDraft = {
       version: 1,
       captureMode,
+      cameraSubmode,
       noteText,
       capturedPhoto,
       capturedPairedVideo,
+      dualPrimaryPhoto,
+      dualSecondaryPhoto,
+      dualPrimaryFacing,
+      dualSecondaryFacing,
       radius,
       selectedPhotoFilterId,
       noteColor,
@@ -317,6 +338,9 @@ export default function HomeScreen() {
   const searchAnim = useSharedValue(0);
   const flatListRef = useRef<any>(null);
   const captureCardRef = useRef<CaptureCardHandle | null>(null);
+  const dualCameraPreviewRef = useRef<DualCameraPreviewHandle | null>(null);
+  const dualCaptureComposeResolverRef = useRef<((uri: string | null) => void) | null>(null);
+  const dualCaptureComposeRequestIdRef = useRef(0);
   const lastFreeNoteColorRef = useRef<string>(DEFAULT_NOTE_COLOR_ID);
   const finalizeInlineSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const resetSaveStateTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -326,6 +350,9 @@ export default function HomeScreen() {
   const previousVisibleFeedItemKeysRef = useRef<string[] | null>(null);
   const lastHandledOpenSharedManageAtRef = useRef<string | null>(null);
   const [captureDraftReady, setCaptureDraftReady] = useState(false);
+  const [dualCaptureSupported, setDualCaptureSupported] = useState(false);
+  const [dualCaptureComposeRequest, setDualCaptureComposeRequest] =
+    useState<DualCaptureComposeRequest | null>(null);
   useScrollToTop(flatListRef);
 
   useEffect(() => {
@@ -337,6 +364,27 @@ export default function HomeScreen() {
       }
 
       setHasSeenLivePhotoCameraHint(Boolean(value));
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (Platform.OS !== 'ios') {
+      setDualCaptureSupported(false);
+      return;
+    }
+
+    let cancelled = false;
+
+    void getDualCameraAvailability().then((availability) => {
+      if (cancelled) {
+        return;
+      }
+
+      setDualCaptureSupported(Boolean(availability.supported));
     });
 
     return () => {
@@ -394,14 +442,24 @@ export default function HomeScreen() {
   }, [router]);
   const {
     captureMode,
+    cameraSubmode,
     cameraSessionKey,
     setCaptureMode,
+    setCameraSubmode,
     noteText,
     setNoteText,
     capturedPhoto,
     setCapturedPhoto,
     capturedPairedVideo,
     setCapturedPairedVideo,
+    dualPrimaryPhoto,
+    setDualPrimaryPhoto,
+    dualSecondaryPhoto,
+    setDualSecondaryPhoto,
+    dualPrimaryFacing,
+    setDualPrimaryFacing,
+    dualSecondaryFacing,
+    setDualSecondaryFacing,
     radius,
     setRadius,
     facing,
@@ -409,6 +467,8 @@ export default function HomeScreen() {
     selectedPhotoFilterId,
     setSelectedPhotoFilterId,
     cameraDevice,
+    backCameraDeviceId,
+    frontCameraDeviceId,
     permission,
     requestPermission,
     cameraRef,
@@ -420,6 +480,7 @@ export default function HomeScreen() {
     handleShutterPressIn,
     handleShutterPressOut,
     takePicture,
+    capturePhotoFile,
     startLivePhotoCapture,
     isStillPhotoCaptureInProgress,
     isLivePhotoCaptureInProgress,
@@ -428,6 +489,7 @@ export default function HomeScreen() {
     needsCameraPermission,
     resetCapture,
     restoreCaptureState,
+    clearDualCaptureState,
   } = useCaptureFlow();
   const isCameraPreviewActive =
     captureMode === 'camera' &&
@@ -435,6 +497,60 @@ export default function HomeScreen() {
     isScreenFocused &&
     appState === 'active' &&
     Boolean(permission?.granted);
+  const dualCaptureUsesSequentialCapture =
+    Platform.OS === 'android' && Boolean(backCameraDeviceId && frontCameraDeviceId);
+  const dualCaptureFeatureSupported = dualCaptureUsesSequentialCapture || dualCaptureSupported;
+  const dualCaptureUiEnabled = dualCaptureFeatureSupported;
+  const dualCaptureAwaitingSecondShot =
+    cameraSubmode === 'dual' &&
+    dualCaptureUsesSequentialCapture &&
+    Boolean(dualPrimaryPhoto) &&
+    !dualSecondaryPhoto &&
+    !capturedPhoto;
+
+  useEffect(() => {
+    if (cameraSubmode !== 'dual' || dualCaptureUiEnabled) {
+      return;
+    }
+
+    setCameraSubmode('single');
+  }, [cameraSubmode, dualCaptureUiEnabled, setCameraSubmode]);
+
+  const handleToggleFacing = useCallback(() => {
+    if (dualCaptureAwaitingSecondShot) {
+      clearDualCaptureState();
+    }
+
+    setFacing((prev) => (prev === 'back' ? 'front' : 'back'));
+  }, [clearDualCaptureState, dualCaptureAwaitingSecondShot, setFacing]);
+
+  const handleChangeCameraSubmode = useCallback(
+    (nextSubmode: 'single' | 'dual') => {
+      if (nextSubmode !== 'dual' || !dualCaptureUsesSequentialCapture) {
+        clearDualCaptureState();
+      }
+
+      setCameraSubmode(nextSubmode);
+    },
+    [clearDualCaptureState, dualCaptureUsesSequentialCapture, setCameraSubmode]
+  );
+
+  const cameraInstructionText = useMemo(() => {
+    if (captureMode !== 'camera') {
+      return null;
+    }
+
+    if (cameraSubmode === 'single' && showLivePhotoCameraHint) {
+      return t('capture.livePhotoCaptureHint', 'Tap for a photo. Hold for a live photo.');
+    }
+
+    return null;
+  }, [
+    cameraSubmode,
+    captureMode,
+    showLivePhotoCameraHint,
+    t,
+  ]);
 
   const liveSnapHeight = windowHeight;
   const shouldLockCapturePage = Platform.OS === 'android' && isCaptureTextEntryFocused;
@@ -643,9 +759,14 @@ export default function HomeScreen() {
 
       restoreCaptureState({
         captureMode: persistedDraft.captureMode,
+        cameraSubmode: persistedDraft.cameraSubmode,
         noteText: persistedDraft.noteText,
         capturedPhoto: persistedDraft.capturedPhoto,
         capturedPairedVideo: persistedDraft.capturedPairedVideo,
+        dualPrimaryPhoto: persistedDraft.dualPrimaryPhoto,
+        dualSecondaryPhoto: persistedDraft.dualSecondaryPhoto,
+        dualPrimaryFacing: persistedDraft.dualPrimaryFacing,
+        dualSecondaryFacing: persistedDraft.dualSecondaryFacing,
         radius: persistedDraft.radius,
         selectedPhotoFilterId: persistedDraft.selectedPhotoFilterId,
       });
@@ -689,9 +810,14 @@ export default function HomeScreen() {
     const nextDraft: PersistedCaptureDraft = {
       version: 1,
       captureMode,
+      cameraSubmode,
       noteText,
       capturedPhoto,
       capturedPairedVideo,
+      dualPrimaryPhoto,
+      dualSecondaryPhoto,
+      dualPrimaryFacing,
+      dualSecondaryFacing,
       radius,
       selectedPhotoFilterId,
       noteColor,
@@ -719,15 +845,174 @@ export default function HomeScreen() {
   }, [
     captureDraftReady,
     captureMode,
+    cameraSubmode,
     noteText,
     capturedPhoto,
     capturedPairedVideo,
+    dualPrimaryPhoto,
+    dualSecondaryPhoto,
+    dualPrimaryFacing,
+    dualSecondaryFacing,
     radius,
     selectedPhotoFilterId,
     noteColor,
     captureTarget,
     selectedSharedAudienceUserId,
     clearPersistedCaptureDraft,
+  ]);
+
+  const composeDualCapturePhoto = useCallback(
+    async (capture: DualCameraStillCapture) => {
+      const requestId = `dual-compose-${Date.now()}-${dualCaptureComposeRequestIdRef.current + 1}`;
+      dualCaptureComposeRequestIdRef.current += 1;
+
+      const composedUri = await new Promise<string | null>((resolve) => {
+        dualCaptureComposeResolverRef.current = resolve;
+        setDualCaptureComposeRequest({
+          id: requestId,
+          primaryUri: capture.primaryUri,
+          secondaryUri: capture.secondaryUri,
+          primaryFacing: capture.primaryFacing,
+          secondaryFacing: capture.secondaryFacing,
+        });
+      });
+
+      setDualCaptureComposeRequest(null);
+      return composedUri;
+    },
+    []
+  );
+
+  const handleDualCaptureComposeComplete = useCallback(
+    (requestId: string, result: { uri: string | null; error?: string | null }) => {
+      if (dualCaptureComposeRequest?.id !== requestId) {
+        return;
+      }
+
+      const resolver = dualCaptureComposeResolverRef.current;
+      dualCaptureComposeResolverRef.current = null;
+      setDualCaptureComposeRequest(null);
+
+      if (result.error) {
+        console.warn('[dual-capture] Failed to compose capture:', result.error);
+      }
+
+      resolver?.(result.uri);
+    },
+    [dualCaptureComposeRequest?.id]
+  );
+
+  const handleTakeDualPicture = useCallback(async () => {
+    if (dualCaptureUsesSequentialCapture) {
+      try {
+        const capturedUri = await capturePhotoFile();
+        if (!capturedUri) {
+          return;
+        }
+
+        const currentFacing = facing;
+        setCapturedPairedVideo(null);
+
+        if (!dualCaptureAwaitingSecondShot || !dualPrimaryPhoto || !dualPrimaryFacing) {
+          setDualPrimaryPhoto(capturedUri);
+          setDualPrimaryFacing(currentFacing);
+          setDualSecondaryPhoto(null);
+          setDualSecondaryFacing(null);
+          setFacing(currentFacing === 'back' ? 'front' : 'back');
+          return;
+        }
+
+        const result = {
+          primaryUri: dualPrimaryPhoto,
+          secondaryUri: capturedUri,
+          primaryFacing: dualPrimaryFacing,
+          secondaryFacing: currentFacing,
+          width: 0,
+          height: 0,
+        } satisfies DualCameraStillCapture;
+
+        const composedUri = await composeDualCapturePhoto(result);
+        if (!composedUri) {
+          throw new Error('Could not compose dual capture image.');
+        }
+
+        setDualSecondaryPhoto(capturedUri);
+        setDualSecondaryFacing(currentFacing);
+        setCapturedPhoto(composedUri);
+      } catch (error) {
+        console.warn('[dual-capture] Sequential capture failed:', error);
+        clearDualCaptureState();
+        showAlert({
+          variant: 'error',
+          title: t('capture.error', 'Error'),
+          message: t('capture.dualCaptureFailed', 'We could not capture both cameras right now.'),
+          primaryAction: {
+            label: t('common.done', 'Done'),
+          },
+        });
+      }
+      return;
+    }
+
+    if (!dualCameraPreviewRef.current) {
+      return;
+    }
+
+    try {
+      const result = await dualCameraPreviewRef.current.captureStill();
+      const composedUri = await composeDualCapturePhoto(result);
+      if (!composedUri) {
+        throw new Error('Could not compose dual capture image.');
+      }
+
+      setCapturedPairedVideo(null);
+      setDualPrimaryPhoto(result.primaryUri);
+      setDualSecondaryPhoto(result.secondaryUri);
+      setDualPrimaryFacing(result.primaryFacing);
+      setDualSecondaryFacing(result.secondaryFacing);
+      setCapturedPhoto(composedUri);
+    } catch (error) {
+      console.warn('[dual-capture] Capture failed:', error);
+      showAlert({
+        variant: 'error',
+        title: t('capture.error', 'Error'),
+        message: t('capture.dualCaptureFailed', 'We could not capture both cameras right now.'),
+        primaryAction: {
+          label: t('common.done', 'Done'),
+        },
+      });
+    }
+  }, [
+    capturePhotoFile,
+    clearDualCaptureState,
+    composeDualCapturePhoto,
+    dualCaptureAwaitingSecondShot,
+    dualCaptureUsesSequentialCapture,
+    dualPrimaryFacing,
+    dualPrimaryPhoto,
+    setCapturedPairedVideo,
+    setCapturedPhoto,
+    setFacing,
+    setDualPrimaryFacing,
+    setDualPrimaryPhoto,
+    setDualSecondaryFacing,
+    setDualSecondaryPhoto,
+    showAlert,
+    t,
+    facing,
+  ]);
+
+  const handleResetDualCaptureSequence = useCallback(() => {
+    const restartFacing = dualPrimaryFacing ?? facing;
+    clearDualCaptureState();
+    setCapturedPairedVideo(null);
+    setFacing(restartFacing);
+  }, [
+    clearDualCaptureState,
+    dualPrimaryFacing,
+    facing,
+    setCapturedPairedVideo,
+    setFacing,
   ]);
 
   const clearInlineSaveTimers = useCallback(() => {
@@ -1908,6 +2193,8 @@ export default function HomeScreen() {
 
       let destinationPath: string | null = null;
       let pairedVideoDestinationPath: string | null = null;
+      let dualPrimaryDestinationPath: string | null = null;
+      let dualSecondaryDestinationPath: string | null = null;
       const pendingNoteId = generateNoteId();
       setSuppressedHomeNoteIds((current) =>
         current.includes(pendingNoteId) ? current : [...current, pendingNoteId]
@@ -1934,12 +2221,25 @@ export default function HomeScreen() {
           await FileSystem.makeDirectoryAsync(directory, { intermediates: true });
           const filename = `note-${Date.now()}.jpg`;
           destinationPath = `${directory}${filename}`;
-          if (selectedPhotoFilterId === 'original') {
+          if (cameraSubmode === 'dual') {
+            await FileSystem.copyAsync({ from: capturedPhoto, to: destinationPath });
+          } else if (selectedPhotoFilterId === 'original') {
             await FileSystem.copyAsync({ from: capturedPhoto, to: destinationPath });
           } else {
             await renderFilteredPhotoToFile(capturedPhoto, destinationPath, selectedPhotoFilterId);
           }
           content = destinationPath;
+        }
+        if (captureMode === 'camera' && cameraSubmode === 'dual') {
+          const directory = `${FileSystem.documentDirectory}photos/`;
+          if (dualPrimaryPhoto) {
+            dualPrimaryDestinationPath = `${directory}${pendingNoteId}-dual-primary.jpg`;
+            await FileSystem.copyAsync({ from: dualPrimaryPhoto, to: dualPrimaryDestinationPath });
+          }
+          if (dualSecondaryPhoto) {
+            dualSecondaryDestinationPath = `${directory}${pendingNoteId}-dual-secondary.jpg`;
+            await FileSystem.copyAsync({ from: dualSecondaryPhoto, to: dualSecondaryDestinationPath });
+          }
         }
         if (captureMode === 'camera' && capturedPairedVideo) {
           pairedVideoDestinationPath = await persistLivePhotoVideo(
@@ -1970,6 +2270,31 @@ export default function HomeScreen() {
           promptAnswer: null,
           moodEmoji: autoEmoji,
           noteColor: captureMode === 'text' ? noteColor : null,
+          captureVariant: captureMode === 'camera' ? (cameraSubmode === 'dual' ? 'dual' : 'single') : null,
+          dualPrimaryPhotoLocalUri:
+            captureMode === 'camera' && cameraSubmode === 'dual'
+              ? dualPrimaryDestinationPath
+              : null,
+          dualSecondaryPhotoLocalUri:
+            captureMode === 'camera' && cameraSubmode === 'dual'
+              ? dualSecondaryDestinationPath
+              : null,
+          dualPrimaryFacing:
+            captureMode === 'camera' && cameraSubmode === 'dual'
+              ? dualPrimaryFacing
+              : null,
+          dualSecondaryFacing:
+            captureMode === 'camera' && cameraSubmode === 'dual'
+              ? dualSecondaryFacing
+              : null,
+          dualLayoutPreset:
+            captureMode === 'camera' && cameraSubmode === 'dual'
+              ? 'top-left'
+              : null,
+          dualComposedPhotoLocalUri:
+            captureMode === 'camera' && cameraSubmode === 'dual'
+              ? destinationPath
+              : null,
           latitude: lat,
           longitude: lon,
           radius,
@@ -2040,6 +2365,15 @@ export default function HomeScreen() {
             console.warn('Failed to clean up orphaned live photo motion clip:', cleanupError);
           }
         }
+        for (const dualPath of [dualPrimaryDestinationPath, dualSecondaryDestinationPath].filter(
+          (value): value is string => Boolean(value)
+        )) {
+          try {
+            await FileSystem.deleteAsync(dualPath, { idempotent: true });
+          } catch (cleanupError) {
+            console.warn('Failed to clean up orphaned dual capture photo file:', cleanupError);
+          }
+        }
         showDoneSheet(
           'error',
           t('capture.error', 'Error'),
@@ -2060,10 +2394,15 @@ export default function HomeScreen() {
     showDoneSheet,
     t,
     captureMode,
+    cameraSubmode,
     noteText,
     noteColor,
     capturedPhoto,
     capturedPairedVideo,
+    dualPrimaryPhoto,
+    dualPrimaryFacing,
+    dualSecondaryPhoto,
+    dualSecondaryFacing,
     selectedPhotoFilterId,
     createNote,
     radius,
@@ -2119,6 +2458,8 @@ export default function HomeScreen() {
 
       const selectedAsset = result.assets?.[0];
       if (!result.canceled && selectedAsset?.uri) {
+        setCameraSubmode('single');
+        clearDualCaptureState();
         setCapturedPhoto(selectedAsset.uri);
         setCapturedPairedVideo(
           selectedAsset.type === 'livePhoto' ? selectedAsset.pairedVideoAsset?.uri ?? null : null
@@ -2138,6 +2479,8 @@ export default function HomeScreen() {
       setImportingPhoto(false);
     }
   }, [
+    clearDualCaptureState,
+    setCameraSubmode,
     setCapturedPairedVideo,
     setCapturedPhoto,
     setSelectedPhotoFilterId,
@@ -2255,6 +2598,9 @@ export default function HomeScreen() {
           topInset={insets.top}
           isSearching={false}
           captureMode={captureMode}
+          cameraSubmode={cameraSubmode}
+          dualCaptureSupported={dualCaptureUiEnabled}
+          dualCaptureUsesSequentialCapture={dualCaptureUsesSequentialCapture}
           cameraSessionKey={cameraSessionKey}
           captureScale={captureScale}
           captureTranslateY={captureTranslateY}
@@ -2273,6 +2619,7 @@ export default function HomeScreen() {
           onRetakePhoto={() => {
             setCapturedPhoto(null);
             setCapturedPairedVideo(null);
+            clearDualCaptureState();
           }}
           onImportMotionClip={() => {
             void handleImportMotionClip();
@@ -2284,7 +2631,8 @@ export default function HomeScreen() {
             void handleRequestCameraPermission();
           }}
           facing={facing}
-          onToggleFacing={() => setFacing((prev) => (prev === 'back' ? 'front' : 'back'))}
+          onToggleFacing={handleToggleFacing}
+          onChangeCameraSubmode={handleChangeCameraSubmode}
           onOpenPhotoLibrary={() => {
             void handleImportPhoto();
           }}
@@ -2300,6 +2648,11 @@ export default function HomeScreen() {
           onShutterPressIn={handleShutterPressIn}
           onShutterPressOut={handleShutterPressOut}
           onTakePicture={() => {
+            if (cameraSubmode === 'dual') {
+              void handleTakeDualPicture();
+              return;
+            }
+
             void takePicture();
           }}
           onStartLivePhotoCapture={() => {
@@ -2315,18 +2668,18 @@ export default function HomeScreen() {
           isLivePhotoCaptureInProgress={isLivePhotoCaptureInProgress}
           isLivePhotoCaptureSettling={isLivePhotoCaptureSettling}
           isLivePhotoSaveGuardActive={isLivePhotoSaveGuardActive}
-          cameraInstructionText={
-            captureMode === 'camera' && showLivePhotoCameraHint
-              ? t('capture.livePhotoCaptureHint', 'Tap for a photo. Hold for a live photo.')
-              : null
-          }
+          cameraInstructionText={cameraInstructionText}
           remainingPhotoSlots={captureMode === 'camera' ? remainingPhotoSlots : null}
-          libraryImportLocked={false}
+          libraryImportLocked={cameraSubmode === 'dual'}
           importingPhoto={importingPhoto}
+          dualCameraPreviewRef={dualCameraPreviewRef}
+          dualCaptureAwaitingSecondShot={dualCaptureAwaitingSecondShot}
+          dualCaptureFirstShotUri={dualPrimaryPhoto}
           radius={radius}
           onChangeRadius={setRadius}
           shareTarget={captureTarget}
           onChangeShareTarget={handleCaptureTargetChange}
+          onResetDualCaptureSequence={handleResetDualCaptureSequence}
           onTextEntryFocusChange={handleCaptureTextEntryFocusChange}
           footerContent={captureFooterContent}
         />
@@ -2335,6 +2688,8 @@ export default function HomeScreen() {
     [
       cameraDevice,
       cameraPermissionRequiresSettings,
+      cameraSubmode,
+      cameraInstructionText,
       captureFooterContent,
       cameraRef,
       cameraSessionKey,
@@ -2345,16 +2700,25 @@ export default function HomeScreen() {
       capturedPairedVideo,
       capturedPhoto,
       colors,
+      clearDualCaptureState,
+      dualCaptureUiEnabled,
+      dualCaptureUsesSequentialCapture,
+      dualCaptureAwaitingSecondShot,
+      dualPrimaryPhoto,
       facing,
       handleCaptureTargetChange,
       handleChangeNoteColor,
+      handleChangeCameraSubmode,
       handleChangePhotoFilter,
+      handleResetDualCaptureSequence,
+      handleTakeDualPicture,
       handleCaptureTextEntryFocusChange,
       handleImportMotionClip,
       handleImportPhoto,
       handleRequestCameraPermission,
       handleShutterPressIn,
       handleShutterPressOut,
+      handleToggleFacing,
       importingPhoto,
       insets.top,
       isCameraPreviewActive,
@@ -2378,12 +2742,10 @@ export default function HomeScreen() {
       selectedPhotoFilterId,
       setCapturedPairedVideo,
       setCapturedPhoto,
-      setFacing,
       setNoteText,
       setRadius,
       saveNote,
       shutterScale,
-      showLivePhotoCameraHint,
       showPlusSheet,
       snapHeight,
       startLivePhotoCapture,
@@ -2465,6 +2827,10 @@ export default function HomeScreen() {
         blurBackgroundColor={colors.background}
         notesFeedProps={notesFeedProps}
         savedRevealProps={savedRevealProps}
+      />
+      <DualCaptureComposer
+        request={dualCaptureComposeRequest}
+        onComplete={handleDualCaptureComposeComplete}
       />
 
       <HomeHeaderSearch

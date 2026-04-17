@@ -12,6 +12,8 @@ const opaquePngBase64 =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC';
 let mockClipboardPasteButtonAvailable = true;
 let mockCameraViewProps: any = null;
+let mockDualCameraPreviewProps: any = null;
+let mockDualCameraPreviewAutoReady = true;
 let mockCameraMountCount = 0;
 let mockCameraUnmountCount = 0;
 let mockCameraFocus = jest.fn();
@@ -90,6 +92,33 @@ jest.mock('react-native-vision-camera', () => {
       maxZoom: 4,
       supportsFocus: true,
     }),
+  };
+});
+
+jest.mock('../components/home/capture/DualCameraPreview', () => {
+  const React = require('react');
+  const { View } = require('react-native');
+
+  const MockDualCameraPreview = React.forwardRef((props: any, ref: any) => {
+    mockDualCameraPreviewProps = props;
+
+    React.useEffect(() => {
+      if (props.active && mockDualCameraPreviewAutoReady) {
+        props.onPreviewReady?.();
+      }
+    }, [props.active, props.onPreviewReady]);
+
+    React.useImperativeHandle(ref, () => ({
+      captureStill: jest.fn(),
+    }));
+
+    return <View testID="mock-dual-camera-view" />;
+  });
+
+  MockDualCameraPreview.displayName = 'MockDualCameraPreview';
+
+  return {
+    DualCameraPreview: MockDualCameraPreview,
   };
 });
 
@@ -514,6 +543,8 @@ describe('CaptureCard doodle handle', () => {
     jest.clearAllMocks();
     mockClipboardPasteButtonAvailable = true;
     mockCameraViewProps = null;
+    mockDualCameraPreviewProps = null;
+    mockDualCameraPreviewAutoReady = true;
     mockCameraMountCount = 0;
     mockCameraUnmountCount = 0;
     mockCameraFocus = jest.fn();
@@ -930,6 +961,105 @@ describe('CaptureCard doodle handle', () => {
       expect(mockCameraViewProps?.isActive).toBe(true);
     } finally {
       Platform.OS = originalPlatform;
+    }
+  });
+
+  it('does not trip the camera watchdog after the dual preview reports ready', () => {
+    jest.useFakeTimers();
+
+    try {
+      const ref = React.createRef<CaptureCardHandle>();
+      const view = renderCaptureCard(ref, {
+        captureMode: 'camera',
+        cameraSubmode: 'dual',
+        dualCaptureSupported: true,
+        isCameraPreviewActive: true,
+      });
+
+      expect(view.getByTestId('mock-dual-camera-view')).toBeTruthy();
+      expect(mockDualCameraPreviewProps).toMatchObject({
+        active: true,
+        primaryFacing: 'back',
+      });
+
+      act(() => {
+        jest.advanceTimersByTime(3000);
+      });
+
+      expect(view.queryByText("Camera preview couldn't start")).toBeNull();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('keeps the single-camera preview mounted for sequential dual capture mode', () => {
+    const ref = React.createRef<CaptureCardHandle>();
+    const view = renderCaptureCard(ref, {
+      captureMode: 'camera',
+      cameraSubmode: 'dual',
+      dualCaptureSupported: true,
+      dualCaptureUsesSequentialCapture: true,
+      isCameraPreviewActive: true,
+      cameraInstructionText: 'Take the first photo.',
+    });
+
+    expect(view.getByTestId('mock-camera-view')).toBeTruthy();
+    expect(view.queryByTestId('mock-dual-camera-view')).toBeNull();
+  });
+
+  it('shows the first dual capture in the inset preview while waiting for the second shot', () => {
+    const ref = React.createRef<CaptureCardHandle>();
+    const onResetDualCaptureSequence = jest.fn();
+    const view = renderCaptureCard(ref, {
+      captureMode: 'camera',
+      cameraSubmode: 'dual',
+      dualCaptureSupported: true,
+      dualCaptureUsesSequentialCapture: true,
+      dualCaptureAwaitingSecondShot: true,
+      dualCaptureFirstShotUri: 'file:///tmp/dual-first.jpg',
+      facing: 'front',
+      isCameraPreviewActive: true,
+      onResetDualCaptureSequence,
+    });
+
+    expect(view.getByTestId('capture-dual-inset-preview')).toBeTruthy();
+    expect(view.getByText('1 of 2 saved. Front camera is up next.')).toBeTruthy();
+
+    fireEvent.press(view.getByLabelText('Start over'));
+
+    expect(onResetDualCaptureSequence).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not fall back to the single-camera preview when dual preview fails', () => {
+    jest.useFakeTimers();
+
+    try {
+      const ref = React.createRef<CaptureCardHandle>();
+      const view = renderCaptureCard(ref, {
+        captureMode: 'camera',
+        cameraSubmode: 'dual',
+        dualCaptureSupported: true,
+        isCameraPreviewActive: true,
+      });
+
+      expect(view.getByTestId('mock-dual-camera-view')).toBeTruthy();
+
+      act(() => {
+        mockDualCameraPreviewProps?.onCaptureError?.({
+          nativeEvent: {
+            message:
+              'bindToLifecycle for single camera is not supported in concurrent camera mode, call unbindAll() first',
+          },
+        });
+      });
+
+      act(() => {
+        jest.advanceTimersByTime(3000);
+      });
+
+      expect(view.queryByTestId('mock-camera-view')).toBeNull();
+    } finally {
+      jest.useRealTimers();
     }
   });
 

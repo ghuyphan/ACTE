@@ -15,12 +15,15 @@ import {
 } from './captureCardStyles';
 
 interface LiveCameraActionBarProps {
+  cameraSubmode: 'single' | 'dual';
   colors: CaptureCardColors;
+  dualCaptureSupported: boolean;
   filterModeEnabled: boolean;
   importingPhoto: boolean;
   libraryImportLocked: boolean;
   lockedPhotoFilterIds?: PhotoFilterId[];
   needsCameraPermission: boolean;
+  onChangeCameraSubmode: (nextSubmode: 'single' | 'dual') => void;
   onChangePhotoFilter: (filterId: PhotoFilterId) => void;
   onOpenPhotoLibrary: () => void;
   onPressLockedPhotoFilter?: (filterId: PhotoFilterId) => void;
@@ -30,12 +33,15 @@ interface LiveCameraActionBarProps {
 }
 
 export function LiveCameraActionBar({
+  cameraSubmode,
   colors,
+  dualCaptureSupported,
   filterModeEnabled,
   importingPhoto,
   libraryImportLocked,
   lockedPhotoFilterIds = [],
   needsCameraPermission,
+  onChangeCameraSubmode,
   onChangePhotoFilter,
   onOpenPhotoLibrary,
   onPressLockedPhotoFilter,
@@ -47,6 +53,8 @@ export function LiveCameraActionBar({
     return null;
   }
 
+  const dualModeEnabled = cameraSubmode === 'dual';
+
   const glassPalette = getGlassSurfacePalette({
     isDark: colors.captureGlassColorScheme === 'dark',
     borderColor: colors.captureCardBorder,
@@ -56,6 +64,46 @@ export function LiveCameraActionBar({
     <View style={styles.captureActionBarWrap}>
       <CaptureControlRail borderColor={colors.captureCardBorder} colors={colors}>
         <View style={styles.liveCameraActionRow}>
+          {dualCaptureSupported ? (
+            <CaptureToggleIconButton
+              testID="capture-dual-toggle"
+              accessibilityLabel={
+                dualModeEnabled
+                  ? t('capture.dualModeOn', 'Dual on')
+                  : t('capture.dualMode', 'Dual')
+              }
+              onPress={() => onChangeCameraSubmode(dualModeEnabled ? 'single' : 'dual')}
+              active={dualModeEnabled}
+              activeIconName="camera-outline"
+              inactiveIconName="camera-outline"
+              renderActiveIcon={({ color, size }) => (
+                <Ionicons name="copy-outline" size={size} color={color} />
+              )}
+              renderInactiveIcon={({ color, size }) => (
+                <Ionicons name="copy-outline" size={size} color={color} />
+              )}
+              activeBackgroundColor={glassPalette.activeControlBackgroundColor}
+              inactiveBackgroundColor="transparent"
+              activeBorderColor={glassPalette.controlBorderColor}
+              inactiveBorderColor="transparent"
+              activeIconColor={colors.captureGlassText}
+              inactiveIconColor={colors.captureGlassText}
+              activeScale={DECORATE_OPTION_ACTIVE_SCALE}
+              activeTranslateY={0}
+              contentActiveScale={DECORATE_OPTION_CONTENT_SCALE}
+              contentActiveTranslateY={0}
+              style={styles.textBottomToolsButton}
+            />
+          ) : null}
+          {dualCaptureSupported ? (
+            <View
+              pointerEvents="none"
+              style={[
+                styles.liveCameraActionDivider,
+                { backgroundColor: colors.captureGlassBorder },
+              ]}
+            />
+          ) : null}
           <CaptureToggleIconButton
             testID="capture-filter-toggle"
             accessibilityLabel={
@@ -64,7 +112,7 @@ export function LiveCameraActionBar({
                 : t('capture.filters', 'Filters')
             }
             onPress={onToggleFilterMode}
-            active={filterModeEnabled}
+            active={filterModeEnabled && !dualModeEnabled}
             activeIconName="options-outline"
             inactiveIconName="options-outline"
             renderActiveIcon={({ color, size }) => (
@@ -84,8 +132,9 @@ export function LiveCameraActionBar({
             contentActiveScale={DECORATE_OPTION_CONTENT_SCALE}
             contentActiveTranslateY={0}
             style={styles.textBottomToolsButton}
+            disabled={dualModeEnabled}
           />
-          {filterModeEnabled ? (
+          {filterModeEnabled && !dualModeEnabled ? (
             <View style={styles.liveCameraFilterRail}>
               <PhotoFilterPicker
                 colors={colors}
@@ -112,7 +161,7 @@ export function LiveCameraActionBar({
                 : t('capture.importPhoto', 'Photos')
             }
             onPress={onOpenPhotoLibrary}
-            disabled={importingPhoto}
+            disabled={importingPhoto || dualModeEnabled}
             disabledOpacity={0.55}
             pressedScale={0.96}
             style={[

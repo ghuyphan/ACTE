@@ -86,6 +86,22 @@ export function mergeNotePatch(note: Note, updates: NoteUpdates, updatedAt = new
     promptAnswer: resolveNullableValue(updates.promptAnswer, note.promptAnswer),
     moodEmoji: resolveNullableValue(updates.moodEmoji, note.moodEmoji),
     noteColor: resolveNullableValue(updates.noteColor, note.noteColor),
+    captureVariant: resolveNullableValue(updates.captureVariant, note.captureVariant),
+    dualPrimaryPhotoLocalUri: resolveNullableValue(
+      updates.dualPrimaryPhotoLocalUri,
+      note.dualPrimaryPhotoLocalUri
+    ),
+    dualSecondaryPhotoLocalUri: resolveNullableValue(
+      updates.dualSecondaryPhotoLocalUri,
+      note.dualSecondaryPhotoLocalUri
+    ),
+    dualPrimaryFacing: resolveNullableValue(updates.dualPrimaryFacing, note.dualPrimaryFacing),
+    dualSecondaryFacing: resolveNullableValue(updates.dualSecondaryFacing, note.dualSecondaryFacing),
+    dualLayoutPreset: resolveNullableValue(updates.dualLayoutPreset, note.dualLayoutPreset),
+    dualComposedPhotoLocalUri: resolveNullableValue(
+      updates.dualComposedPhotoLocalUri,
+      note.dualComposedPhotoLocalUri
+    ),
     hasDoodle: resolveBooleanValue(updates.hasDoodle, note.hasDoodle),
     doodleStrokesJson:
       updates.doodleStrokesJson !== undefined ? updates.doodleStrokesJson : note.doodleStrokesJson ?? null,

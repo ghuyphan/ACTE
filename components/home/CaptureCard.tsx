@@ -51,6 +51,7 @@ import {
   PhotoCaptureSurface,
   TextCaptureSurface,
 } from './capture/CaptureCardSections';
+import type { DualCameraPreviewHandle } from './capture/DualCameraPreview';
 import type { CameraUiStage } from './capture/captureShared';
 import { CaptureActionRow } from './capture/CaptureActionRow';
 import {
@@ -131,6 +132,9 @@ interface CaptureCardProps {
   topInset: number;
   isSearching: boolean;
   captureMode: 'text' | 'camera';
+  cameraSubmode?: 'single' | 'dual';
+  dualCaptureSupported?: boolean;
+  dualCaptureUsesSequentialCapture?: boolean;
   cameraSessionKey: number;
   captureScale: SharedValue<number>;
   captureTranslateY: SharedValue<number>;
@@ -176,6 +180,7 @@ interface CaptureCardProps {
   onRequestCameraPermission: () => void;
   facing: 'back' | 'front';
   onToggleFacing: () => void;
+  onChangeCameraSubmode?: (nextSubmode: 'single' | 'dual') => void;
   onOpenPhotoLibrary: () => void;
   selectedPhotoFilterId: PhotoFilterId;
   onChangePhotoFilter: (filterId: PhotoFilterId) => void;
@@ -202,10 +207,14 @@ interface CaptureCardProps {
   remainingPhotoSlots?: number | null;
   libraryImportLocked?: boolean;
   importingPhoto?: boolean;
+  dualCameraPreviewRef?: RefObject<DualCameraPreviewHandle | null>;
+  dualCaptureAwaitingSecondShot?: boolean;
+  dualCaptureFirstShotUri?: string | null;
   radius: number;
   onChangeRadius: (nextRadius: number) => void;
   shareTarget: 'private' | 'shared';
   onChangeShareTarget: (nextTarget: 'private' | 'shared') => void;
+  onResetDualCaptureSequence?: () => void;
   onDoodleModeChange?: (enabled: boolean) => void;
   onTextEntryFocusChange?: (focused: boolean) => void;
   footerContent?: ReactNode;
@@ -216,6 +225,9 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   topInset,
   isSearching,
   captureMode,
+  cameraSubmode = 'single',
+  dualCaptureSupported = false,
+  dualCaptureUsesSequentialCapture = false,
   cameraSessionKey,
   captureScale,
   captureTranslateY,
@@ -239,6 +251,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   onRequestCameraPermission,
   facing,
   onToggleFacing,
+  onChangeCameraSubmode = () => undefined,
   onOpenPhotoLibrary,
   selectedPhotoFilterId,
   onChangePhotoFilter,
@@ -265,10 +278,14 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   remainingPhotoSlots,
   libraryImportLocked = false,
   importingPhoto = false,
+  dualCameraPreviewRef,
+  dualCaptureAwaitingSecondShot = false,
+  dualCaptureFirstShotUri = null,
   radius,
   onChangeRadius,
   shareTarget,
   onChangeShareTarget,
+  onResetDualCaptureSequence = () => undefined,
   onDoodleModeChange,
   onTextEntryFocusChange,
   footerContent,
@@ -315,6 +332,48 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   const isSaveSuccessful = saveState === 'success';
   const isSaveDisabled = isSaveBusy || isSaveSuccessful;
   const interactionsDisabled = isSaveBusy || isSaveSuccessful;
+  const dualCaptureModeEnabled =
+    captureMode === 'camera' &&
+    cameraSubmode === 'dual' &&
+    (dualCaptureSupported || dualCaptureUsesSequentialCapture);
+  const dualNativePreviewEnabled = dualCaptureModeEnabled && !dualCaptureUsesSequentialCapture;
+  const dualCaptureStatusText = useMemo(() => {
+    if (!dualCaptureModeEnabled) {
+      return null;
+    }
+
+    if (dualCaptureAwaitingSecondShot) {
+      return t(
+        facing === 'front'
+          ? 'capture.dualSecondShotFrontStatus'
+          : 'capture.dualSecondShotBackStatus',
+        facing === 'front'
+          ? '1 of 2 saved. Front camera is up next.'
+          : '1 of 2 saved. Back camera is up next.'
+      );
+    }
+
+    if (dualCaptureUsesSequentialCapture) {
+      return t('capture.dualFirstShotStatus', 'Dual mode: take the first photo.');
+    }
+
+    return t(
+      'capture.dualNativeStatus',
+      'Dual mode: captures both cameras together.'
+    );
+  }, [
+    dualCaptureAwaitingSecondShot,
+    dualCaptureModeEnabled,
+    dualCaptureUsesSequentialCapture,
+    facing,
+    t,
+  ]);
+
+  useEffect(() => {
+    if (dualCaptureModeEnabled && liveCameraFilterModeEnabled) {
+      setLiveCameraFilterModeEnabled(false);
+    }
+  }, [dualCaptureModeEnabled, liveCameraFilterModeEnabled]);
 
   const {
     activeTextPlaceholder,
@@ -702,6 +761,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
     facing,
     cameraInstructionText,
     isLivePhotoCaptureInProgress,
+    allowShutterLongPress: !dualCaptureModeEnabled,
     interactionsDisabled,
     reduceMotionEnabled,
     shutterScale,
@@ -1161,6 +1221,13 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                     cameraPermissionRequiresSettings={cameraPermissionRequiresSettings}
                     cameraPreviewZoom={cameraPreviewZoom}
                     cameraRef={cameraRef}
+                    dualCameraPreviewRef={dualCameraPreviewRef}
+                    dualCaptureFirstShotUri={
+                      dualCaptureAwaitingSecondShot ? dualCaptureFirstShotUri : null
+                    }
+                    dualCaptureStatusText={dualCaptureStatusText}
+                    dualCameraSupported={dualCaptureSupported}
+                    dualModeEnabled={dualNativePreviewEnabled}
                     cameraTransitionMaskAnimatedStyle={cameraTransitionMaskAnimatedStyle}
                     cameraUnavailableDetail={cameraUnavailableDetail}
                     cameraZoomGesture={cameraZoomGesture}
@@ -1309,11 +1376,14 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                 >
                   <LiveCameraActionBar
                     colors={colors}
+                    cameraSubmode={cameraSubmode}
+                    dualCaptureSupported={dualCaptureSupported}
                     filterModeEnabled={liveCameraFilterModeEnabled}
                     importingPhoto={importingPhoto}
                     libraryImportLocked={libraryImportLocked}
                     lockedPhotoFilterIds={lockedPhotoFilterIds}
                     needsCameraPermission={needsCameraPermission}
+                    onChangeCameraSubmode={onChangeCameraSubmode}
                     onChangePhotoFilter={onChangePhotoFilter}
                     onOpenPhotoLibrary={onOpenPhotoLibrary}
                     onPressLockedPhotoFilter={onPressLockedPhotoFilter}
@@ -1342,7 +1412,9 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
               isSaveSuccessful={isSaveSuccessful}
               isSharedTarget={isSharedTarget}
               livePhotoCountdownSeconds={livePhotoCountdownSeconds}
+              dualCaptureAwaitingSecondShot={dualCaptureAwaitingSecondShot}
               onChangeShareTarget={onChangeShareTarget}
+              onResetDualCaptureSequence={onResetDualCaptureSequence}
               onRetakePhoto={onRetakePhoto}
               onSaveNote={onSaveNote}
               onShutterPressIn={onShutterPressIn}
