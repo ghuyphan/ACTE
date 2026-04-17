@@ -69,6 +69,10 @@ beforeEach(() => {
   mockArePlaceRemindersEnabled.mockReturnValue(true);
 });
 
+afterEach(() => {
+  jest.useRealTimers();
+});
+
 describe('useGeofence', () => {
   it('does not auto-request location permission on mount', async () => {
     renderHook(() => useGeofence());
@@ -144,6 +148,42 @@ describe('useGeofence', () => {
       expect(response.requiresSettings).toBe(false);
       expect(response.reason).toBeNull();
     });
+  });
+
+  it('times out a stuck foreground location request and allows retrying', async () => {
+    jest.useFakeTimers();
+    mockGetForegroundPermissionsAsync.mockResolvedValue({ status: 'denied', canAskAgain: true });
+    mockRequestForegroundPermissionsAsync.mockResolvedValue({ status: 'granted', canAskAgain: true });
+    mockHasServicesEnabledAsync
+      .mockImplementationOnce(() => new Promise(() => undefined))
+      .mockResolvedValue(false);
+
+    const { result } = renderHook(() => useGeofence());
+
+    let firstResponse: Awaited<ReturnType<typeof result.current.requestForegroundLocation>> | null = null;
+
+    await act(async () => {
+      const firstRequest = result.current.requestForegroundLocation();
+      jest.advanceTimersByTime(12_000);
+      firstResponse = await firstRequest;
+    });
+
+    expect(firstResponse).toEqual({
+      location: null,
+      requiresSettings: false,
+      reason: 'timeout',
+    });
+
+    await act(async () => {
+      const secondResponse = await result.current.requestForegroundLocation();
+      expect(secondResponse).toEqual({
+        location: null,
+        requiresSettings: true,
+        reason: 'services_disabled',
+      });
+    });
+
+    expect(mockHasServicesEnabledAsync).toHaveBeenCalledTimes(2);
   });
 
   it('enables reminders and syncs geofences when all permissions are granted', async () => {

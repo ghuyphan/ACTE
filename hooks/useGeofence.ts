@@ -12,6 +12,7 @@ import { syncSocialPushRegistration } from '../services/socialPushService';
 import { scheduleOnIdle } from '../utils/scheduleOnIdle';
 
 const LOCATION_FIX_TIMEOUT_MS = 8000;
+const FOREGROUND_LOCATION_REQUEST_TIMEOUT_MS = LOCATION_FIX_TIMEOUT_MS + 4000;
 const RECENT_LOCATION_MAX_AGE_MS = 2 * 60 * 1000;
 
 function getLocationErrorMessage(error: unknown) {
@@ -63,6 +64,47 @@ function isRecentLocation(location: Location.LocationObject | null | undefined) 
     }
 
     return Date.now() - location.timestamp <= RECENT_LOCATION_MAX_AGE_MS;
+}
+
+function withForegroundLocationRequestTimeout(
+    promise: Promise<ForegroundLocationRequestResult>,
+    timeoutMs: number
+): Promise<ForegroundLocationRequestResult> {
+    return new Promise<ForegroundLocationRequestResult>((resolve, reject) => {
+        let settled = false;
+        const timeoutId = setTimeout(() => {
+            if (settled) {
+                return;
+            }
+
+            settled = true;
+            resolve({
+                location: null,
+                requiresSettings: false,
+                reason: 'timeout',
+            });
+        }, timeoutMs);
+
+        promise
+            .then((result) => {
+                if (settled) {
+                    return;
+                }
+
+                settled = true;
+                clearTimeout(timeoutId);
+                resolve(result);
+            })
+            .catch((error) => {
+                if (settled) {
+                    return;
+                }
+
+                settled = true;
+                clearTimeout(timeoutId);
+                reject(error);
+            });
+    });
 }
 
 export function useGeofence() {
@@ -285,21 +327,24 @@ export function useGeofence() {
             return foregroundLocationRequestRef.current;
         }
 
-        const requestPromise: Promise<ForegroundLocationRequestResult> = (async () => {
-            const foregroundPermission = await requestForegroundPermission();
-            if (!foregroundPermission.granted) {
-                return {
-                    location: null,
-                    requiresSettings: foregroundPermission.requiresSettings,
-                    reason: 'permission_denied',
-                };
-            }
+        const requestPromise = withForegroundLocationRequestTimeout(
+            (async () => {
+                const foregroundPermission = await requestForegroundPermission();
+                if (!foregroundPermission.granted) {
+                    return {
+                        location: null,
+                        requiresSettings: foregroundPermission.requiresSettings,
+                        reason: 'permission_denied',
+                    };
+                }
 
-            return refreshLocation({
-                preferCached: true,
-                backgroundRefreshIfCached: true,
-            });
-        })();
+                return refreshLocation({
+                    preferCached: true,
+                    backgroundRefreshIfCached: true,
+                });
+            })(),
+            FOREGROUND_LOCATION_REQUEST_TIMEOUT_MS
+        );
 
         foregroundLocationRequestRef.current = requestPromise;
 

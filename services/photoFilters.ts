@@ -56,6 +56,13 @@ export type PhotoFilterLayer =
       blendMode: PhotoFilterBlendMode;
     };
 
+export type PhotoFilterImagePass = {
+  opacity: number;
+  blendMode: PhotoFilterBlendMode;
+  blurSigma?: number;
+  colorMatrix?: number[];
+};
+
 export type PhotoFilterPreset = {
   id: PhotoFilterId;
   labelKey: string;
@@ -63,6 +70,7 @@ export type PhotoFilterPreset = {
   tier: PlanTier;
   previewLayers: PhotoFilterLayer[];
   renderMatrix: number[];
+  renderPasses?: PhotoFilterImagePass[];
   renderLayers?: PhotoFilterLayer[];
 };
 
@@ -230,37 +238,81 @@ const VIVID_POP_LAYERS: PhotoFilterLayer[] = [
 const VINTAGE_FILM_LAYERS: PhotoFilterLayer[] = [
   {
     type: 'solid',
-    color: '#E6D3B7',
-    opacity: 0.05,
+    color: '#EADBC3',
+    opacity: 0.06,
     blendMode: 'softLight',
   },
   {
     type: 'linearGradient',
-    colors: ['rgba(246, 238, 218, 0.66)', 'rgba(189, 173, 141, 0.22)', 'rgba(91, 99, 84, 0.32)'],
-    positions: [0, 0.55, 1],
-    start: { x: 0.15, y: 0 },
-    end: { x: 0.85, y: 1 },
-    opacity: 0.08,
+    colors: ['rgba(249, 241, 224, 0.74)', 'rgba(207, 181, 134, 0.26)', 'rgba(92, 102, 82, 0.30)'],
+    positions: [0, 0.52, 1],
+    start: { x: 0.12, y: 0.02 },
+    end: { x: 0.84, y: 1 },
+    opacity: 0.1,
     blendMode: 'softLight',
   },
   {
+    type: 'linearGradient',
+    colors: ['rgba(0, 0, 0, 0)', 'rgba(80, 69, 48, 0.72)'],
+    positions: [0.42, 1],
+    start: { x: 0.5, y: 0.1 },
+    end: { x: 0.5, y: 1 },
+    opacity: 0.06,
+    blendMode: 'multiply',
+  },
+  {
     type: 'radialGradient',
-    colors: ['rgba(0, 0, 0, 0)', 'rgba(74, 61, 42, 0.42)'],
-    positions: [0.72, 1],
+    colors: ['rgba(255, 245, 226, 0)', 'rgba(73, 59, 39, 0.5)'],
+    positions: [0.66, 1],
     center: { x: 0.5, y: 0.48 },
-    radius: 0.87,
-    opacity: 0.05,
+    radius: 0.9,
+    opacity: 0.09,
     blendMode: 'multiply',
   },
   {
     type: 'grain',
-    freqX: 1.05,
-    freqY: 1.05,
-    octaves: 3,
+    freqX: 1.08,
+    freqY: 1.08,
+    octaves: 4,
     seed: 14,
-    tileScale: 0.2,
-    opacity: 0.02,
+    tileScale: 0.16,
+    opacity: 0.024,
     blendMode: 'softLight',
+  },
+  {
+    type: 'grain',
+    freqX: 0.92,
+    freqY: 0.92,
+    octaves: 2,
+    seed: 27,
+    tileScale: 0.24,
+    opacity: 0.018,
+    blendMode: 'multiply',
+  },
+];
+
+const RETRO_HALATION_PASSES: PhotoFilterImagePass[] = [
+  {
+    blurSigma: 10,
+    opacity: 0.18,
+    blendMode: 'screen',
+    colorMatrix: [
+      1.15, 0.06, 0.01, 0, 0.01,
+      0.03, 1.02, 0.01, 0, 0.005,
+      0.01, 0.02, 0.72, 0, 0,
+      0, 0, 0, 1, 0,
+    ],
+  },
+  {
+    blurSigma: 3,
+    opacity: 0.1,
+    blendMode: 'softLight',
+    colorMatrix: [
+      1.03, 0.01, 0, 0, 0,
+      0.01, 1.01, 0, 0, 0,
+      0, 0.01, 0.94, 0, 0,
+      0, 0, 0, 1, 0,
+    ],
   },
 ];
 
@@ -350,11 +402,12 @@ export const PHOTO_FILTER_PRESETS: PhotoFilterPreset[] = [
     tier: 'plus',
     previewLayers: VINTAGE_FILM_LAYERS,
     renderMatrix: [
-      0.88, 0.08, 0.02, 0, 0,
-      0.04, 0.9, 0.02, 0, 0,
-      0.02, 0.06, 0.78, 0, 0,
+      0.84, 0.09, 0.03, 0, 0.015,
+      0.05, 0.9, 0.02, 0, 0.008,
+      0.03, 0.08, 0.72, 0, 0.012,
       0, 0, 0, 1, 0,
     ],
+    renderPasses: RETRO_HALATION_PASSES,
     renderLayers: VINTAGE_FILM_LAYERS,
   },
 ];
@@ -421,6 +474,26 @@ function createLayerPaint(width: number, height: number, layer: PhotoFilterLayer
   return paint;
 }
 
+function createImagePassPaint(pass: PhotoFilterImagePass) {
+  const paint = Skia.Paint();
+  paint.setAntiAlias(true);
+  paint.setDither(true);
+  paint.setAlphaf(pass.opacity);
+  paint.setBlendMode(BLEND_MODE_MAP[pass.blendMode]);
+
+  if (pass.colorMatrix) {
+    paint.setColorFilter(Skia.ColorFilter.MakeMatrix(pass.colorMatrix));
+  }
+
+  if (pass.blurSigma && pass.blurSigma > 0) {
+    paint.setImageFilter(
+      Skia.ImageFilter.MakeBlur(pass.blurSigma, pass.blurSigma, TileMode.Decal, null)
+    );
+  }
+
+  return paint;
+}
+
 export function applyPhotoFilterLayerStack(
   canvas: SkCanvas,
   width: number,
@@ -451,6 +524,12 @@ export function applyPhotoFilterToCanvas(
   imagePaint.setColorFilter(Skia.ColorFilter.MakeMatrix(preset.renderMatrix));
 
   canvas.drawImage(sourceImage, 0, 0, imagePaint);
+
+  for (const pass of preset.renderPasses ?? []) {
+    const passPaint = createImagePassPaint(pass);
+    canvas.drawImage(sourceImage, 0, 0, passPaint);
+  }
+
   applyPhotoFilterLayerStack(canvas, width, height, preset.renderLayers ?? preset.previewLayers);
 }
 

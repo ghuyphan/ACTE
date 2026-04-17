@@ -71,7 +71,7 @@ const mockUpdateOwnPhotoURL = jest.fn<
 const mockClearSharedFeedCache = jest.fn<Promise<void>, [string | null | undefined]>(async () => undefined);
 const mockUnregisterCurrentSocialPushToken = jest.fn<Promise<void>, []>(async () => undefined);
 const mockPurgeLocalAccountScope = jest.fn<Promise<void>, [string | null | undefined]>(async () => undefined);
-const mockHasScopeOwnedData = jest.fn<Promise<boolean>, []>(async () => true);
+const mockHasScopeOwnedData = jest.fn<Promise<boolean>, [string]>(async () => true);
 const mockMigrateLocalNotesScopeToUser = jest.fn<Promise<void>, [string]>(async () => undefined);
 const mockSetActiveNotesScope = jest.fn<void, [string | null | undefined]>();
 const mockGetPersistedActiveNotesScopeSync = jest.fn<string | null | undefined, []>(() => null);
@@ -219,7 +219,7 @@ jest.mock('../services/accountCleanup', () => ({
 
 jest.mock('../services/database', () => ({
   LOCAL_NOTES_SCOPE: '__local__',
-  hasScopeOwnedData: () => mockHasScopeOwnedData(),
+  hasScopeOwnedData: (scope: string) => mockHasScopeOwnedData(scope),
   getPersistedActiveNotesScopeSync: () => mockGetPersistedActiveNotesScopeSync(),
   migrateLocalNotesScopeToUser: (userUid: string) => mockMigrateLocalNotesScopeToUser(userUid),
   setActiveNotesScope: (scope: string | null | undefined) => mockSetActiveNotesScope(scope),
@@ -418,7 +418,7 @@ describe('useAuth', () => {
       expect(hook.result.current.user?.uid).toBe('user-1');
     });
 
-    expect(hook.result.current.user?.photoURL).toBeNull();
+    expect(hook.result.current.user?.photoURL).toBe('https://example.com/avatar.jpg');
 
     await act(async () => {
       resolveProfile({

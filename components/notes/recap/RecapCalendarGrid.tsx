@@ -237,7 +237,7 @@ const RecapCalendarDayCell = memo(function RecapCalendarDayCell({
                             {
                               borderColor: PHOTO_FRAME_BORDER_COLOR,
                               backgroundColor: PHOTO_BACKING_COLOR,
-                              transform: [{ rotate: '6deg' }],
+                              transform: [{ rotate: '8deg' }],
                             }
                           )}
                         />
@@ -249,7 +249,7 @@ const RecapCalendarDayCell = memo(function RecapCalendarDayCell({
                             {
                               borderColor: PHOTO_FRAME_BORDER_COLOR,
                               backgroundColor: PHOTO_FRAME_BORDER_COLOR,
-                              transform: [{ rotate: '-8deg' }],
+                              transform: [{ rotate: '-10deg' }],
                             }
                           )}
                         >
@@ -659,8 +659,8 @@ const styles = StyleSheet.create({
     height: '100%',
     borderRadius: 18,
     borderCurve: 'continuous',
-    borderWidth: 1.5,
-    padding: 1.5,
+    borderWidth: 1,
+    padding: 1,
     overflow: 'hidden',
   },
   photoSingleFrameCompact: {
@@ -676,30 +676,32 @@ const styles = StyleSheet.create({
   },
   photoStackBackFrame: {
     position: 'absolute',
-    top: 1,
-    right: -1,
-    width: '86%',
-    height: '86%',
+    top: 3,
+    right: -3,
+    width: '78%',
+    height: '78%',
     borderRadius: 16,
     borderCurve: 'continuous',
-    borderWidth: 1.5,
-    padding: 1.5,
+    borderWidth: 1,
+    padding: 1,
     overflow: 'hidden',
+    zIndex: 2,
   },
   photoStackBackFrameCompact: {
     borderRadius: 14,
   },
   photoStackFrontFrame: {
     position: 'absolute',
-    top: 1,
-    left: 0,
-    width: '88%',
-    height: '88%',
+    top: 0,
+    left: -2,
+    width: '78%',
+    height: '78%',
     borderRadius: 16,
     borderCurve: 'continuous',
-    borderWidth: 1.5,
-    padding: 1.5,
+    borderWidth: 1,
+    padding: 1,
     overflow: 'hidden',
+    zIndex: 1,
   },
   photoStackFrontFrameCompact: {
     borderRadius: 14,
@@ -707,7 +709,7 @@ const styles = StyleSheet.create({
   photoStackImage: {
     width: '100%',
     height: '100%',
-    borderRadius: 12,
+    borderRadius: 14,
   },
   photoStackCountBadge: {
     position: 'absolute',
