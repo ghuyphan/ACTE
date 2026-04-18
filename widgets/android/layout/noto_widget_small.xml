@@ -238,7 +238,7 @@
                     android:layout_height="wrap_content"
                     android:layout_gravity="center"
                     android:ellipsize="end"
-                    android:fontFamily="@font/noto_sans_700bold"
+                    android:fontFamily="@font/noto_sans_800extra_bold"
                     android:gravity="center"
                     android:includeFontPadding="false"
                     android:letterSpacing="0"
@@ -246,8 +246,21 @@
                     android:maxLines="4"
                     android:paddingLeft="20dp"
                     android:paddingRight="20dp"
+                    android:shadowColor="#14000000"
+                    android:shadowDx="0"
+                    android:shadowDy="1"
+                    android:shadowRadius="4"
                     android:textColor="#2B2621"
                     android:textSize="17sp"
+                    android:visibility="gone" />
+
+                <ImageView
+                    android:id="@+id/widget_body_bitmap"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:adjustViewBounds="false"
+                    android:contentDescription="@null"
+                    android:scaleType="center"
                     android:visibility="gone" />
             </FrameLayout>
 

@@ -60,6 +60,10 @@ describe('supabase migration hardening', () => {
     ),
     'utf8'
   );
+  const dualCaptureMigration = readFileSync(
+    resolve(__dirname, '../supabase/migrations/20260418120000_add_dual_capture_sync_columns.sql'),
+    'utf8'
+  );
   const normalizedRemoveStorageCleanupTriggersMigration =
     removeStorageCleanupTriggersMigration.toLowerCase();
 
@@ -104,6 +108,15 @@ describe('supabase migration hardening', () => {
     expect(livePhotoMigration).toContain('add column if not exists is_live_photo boolean not null default false');
     expect(livePhotoMigration).toContain('add column if not exists paired_video_path text');
     expect(livePhotoMigration).toContain('alter table public.shared_posts');
+  });
+
+  it('adds dual-capture columns for synced notes and shared posts', () => {
+    expect(dualCaptureMigration).toContain('alter table public.notes');
+    expect(dualCaptureMigration).toContain('add column if not exists capture_variant text');
+    expect(dualCaptureMigration).toContain('add column if not exists dual_primary_photo_path text');
+    expect(dualCaptureMigration).toContain('add column if not exists dual_secondary_photo_path text');
+    expect(dualCaptureMigration).toContain('alter table public.shared_posts');
+    expect(dualCaptureMigration).toContain('add column if not exists dual_layout_preset text');
   });
 
   it('adds shared post coordinates for map rendering', () => {

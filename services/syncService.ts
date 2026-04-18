@@ -19,6 +19,9 @@ import {
   deleteNoteForScope,
   getActiveNotesScope,
   Note,
+  NoteCaptureVariant,
+  NoteDualFacing,
+  NoteDualLayoutPreset,
   getAllNotesForScope,
   getDB,
   getNoteByIdForScope,
@@ -50,6 +53,7 @@ import {
   getRemoteStickerAssetPaths,
   normalizeRemoteArtifactPath,
   normalizeRemoteEntityIds,
+  type RemoteArtifactSnapshot,
 } from './remoteArtifactUtils';
 
 export type SyncChangeType = 'create' | 'update' | 'delete' | 'deleteAll';
@@ -119,6 +123,46 @@ function normalizeMediaUri(value: string | null | undefined) {
   return normalizedValue || null;
 }
 
+function normalizeRemoteNoteCaptureVariant(
+  noteType: Note['type'],
+  value: NoteCaptureVariant | null | undefined
+) {
+  if (noteType !== 'photo') {
+    return null;
+  }
+
+  return value === 'dual' ? 'dual' : value === 'single' ? 'single' : null;
+}
+
+function normalizeRemoteNoteDualFacing(value: NoteDualFacing | null | undefined) {
+  return value === 'front' || value === 'back' ? value : null;
+}
+
+function normalizeRemoteNoteDualLayoutPreset(value: NoteDualLayoutPreset | null | undefined) {
+  return value === 'top-left' ? value : null;
+}
+
+function getRemoteDualPhotoPath(basePath: string, slot: 'primary' | 'secondary') {
+  return `${basePath}.dual-${slot}`;
+}
+
+function getSyncPhotoUri(note: Pick<Note, 'type' | 'content' | 'photoLocalUri'>) {
+  return note.type === 'photo' ? normalizeMediaUri(note.photoLocalUri ?? note.content) : null;
+}
+
+function getSyncDualPhotoUri(
+  note: Pick<Note, 'type' | 'captureVariant' | 'dualPrimaryPhotoLocalUri' | 'dualSecondaryPhotoLocalUri'>,
+  slot: 'primary' | 'secondary'
+) {
+  if (note.type !== 'photo' || note.captureVariant !== 'dual') {
+    return null;
+  }
+
+  return normalizeMediaUri(
+    slot === 'primary' ? note.dualPrimaryPhotoLocalUri : note.dualSecondaryPhotoLocalUri
+  );
+}
+
 export interface SyncService {
   isAvailable: boolean;
   recordChange: (change: SyncChange) => Promise<void>;
@@ -148,6 +192,12 @@ interface NoteRow {
   type: Note['type'];
   content: string;
   photo_path: string | null;
+  capture_variant: NoteCaptureVariant | null;
+  dual_primary_photo_path: string | null;
+  dual_secondary_photo_path: string | null;
+  dual_primary_facing: NoteDualFacing | null;
+  dual_secondary_facing: NoteDualFacing | null;
+  dual_layout_preset: NoteDualLayoutPreset | null;
   is_live_photo: boolean;
   paired_video_path: string | null;
   has_doodle: boolean;
@@ -248,12 +298,6 @@ interface SyncStateRow {
   last_sync_status: string | null;
   last_sync_error: string | null;
   updated_at: string;
-}
-
-interface RemoteArtifactSnapshot {
-  photoPath?: string | null;
-  pairedVideoPath?: string | null;
-  stickerPlacementsJson?: string | null;
 }
 
 const MAX_SYNC_ATTEMPTS = 5;
@@ -467,6 +511,8 @@ async function cleanupRemoteArtifacts(
   bucket: string,
   artifacts: {
     photoPath?: string | null;
+    dualPrimaryPhotoPath?: string | null;
+    dualSecondaryPhotoPath?: string | null;
     pairedVideoPath?: string | null;
     stickerPaths?: string[];
   },
@@ -477,6 +523,16 @@ async function cleanupRemoteArtifacts(
   const photoPath = normalizeRemoteArtifactPath(artifacts.photoPath);
   if (photoPath) {
     removals.push(deletePhotoFromStorage(bucket, photoPath));
+  }
+
+  const dualPrimaryPhotoPath = normalizeRemoteArtifactPath(artifacts.dualPrimaryPhotoPath);
+  if (dualPrimaryPhotoPath) {
+    removals.push(deletePhotoFromStorage(bucket, dualPrimaryPhotoPath));
+  }
+
+  const dualSecondaryPhotoPath = normalizeRemoteArtifactPath(artifacts.dualSecondaryPhotoPath);
+  if (dualSecondaryPhotoPath) {
+    removals.push(deletePhotoFromStorage(bucket, dualSecondaryPhotoPath));
   }
 
   const pairedVideoPath = normalizeRemoteArtifactPath(artifacts.pairedVideoPath);
@@ -509,11 +565,15 @@ async function cleanupRemoteArtifacts(
 
 function getReusableNoteMediaCleanupArtifacts(artifacts: {
   photoPath?: string | null;
+  dualPrimaryPhotoPath?: string | null;
+  dualSecondaryPhotoPath?: string | null;
   pairedVideoPath?: string | null;
   stickerPaths?: string[];
 }) {
   return {
     photoPath: artifacts.photoPath ?? null,
+    dualPrimaryPhotoPath: artifacts.dualPrimaryPhotoPath ?? null,
+    dualSecondaryPhotoPath: artifacts.dualSecondaryPhotoPath ?? null,
     pairedVideoPath: artifacts.pairedVideoPath ?? null,
     stickerPaths: artifacts.stickerPaths ?? [],
   };
@@ -688,6 +748,8 @@ async function cleanupRemoteArtifactsBestEffort(
   bucket: string,
   artifacts: {
     photoPath?: string | null;
+    dualPrimaryPhotoPath?: string | null;
+    dualSecondaryPhotoPath?: string | null;
     pairedVideoPath?: string | null;
     stickerPaths?: string[];
   }
@@ -1162,7 +1224,9 @@ async function fetchRemoteArtifactSnapshots(
 
     const { data, error } = await supabase
       .from('notes')
-      .select('id, photo_path, paired_video_path, sticker_placements_json')
+      .select(
+        'id, photo_path, dual_primary_photo_path, dual_secondary_photo_path, paired_video_path, sticker_placements_json'
+      )
       .eq('user_id', userId)
       .in('id', noteIdChunk);
     if (error) {
@@ -1172,6 +1236,8 @@ async function fetchRemoteArtifactSnapshots(
     for (const row of (data ?? []) as {
       id?: string;
       photo_path?: string | null;
+      dual_primary_photo_path?: string | null;
+      dual_secondary_photo_path?: string | null;
       paired_video_path?: string | null;
       sticker_placements_json?: string | null;
     }[]) {
@@ -1181,6 +1247,8 @@ async function fetchRemoteArtifactSnapshots(
 
       artifactSnapshots.set(row.id, {
         photoPath: row.photo_path ?? null,
+        dualPrimaryPhotoPath: row.dual_primary_photo_path ?? null,
+        dualSecondaryPhotoPath: row.dual_secondary_photo_path ?? null,
         pairedVideoPath: row.paired_video_path ?? null,
         stickerPlacementsJson: row.sticker_placements_json ?? null,
       });
@@ -1202,7 +1270,7 @@ async function fetchRemoteNotePage(
   let request = supabase
     .from('notes')
     .select(
-      'id, user_id, type, content, photo_path, is_live_photo, paired_video_path, has_doodle, doodle_strokes_json, has_stickers, sticker_placements_json, location_name, prompt_id, prompt_text_snapshot, prompt_answer, mood_emoji, note_color, latitude, longitude, radius, is_favorite, created_at, updated_at, synced_at'
+      'id, user_id, type, content, photo_path, capture_variant, dual_primary_photo_path, dual_secondary_photo_path, dual_primary_facing, dual_secondary_facing, dual_layout_preset, is_live_photo, paired_video_path, has_doodle, doodle_strokes_json, has_stickers, sticker_placements_json, location_name, prompt_id, prompt_text_snapshot, prompt_answer, mood_emoji, note_color, latitude, longitude, radius, is_favorite, created_at, updated_at, synced_at'
     )
     .eq('user_id', userId)
     .order('synced_at', { ascending: true })
@@ -1269,36 +1337,51 @@ async function fetchRemoteNoteTombstonePage(
   return (data ?? []) as NoteTombstoneRow[];
 }
 
-async function serializeNoteForSupabase(
-  userId: string,
-  note: Note,
-  syncedAt: string,
-  existingRemoteArtifacts: RemoteArtifactSnapshot | null = null
-): Promise<NoteRow> {
-  const currentPhotoUri =
-    note.type === 'photo' ? normalizeMediaUri(note.photoLocalUri ?? note.content) : null;
+async function uploadNoteMediaArtifacts(options: {
+  userId: string;
+  note: Note;
+  existingRemoteArtifacts?: RemoteArtifactSnapshot | null;
+  allowOverwrite?: boolean;
+}) {
+  const { userId, note, existingRemoteArtifacts = null, allowOverwrite = false } = options;
+  const basePath = `${userId}/${note.id}`;
+  const currentPhotoUri = getSyncPhotoUri(note);
+  const currentDualPrimaryPhotoUri = getSyncDualPhotoUri(note, 'primary');
+  const currentDualSecondaryPhotoUri = getSyncDualPhotoUri(note, 'secondary');
   const currentPairedVideoUri =
     note.type === 'photo' && note.isLivePhoto
       ? normalizeMediaUri(note.pairedVideoLocalUri ?? null)
       : null;
-  let photoPath: string | null = null;
-  let pairedVideoPath: string | null = null;
-  let stickerPlacementsJson: string | null = null;
 
-  try {
-    photoPath =
+  return {
+    photoPath:
       note.type === 'photo'
         ? existingRemoteArtifacts?.photoPath &&
           (!currentPhotoUri || currentPhotoUri === normalizeMediaUri(note.photoSyncedLocalUri))
           ? existingRemoteArtifacts.photoPath
-          : await uploadPhotoToStorage(
-              NOTE_MEDIA_BUCKET,
-              `${userId}/${note.id}`,
-              currentPhotoUri,
-              { allowOverwrite: true }
-            )
-        : null;
-    pairedVideoPath =
+          : await uploadPhotoToStorage(NOTE_MEDIA_BUCKET, basePath, currentPhotoUri, {
+              allowOverwrite,
+            })
+        : null,
+    dualPrimaryPhotoPath:
+      currentDualPrimaryPhotoUri
+        ? await uploadPhotoToStorage(
+            NOTE_MEDIA_BUCKET,
+            getRemoteDualPhotoPath(basePath, 'primary'),
+            currentDualPrimaryPhotoUri,
+            { allowOverwrite }
+          )
+        : null,
+    dualSecondaryPhotoPath:
+      currentDualSecondaryPhotoUri
+        ? await uploadPhotoToStorage(
+            NOTE_MEDIA_BUCKET,
+            getRemoteDualPhotoPath(basePath, 'secondary'),
+            currentDualSecondaryPhotoUri,
+            { allowOverwrite }
+          )
+        : null,
+    pairedVideoPath:
       note.type === 'photo' && note.isLivePhoto
         ? existingRemoteArtifacts?.pairedVideoPath &&
           (!currentPairedVideoUri ||
@@ -1306,11 +1389,38 @@ async function serializeNoteForSupabase(
           ? existingRemoteArtifacts.pairedVideoPath
           : await uploadPairedVideoToStorage(
               NOTE_MEDIA_BUCKET,
-              getRemotePairedVideoPath(`${userId}/${note.id}`, currentPairedVideoUri),
+              getRemotePairedVideoPath(basePath, currentPairedVideoUri),
               currentPairedVideoUri,
-              { allowOverwrite: true }
+              { allowOverwrite }
             )
-        : null;
+        : null,
+  };
+}
+
+async function serializeNoteForSupabase(
+  userId: string,
+  note: Note,
+  syncedAt: string,
+  existingRemoteArtifacts: RemoteArtifactSnapshot | null = null
+): Promise<NoteRow> {
+  let photoPath: string | null = null;
+  let dualPrimaryPhotoPath: string | null = null;
+  let dualSecondaryPhotoPath: string | null = null;
+  let pairedVideoPath: string | null = null;
+  let stickerPlacementsJson: string | null = null;
+
+  try {
+    ({
+      photoPath,
+      dualPrimaryPhotoPath,
+      dualSecondaryPhotoPath,
+      pairedVideoPath,
+    } = await uploadNoteMediaArtifacts({
+      userId,
+      note,
+      existingRemoteArtifacts,
+      allowOverwrite: true,
+    }));
     const stickerPlacements = parseNoteStickerPlacements(note.stickerPlacementsJson);
     stickerPlacementsJson =
       stickerPlacements.length > 0
@@ -1325,6 +1435,12 @@ async function serializeNoteForSupabase(
       type: note.type,
       content: note.type === 'text' ? note.content : note.caption ?? '',
       photo_path: photoPath,
+      capture_variant: normalizeRemoteNoteCaptureVariant(note.type, note.captureVariant ?? null),
+      dual_primary_photo_path: dualPrimaryPhotoPath,
+      dual_secondary_photo_path: dualSecondaryPhotoPath,
+      dual_primary_facing: normalizeRemoteNoteDualFacing(note.dualPrimaryFacing),
+      dual_secondary_facing: normalizeRemoteNoteDualFacing(note.dualSecondaryFacing),
+      dual_layout_preset: normalizeRemoteNoteDualLayoutPreset(note.dualLayoutPreset),
       is_live_photo: Boolean(note.isLivePhoto && pairedVideoPath),
       paired_video_path: pairedVideoPath,
       has_doodle: Boolean(note.hasDoodle && note.doodleStrokesJson),
@@ -1352,6 +1468,8 @@ async function serializeNoteForSupabase(
         buildNewRemoteArtifacts(
           {
             photoPath,
+            dualPrimaryPhotoPath,
+            dualSecondaryPhotoPath,
             pairedVideoPath,
             stickerPlacementsJson,
           },
@@ -1383,6 +1501,11 @@ async function deserializeRemoteNote(
   if (!photoLocalUri && existingLocalNote?.type === 'photo') {
     photoLocalUri = existingLocalNote.content;
   }
+  const captureVariant = normalizeRemoteNoteCaptureVariant(record.type, record.capture_variant);
+  let dualPrimaryPhotoLocalUri: string | null =
+    captureVariant === 'dual' ? existingLocalNote?.dualPrimaryPhotoLocalUri ?? null : null;
+  let dualSecondaryPhotoLocalUri: string | null =
+    captureVariant === 'dual' ? existingLocalNote?.dualSecondaryPhotoLocalUri ?? null : null;
   let pairedVideoLocalUri: string | null = existingLocalNote?.pairedVideoLocalUri ?? null;
 
   if (record.type === 'photo' && record.photo_path) {
@@ -1405,6 +1528,34 @@ async function deserializeRemoteNote(
         NOTE_MEDIA_BUCKET,
         record.paired_video_path,
         `${record.id}-motion`
+      );
+    } catch (error) {
+      if (!isSupabaseStorageObjectMissingError(error)) {
+        throw error;
+      }
+    }
+  }
+
+  if (captureVariant === 'dual' && record.dual_primary_photo_path) {
+    try {
+      dualPrimaryPhotoLocalUri = await downloadPhotoFromStorage(
+        NOTE_MEDIA_BUCKET,
+        record.dual_primary_photo_path,
+        `${record.id}-dual-primary`
+      );
+    } catch (error) {
+      if (!isSupabaseStorageObjectMissingError(error)) {
+        throw error;
+      }
+    }
+  }
+
+  if (captureVariant === 'dual' && record.dual_secondary_photo_path) {
+    try {
+      dualSecondaryPhotoLocalUri = await downloadPhotoFromStorage(
+        NOTE_MEDIA_BUCKET,
+        record.dual_secondary_photo_path,
+        `${record.id}-dual-secondary`
       );
     } catch (error) {
       if (!isSupabaseStorageObjectMissingError(error)) {
@@ -1442,6 +1593,22 @@ async function deserializeRemoteNote(
     photoLocalUri,
     photoSyncedLocalUri: photoLocalUri,
     photoRemoteBase64: null,
+    captureVariant,
+    dualPrimaryPhotoLocalUri: captureVariant === 'dual' ? dualPrimaryPhotoLocalUri : null,
+    dualSecondaryPhotoLocalUri: captureVariant === 'dual' ? dualSecondaryPhotoLocalUri : null,
+    dualPrimaryFacing:
+      captureVariant === 'dual'
+        ? normalizeRemoteNoteDualFacing(record.dual_primary_facing)
+        : null,
+    dualSecondaryFacing:
+      captureVariant === 'dual'
+        ? normalizeRemoteNoteDualFacing(record.dual_secondary_facing)
+        : null,
+    dualLayoutPreset:
+      captureVariant === 'dual'
+        ? normalizeRemoteNoteDualLayoutPreset(record.dual_layout_preset)
+        : null,
+    dualComposedPhotoLocalUri: captureVariant === 'dual' ? photoLocalUri : null,
     isLivePhoto: Boolean(record.is_live_photo && pairedVideoLocalUri),
     pairedVideoLocalUri,
     pairedVideoSyncedLocalUri: pairedVideoLocalUri,
@@ -1513,7 +1680,9 @@ async function deleteRemoteNote(userId: string, noteId: string) {
 
   const { data: sharedPosts, error: sharedPostsError } = await supabase
     .from('shared_posts')
-    .select('id, photo_path, paired_video_path, sticker_placements_json')
+    .select(
+      'id, photo_path, dual_primary_photo_path, dual_secondary_photo_path, paired_video_path, sticker_placements_json'
+    )
     .eq('author_user_id', userId)
     .eq('source_note_id', noteId);
   if (sharedPostsError) {
@@ -1522,7 +1691,9 @@ async function deleteRemoteNote(userId: string, noteId: string) {
 
   const { data: existingNote, error: noteFetchError } = await supabase
     .from('notes')
-    .select('photo_path, paired_video_path, sticker_placements_json')
+    .select(
+      'photo_path, dual_primary_photo_path, dual_secondary_photo_path, paired_video_path, sticker_placements_json'
+    )
     .eq('id', noteId)
     .eq('user_id', userId)
     .maybeSingle();
@@ -1583,6 +1754,14 @@ async function deleteRemoteNote(userId: string, noteId: string) {
           SHARED_POST_MEDIA_BUCKET,
           {
             photoPath: row.photoPath ?? (row as { photo_path?: string | null }).photo_path ?? null,
+            dualPrimaryPhotoPath:
+              row.dualPrimaryPhotoPath ??
+              (row as { dual_primary_photo_path?: string | null }).dual_primary_photo_path ??
+              null,
+            dualSecondaryPhotoPath:
+              row.dualSecondaryPhotoPath ??
+              (row as { dual_secondary_photo_path?: string | null }).dual_secondary_photo_path ??
+              null,
             pairedVideoPath:
               row.pairedVideoPath ?? (row as { paired_video_path?: string | null }).paired_video_path ?? null,
           }
@@ -1626,6 +1805,12 @@ async function deleteRemoteNote(userId: string, noteId: string) {
   await clearRemoteStickerAssetRefs(userId, 'note', noteId);
   await cleanupRemoteArtifactsBestEffort(`note ${noteId}`, NOTE_MEDIA_BUCKET, {
     photoPath: (existingNote as { photo_path?: string | null } | null)?.photo_path ?? null,
+    dualPrimaryPhotoPath:
+      (existingNote as { dual_primary_photo_path?: string | null } | null)?.dual_primary_photo_path ??
+      null,
+    dualSecondaryPhotoPath:
+      (existingNote as { dual_secondary_photo_path?: string | null } | null)?.dual_secondary_photo_path ??
+      null,
     pairedVideoPath:
       (existingNote as { paired_video_path?: string | null } | null)?.paired_video_path ?? null,
   });
@@ -1640,11 +1825,15 @@ async function deleteAllRemoteNotesForUser(userId: string) {
   const [{ data, error }, { data: sharedPosts, error: sharedPostsError }] = await Promise.all([
     supabase
       .from('notes')
-      .select('id, photo_path, paired_video_path, sticker_placements_json')
+      .select(
+        'id, photo_path, dual_primary_photo_path, dual_secondary_photo_path, paired_video_path, sticker_placements_json'
+      )
       .eq('user_id', userId),
     supabase
       .from('shared_posts')
-      .select('id, photo_path, paired_video_path, sticker_placements_json')
+      .select(
+        'id, photo_path, dual_primary_photo_path, dual_secondary_photo_path, paired_video_path, sticker_placements_json'
+      )
       .eq('author_user_id', userId),
   ]);
   if (error) {
@@ -1714,6 +1903,8 @@ async function deleteAllRemoteNotesForUser(userId: string) {
     ((sharedPosts ?? []) as {
       id?: string;
       photo_path?: string | null;
+      dual_primary_photo_path?: string | null;
+      dual_secondary_photo_path?: string | null;
       paired_video_path?: string | null;
       sticker_placements_json?: string | null;
     }[]).map(async (row) => {
@@ -1722,6 +1913,8 @@ async function deleteAllRemoteNotesForUser(userId: string) {
         SHARED_POST_MEDIA_BUCKET,
         {
           photoPath: row.photo_path ?? null,
+          dualPrimaryPhotoPath: row.dual_primary_photo_path ?? null,
+          dualSecondaryPhotoPath: row.dual_secondary_photo_path ?? null,
           pairedVideoPath: row.paired_video_path ?? null,
           stickerPaths: getRemoteStickerAssetPaths(row.sticker_placements_json ?? null),
         }
@@ -1777,6 +1970,8 @@ async function deleteAllRemoteNotesForUser(userId: string) {
     ((data ?? []) as {
       id?: string;
       photo_path?: string | null;
+      dual_primary_photo_path?: string | null;
+      dual_secondary_photo_path?: string | null;
       paired_video_path?: string | null;
       sticker_placements_json?: string | null;
     }[]).map(async (row) => {
@@ -1785,6 +1980,8 @@ async function deleteAllRemoteNotesForUser(userId: string) {
         NOTE_MEDIA_BUCKET,
         {
           photoPath: row.photo_path ?? null,
+          dualPrimaryPhotoPath: row.dual_primary_photo_path ?? null,
+          dualSecondaryPhotoPath: row.dual_secondary_photo_path ?? null,
           pairedVideoPath: row.paired_video_path ?? null,
           stickerPaths: getRemoteStickerAssetPaths(row.sticker_placements_json ?? null),
         }
@@ -1809,7 +2006,9 @@ async function upsertRemoteNote(
   if (existingArtifacts === undefined) {
     const { data: existingRemoteNote, error: fetchError } = await supabase
       .from('notes')
-      .select('photo_path, paired_video_path, sticker_placements_json')
+      .select(
+        'photo_path, dual_primary_photo_path, dual_secondary_photo_path, paired_video_path, sticker_placements_json'
+      )
       .eq('id', note.id)
       .eq('user_id', userId)
       .maybeSingle();
@@ -1819,6 +2018,12 @@ async function upsertRemoteNote(
 
     existingArtifacts = {
       photoPath: (existingRemoteNote as { photo_path?: string | null } | null)?.photo_path ?? null,
+      dualPrimaryPhotoPath:
+        (existingRemoteNote as { dual_primary_photo_path?: string | null } | null)
+          ?.dual_primary_photo_path ?? null,
+      dualSecondaryPhotoPath:
+        (existingRemoteNote as { dual_secondary_photo_path?: string | null } | null)
+          ?.dual_secondary_photo_path ?? null,
       pairedVideoPath:
         (existingRemoteNote as { paired_video_path?: string | null } | null)?.paired_video_path ?? null,
       stickerPlacementsJson:
@@ -1838,6 +2043,8 @@ async function upsertRemoteNote(
         buildNewRemoteArtifacts(
           {
             photoPath: serializedNote.photo_path,
+            dualPrimaryPhotoPath: serializedNote.dual_primary_photo_path,
+            dualSecondaryPhotoPath: serializedNote.dual_secondary_photo_path,
             pairedVideoPath: serializedNote.paired_video_path,
             stickerPlacementsJson: serializedNote.sticker_placements_json,
           },
@@ -1867,6 +2074,8 @@ async function upsertRemoteNote(
     getReusableNoteMediaCleanupArtifacts(
       buildRemovedRemoteArtifacts(existingArtifacts, {
         photoPath: serializedNote.photo_path,
+        dualPrimaryPhotoPath: serializedNote.dual_primary_photo_path,
+        dualSecondaryPhotoPath: serializedNote.dual_secondary_photo_path,
         pairedVideoPath: serializedNote.paired_video_path,
         stickerPlacementsJson: serializedNote.sticker_placements_json,
       })

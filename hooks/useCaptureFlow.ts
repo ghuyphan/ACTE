@@ -26,6 +26,7 @@ export type CaptureDraftState = {
   dualSecondaryPhoto: string | null;
   dualPrimaryFacing: DualCameraFacing | null;
   dualSecondaryFacing: DualCameraFacing | null;
+  facing: DualCameraFacing;
   radius: number;
   selectedPhotoFilterId: PhotoFilterId;
 };
@@ -576,6 +577,7 @@ export function useCaptureFlow() {
     setDualSecondaryPhoto(draft.dualSecondaryPhoto ?? null);
     setDualPrimaryFacing(draft.dualPrimaryFacing ?? null);
     setDualSecondaryFacing(draft.dualSecondaryFacing ?? null);
+    setFacing(draft.facing === 'front' ? 'front' : 'back');
     setIsStillPhotoCaptureInProgress(false);
     setIsLivePhotoCaptureInProgress(false);
     setIsLivePhotoCaptureSettling(false);

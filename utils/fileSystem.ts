@@ -18,14 +18,81 @@ function getDirectoryUri(getter: () => Directory) {
 
 function getPathInfo(uri: string) {
   try {
-    return Paths.info(uri);
+    const info = Paths.info(uri);
+    if (info.exists) {
+      return {
+        exists: true,
+        isDirectory: Boolean(info.isDirectory),
+        uri,
+      };
+    }
   } catch {
-    return {
-      exists: false,
-      isDirectory: false,
-      uri,
-    };
+    // Fall back to direct file and directory probes below.
   }
+
+  const probeDirectoryFirst = uri.endsWith('/');
+  const probes = probeDirectoryFirst
+    ? [
+        () => {
+          const directory = new Directory(uri);
+          return directory.exists
+            ? {
+                exists: true,
+                isDirectory: true,
+                uri: directory.uri,
+              }
+            : null;
+        },
+        () => {
+          const file = new File(uri);
+          return file.exists
+            ? {
+                exists: true,
+                isDirectory: false,
+                uri: file.uri,
+              }
+            : null;
+        },
+      ]
+    : [
+        () => {
+          const file = new File(uri);
+          return file.exists
+            ? {
+                exists: true,
+                isDirectory: false,
+                uri: file.uri,
+              }
+            : null;
+        },
+        () => {
+          const directory = new Directory(uri);
+          return directory.exists
+            ? {
+                exists: true,
+                isDirectory: true,
+                uri: directory.uri,
+              }
+            : null;
+        },
+      ];
+
+  for (const probe of probes) {
+    try {
+      const info = probe();
+      if (info) {
+        return info;
+      }
+    } catch {
+      // Ignore constructor or permission errors and keep probing.
+    }
+  }
+
+  return {
+    exists: false,
+    isDirectory: false,
+    uri,
+  };
 }
 
 type EncodingValue = 'utf8' | 'base64';

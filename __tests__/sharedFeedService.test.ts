@@ -1122,6 +1122,79 @@ describe('sharedFeedService', () => {
     );
   });
 
+  it('preserves dual-capture media metadata when creating a shared post', async () => {
+    mockEnsureFriendMap(ownerUser.id).set(friendUser.id, {
+      display_name_snapshot: friendUser.username,
+      photo_url_snapshot: friendUser.photoURL,
+      friended_at: '2026-03-20T00:00:00.000Z',
+      last_shared_at: null,
+      created_by_invite_id: 'invite-1',
+    });
+    mockEnsureFriendMap(friendUser.id).set(ownerUser.id, {
+      display_name_snapshot: ownerUser.username,
+      photo_url_snapshot: ownerUser.photoURL,
+      friended_at: '2026-03-20T00:00:00.000Z',
+      last_shared_at: null,
+      created_by_invite_id: 'invite-1',
+    });
+
+    const note = {
+      id: 'note-dual',
+      type: 'photo',
+      content: 'file:///photos/note-dual.jpg',
+      photoLocalUri: 'file:///photos/note-dual.jpg',
+      captureVariant: 'dual',
+      dualPrimaryPhotoLocalUri: 'file:///photos/note-dual-primary.jpg',
+      dualSecondaryPhotoLocalUri: 'file:///photos/note-dual-secondary.jpg',
+      dualPrimaryFacing: 'back',
+      dualSecondaryFacing: 'front',
+      dualLayoutPreset: 'top-left',
+      doodleStrokesJson: null,
+      locationName: 'Saigon',
+      latitude: 10.77,
+      longitude: 106.69,
+      moodEmoji: null,
+    } as any;
+
+    const post = await createSharedPost(ownerUser, note, [friendUser.id]);
+    const storedPost = mockSharedPosts.get(post.id);
+
+    expect(mockUploadPhotoToStorage).toHaveBeenCalledWith(
+      'shared-post-media',
+      expect.stringMatching(new RegExp(`${ownerUser.id}/shared-post-.*\\.dual-primary$`)),
+      'file:///photos/note-dual-primary.jpg'
+    );
+    expect(mockUploadPhotoToStorage).toHaveBeenCalledWith(
+      'shared-post-media',
+      expect.stringMatching(new RegExp(`${ownerUser.id}/shared-post-.*\\.dual-secondary$`)),
+      'file:///photos/note-dual-secondary.jpg'
+    );
+    expect(post).toEqual(
+      expect.objectContaining({
+        captureVariant: 'dual',
+        dualPrimaryPhotoLocalUri: 'file:///photos/note-dual-primary.jpg',
+        dualSecondaryPhotoLocalUri: 'file:///photos/note-dual-secondary.jpg',
+        dualPrimaryFacing: 'back',
+        dualSecondaryFacing: 'front',
+        dualLayoutPreset: 'top-left',
+      })
+    );
+    expect(storedPost).toEqual(
+      expect.objectContaining({
+        capture_variant: 'dual',
+        dual_primary_photo_path: expect.stringMatching(
+          new RegExp(`${ownerUser.id}/shared-post-.*\\.dual-primary$`)
+        ),
+        dual_secondary_photo_path: expect.stringMatching(
+          new RegExp(`${ownerUser.id}/shared-post-.*\\.dual-secondary$`)
+        ),
+        dual_primary_facing: 'back',
+        dual_secondary_facing: 'front',
+        dual_layout_preset: 'top-left',
+      })
+    );
+  });
+
   it('hydrates stored doodles and stickers before creating a shared post', async () => {
     mockEnsureFriendMap(ownerUser.id).set(friendUser.id, {
       display_name_snapshot: friendUser.username,

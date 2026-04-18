@@ -22,11 +22,16 @@ import android.graphics.BitmapShader
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.text.Layout
+import android.text.StaticLayout
+import android.text.TextPaint
+import android.text.TextUtils
 import android.util.SizeF
 import android.util.Base64
 import android.util.TypedValue
 import android.view.View
 import android.widget.RemoteViews
+import androidx.core.content.res.ResourcesCompat
 import androidx.exifinterface.media.ExifInterface
 import com.acte.app.R
 import org.json.JSONArray
@@ -196,6 +201,32 @@ private fun getPerceivedLuminance(color: Int): Float {
   val green = Color.green(color) / 255f
   val blue = Color.blue(color) / 255f
   return (red * 0.299f) + (green * 0.587f) + (blue * 0.114f)
+}
+
+private fun srgbChannelToLinear(channel: Int): Double {
+  val normalized = channel / 255.0
+  return if (normalized <= 0.04045) {
+    normalized / 12.92
+  } else {
+    Math.pow((normalized + 0.055) / 1.055, 2.4)
+  }
+}
+
+private fun getRelativeLuminance(color: Int): Double {
+  val linearRed = srgbChannelToLinear(Color.red(color))
+  val linearGreen = srgbChannelToLinear(Color.green(color))
+  val linearBlue = srgbChannelToLinear(Color.blue(color))
+
+  return (linearRed * 0.2126) + (linearGreen * 0.7152) + (linearBlue * 0.0722)
+}
+
+private fun getContrastRatio(foreground: Int, background: Int): Double {
+  val foregroundLuminance = getRelativeLuminance(foreground)
+  val backgroundLuminance = getRelativeLuminance(background)
+  val lighter = max(foregroundLuminance, backgroundLuminance)
+  val darker = min(foregroundLuminance, backgroundLuminance)
+
+  return (lighter + 0.05) / (darker + 0.05)
 }
 
 private fun clampWidgetScalar(value: Float, minValue: Float, maxValue: Float): Float {
@@ -549,6 +580,7 @@ class NotoWidgetProvider : AppWidgetProvider() {
       views.setTextColor(R.id.widget_idle_body, Color.parseColor("#FFF7E8"))
       views.setTextViewText(R.id.widget_body, bodyText)
       views.setViewVisibility(R.id.widget_body, if (bodyText.isBlank()) View.GONE else View.VISIBLE)
+      views.setViewVisibility(R.id.widget_body_bitmap, View.GONE)
       views.setViewVisibility(R.id.widget_photo_title, if (showPhotoTitle) View.VISIBLE else View.GONE)
       if (showPhotoTitle) {
         views.setTextViewText(R.id.widget_photo_title, photoTitleText)
@@ -613,14 +645,36 @@ class NotoWidgetProvider : AppWidgetProvider() {
         bodyTypography.horizontalPaddingPx,
         0
       )
-      views.setTextColor(
-        R.id.widget_body,
-        resolveBodyForegroundColor(
-          usesTextSurface = usesTextSurface,
-          noteColorId = snapshot.noteColorId,
-          textSurfaceGradient = textSurfaceGradient
-        )
+      views.setViewPadding(
+        R.id.widget_body_bitmap,
+        bodyTypography.horizontalPaddingPx,
+        0,
+        bodyTypography.horizontalPaddingPx,
+        0
       )
+      val bodyForegroundColor = resolveBodyForegroundColor(
+        usesTextSurface = usesTextSurface,
+        noteColorId = snapshot.noteColorId,
+        textSurfaceGradient = textSurfaceGradient
+      )
+      views.setTextColor(R.id.widget_body, bodyForegroundColor)
+      val renderedBodyBitmap = if (snapshot.noteType == "text") {
+        renderBodyTextBitmap(
+          context = context,
+          bodyText = bodyText,
+          geometry = geometry,
+          typography = bodyTypography,
+          bodyForegroundColor = bodyForegroundColor,
+          noteType = snapshot.noteType
+        )
+      } else {
+        null
+      }
+      if (renderedBodyBitmap != null) {
+        views.setImageViewBitmap(R.id.widget_body_bitmap, renderedBodyBitmap)
+        views.setViewVisibility(R.id.widget_body_bitmap, View.VISIBLE)
+        views.setViewVisibility(R.id.widget_body, View.GONE)
+      }
       bindLocationChip(
         views = views,
         chipId = R.id.widget_location_chip,
@@ -908,17 +962,23 @@ class NotoWidgetProvider : AppWidgetProvider() {
       if (!usesTextSurface) {
         return Color.parseColor("#FFF7E8")
       }
+      val darkText = Color.parseColor("#2B2621")
+      val lightText = Color.parseColor("#FFF7E8")
 
-      when (noteColorId) {
-        "sky-blue", "holo-foil" -> return Color.parseColor("#445873")
-        "jade-pop", "olive-lime" -> return Color.parseColor("#445C48")
-        "pool-teal" -> return Color.parseColor("#3F6368")
-        "violet-bloom", "periwinkle-ink", "chrome-rare", "aurora-rgb" -> return Color.parseColor("#544B70")
-        "sunset-coral", "raspberry-dusk" -> return Color.parseColor("#664D5C")
-        "marigold-glow", "tangerine-clay" -> return Color.parseColor("#56453B")
+      if (textSurfaceGradient == null) {
+        return darkText
       }
 
-      return resolveGradientBodyForegroundColor(textSurfaceGradient)
+      val darkContrast = min(
+        getContrastRatio(darkText, textSurfaceGradient.startColor),
+        getContrastRatio(darkText, textSurfaceGradient.endColor)
+      )
+      val lightContrast = min(
+        getContrastRatio(lightText, textSurfaceGradient.startColor),
+        getContrastRatio(lightText, textSurfaceGradient.endColor)
+      )
+
+      return if (darkContrast >= lightContrast) darkText else lightText
     }
 
     private fun resolveGradientLocationForegroundColor(
@@ -953,36 +1013,6 @@ class NotoWidgetProvider : AppWidgetProvider() {
         blendColors(tintedColor, Color.parseColor("#3F352D"), 0.22f)
       } else {
         tintedColor
-      }
-    }
-
-    private fun resolveGradientBodyForegroundColor(
-      textSurfaceGradient: WidgetGradientColors?
-    ): Int {
-      if (textSurfaceGradient == null) {
-        return Color.parseColor("#4D423A")
-      }
-
-      val averageGradientColor = blendColors(
-        textSurfaceGradient.startColor,
-        textSurfaceGradient.endColor,
-        0.5f
-      )
-      val luminance = getPerceivedLuminance(averageGradientColor)
-      val hsv = FloatArray(3)
-      Color.colorToHSV(averageGradientColor, hsv)
-      val hue = hsv[0]
-      val saturation = hsv[1]
-      val anchorColor = when {
-        saturation >= 0.08f && hue in 185f..320f -> Color.parseColor("#445873")
-        saturation >= 0.08f && hue in 8f..55f -> Color.parseColor("#56453B")
-        else -> Color.parseColor("#4D423A")
-      }
-
-      return if (luminance > 0.68f) {
-        blendColors(anchorColor, Color.parseColor("#2F2722"), 0.18f)
-      } else {
-        anchorColor
       }
     }
 
@@ -1323,6 +1353,65 @@ class NotoWidgetProvider : AppWidgetProvider() {
       }
 
       return total
+    }
+
+    private fun renderBodyTextBitmap(
+      context: Context,
+      bodyText: String,
+      geometry: WidgetRenderGeometry,
+      typography: WidgetBodyTypography,
+      bodyForegroundColor: Int,
+      noteType: String
+    ): Bitmap? {
+      val normalizedText = bodyText.trim()
+      if (normalizedText.isBlank()) {
+        return null
+      }
+
+      val typefaceRes = if (noteType == "text") R.font.noto_sans_800extra_bold else R.font.noto_sans_700bold
+      val typeface = ResourcesCompat.getFont(context, typefaceRes) ?: return null
+      val availableWidthPx = max(1, geometry.contentWidthPx - (typography.horizontalPaddingPx * 2))
+      val textSizePx = context.spToPx(typography.textSizeSp)
+      val lineSpacingExtraPx = context.dpToPx(
+        when {
+          typography.textSizeSp >= 24f -> 6f
+          typography.textSizeSp >= 22f -> 5f
+          else -> 3f
+        }
+      ).toFloat()
+
+      val textPaint = TextPaint(Paint.ANTI_ALIAS_FLAG or Paint.SUBPIXEL_TEXT_FLAG).apply {
+        color = bodyForegroundColor
+        textSize = textSizePx
+        this.typeface = typeface
+        textAlign = Paint.Align.LEFT
+        letterSpacing = if (noteType == "text") -0.03f else 0f
+        setShadowLayer(
+          context.dpToPx(4f).toFloat(),
+          0f,
+          context.dpToPx(1f).toFloat(),
+          Color.parseColor("#14000000")
+        )
+      }
+
+      val staticLayout = StaticLayout.Builder
+        .obtain(normalizedText, 0, normalizedText.length, textPaint, availableWidthPx)
+        .setAlignment(Layout.Alignment.ALIGN_CENTER)
+        .setIncludePad(false)
+        .setMaxLines(typography.maxLines)
+        .setEllipsize(TextUtils.TruncateAt.END)
+        .setLineSpacing(lineSpacingExtraPx, 1f)
+        .build()
+
+      val insetPx = context.dpToPx(4f)
+      val bitmapWidth = max(1, staticLayout.width + insetPx * 2)
+      val bitmapHeight = max(1, staticLayout.height + insetPx * 2)
+
+      return Bitmap.createBitmap(bitmapWidth, bitmapHeight, Bitmap.Config.ARGB_8888).also { bitmap ->
+        val canvas = Canvas(bitmap)
+        canvas.translate(insetPx.toFloat(), insetPx.toFloat())
+        staticLayout.draw(canvas)
+      }
     }
 
     private fun getCompactAuthorName(snapshot: NotoWidgetSnapshot): String {

@@ -102,6 +102,30 @@ describe('useCaptureFlow', () => {
     expect(result.current.capturedPhoto).toBe('file:///tmp/captured-photo.jpg');
   });
 
+  it('restores the active camera facing from a persisted draft', () => {
+    const { result } = renderHook(() => useCaptureFlow());
+
+    act(() => {
+      result.current.restoreCaptureState({
+        captureMode: 'camera',
+        cameraSubmode: 'dual',
+        noteText: '',
+        capturedPhoto: null,
+        capturedPairedVideo: null,
+        dualPrimaryPhoto: 'file:///tmp/primary.jpg',
+        dualSecondaryPhoto: null,
+        dualPrimaryFacing: 'back',
+        dualSecondaryFacing: null,
+        facing: 'front',
+        radius: 150,
+        selectedPhotoFilterId: 'original',
+      });
+    });
+
+    expect(result.current.facing).toBe('front');
+    expect(result.current.dualPrimaryFacing).toBe('back');
+  });
+
   it('captures a live photo by taking a still photo and pairing it with a recorded motion clip', async () => {
     jest.useFakeTimers();
     const { result } = renderHook(() => useCaptureFlow());

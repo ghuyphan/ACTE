@@ -181,7 +181,7 @@ let db: SQLite.SQLiteDatabase | null = null;
 let dbInitPromise: Promise<SQLite.SQLiteDatabase> | null = null;
 let transactionQueue: Promise<void> = Promise.resolve();
 let androidDatabaseQueue: Promise<void> = Promise.resolve();
-const APP_SCHEMA_VERSION = 17;
+const APP_SCHEMA_VERSION = 18;
 const DATABASE_NAME = 'acte_notes.db';
 export const LOCAL_NOTES_SCOPE = '__local__';
 const ACTIVE_NOTES_SCOPE_STORAGE_KEY = 'notes.activeScope';
@@ -750,9 +750,17 @@ export async function getDB(): Promise<SQLite.SQLiteDatabase> {
         text TEXT NOT NULL DEFAULT '',
         photo_path TEXT,
         photo_local_uri TEXT,
+        capture_variant TEXT CHECK(capture_variant IN ('single', 'dual')),
+        dual_primary_photo_path TEXT,
+        dual_secondary_photo_path TEXT,
+        dual_primary_photo_local_uri TEXT,
+        dual_secondary_photo_local_uri TEXT,
         is_live_photo INTEGER NOT NULL DEFAULT 0,
         paired_video_path TEXT,
         paired_video_local_uri TEXT,
+        dual_primary_facing TEXT CHECK(dual_primary_facing IN ('front', 'back')),
+        dual_secondary_facing TEXT CHECK(dual_secondary_facing IN ('front', 'back')),
+        dual_layout_preset TEXT CHECK(dual_layout_preset IN ('top-left')),
         doodle_strokes_json TEXT,
         sticker_placements_json TEXT,
         note_color TEXT,
@@ -1113,9 +1121,17 @@ export async function getDB(): Promise<SQLite.SQLiteDatabase> {
                     text TEXT NOT NULL DEFAULT '',
                     photo_path TEXT,
                     photo_local_uri TEXT,
+                    capture_variant TEXT CHECK(capture_variant IN ('single', 'dual')),
+                    dual_primary_photo_path TEXT,
+                    dual_secondary_photo_path TEXT,
+                    dual_primary_photo_local_uri TEXT,
+                    dual_secondary_photo_local_uri TEXT,
                     is_live_photo INTEGER NOT NULL DEFAULT 0,
                     paired_video_path TEXT,
                     paired_video_local_uri TEXT,
+                    dual_primary_facing TEXT CHECK(dual_primary_facing IN ('front', 'back')),
+                    dual_secondary_facing TEXT CHECK(dual_secondary_facing IN ('front', 'back')),
+                    dual_layout_preset TEXT CHECK(dual_layout_preset IN ('top-left')),
                     doodle_strokes_json TEXT,
                     sticker_placements_json TEXT,
                     note_color TEXT,
@@ -1135,11 +1151,35 @@ export async function getDB(): Promise<SQLite.SQLiteDatabase> {
             if (!sharedPostsCacheColumns.includes('is_live_photo')) {
                 await database.execAsync(`ALTER TABLE shared_posts_cache ADD COLUMN is_live_photo INTEGER NOT NULL DEFAULT 0`);
             }
+            if (!sharedPostsCacheColumns.includes('capture_variant')) {
+                await database.execAsync(`ALTER TABLE shared_posts_cache ADD COLUMN capture_variant TEXT`);
+            }
+            if (!sharedPostsCacheColumns.includes('dual_primary_photo_path')) {
+                await database.execAsync(`ALTER TABLE shared_posts_cache ADD COLUMN dual_primary_photo_path TEXT`);
+            }
+            if (!sharedPostsCacheColumns.includes('dual_secondary_photo_path')) {
+                await database.execAsync(`ALTER TABLE shared_posts_cache ADD COLUMN dual_secondary_photo_path TEXT`);
+            }
+            if (!sharedPostsCacheColumns.includes('dual_primary_photo_local_uri')) {
+                await database.execAsync(`ALTER TABLE shared_posts_cache ADD COLUMN dual_primary_photo_local_uri TEXT`);
+            }
+            if (!sharedPostsCacheColumns.includes('dual_secondary_photo_local_uri')) {
+                await database.execAsync(`ALTER TABLE shared_posts_cache ADD COLUMN dual_secondary_photo_local_uri TEXT`);
+            }
             if (!sharedPostsCacheColumns.includes('paired_video_path')) {
                 await database.execAsync(`ALTER TABLE shared_posts_cache ADD COLUMN paired_video_path TEXT`);
             }
             if (!sharedPostsCacheColumns.includes('paired_video_local_uri')) {
                 await database.execAsync(`ALTER TABLE shared_posts_cache ADD COLUMN paired_video_local_uri TEXT`);
+            }
+            if (!sharedPostsCacheColumns.includes('dual_primary_facing')) {
+                await database.execAsync(`ALTER TABLE shared_posts_cache ADD COLUMN dual_primary_facing TEXT`);
+            }
+            if (!sharedPostsCacheColumns.includes('dual_secondary_facing')) {
+                await database.execAsync(`ALTER TABLE shared_posts_cache ADD COLUMN dual_secondary_facing TEXT`);
+            }
+            if (!sharedPostsCacheColumns.includes('dual_layout_preset')) {
+                await database.execAsync(`ALTER TABLE shared_posts_cache ADD COLUMN dual_layout_preset TEXT`);
             }
             if (!sharedPostsCacheColumns.includes('note_color')) {
                 await database.execAsync(`ALTER TABLE shared_posts_cache ADD COLUMN note_color TEXT`);

@@ -116,11 +116,30 @@ type PersistedCaptureDraft = CaptureDraftState & {
 };
 
 function isPersistableCaptureDraft(draft: CaptureDraftState) {
-  if (draft.captureMode === 'camera') {
-    return Boolean(draft.capturedPhoto);
+  if (draft.captureMode !== 'camera') {
+    return draft.noteText.trim().length > 0;
   }
 
-  return draft.noteText.trim().length > 0;
+  if (draft.cameraSubmode === 'dual') {
+    return Boolean(
+      draft.capturedPhoto ||
+        (draft.dualPrimaryPhoto && draft.dualPrimaryFacing && !draft.dualSecondaryPhoto)
+    );
+  }
+
+  return Boolean(draft.capturedPhoto);
+}
+
+function getRequiredPersistedCaptureDraftPhotoUris(draft: PersistedCaptureDraft) {
+  if (draft.captureMode !== 'camera') {
+    return [];
+  }
+
+  return [
+    draft.capturedPhoto,
+    draft.cameraSubmode === 'dual' ? draft.dualPrimaryPhoto : null,
+    draft.cameraSubmode === 'dual' ? draft.dualSecondaryPhoto : null,
+  ].filter((value): value is string => Boolean(value?.trim()));
 }
 
 const HomeFeedSurface = memo(function HomeFeedSurface({
@@ -184,6 +203,7 @@ function parsePersistedCaptureDraft(rawValue: string | null): PersistedCaptureDr
         : null;
     const dualPrimaryFacing = parsed.dualPrimaryFacing === 'front' ? 'front' : parsed.dualPrimaryFacing === 'back' ? 'back' : null;
     const dualSecondaryFacing = parsed.dualSecondaryFacing === 'front' ? 'front' : parsed.dualSecondaryFacing === 'back' ? 'back' : null;
+    const facing = parsed.facing === 'front' ? 'front' : 'back';
     const radius = typeof parsed.radius === 'number' && Number.isFinite(parsed.radius)
       ? parsed.radius
       : DEFAULT_NOTE_RADIUS;
@@ -210,6 +230,7 @@ function parsePersistedCaptureDraft(rawValue: string | null): PersistedCaptureDr
       dualSecondaryPhoto,
       dualPrimaryFacing,
       dualSecondaryFacing,
+      facing,
       radius,
       selectedPhotoFilterId,
       noteColor,
@@ -730,26 +751,29 @@ export default function HomeScreen() {
         return;
       }
 
-      if (persistedDraft.captureMode === 'camera' && persistedDraft.capturedPhoto) {
-        const photoInfo = await FileSystem.getInfoAsync(persistedDraft.capturedPhoto).catch(() => ({
-          exists: false,
-        }));
+      const requiredPhotoUris = getRequiredPersistedCaptureDraftPhotoUris(persistedDraft);
+      if (requiredPhotoUris.length > 0) {
+        const photoChecks = await Promise.all(
+          requiredPhotoUris.map(async (uri) => FileSystem.getInfoAsync(uri).catch(() => ({ exists: false })))
+        );
+        const missingPhoto = photoChecks.find((info) => !info.exists);
 
-        if (!photoInfo.exists) {
+        if (missingPhoto) {
           await clearPersistedCaptureDraft();
           if (!cancelled) {
             setCaptureDraftReady(true);
           }
           return;
         }
+      }
 
-        if (persistedDraft.capturedPairedVideo) {
-          const pairedVideoInfo = await FileSystem.getInfoAsync(persistedDraft.capturedPairedVideo).catch(() => ({
-            exists: false,
-          }));
-          if (!pairedVideoInfo.exists) {
-            persistedDraft.capturedPairedVideo = null;
-          }
+      if (persistedDraft.captureMode === 'camera' && persistedDraft.capturedPairedVideo) {
+        const pairedVideoInfo = await FileSystem.getInfoAsync(persistedDraft.capturedPairedVideo).catch(() => ({
+          exists: false,
+        }));
+
+        if (!pairedVideoInfo.exists) {
+          persistedDraft.capturedPairedVideo = null;
         }
       }
 
@@ -767,6 +791,7 @@ export default function HomeScreen() {
         dualSecondaryPhoto: persistedDraft.dualSecondaryPhoto,
         dualPrimaryFacing: persistedDraft.dualPrimaryFacing,
         dualSecondaryFacing: persistedDraft.dualSecondaryFacing,
+        facing: persistedDraft.facing,
         radius: persistedDraft.radius,
         selectedPhotoFilterId: persistedDraft.selectedPhotoFilterId,
       });
@@ -818,6 +843,7 @@ export default function HomeScreen() {
       dualSecondaryPhoto,
       dualPrimaryFacing,
       dualSecondaryFacing,
+      facing,
       radius,
       selectedPhotoFilterId,
       noteColor,
@@ -853,6 +879,7 @@ export default function HomeScreen() {
     dualSecondaryPhoto,
     dualPrimaryFacing,
     dualSecondaryFacing,
+    facing,
     radius,
     selectedPhotoFilterId,
     noteColor,

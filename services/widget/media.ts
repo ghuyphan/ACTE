@@ -285,6 +285,38 @@ async function resolveReadablePhotoUriForCandidate(candidate: WidgetCandidate) {
   return getReadablePhotoUri(downloadedPhotoUri);
 }
 
+async function resolveReadableDualPhotoUriForCandidate(
+  candidate: WidgetCandidate,
+  slot: 'primary' | 'secondary'
+) {
+  const localUri =
+    slot === 'primary' ? candidate.dualPrimaryPhotoLocalUri : candidate.dualSecondaryPhotoLocalUri;
+  if (localUri?.trim()) {
+    const readableLocalUri = await getReadablePhotoUri(localUri);
+    if (readableLocalUri) {
+      return readableLocalUri;
+    }
+  }
+
+  const remotePath =
+    slot === 'primary' ? candidate.dualPrimaryPhotoPath : candidate.dualSecondaryPhotoPath;
+  if (candidate.source !== 'shared' || !remotePath?.trim()) {
+    return undefined;
+  }
+
+  const downloadedPhotoUri = await downloadPhotoFromStorage(
+    SHARED_POST_MEDIA_BUCKET,
+    remotePath,
+    `shared-post-${candidate.id}-${slot}`
+  );
+
+  if (!downloadedPhotoUri) {
+    return undefined;
+  }
+
+  return getReadablePhotoUri(downloadedPhotoUri);
+}
+
 async function stageReadableWidgetImage(options: {
   candidate: WidgetCandidate;
   readablePhotoUri: string;
@@ -335,12 +367,12 @@ export async function resolveWidgetPhotoProps(
 
   if (
     candidate.isDualCapture &&
-    candidate.dualPrimaryPhotoLocalUri?.trim() &&
-    candidate.dualSecondaryPhotoLocalUri?.trim()
+    ((candidate.dualPrimaryPhotoLocalUri?.trim() && candidate.dualSecondaryPhotoLocalUri?.trim()) ||
+      (candidate.dualPrimaryPhotoPath?.trim() && candidate.dualSecondaryPhotoPath?.trim()))
   ) {
     const [readablePrimaryUri, readableSecondaryUri] = await Promise.all([
-      getReadablePhotoUri(candidate.dualPrimaryPhotoLocalUri),
-      getReadablePhotoUri(candidate.dualSecondaryPhotoLocalUri),
+      resolveReadableDualPhotoUriForCandidate(candidate, 'primary'),
+      resolveReadableDualPhotoUriForCandidate(candidate, 'secondary'),
     ]);
 
     if (readablePrimaryUri && readableSecondaryUri) {

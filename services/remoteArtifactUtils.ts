@@ -4,12 +4,16 @@ import { getUniqueNormalizedStrings, normalizeOptionalString } from './normalize
 
 export interface RemoteArtifactSnapshot {
   photoPath?: string | null;
+  dualPrimaryPhotoPath?: string | null;
+  dualSecondaryPhotoPath?: string | null;
   pairedVideoPath?: string | null;
   stickerPlacementsJson?: string | null;
 }
 
 export interface RemoteArtifactDelta {
   photoPath: string | null;
+  dualPrimaryPhotoPath: string | null;
+  dualSecondaryPhotoPath: string | null;
   pairedVideoPath: string | null;
   stickerPaths: string[];
 }
@@ -38,19 +42,32 @@ export function getRemoteStickerAssetPaths(stickerPlacementsJson: string | null 
   );
 }
 
+function getChangedArtifactPath(
+  nextPath: string | null | undefined,
+  previousPath: string | null | undefined
+) {
+  const normalizedNextPath = normalizeRemoteArtifactPath(nextPath);
+  const normalizedPreviousPath = normalizeRemoteArtifactPath(previousPath);
+  return normalizedNextPath !== normalizedPreviousPath ? normalizedNextPath : null;
+}
+
 export function buildNewRemoteArtifacts(
   next: RemoteArtifactSnapshot,
   previous: RemoteArtifactSnapshot | null | undefined
 ): RemoteArtifactDelta {
   const previousStickerPaths = new Set(getRemoteStickerAssetPaths(previous?.stickerPlacementsJson));
-  const nextPhotoPath = normalizeRemoteArtifactPath(next.photoPath);
-  const previousPhotoPath = normalizeRemoteArtifactPath(previous?.photoPath);
-  const nextPairedVideoPath = normalizeRemoteArtifactPath(next.pairedVideoPath);
-  const previousPairedVideoPath = normalizeRemoteArtifactPath(previous?.pairedVideoPath);
 
   return {
-    photoPath: nextPhotoPath !== previousPhotoPath ? nextPhotoPath : null,
-    pairedVideoPath: nextPairedVideoPath !== previousPairedVideoPath ? nextPairedVideoPath : null,
+    photoPath: getChangedArtifactPath(next.photoPath, previous?.photoPath),
+    dualPrimaryPhotoPath: getChangedArtifactPath(
+      next.dualPrimaryPhotoPath,
+      previous?.dualPrimaryPhotoPath
+    ),
+    dualSecondaryPhotoPath: getChangedArtifactPath(
+      next.dualSecondaryPhotoPath,
+      previous?.dualSecondaryPhotoPath
+    ),
+    pairedVideoPath: getChangedArtifactPath(next.pairedVideoPath, previous?.pairedVideoPath),
     stickerPaths: getRemoteStickerAssetPaths(next.stickerPlacementsJson).filter(
       (path) => !previousStickerPaths.has(path)
     ),
@@ -62,14 +79,18 @@ export function buildRemovedRemoteArtifacts(
   next: RemoteArtifactSnapshot | null | undefined
 ): RemoteArtifactDelta {
   const nextStickerPaths = new Set(getRemoteStickerAssetPaths(next?.stickerPlacementsJson));
-  const previousPhotoPath = normalizeRemoteArtifactPath(previous?.photoPath);
-  const nextPhotoPath = normalizeRemoteArtifactPath(next?.photoPath);
-  const previousPairedVideoPath = normalizeRemoteArtifactPath(previous?.pairedVideoPath);
-  const nextPairedVideoPath = normalizeRemoteArtifactPath(next?.pairedVideoPath);
 
   return {
-    photoPath: previousPhotoPath !== nextPhotoPath ? previousPhotoPath : null,
-    pairedVideoPath: previousPairedVideoPath !== nextPairedVideoPath ? previousPairedVideoPath : null,
+    photoPath: getChangedArtifactPath(previous?.photoPath, next?.photoPath),
+    dualPrimaryPhotoPath: getChangedArtifactPath(
+      previous?.dualPrimaryPhotoPath,
+      next?.dualPrimaryPhotoPath
+    ),
+    dualSecondaryPhotoPath: getChangedArtifactPath(
+      previous?.dualSecondaryPhotoPath,
+      next?.dualSecondaryPhotoPath
+    ),
+    pairedVideoPath: getChangedArtifactPath(previous?.pairedVideoPath, next?.pairedVideoPath),
     stickerPaths: getRemoteStickerAssetPaths(previous?.stickerPlacementsJson).filter(
       (path) => !nextStickerPaths.has(path)
     ),

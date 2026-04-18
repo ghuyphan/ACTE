@@ -11,7 +11,13 @@ import {
   isSupabaseSchemaMismatchError,
   isSupabaseStorageObjectMissingError,
 } from '../utils/supabase';
-import { Note, NoteType } from './database';
+import {
+  Note,
+  NoteCaptureVariant,
+  NoteDualFacing,
+  NoteDualLayoutPreset,
+  NoteType,
+} from './database';
 import { normalizeSavedTextNoteColor } from './noteAppearance';
 import { getNoteDoodle, parseNoteDoodleStrokes } from './noteDoodles';
 import {
@@ -48,6 +54,7 @@ import {
   getRemoteStickerAssetPaths,
   normalizeRemoteArtifactPath,
   normalizeRemoteEntityIds,
+  type RemoteArtifactSnapshot,
 } from './remoteArtifactUtils';
 
 export interface FriendConnection {
@@ -93,6 +100,14 @@ export interface SharedPost {
   text: string;
   photoPath: string | null;
   photoLocalUri: string | null;
+  captureVariant?: NoteCaptureVariant | null;
+  dualPrimaryPhotoPath?: string | null;
+  dualSecondaryPhotoPath?: string | null;
+  dualPrimaryPhotoLocalUri?: string | null;
+  dualSecondaryPhotoLocalUri?: string | null;
+  dualPrimaryFacing?: NoteDualFacing | null;
+  dualSecondaryFacing?: NoteDualFacing | null;
+  dualLayoutPreset?: NoteDualLayoutPreset | null;
   isLivePhoto?: boolean;
   pairedVideoPath?: string | null;
   pairedVideoLocalUri?: string | null;
@@ -160,6 +175,12 @@ interface SharedPostRow {
   type: NoteType;
   text: string;
   photo_path: string | null;
+  capture_variant: NoteCaptureVariant | null;
+  dual_primary_photo_path: string | null;
+  dual_secondary_photo_path: string | null;
+  dual_primary_facing: NoteDualFacing | null;
+  dual_secondary_facing: NoteDualFacing | null;
+  dual_layout_preset: NoteDualLayoutPreset | null;
   is_live_photo: boolean;
   paired_video_path: string | null;
   doodle_strokes_json?: string | null;
@@ -177,12 +198,6 @@ interface SharedPostTombstoneRow {
   post_id: string;
   author_user_id: string;
   deleted_at: string;
-}
-
-interface RemoteArtifactSnapshot {
-  photoPath?: string | null;
-  pairedVideoPath?: string | null;
-  stickerPlacementsJson?: string | null;
 }
 
 const ACTIVE_FRIEND_INVITE_QUERY_LIMIT = 50;
@@ -261,6 +276,8 @@ async function cleanupRemoteArtifacts(
   bucket: string,
   artifacts: {
     photoPath?: string | null;
+    dualPrimaryPhotoPath?: string | null;
+    dualSecondaryPhotoPath?: string | null;
     pairedVideoPath?: string | null;
     stickerPaths?: string[];
   },
@@ -271,6 +288,16 @@ async function cleanupRemoteArtifacts(
   const photoPath = normalizeRemoteArtifactPath(artifacts.photoPath);
   if (photoPath) {
     removals.push(deletePhotoFromStorage(bucket, photoPath));
+  }
+
+  const dualPrimaryPhotoPath = normalizeRemoteArtifactPath(artifacts.dualPrimaryPhotoPath);
+  if (dualPrimaryPhotoPath) {
+    removals.push(deletePhotoFromStorage(bucket, dualPrimaryPhotoPath));
+  }
+
+  const dualSecondaryPhotoPath = normalizeRemoteArtifactPath(artifacts.dualSecondaryPhotoPath);
+  if (dualSecondaryPhotoPath) {
+    removals.push(deletePhotoFromStorage(bucket, dualSecondaryPhotoPath));
   }
 
   const pairedVideoPath = normalizeRemoteArtifactPath(artifacts.pairedVideoPath);
@@ -310,6 +337,8 @@ async function cleanupRemoteArtifactsBestEffort(
   bucket: string,
   artifacts: {
     photoPath?: string | null;
+    dualPrimaryPhotoPath?: string | null;
+    dualSecondaryPhotoPath?: string | null;
     pairedVideoPath?: string | null;
     stickerPaths?: string[];
   }
@@ -321,11 +350,15 @@ async function cleanupRemoteArtifactsBestEffort(
 
 function getReusableSharedPostCleanupArtifacts(artifacts: {
   photoPath?: string | null;
+  dualPrimaryPhotoPath?: string | null;
+  dualSecondaryPhotoPath?: string | null;
   pairedVideoPath?: string | null;
   stickerPaths?: string[];
 }) {
   return {
     photoPath: artifacts.photoPath ?? null,
+    dualPrimaryPhotoPath: artifacts.dualPrimaryPhotoPath ?? null,
+    dualSecondaryPhotoPath: artifacts.dualSecondaryPhotoPath ?? null,
     pairedVideoPath: artifacts.pairedVideoPath ?? null,
     // Shared-post sticker blobs are reusable assets; shared-post cleanup should
     // drop the container refs without deleting the shared underlying asset.
@@ -553,6 +586,128 @@ function normalizeCoordinate(value: number | null | undefined) {
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
 }
 
+function normalizeSharedPostCaptureVariant(
+  noteType: NoteType,
+  value: NoteCaptureVariant | null | undefined
+) {
+  if (noteType !== 'photo') {
+    return null;
+  }
+
+  return value === 'dual' ? 'dual' : value === 'single' ? 'single' : null;
+}
+
+function normalizeSharedPostDualFacing(value: NoteDualFacing | null | undefined) {
+  return value === 'front' || value === 'back' ? value : null;
+}
+
+function normalizeSharedPostDualLayoutPreset(value: NoteDualLayoutPreset | null | undefined) {
+  return value === 'top-left' ? value : null;
+}
+
+function getSharedPostPhotoUri(note: Pick<Note, 'type' | 'content' | 'photoLocalUri'>) {
+  return note.type === 'photo'
+    ? normalizeRemoteArtifactPath(note.photoLocalUri ?? note.content)
+    : null;
+}
+
+function getSharedPostDualPhotoUri(
+  note: Pick<Note, 'type' | 'captureVariant' | 'dualPrimaryPhotoLocalUri' | 'dualSecondaryPhotoLocalUri'>,
+  slot: 'primary' | 'secondary'
+) {
+  if (note.type !== 'photo' || note.captureVariant !== 'dual') {
+    return null;
+  }
+
+  return normalizeRemoteArtifactPath(
+    slot === 'primary' ? note.dualPrimaryPhotoLocalUri : note.dualSecondaryPhotoLocalUri
+  );
+}
+
+function getSharedPostDualPhotoPath(basePath: string, slot: 'primary' | 'secondary') {
+  return `${basePath}.dual-${slot}`;
+}
+
+function getSharedPostRemoteArtifacts(
+  post: Pick<
+    SharedPostRow,
+    | 'photo_path'
+    | 'dual_primary_photo_path'
+    | 'dual_secondary_photo_path'
+    | 'paired_video_path'
+    | 'sticker_placements_json'
+  >
+): RemoteArtifactSnapshot {
+  return {
+    photoPath: post.photo_path ?? null,
+    dualPrimaryPhotoPath: post.dual_primary_photo_path ?? null,
+    dualSecondaryPhotoPath: post.dual_secondary_photo_path ?? null,
+    pairedVideoPath: post.paired_video_path ?? null,
+    stickerPlacementsJson: post.sticker_placements_json ?? null,
+  };
+}
+
+async function uploadSharedPostMediaArtifacts(options: {
+  userId: string;
+  postId: string;
+  note: Note;
+  existingArtifacts?: RemoteArtifactSnapshot | null;
+  allowOverwrite?: boolean;
+}) {
+  const { userId, postId, note, existingArtifacts = null, allowOverwrite = false } = options;
+  const basePath = `${userId}/${postId}`;
+  const currentPhotoUri = getSharedPostPhotoUri(note);
+  const currentDualPrimaryPhotoUri = getSharedPostDualPhotoUri(note, 'primary');
+  const currentDualSecondaryPhotoUri = getSharedPostDualPhotoUri(note, 'secondary');
+  const currentPairedVideoUri =
+    note.type === 'photo' && note.isLivePhoto
+      ? normalizeRemoteArtifactPath(note.pairedVideoLocalUri ?? null)
+      : null;
+
+  return {
+    photoPath:
+      note.type === 'photo'
+        ? existingArtifacts?.photoPath && !currentPhotoUri
+          ? existingArtifacts.photoPath
+          : await uploadPhotoToStorage(
+              SHARED_POST_MEDIA_BUCKET,
+              basePath,
+              currentPhotoUri,
+              { allowOverwrite }
+            )
+        : null,
+    dualPrimaryPhotoPath:
+      currentDualPrimaryPhotoUri
+        ? await uploadPhotoToStorage(
+            SHARED_POST_MEDIA_BUCKET,
+            getSharedPostDualPhotoPath(basePath, 'primary'),
+            currentDualPrimaryPhotoUri,
+            { allowOverwrite }
+          )
+        : null,
+    dualSecondaryPhotoPath:
+      currentDualSecondaryPhotoUri
+        ? await uploadPhotoToStorage(
+            SHARED_POST_MEDIA_BUCKET,
+            getSharedPostDualPhotoPath(basePath, 'secondary'),
+            currentDualSecondaryPhotoUri,
+            { allowOverwrite }
+          )
+        : null,
+    pairedVideoPath:
+      note.type === 'photo' && note.isLivePhoto
+        ? existingArtifacts?.pairedVideoPath && !currentPairedVideoUri
+          ? existingArtifacts.pairedVideoPath
+          : await uploadPairedVideoToStorage(
+              SHARED_POST_MEDIA_BUCKET,
+              getRemotePairedVideoPath(basePath, currentPairedVideoUri),
+              currentPairedVideoUri,
+              { allowOverwrite }
+            )
+        : null,
+  };
+}
+
 function shouldIncludeSharedPostInFeed(post: SharedPost, viewerUid: string, friendUids: Set<string>) {
   if (post.authorUid === viewerUid) {
     return post.audienceUserIds.some((audienceUid) => audienceUid !== viewerUid && friendUids.has(audienceUid));
@@ -745,6 +900,8 @@ function shouldRefreshForSharedPostChange(payload: unknown, userId: string) {
 }
 
 function mapSharedPost(record: SharedPostRow): SharedPost {
+  const captureVariant = normalizeSharedPostCaptureVariant(record.type, record.capture_variant);
+
   return {
     id: record.id,
     authorUid: record.author_user_id,
@@ -755,6 +912,25 @@ function mapSharedPost(record: SharedPostRow): SharedPost {
     text: record.text ?? '',
     photoPath: record.photo_path ?? null,
     photoLocalUri: null,
+    captureVariant,
+    dualPrimaryPhotoPath:
+      captureVariant === 'dual' ? record.dual_primary_photo_path ?? null : null,
+    dualSecondaryPhotoPath:
+      captureVariant === 'dual' ? record.dual_secondary_photo_path ?? null : null,
+    dualPrimaryPhotoLocalUri: null,
+    dualSecondaryPhotoLocalUri: null,
+    dualPrimaryFacing:
+      captureVariant === 'dual'
+        ? normalizeSharedPostDualFacing(record.dual_primary_facing)
+        : null,
+    dualSecondaryFacing:
+      captureVariant === 'dual'
+        ? normalizeSharedPostDualFacing(record.dual_secondary_facing)
+        : null,
+    dualLayoutPreset:
+      captureVariant === 'dual'
+        ? normalizeSharedPostDualLayoutPreset(record.dual_layout_preset)
+        : null,
     isLivePhoto: Boolean(record.is_live_photo && record.paired_video_path),
     pairedVideoPath: record.paired_video_path ?? null,
     pairedVideoLocalUri: null,
@@ -875,7 +1051,7 @@ async function performSharedFeedRefresh(user: AppUser): Promise<SharedFeedSnapsh
     requireSupabase()
       .from('shared_posts')
       .select(
-        'id, author_user_id, author_display_name, author_photo_url_snapshot, audience_user_ids, type, text, photo_path, is_live_photo, paired_video_path, doodle_strokes_json, sticker_placements_json, note_color, place_name, source_note_id, latitude, longitude, created_at, updated_at'
+        'id, author_user_id, author_display_name, author_photo_url_snapshot, audience_user_ids, type, text, photo_path, capture_variant, dual_primary_photo_path, dual_secondary_photo_path, dual_primary_facing, dual_secondary_facing, dual_layout_preset, is_live_photo, paired_video_path, doodle_strokes_json, sticker_placements_json, note_color, place_name, source_note_id, latitude, longitude, created_at, updated_at'
       )
       .contains('audience_user_ids', [user.id])
       .order('created_at', { ascending: false })
@@ -1268,26 +1444,22 @@ export async function createSharedPost(
   const postId = `shared-post-${Date.now()}-${Crypto.randomUUID().slice(0, 8)}`;
   const now = getNowIso();
   let photoPath: string | null = null;
+  let dualPrimaryPhotoPath: string | null = null;
+  let dualSecondaryPhotoPath: string | null = null;
   let pairedVideoPath: string | null = null;
   let stickerPlacementsJson: string | null = null;
 
   try {
-    photoPath =
-      shareableNote.type === 'photo'
-        ? await uploadPhotoToStorage(
-            SHARED_POST_MEDIA_BUCKET,
-            `${user.id}/${postId}`,
-            shareableNote.photoLocalUri ?? shareableNote.content
-          )
-        : null;
-    pairedVideoPath =
-      shareableNote.type === 'photo' && shareableNote.isLivePhoto
-        ? await uploadPairedVideoToStorage(
-            SHARED_POST_MEDIA_BUCKET,
-            getRemotePairedVideoPath(`${user.id}/${postId}`, shareableNote.pairedVideoLocalUri ?? null),
-            shareableNote.pairedVideoLocalUri ?? null
-          )
-        : null;
+    ({
+      photoPath,
+      dualPrimaryPhotoPath,
+      dualSecondaryPhotoPath,
+      pairedVideoPath,
+    } = await uploadSharedPostMediaArtifacts({
+      userId: user.id,
+      postId,
+      note: shareableNote,
+    }));
     const stickerPlacements = parseNoteStickerPlacements(shareableNote.stickerPlacementsJson);
     stickerPlacementsJson =
       stickerPlacements.length > 0
@@ -1314,6 +1486,15 @@ export async function createSharedPost(
           ? formatNoteTextWithEmoji(shareableNote.content.trim(), shareableNote.moodEmoji)
           : shareableNote.caption?.trim() ?? '',
       photo_path: photoPath ?? null,
+      capture_variant: normalizeSharedPostCaptureVariant(
+        shareableNote.type,
+        shareableNote.captureVariant ?? null
+      ),
+      dual_primary_photo_path: dualPrimaryPhotoPath ?? null,
+      dual_secondary_photo_path: dualSecondaryPhotoPath ?? null,
+      dual_primary_facing: normalizeSharedPostDualFacing(shareableNote.dualPrimaryFacing),
+      dual_secondary_facing: normalizeSharedPostDualFacing(shareableNote.dualSecondaryFacing),
+      dual_layout_preset: normalizeSharedPostDualLayoutPreset(shareableNote.dualLayoutPreset),
       is_live_photo: Boolean(shareableNote.isLivePhoto && pairedVideoPath),
       paired_video_path: pairedVideoPath ?? null,
       doodle_strokes_json: shareableNote.doodleStrokesJson ?? null,
@@ -1352,7 +1533,9 @@ export async function createSharedPost(
 
     return {
       ...mapSharedPost(record),
-      photoLocalUri: shareableNote.type === 'photo' ? shareableNote.photoLocalUri ?? shareableNote.content : null,
+      photoLocalUri: getSharedPostPhotoUri(shareableNote),
+      dualPrimaryPhotoLocalUri: getSharedPostDualPhotoUri(shareableNote, 'primary'),
+      dualSecondaryPhotoLocalUri: getSharedPostDualPhotoUri(shareableNote, 'secondary'),
       pairedVideoLocalUri: shareableNote.type === 'photo' ? shareableNote.pairedVideoLocalUri ?? null : null,
       hasStickers: hasStoredStickerPayload(stickerPlacementsJson),
       stickerPlacementsJson,
@@ -1362,6 +1545,8 @@ export async function createSharedPost(
     await cleanupRemoteArtifacts(SHARED_POST_MEDIA_BUCKET, {
       ...getReusableSharedPostCleanupArtifacts({
         photoPath,
+        dualPrimaryPhotoPath,
+        dualSecondaryPhotoPath,
         pairedVideoPath,
         stickerPaths: getRemoteStickerAssetPaths(stickerPlacementsJson),
       }),
@@ -1381,7 +1566,7 @@ export async function updateSharedPost(
   const { data: existing, error: fetchError } = await supabase
     .from('shared_posts')
     .select(
-      'id, author_user_id, author_display_name, author_photo_url_snapshot, audience_user_ids, type, text, photo_path, is_live_photo, paired_video_path, doodle_strokes_json, sticker_placements_json, note_color, place_name, source_note_id, latitude, longitude, created_at, updated_at'
+      'id, author_user_id, author_display_name, author_photo_url_snapshot, audience_user_ids, type, text, photo_path, capture_variant, dual_primary_photo_path, dual_secondary_photo_path, dual_primary_facing, dual_secondary_facing, dual_layout_preset, is_live_photo, paired_video_path, doodle_strokes_json, sticker_placements_json, note_color, place_name, source_note_id, latitude, longitude, created_at, updated_at'
     )
     .eq('id', postId)
     .eq('author_user_id', user.id)
@@ -1396,40 +1581,26 @@ export async function updateSharedPost(
     throw new Error('Shared post not found.');
   }
 
-  const currentArtifacts: RemoteArtifactSnapshot = {
-    photoPath: current.photo_path ?? null,
-    pairedVideoPath: current.paired_video_path ?? null,
-    stickerPlacementsJson: current.sticker_placements_json ?? null,
-  };
+  const currentArtifacts = getSharedPostRemoteArtifacts(current);
   let nextPhotoPath: string | null = null;
+  let nextDualPrimaryPhotoPath: string | null = null;
+  let nextDualSecondaryPhotoPath: string | null = null;
   let nextPairedVideoPath: string | null = null;
   let nextStickerPlacementsJson: string | null = null;
 
   try {
-    const currentPhotoUri = normalizeRemoteArtifactPath(note.photoLocalUri ?? note.content);
-    const currentPairedVideoUri = normalizeRemoteArtifactPath(shareableNote.pairedVideoLocalUri ?? null);
-    nextPhotoPath =
-      shareableNote.type === 'photo'
-        ? current.photo_path && !currentPhotoUri
-          ? current.photo_path
-          : await uploadPhotoToStorage(
-            SHARED_POST_MEDIA_BUCKET,
-            `${user.id}/${postId}`,
-            shareableNote.photoLocalUri ?? shareableNote.content,
-            { allowOverwrite: true }
-          )
-        : null;
-    nextPairedVideoPath =
-      shareableNote.type === 'photo' && shareableNote.isLivePhoto
-        ? current.paired_video_path && !currentPairedVideoUri
-          ? current.paired_video_path
-          : await uploadPairedVideoToStorage(
-            SHARED_POST_MEDIA_BUCKET,
-            getRemotePairedVideoPath(`${user.id}/${postId}`, shareableNote.pairedVideoLocalUri ?? null),
-            shareableNote.pairedVideoLocalUri ?? null,
-            { allowOverwrite: true }
-          )
-        : null;
+    ({
+      photoPath: nextPhotoPath,
+      dualPrimaryPhotoPath: nextDualPrimaryPhotoPath,
+      dualSecondaryPhotoPath: nextDualSecondaryPhotoPath,
+      pairedVideoPath: nextPairedVideoPath,
+    } = await uploadSharedPostMediaArtifacts({
+      userId: user.id,
+      postId,
+      note: shareableNote,
+      existingArtifacts: currentArtifacts,
+      allowOverwrite: true,
+    }));
     const stickerPlacements = parseNoteStickerPlacements(shareableNote.stickerPlacementsJson);
     nextStickerPlacementsJson =
       stickerPlacements.length > 0
@@ -1453,6 +1624,8 @@ export async function updateSharedPost(
         buildNewRemoteArtifacts(
           {
             photoPath: nextPhotoPath,
+            dualPrimaryPhotoPath: nextDualPrimaryPhotoPath,
+            dualSecondaryPhotoPath: nextDualSecondaryPhotoPath,
             pairedVideoPath: nextPairedVideoPath,
             stickerPlacementsJson: nextStickerPlacementsJson,
           },
@@ -1471,6 +1644,15 @@ export async function updateSharedPost(
           ? formatNoteTextWithEmoji(shareableNote.content.trim(), shareableNote.moodEmoji)
           : shareableNote.caption?.trim() ?? '',
       photo_path: nextPhotoPath ?? null,
+      capture_variant: normalizeSharedPostCaptureVariant(
+        shareableNote.type,
+        shareableNote.captureVariant ?? null
+      ),
+      dual_primary_photo_path: nextDualPrimaryPhotoPath ?? null,
+      dual_secondary_photo_path: nextDualSecondaryPhotoPath ?? null,
+      dual_primary_facing: normalizeSharedPostDualFacing(shareableNote.dualPrimaryFacing),
+      dual_secondary_facing: normalizeSharedPostDualFacing(shareableNote.dualSecondaryFacing),
+      dual_layout_preset: normalizeSharedPostDualLayoutPreset(shareableNote.dualLayoutPreset),
       is_live_photo: Boolean(shareableNote.isLivePhoto && nextPairedVideoPath),
       paired_video_path: nextPairedVideoPath ?? null,
       doodle_strokes_json: shareableNote.doodleStrokesJson ?? null,
@@ -1492,6 +1674,8 @@ export async function updateSharedPost(
         buildNewRemoteArtifacts(
           {
             photoPath: nextPhotoPath,
+            dualPrimaryPhotoPath: nextDualPrimaryPhotoPath,
+            dualSecondaryPhotoPath: nextDualSecondaryPhotoPath,
             pairedVideoPath: nextPairedVideoPath,
             stickerPlacementsJson: nextStickerPlacementsJson,
           },
@@ -1511,6 +1695,8 @@ export async function updateSharedPost(
     getReusableSharedPostCleanupArtifacts(
       buildRemovedRemoteArtifacts(currentArtifacts, {
         photoPath: nextPhotoPath,
+        dualPrimaryPhotoPath: nextDualPrimaryPhotoPath,
+        dualSecondaryPhotoPath: nextDualSecondaryPhotoPath,
         pairedVideoPath: nextPairedVideoPath,
         stickerPlacementsJson: nextStickerPlacementsJson,
       })

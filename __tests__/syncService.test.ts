@@ -25,6 +25,13 @@ type NoteRecord = {
   photoLocalUri: string | null;
   photoSyncedLocalUri?: string | null;
   photoRemoteBase64: string | null;
+  captureVariant?: 'single' | 'dual' | null;
+  dualPrimaryPhotoLocalUri?: string | null;
+  dualSecondaryPhotoLocalUri?: string | null;
+  dualPrimaryFacing?: 'front' | 'back' | null;
+  dualSecondaryFacing?: 'front' | 'back' | null;
+  dualLayoutPreset?: 'top-left' | null;
+  dualComposedPhotoLocalUri?: string | null;
   isLivePhoto?: boolean;
   pairedVideoLocalUri?: string | null;
   pairedVideoSyncedLocalUri?: string | null;
@@ -1023,6 +1030,19 @@ function createLivePhotoNote(id: string, extension: '.mov' | '.mp4' = '.mov'): N
   };
 }
 
+function createDualPhotoNote(id: string): NoteRecord {
+  return {
+    ...createPhotoNote(id),
+    captureVariant: 'dual',
+    dualPrimaryPhotoLocalUri: `file:///photos/${id}-primary.jpg`,
+    dualSecondaryPhotoLocalUri: `file:///photos/${id}-secondary.jpg`,
+    dualPrimaryFacing: 'back',
+    dualSecondaryFacing: 'front',
+    dualLayoutPreset: 'top-left',
+    dualComposedPhotoLocalUri: `file:///photos/${id}.jpg`,
+  };
+}
+
 function createRemoteStickerPlacementsJson(remotePath: string) {
   return JSON.stringify([
     {
@@ -1402,6 +1422,42 @@ describe('syncService', () => {
     );
   });
 
+  it('preserves dual-capture media metadata when syncing a local note', async () => {
+    localNotesStore = [createDualPhotoNote('note-dual')];
+
+    const result = await syncNotes(syncUser, localNotesStore, { mode: 'full' });
+
+    expect(result.status).toBe('success');
+    expect(mockUploadPhotoToStorage).toHaveBeenCalledWith(
+      'note-media',
+      'user-1/note-dual.dual-primary',
+      'file:///photos/note-dual-primary.jpg'
+    );
+    expect(mockUploadPhotoToStorage).toHaveBeenCalledWith(
+      'note-media',
+      'user-1/note-dual.dual-secondary',
+      'file:///photos/note-dual-secondary.jpg'
+    );
+    expect(mockRemoteNotes.get('note-dual')).toEqual(
+      expect.objectContaining({
+        capture_variant: 'dual',
+        dual_primary_photo_path: 'user-1/note-dual.dual-primary',
+        dual_secondary_photo_path: 'user-1/note-dual.dual-secondary',
+        dual_primary_facing: 'back',
+        dual_secondary_facing: 'front',
+        dual_layout_preset: 'top-left',
+      })
+    );
+    expect(mockUpsertNote).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 'note-dual',
+        captureVariant: 'dual',
+        dualPrimaryPhotoLocalUri: 'file:///photos/note-dual-primary.jpg',
+        dualSecondaryPhotoLocalUri: 'file:///photos/note-dual-secondary.jpg',
+      })
+    );
+  });
+
   it('reuses existing synced photo and motion paths when local media did not change', async () => {
     localNotesStore = [
       {
@@ -1639,6 +1695,66 @@ describe('syncService', () => {
     expect(result.status).toBe('success');
     expect(mockDownloadPhotoFromStorage).not.toHaveBeenCalled();
     expect(mockUpsertNote).not.toHaveBeenCalled();
+  });
+
+  it('imports remote dual-capture notes with both source photos intact', async () => {
+    await AsyncStorage.setItem('sync.lastRemoteCursor.user-1', '2026-03-09T00:00:00.000Z');
+    mockRemoteNotes.set('note-remote-dual', {
+      id: 'note-remote-dual',
+      user_id: 'user-1',
+      type: 'photo',
+      content: '',
+      photo_path: 'user-1/note-remote-dual',
+      capture_variant: 'dual',
+      dual_primary_photo_path: 'user-1/note-remote-dual.dual-primary',
+      dual_secondary_photo_path: 'user-1/note-remote-dual.dual-secondary',
+      dual_primary_facing: 'back',
+      dual_secondary_facing: 'front',
+      dual_layout_preset: 'top-left',
+      has_doodle: false,
+      doodle_strokes_json: null,
+      has_stickers: false,
+      sticker_placements_json: null,
+      location_name: 'Da Nang',
+      prompt_id: null,
+      prompt_text_snapshot: null,
+      prompt_answer: null,
+      mood_emoji: null,
+      note_color: null,
+      latitude: 16.06,
+      longitude: 108.22,
+      radius: 150,
+      is_favorite: false,
+      created_at: '2026-03-10T00:00:00.000Z',
+      updated_at: '2026-03-11T00:00:00.000Z',
+      synced_at: '2026-03-11T00:00:00.000Z',
+    });
+
+    const result = await syncNotes(syncUser, [], { mode: 'incremental' });
+
+    expect(result.status).toBe('success');
+    expect(mockDownloadPhotoFromStorage).toHaveBeenCalledWith(
+      'note-media',
+      'user-1/note-remote-dual.dual-primary',
+      'note-remote-dual-dual-primary'
+    );
+    expect(mockDownloadPhotoFromStorage).toHaveBeenCalledWith(
+      'note-media',
+      'user-1/note-remote-dual.dual-secondary',
+      'note-remote-dual-dual-secondary'
+    );
+    expect(mockUpsertNote).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 'note-remote-dual',
+        captureVariant: 'dual',
+        dualPrimaryPhotoLocalUri: 'file:///synced/user-1/note-remote-dual.dual-primary',
+        dualSecondaryPhotoLocalUri: 'file:///synced/user-1/note-remote-dual.dual-secondary',
+        dualPrimaryFacing: 'back',
+        dualSecondaryFacing: 'front',
+        dualLayoutPreset: 'top-left',
+        dualComposedPhotoLocalUri: 'file:///synced/user-1/note-remote-dual',
+      })
+    );
   });
 
   it('skips a missing remote photo object and still completes the first full sync', async () => {

@@ -28,6 +28,8 @@ export interface WidgetCandidate {
   photoLocalUri: string | null;
   isLivePhoto: boolean;
   isDualCapture: boolean;
+  dualPrimaryPhotoPath: string | null;
+  dualSecondaryPhotoPath: string | null;
   dualPrimaryPhotoLocalUri: string | null;
   dualSecondaryPhotoLocalUri: string | null;
   dualLayoutPreset: 'top-left' | null;
@@ -129,6 +131,8 @@ export function createTextFallbackWidgetCandidate(candidate: WidgetCandidate): W
     photoLocalUri: null,
     isLivePhoto: false,
     isDualCapture: false,
+    dualPrimaryPhotoPath: null,
+    dualSecondaryPhotoPath: null,
     dualPrimaryPhotoLocalUri: null,
     dualSecondaryPhotoLocalUri: null,
     dualLayoutPreset: null,
@@ -146,6 +150,8 @@ export function createPersonalWidgetCandidate(note: Note): WidgetCandidate {
     photoLocalUri: getNotePhotoUri(note),
     isLivePhoto: Boolean(note.type === 'photo' && note.isLivePhoto),
     isDualCapture: Boolean(note.type === 'photo' && note.captureVariant === 'dual'),
+    dualPrimaryPhotoPath: null,
+    dualSecondaryPhotoPath: null,
     dualPrimaryPhotoLocalUri:
       note.type === 'photo' && note.captureVariant === 'dual'
         ? note.dualPrimaryPhotoLocalUri ?? null
@@ -185,10 +191,27 @@ export function createSharedWidgetCandidate(post: SharedPost): WidgetCandidate {
     photoPath: post.photoPath ?? null,
     photoLocalUri: post.photoLocalUri,
     isLivePhoto: Boolean(post.type === 'photo' && post.isLivePhoto),
-    isDualCapture: false,
-    dualPrimaryPhotoLocalUri: null,
-    dualSecondaryPhotoLocalUri: null,
-    dualLayoutPreset: null,
+    isDualCapture: Boolean(post.type === 'photo' && post.captureVariant === 'dual'),
+    dualPrimaryPhotoPath:
+      post.type === 'photo' && post.captureVariant === 'dual'
+        ? post.dualPrimaryPhotoPath ?? null
+        : null,
+    dualSecondaryPhotoPath:
+      post.type === 'photo' && post.captureVariant === 'dual'
+        ? post.dualSecondaryPhotoPath ?? null
+        : null,
+    dualPrimaryPhotoLocalUri:
+      post.type === 'photo' && post.captureVariant === 'dual'
+        ? post.dualPrimaryPhotoLocalUri ?? null
+        : null,
+    dualSecondaryPhotoLocalUri:
+      post.type === 'photo' && post.captureVariant === 'dual'
+        ? post.dualSecondaryPhotoLocalUri ?? null
+        : null,
+    dualLayoutPreset:
+      post.type === 'photo' && post.captureVariant === 'dual'
+        ? post.dualLayoutPreset ?? 'top-left'
+        : null,
     locationName: post.placeName,
     latitude: null,
     longitude: null,

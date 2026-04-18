@@ -28,9 +28,17 @@ interface SharedPostRow {
   text: string;
   photo_path: string | null;
   photo_local_uri: string | null;
+  capture_variant: SharedPost['captureVariant'];
+  dual_primary_photo_path: string | null;
+  dual_secondary_photo_path: string | null;
+  dual_primary_photo_local_uri: string | null;
+  dual_secondary_photo_local_uri: string | null;
   is_live_photo: number;
   paired_video_path: string | null;
   paired_video_local_uri: string | null;
+  dual_primary_facing: SharedPost['dualPrimaryFacing'];
+  dual_secondary_facing: SharedPost['dualSecondaryFacing'];
+  dual_layout_preset: SharedPost['dualLayoutPreset'];
   doodle_strokes_json: string | null;
   sticker_placements_json: string | null;
   note_color: string | null;
@@ -80,9 +88,17 @@ function rowToSharedPost(row: SharedPostRow): SharedPost {
     text: row.text,
     photoPath: row.photo_path,
     photoLocalUri: row.photo_local_uri,
+    captureVariant: row.capture_variant ?? null,
+    dualPrimaryPhotoPath: row.dual_primary_photo_path,
+    dualSecondaryPhotoPath: row.dual_secondary_photo_path,
+    dualPrimaryPhotoLocalUri: row.dual_primary_photo_local_uri,
+    dualSecondaryPhotoLocalUri: row.dual_secondary_photo_local_uri,
     isLivePhoto: row.is_live_photo === 1,
     pairedVideoPath: row.paired_video_path,
     pairedVideoLocalUri: row.paired_video_local_uri,
+    dualPrimaryFacing: row.dual_primary_facing ?? null,
+    dualSecondaryFacing: row.dual_secondary_facing ?? null,
+    dualLayoutPreset: row.dual_layout_preset ?? null,
     doodleStrokesJson: row.doodle_strokes_json,
     hasStickers: hasStoredStickerPayload(row.sticker_placements_json),
     stickerPlacementsJson: row.sticker_placements_json,
@@ -227,9 +243,17 @@ export async function replaceCachedSharedPosts(userUid: string, posts: SharedPos
           text,
           photo_path,
           photo_local_uri,
+          capture_variant,
+          dual_primary_photo_path,
+          dual_secondary_photo_path,
+          dual_primary_photo_local_uri,
+          dual_secondary_photo_local_uri,
           is_live_photo,
           paired_video_path,
           paired_video_local_uri,
+          dual_primary_facing,
+          dual_secondary_facing,
+          dual_layout_preset,
           doodle_strokes_json,
           sticker_placements_json,
           note_color,
@@ -240,7 +264,7 @@ export async function replaceCachedSharedPosts(userUid: string, posts: SharedPos
           created_at,
           updated_at
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         userUid,
         post.id,
         post.authorUid,
@@ -251,9 +275,17 @@ export async function replaceCachedSharedPosts(userUid: string, posts: SharedPos
         post.text,
         post.photoPath,
         post.photoLocalUri,
+        post.captureVariant ?? null,
+        post.dualPrimaryPhotoPath ?? null,
+        post.dualSecondaryPhotoPath ?? null,
+        post.dualPrimaryPhotoLocalUri ?? null,
+        post.dualSecondaryPhotoLocalUri ?? null,
         post.isLivePhoto ? 1 : 0,
         post.pairedVideoPath ?? null,
         post.pairedVideoLocalUri ?? null,
+        post.dualPrimaryFacing ?? null,
+        post.dualSecondaryFacing ?? null,
+        post.dualLayoutPreset ?? null,
         post.doodleStrokesJson ?? null,
         post.stickerPlacementsJson ?? null,
         post.noteColor ?? null,
@@ -454,9 +486,17 @@ export async function cacheSharedFeedSnapshot(
           text,
           photo_path,
           photo_local_uri,
+          capture_variant,
+          dual_primary_photo_path,
+          dual_secondary_photo_path,
+          dual_primary_photo_local_uri,
+          dual_secondary_photo_local_uri,
           is_live_photo,
           paired_video_path,
           paired_video_local_uri,
+          dual_primary_facing,
+          dual_secondary_facing,
+          dual_layout_preset,
           doodle_strokes_json,
           sticker_placements_json,
           note_color,
@@ -467,7 +507,7 @@ export async function cacheSharedFeedSnapshot(
           created_at,
           updated_at
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         userUid,
         post.id,
         post.authorUid,
@@ -478,9 +518,17 @@ export async function cacheSharedFeedSnapshot(
         post.text,
         post.photoPath,
         post.photoLocalUri,
+        post.captureVariant ?? null,
+        post.dualPrimaryPhotoPath ?? null,
+        post.dualSecondaryPhotoPath ?? null,
+        post.dualPrimaryPhotoLocalUri ?? null,
+        post.dualSecondaryPhotoLocalUri ?? null,
         post.isLivePhoto ? 1 : 0,
         post.pairedVideoPath ?? null,
         post.pairedVideoLocalUri ?? null,
+        post.dualPrimaryFacing ?? null,
+        post.dualSecondaryFacing ?? null,
+        post.dualLayoutPreset ?? null,
         post.doodleStrokesJson ?? null,
         post.stickerPlacementsJson ?? null,
         post.noteColor ?? null,
