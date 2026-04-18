@@ -1004,6 +1004,8 @@ describe('CaptureCard doodle handle', () => {
     });
 
     expect(view.getByTestId('mock-camera-view')).toBeTruthy();
+    expect(view.getByTestId('capture-dual-step-indicator')).toBeTruthy();
+    expect(view.getByText('1/2')).toBeTruthy();
     expect(view.queryByTestId('mock-dual-camera-view')).toBeNull();
   });
 
@@ -1024,7 +1026,10 @@ describe('CaptureCard doodle handle', () => {
 
     expect(view.getByTestId('capture-dual-reference-photo')).toBeTruthy();
     expect(view.getByTestId('capture-dual-live-inset')).toBeTruthy();
-    expect(view.getByText('Shot 2: Front')).toBeTruthy();
+    expect(view.getByTestId('capture-dual-step-indicator')).toBeTruthy();
+    expect(view.getByText('2/2')).toBeTruthy();
+    expect(view.getByText('Front')).toBeTruthy();
+    expect(view.queryByText('Shot 2: Front')).toBeNull();
 
     fireEvent.press(view.getByLabelText('Start over'));
 

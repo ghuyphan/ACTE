@@ -1,7 +1,17 @@
 import { Dimensions, Platform, StyleSheet } from 'react-native';
 import { STICKER_ARTBOARD_FRAME } from '../../../constants/doodleLayout';
 import { Layout, Radii, Shadows, Sheet, Typography } from '../../../constants/theme';
-import { getDualCameraInsetMetrics } from './dualCameraLayout';
+import {
+  DUAL_CAMERA_INSET_FRAME_COLOR,
+  DUAL_CAMERA_INSET_FROST_COLOR,
+  DUAL_CAMERA_INSET_PREVIEW_SCRIM_COLOR,
+  DUAL_CAMERA_INSET_SHELL_BACKGROUND,
+  DUAL_CAMERA_INSET_SHADOW_COLOR,
+  DUAL_CAMERA_INSET_SHADOW_OFFSET,
+  DUAL_CAMERA_INSET_SHADOW_OPACITY,
+  DUAL_CAMERA_INSET_SHADOW_RADIUS,
+  getDualCameraInsetMetrics,
+} from './dualCameraLayout';
 
 const { width } = Dimensions.get('window');
 
@@ -390,18 +400,17 @@ export const styles = StyleSheet.create({
     borderRadius: DUAL_CAMERA_INSET_RADIUS,
     borderCurve: 'continuous',
     borderWidth: DUAL_CAMERA_INSET_BORDER_WIDTH,
+    borderColor: DUAL_CAMERA_INSET_FRAME_COLOR,
+    backgroundColor: DUAL_CAMERA_INSET_SHELL_BACKGROUND,
     overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 4,
     zIndex: 9,
-    shadowColor: '#000000',
-    shadowOpacity: 0.2,
-    shadowRadius: 16,
-    shadowOffset: {
-      width: 0,
-      height: 8,
-    },
+    shadowColor: DUAL_CAMERA_INSET_SHADOW_COLOR,
+    shadowOpacity: DUAL_CAMERA_INSET_SHADOW_OPACITY,
+    shadowRadius: DUAL_CAMERA_INSET_SHADOW_RADIUS,
+    shadowOffset: DUAL_CAMERA_INSET_SHADOW_OFFSET,
     elevation: 10,
   },
   cameraDualLiveInset: {
@@ -413,20 +422,23 @@ export const styles = StyleSheet.create({
     borderRadius: DUAL_CAMERA_INSET_RADIUS,
     borderCurve: 'continuous',
     borderWidth: DUAL_CAMERA_INSET_BORDER_WIDTH,
+    borderColor: DUAL_CAMERA_INSET_FRAME_COLOR,
+    backgroundColor: DUAL_CAMERA_INSET_SHELL_BACKGROUND,
     overflow: 'hidden',
     zIndex: 9,
-    shadowColor: '#000000',
-    shadowOpacity: 0.2,
-    shadowRadius: 16,
-    shadowOffset: {
-      width: 0,
-      height: 8,
-    },
+    shadowColor: DUAL_CAMERA_INSET_SHADOW_COLOR,
+    shadowOpacity: DUAL_CAMERA_INSET_SHADOW_OPACITY,
+    shadowRadius: DUAL_CAMERA_INSET_SHADOW_RADIUS,
+    shadowOffset: DUAL_CAMERA_INSET_SHADOW_OFFSET,
     elevation: 10,
+  },
+  cameraDualLiveInsetFrost: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: DUAL_CAMERA_INSET_FROST_COLOR,
   },
   cameraDualPreviewInsetScrim: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(255,255,255,0.08)',
+    backgroundColor: DUAL_CAMERA_INSET_PREVIEW_SCRIM_COLOR,
   },
   cameraDualPreviewInsetTitle: {
     fontSize: 15,
@@ -728,6 +740,52 @@ export const styles = StyleSheet.create({
     width: '100%',
     position: 'relative',
     alignItems: 'center',
+  },
+  dualCaptureStepIndicator: {
+    minHeight: 30,
+    borderRadius: 15,
+    borderCurve: 'continuous',
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  dualCaptureStepPips: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  dualCaptureStepPip: {
+    width: 7,
+    height: 7,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255,255,255,0.26)',
+  },
+  dualCaptureStepPipActive: {
+    backgroundColor: '#FFFFFF',
+    width: 8,
+    height: 8,
+  },
+  dualCaptureStepLabel: {
+    fontSize: 12,
+    lineHeight: 14,
+    fontWeight: '800',
+    fontFamily: 'Noto Sans',
+  },
+  dualCaptureFacingWrap: {
+    paddingLeft: 8,
+    marginLeft: 2,
+    borderLeftWidth: StyleSheet.hairlineWidth,
+    borderLeftColor: 'rgba(255,255,255,0.22)',
+  },
+  dualCaptureFacingText: {
+    fontSize: 12,
+    lineHeight: 14,
+    fontWeight: '700',
+    fontFamily: 'Noto Sans',
   },
   belowCardShutterRow: {
     flexDirection: 'row',

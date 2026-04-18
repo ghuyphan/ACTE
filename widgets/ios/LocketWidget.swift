@@ -24,8 +24,11 @@ private struct LocketWidgetPayload {
     let noteCount: Int
     let nearbyPlacesCount: Int
     let isLivePhoto: Bool
+    let isDualCapture: Bool
     let backgroundImageUrl: String?
     let backgroundImageBase64: String?
+    let dualInsetImageUrl: String?
+    let dualLayoutPreset: String?
     let backgroundGradientStartColor: String?
     let backgroundGradientEndColor: String?
     let hasDoodle: Bool
@@ -61,8 +64,11 @@ private struct LocketWidgetPayload {
         noteCount: 0,
         nearbyPlacesCount: 0,
         isLivePhoto: false,
+        isDualCapture: false,
         backgroundImageUrl: nil,
         backgroundImageBase64: nil,
+        dualInsetImageUrl: nil,
+        dualLayoutPreset: nil,
         backgroundGradientStartColor: nil,
         backgroundGradientEndColor: nil,
         hasDoodle: false,
@@ -99,8 +105,11 @@ private struct LocketWidgetPayload {
         noteCount: Int,
         nearbyPlacesCount: Int,
         isLivePhoto: Bool,
+        isDualCapture: Bool,
         backgroundImageUrl: String?,
         backgroundImageBase64: String?,
+        dualInsetImageUrl: String?,
+        dualLayoutPreset: String?,
         backgroundGradientStartColor: String?,
         backgroundGradientEndColor: String?,
         hasDoodle: Bool,
@@ -135,8 +144,11 @@ private struct LocketWidgetPayload {
         self.noteCount = noteCount
         self.nearbyPlacesCount = nearbyPlacesCount
         self.isLivePhoto = isLivePhoto
+        self.isDualCapture = isDualCapture
         self.backgroundImageUrl = backgroundImageUrl
         self.backgroundImageBase64 = backgroundImageBase64
+        self.dualInsetImageUrl = dualInsetImageUrl
+        self.dualLayoutPreset = dualLayoutPreset
         self.backgroundGradientStartColor = backgroundGradientStartColor
         self.backgroundGradientEndColor = backgroundGradientEndColor
         self.hasDoodle = hasDoodle
@@ -175,8 +187,11 @@ private struct LocketWidgetPayload {
         noteCount = LocketWidgetPayload.intValue(payload["noteCount"])
         nearbyPlacesCount = LocketWidgetPayload.intValue(payload["nearbyPlacesCount"])
         isLivePhoto = LocketWidgetPayload.boolValue(payload["isLivePhoto"])
+        isDualCapture = LocketWidgetPayload.boolValue(payload["isDualCapture"])
         backgroundImageUrl = LocketWidgetPayload.optionalStringValue(payload["backgroundImageUrl"])
         backgroundImageBase64 = LocketWidgetPayload.optionalStringValue(payload["backgroundImageBase64"])
+        dualInsetImageUrl = LocketWidgetPayload.optionalStringValue(payload["dualInsetImageUrl"])
+        dualLayoutPreset = LocketWidgetPayload.optionalStringValue(payload["dualLayoutPreset"])
         backgroundGradientStartColor = LocketWidgetPayload.optionalStringValue(payload["backgroundGradientStartColor"])
         backgroundGradientEndColor = LocketWidgetPayload.optionalStringValue(payload["backgroundGradientEndColor"])
         hasDoodle = LocketWidgetPayload.boolValue(payload["hasDoodle"])
@@ -1017,6 +1032,19 @@ private func loadWidgetImageFromPath(_ path: String) -> UIImage? {
     return nil
 }
 
+private struct DualWidgetInsetMetrics {
+    let insetSize: CGFloat
+    let insetMargin: CGFloat
+    let insetRadius: CGFloat
+    let insetBorderWidth: CGFloat
+}
+
+private struct WidgetChromePillMetrics {
+    let horizontalPadding: CGFloat
+    let verticalPadding: CGFloat
+    let shadowOpacity: Double
+}
+
 private struct LocketWidgetEntry: TimelineEntry {
     let date: Date
     let payload: LocketWidgetPayload
@@ -1182,6 +1210,19 @@ private struct LocketWidgetEntryView: View {
         return nil
     }
 
+    private var resolvedDualInsetImage: UIImage? {
+        guard payload.isDualCapture else {
+            return nil
+        }
+
+        if let dualInsetImageUrl = payload.dualInsetImageUrl,
+           let image = loadImage(fromPath: dualInsetImageUrl) {
+            return image
+        }
+
+        return nil
+    }
+
     private var resolvedAuthorAvatar: UIImage? {
         if let authorAvatarImageUrl = payload.authorAvatarImageUrl,
            let image = loadImage(fromPath: authorAvatarImageUrl) {
@@ -1198,6 +1239,41 @@ private struct LocketWidgetEntryView: View {
 
     private var hasPhotoBackground: Bool {
         resolvedImage != nil && !payload.isIdleState
+    }
+
+    private var shouldShowDualCaptureInset: Bool {
+        !payload.isIdleState &&
+        payload.noteType == "photo" &&
+        payload.isDualCapture &&
+        hasPhotoBackground &&
+        resolvedDualInsetImage != nil
+    }
+
+    private var dualCaptureInsetMetrics: DualWidgetInsetMetrics {
+        if isLarge {
+            return DualWidgetInsetMetrics(
+                insetSize: 48,
+                insetMargin: 14,
+                insetRadius: 14,
+                insetBorderWidth: 1.25
+            )
+        }
+
+        if isMedium {
+            return DualWidgetInsetMetrics(
+                insetSize: 42,
+                insetMargin: 12,
+                insetRadius: 13,
+                insetBorderWidth: 1.25
+            )
+        }
+
+        return DualWidgetInsetMetrics(
+            insetSize: 36,
+            insetMargin: 10,
+            insetRadius: 12,
+            insetBorderWidth: 1.25
+        )
     }
 
     private var doodleStrokes: [LocketWidgetDoodleStroke] {
@@ -1684,7 +1760,7 @@ private struct LocketWidgetEntryView: View {
 
     private var floatingLocationChipBackgroundColor: Color {
         hasPhotoBackground
-            ? Color.black.opacity(0.50)
+            ? Color.black.opacity(0.46)
             : Color(red: 0.929, green: 0.910, blue: 0.867).opacity(0.94) // warm ivory pill
     }
 
@@ -1693,7 +1769,7 @@ private struct LocketWidgetEntryView: View {
             return Color(red: 0.27, green: 0.20, blue: 0.15).opacity(0.58)
         }
         return hasPhotoBackground
-            ? Color.black.opacity(0.50)
+            ? Color.black.opacity(0.46)
             : Color(red: 0.929, green: 0.910, blue: 0.867).opacity(0.94)
     }
 
@@ -1707,17 +1783,21 @@ private struct LocketWidgetEntryView: View {
     }
 
     private var countBadge: some View {
+        let metrics = floatingChromePillMetrics
+
         Text(countLabel)
             .font(.custom("Noto Sans SemiBold", size: isLarge ? 11 : 10))
             .foregroundStyle(badgeForegroundColor)
-            .padding(.horizontal, isLarge ? 12 : 11)
-            .padding(.vertical, isLarge ? 7 : 6)
+            .padding(.horizontal, metrics.horizontalPadding)
+            .padding(.vertical, metrics.verticalPadding)
             .background(badgeBackgroundColor)
             .clipShape(Capsule())
-            .shadow(color: Color.black.opacity(hasPhotoBackground ? 0.16 : 0.08), radius: 10, x: 0, y: 4)
+            .shadow(color: Color.black.opacity(metrics.shadowOpacity), radius: 10, x: 0, y: 4)
     }
 
     private var floatingLocationChip: some View {
+        let metrics = floatingChromePillMetrics
+
         HStack(spacing: 5) {
             Image(systemName: "mappin.and.ellipse")
                 .font(.system(size: 10, weight: .semibold))
@@ -1730,17 +1810,29 @@ private struct LocketWidgetEntryView: View {
                 .minimumScaleFactor(0.84)
                 .frame(maxWidth: isLarge ? 170 : (isMedium ? 144 : 124), alignment: .leading)
         }
-        .padding(.horizontal, 11)
-        .padding(.vertical, 6)
+        .padding(.horizontal, metrics.horizontalPadding)
+        .padding(.vertical, metrics.verticalPadding)
         .background(floatingLocationChipBackgroundColor)
         .clipShape(Capsule())
-        .shadow(color: Color.black.opacity(hasPhotoBackground ? 0.18 : 0.08), radius: 10, x: 0, y: 4)
+        .shadow(color: Color.black.opacity(metrics.shadowOpacity), radius: 10, x: 0, y: 4)
     }
 
     private var authorChipBackgroundColor: Color {
         hasPhotoBackground
-            ? Color.black.opacity(0.50)
+            ? Color.black.opacity(0.46)
             : Color(red: 0.929, green: 0.910, blue: 0.867).opacity(0.94)
+    }
+
+    private var floatingChromePillMetrics: WidgetChromePillMetrics {
+        if isLarge {
+            return WidgetChromePillMetrics(horizontalPadding: 12, verticalPadding: 7, shadowOpacity: hasPhotoBackground ? 0.16 : 0.08)
+        }
+
+        return WidgetChromePillMetrics(horizontalPadding: 11, verticalPadding: 6, shadowOpacity: hasPhotoBackground ? 0.16 : 0.08)
+    }
+
+    private var compactChromePillMetrics: WidgetChromePillMetrics {
+        WidgetChromePillMetrics(horizontalPadding: 8, verticalPadding: 5, shadowOpacity: hasPhotoBackground ? 0.16 : 0.08)
     }
 
     private var authorChipForegroundColor: Color {
@@ -1750,6 +1842,8 @@ private struct LocketWidgetEntryView: View {
     }
 
     private var authorChip: some View {
+        let metrics = compactChromePillMetrics
+
         HStack(spacing: 6) {
             if let authorAvatar = resolvedAuthorAvatar {
                 Image(uiImage: authorAvatar)
@@ -1775,14 +1869,16 @@ private struct LocketWidgetEntryView: View {
                     .frame(maxWidth: isLarge ? 112 : 90, alignment: .leading)
             }
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 5)
+        .padding(.horizontal, metrics.horizontalPadding)
+        .padding(.vertical, metrics.verticalPadding)
         .background(authorChipBackgroundColor)
         .clipShape(Capsule())
-        .shadow(color: Color.black.opacity(hasPhotoBackground ? 0.18 : 0.08), radius: 10, x: 0, y: 4)
+        .shadow(color: Color.black.opacity(metrics.shadowOpacity), radius: 10, x: 0, y: 4)
     }
 
     private var livePhotoBadge: some View {
+        let metrics = compactChromePillMetrics
+
         HStack(spacing: 4) {
             Image(systemName: "livephoto")
                 .font(.system(size: 11, weight: .semibold))
@@ -1796,11 +1892,11 @@ private struct LocketWidgetEntryView: View {
                     .minimumScaleFactor(0.85)
             }
         }
-        .padding(.horizontal, 9)
-        .padding(.vertical, 6)
+        .padding(.horizontal, metrics.horizontalPadding)
+        .padding(.vertical, metrics.verticalPadding)
         .background(authorChipBackgroundColor)
         .clipShape(Capsule())
-        .shadow(color: Color.black.opacity(0.18), radius: 10, x: 0, y: 4)
+        .shadow(color: Color.black.opacity(metrics.shadowOpacity), radius: 10, x: 0, y: 4)
     }
 
     @ViewBuilder
@@ -1845,22 +1941,25 @@ private struct LocketWidgetEntryView: View {
     }
 
     private var shouldShowTopLocationChip: Bool {
-        let allowsPhotoHeaderLocation = hasPhotoBackground && !isSmall
         return !payload.isIdleState &&
-            !compactLocationName.isEmpty &&
-            (!shouldShowAuthorChip || allowsPhotoHeaderLocation) &&
-            !(isSmall && hasPhotoBackground)
+            !compactLocationName.isEmpty
+    }
+
+    private var shouldCenterTopLocationChip: Bool {
+        shouldShowTopLocationChip &&
+        !hasPhotoBackground &&
+        payload.noteType == "text"
     }
 
     private var shouldShowBottomMetaChip: Bool {
         !payload.isIdleState && shouldShowAuthorChip
     }
 
-    private var shouldUseSplitPhotoHeader: Bool {
-        hasPhotoBackground && !isSmall && (shouldShowLivePhotoBadge || shouldShowTopLocationChip)
-    }
-
     private var textBodyLineLimit: Int {
+        if shouldCenterTopLocationChip {
+            return isLarge ? 4 : 3
+        }
+
         if shouldShowTopLocationChip {
             return isLarge ? 4 : 3
         }
@@ -1871,6 +1970,10 @@ private struct LocketWidgetEntryView: View {
     private var textHeaderClearance: CGFloat {
         guard shouldShowTopLocationChip, !hasPhotoBackground else {
             return 0
+        }
+
+        if shouldCenterTopLocationChip {
+            return isLarge ? 22 : (isMedium ? 18 : 14)
         }
 
         if isLarge {
@@ -1917,7 +2020,7 @@ private struct LocketWidgetEntryView: View {
             Text(contentDisplayText)
                 .font(payload.isIdleState ? noteCardIdleFont : noteCardBodyFont)
                 .foregroundStyle(primaryTextColor)
-                .multilineTextAlignment(isLarge ? .leading : .center)
+                .multilineTextAlignment(usesTextNoteCardStyle ? .center : (isLarge ? .leading : .center))
                 .lineLimit(textBodyLineLimit)
                 .lineSpacing(noteCardLineSpacing)
                 .tracking(noteCardTracking)
@@ -1927,28 +2030,44 @@ private struct LocketWidgetEntryView: View {
                     x: 0,
                     y: (hasPhotoBackground || payload.isIdleState) ? 1 : 0
                 )
-                .frame(maxWidth: .infinity, alignment: isLarge ? .leading : .center)
+                .frame(maxWidth: .infinity, alignment: usesTextNoteCardStyle ? .center : (isLarge ? .leading : .center))
         }
     }
 
+    private var usesTextNoteCardStyle: Bool {
+        !hasPhotoBackground && payload.noteType == "text"
+    }
+
     private var noteCardBodyFont: Font {
+        let trimmedCount = contentDisplayText.trimmingCharacters(in: .whitespacesAndNewlines).count
+
+        if usesTextNoteCardStyle {
+            let baseSize: CGFloat
+            if trimmedCount > 200 {
+                baseSize = 16
+            } else if trimmedCount > 100 {
+                baseSize = 18
+            } else {
+                baseSize = 24
+            }
+
+            return .custom("Noto Sans Bold", size: baseSize)
+        }
+
         let baseSize: CGFloat
 
         if isLarge {
-            let count = contentDisplayText.trimmingCharacters(in: .whitespacesAndNewlines).count
-            if count > 160 {
+            if trimmedCount > 160 {
                 baseSize = 21
-            } else if count > 96 {
+            } else if trimmedCount > 96 {
                 baseSize = 24
             } else {
                 baseSize = 28
             }
         } else if isMedium {
-            let count = contentDisplayText.trimmingCharacters(in: .whitespacesAndNewlines).count
-            baseSize = count > 110 ? 19 : 21
+            baseSize = trimmedCount > 110 ? 19 : 21
         } else {
-            let count = contentDisplayText.trimmingCharacters(in: .whitespacesAndNewlines).count
-            baseSize = count > 110 ? 16 : 18
+            baseSize = trimmedCount > 110 ? 16 : 18
         }
 
         return .custom("Noto Sans ExtraBold", size: baseSize)
@@ -1963,7 +2082,11 @@ private struct LocketWidgetEntryView: View {
     }
 
     private var noteCardTracking: CGFloat {
-        -0.35
+        if usesTextNoteCardStyle {
+            return -0.5
+        }
+
+        return -0.35
     }
 
     private var noteCardIdleFont: Font {
@@ -1974,23 +2097,71 @@ private struct LocketWidgetEntryView: View {
     private var cardInnerBackground: AnyView {
         if let image = resolvedImage, hasPhotoBackground {
             return AnyView(
-                Image(uiImage: image)
-                    .resizable()
-                    .scaledToFill()
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .scaleEffect(1.01)
-                    .clipped()
-                    .overlay(
-                        LinearGradient(
-                            colors: [
-                                Color.black.opacity(0.00),
-                                Color.black.opacity(0.12),
-                                Color.black.opacity(0.62),
-                            ],
-                            startPoint: .top,
-                            endPoint: .bottom
-                        )
-                    )
+                GeometryReader { proxy in
+                    ZStack(alignment: .topLeading) {
+                        Image(uiImage: image)
+                            .resizable()
+                            .scaledToFill()
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            .scaleEffect(1.01)
+                            .clipped()
+                            .overlay(
+                                LinearGradient(
+                                    colors: [
+                                        Color.black.opacity(0.00),
+                                        Color.black.opacity(0.12),
+                                        Color.black.opacity(0.62),
+                                    ],
+                                    startPoint: .top,
+                                    endPoint: .bottom
+                                )
+                            )
+
+                        if shouldShowDualCaptureInset, let insetImage = resolvedDualInsetImage {
+                            let insetMetrics = dualCaptureInsetMetrics
+
+                            Image(uiImage: insetImage)
+                                .resizable()
+                                .scaledToFill()
+                                .frame(
+                                    width: insetMetrics.insetSize,
+                                    height: insetMetrics.insetSize
+                                )
+                                .background(Color(red: 0.067, green: 0.067, blue: 0.067))
+                                .clipShape(
+                                    RoundedRectangle(
+                                        cornerRadius: insetMetrics.insetRadius,
+                                        style: .continuous
+                                    )
+                                )
+                                .overlay(
+                                    RoundedRectangle(
+                                        cornerRadius: insetMetrics.insetRadius,
+                                        style: .continuous
+                                    )
+                                    .fill(Color.white.opacity(0.04))
+                                )
+                                .overlay(
+                                    RoundedRectangle(
+                                        cornerRadius: insetMetrics.insetRadius,
+                                        style: .continuous
+                                    )
+                                    .stroke(
+                                        Color.white.opacity(0.76),
+                                        lineWidth: insetMetrics.insetBorderWidth
+                                    )
+                                )
+                                .shadow(
+                                    color: Color.black.opacity(0.14),
+                                    radius: 10,
+                                    x: 0,
+                                    y: 4
+                                )
+                                .padding(.top, insetMetrics.insetMargin)
+                                .padding(.leading, insetMetrics.insetMargin)
+                        }
+                    }
+                }
             )
         } else if payload.isIdleState {
             return AnyView(
@@ -2071,35 +2242,25 @@ private struct LocketWidgetEntryView: View {
             }
 
             VStack(spacing: 0) {
-                Group {
-                    if shouldUseSplitPhotoHeader {
-                        HStack(alignment: .top) {
-                            if shouldShowLivePhotoBadge {
-                                livePhotoBadge
-                            }
+                HStack(alignment: .top) {
+                    if shouldShowLivePhotoBadge {
+                        livePhotoBadge
+                    }
 
-                            Spacer(minLength: 0)
+                    Spacer(minLength: 0)
 
-                            if shouldShowTopLocationChip {
-                                floatingLocationChip
-                            }
-                        }
-                    } else {
-                        ZStack(alignment: .top) {
-                            HStack(alignment: .top) {
-                                Spacer(minLength: 0)
+                    if shouldShowTopLocationChip && !shouldCenterTopLocationChip {
+                        floatingLocationChip
+                    } else if shouldShowCountBadge {
+                        countBadge
+                    }
+                }
 
-                                if shouldShowLivePhotoBadge {
-                                    livePhotoBadge
-                                } else if shouldShowCountBadge {
-                                    countBadge
-                                }
-                            }
-
-                            if shouldShowTopLocationChip {
-                                floatingLocationChip
-                            }
-                        }
+                if shouldCenterTopLocationChip {
+                    HStack {
+                        Spacer(minLength: 0)
+                        floatingLocationChip
+                        Spacer(minLength: 0)
                     }
                 }
 
@@ -2136,6 +2297,13 @@ private struct LocketWidgetEntryView: View {
         let normalizedPath = path.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !normalizedPath.isEmpty else {
             return nil
+        }
+
+        // Prefer the direct file decode path first. Some staged widget assets,
+        // especially dual-capture composites, can render more reliably this way
+        // than through the thumbnail pipeline.
+        if let directImage = loadWidgetImageFromPath(normalizedPath) {
+            return directImage
         }
 
         let resolvedUrl: URL?

@@ -342,17 +342,8 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
       return null;
     }
 
-    if (dualCaptureAwaitingSecondShot) {
-      return t(
-        facing === 'front'
-          ? 'capture.dualSecondShotFrontStatus'
-          : 'capture.dualSecondShotBackStatus',
-        facing === 'front' ? 'Shot 2: Front' : 'Shot 2: Back'
-      );
-    }
-
     if (dualCaptureUsesSequentialCapture) {
-      return t('capture.dualFirstShotStatus', 'Shot 1');
+      return null;
     }
 
     return t(
@@ -363,9 +354,32 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
     dualCaptureAwaitingSecondShot,
     dualCaptureModeEnabled,
     dualCaptureUsesSequentialCapture,
-    facing,
     t,
   ]);
+  const dualCaptureStepText = useMemo(() => {
+    if (!dualCaptureModeEnabled || !dualCaptureUsesSequentialCapture) {
+      return null;
+    }
+
+    return dualCaptureAwaitingSecondShot
+      ? t('capture.dualSecondShotStep', '2/2')
+      : t('capture.dualFirstShotStep', '1/2');
+  }, [
+    dualCaptureAwaitingSecondShot,
+    dualCaptureModeEnabled,
+    dualCaptureUsesSequentialCapture,
+    t,
+  ]);
+  const dualCaptureFacingText = useMemo(() => {
+    if (!dualCaptureAwaitingSecondShot || !dualCaptureUsesSequentialCapture) {
+      return null;
+    }
+
+    return t(
+      facing === 'front' ? 'capture.dualFacingFront' : 'capture.dualFacingBack',
+      facing === 'front' ? 'Front' : 'Back'
+    );
+  }, [dualCaptureAwaitingSecondShot, dualCaptureUsesSequentialCapture, facing, t]);
 
   useEffect(() => {
     if (dualCaptureModeEnabled && liveCameraFilterModeEnabled) {
@@ -1221,9 +1235,11 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                     cameraRef={cameraRef}
                     dualCameraPreviewRef={dualCameraPreviewRef}
                     dualCaptureAwaitingSecondShot={dualCaptureAwaitingSecondShot}
+                    dualCaptureFacingText={dualCaptureFacingText}
                     dualCaptureFirstShotUri={
                       dualCaptureAwaitingSecondShot ? dualCaptureFirstShotUri : null
                     }
+                    dualCaptureStepText={dualCaptureStepText}
                     dualCaptureStatusText={dualCaptureStatusText}
                     dualCameraSupported={dualCaptureSupported}
                     dualModeEnabled={dualNativePreviewEnabled}

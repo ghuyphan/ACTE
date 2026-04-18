@@ -14,8 +14,11 @@ data class NotoWidgetSnapshot(
   val noteCount: Int,
   val nearbyPlacesCount: Int,
   val isLivePhoto: Boolean,
+  val isDualCapture: Boolean,
   val backgroundImageUrl: String?,
   val backgroundImageBase64: String?,
+  val dualInsetImageUrl: String?,
+  val dualLayoutPreset: String?,
   val backgroundGradientStartColor: String?,
   val backgroundGradientEndColor: String?,
   val hasDoodle: Boolean,
@@ -40,7 +43,8 @@ data class NotoWidgetSnapshot(
   val authorInitials: String,
   val authorAvatarImageUrl: String?,
   val authorAvatarImageBase64: String?,
-  val primaryActionUrl: String
+  val primaryActionUrl: String,
+  val badgeActionUrl: String?
 )
 
 object NotoWidgetStorage {

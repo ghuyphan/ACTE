@@ -24,13 +24,26 @@ export function resolveStoredPhotoUri(photoUri: string | null | undefined): stri
 }
 
 export function getNotePhotoUri(
-  note: Pick<Note, 'type' | 'content' | 'photoLocalUri' | 'photoSyncedLocalUri'> | null | undefined
+  note: Pick<
+    Note,
+    | 'type'
+    | 'content'
+    | 'photoLocalUri'
+    | 'photoSyncedLocalUri'
+    | 'captureVariant'
+    | 'dualComposedPhotoLocalUri'
+  > | null | undefined
 ) {
   if (!note || note.type !== 'photo') {
     return '';
   }
 
-  return resolveStoredPhotoUri(note.photoLocalUri ?? note.photoSyncedLocalUri ?? note.content);
+  const preferredPhotoUri =
+    note.captureVariant === 'dual'
+      ? note.dualComposedPhotoLocalUri ?? note.photoLocalUri ?? note.photoSyncedLocalUri ?? note.content
+      : note.photoLocalUri ?? note.photoSyncedLocalUri ?? note.content;
+
+  return resolveStoredPhotoUri(preferredPhotoUri);
 }
 
 export async function ensurePhotoDirectory() {

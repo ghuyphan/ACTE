@@ -285,11 +285,89 @@ async function resolveReadablePhotoUriForCandidate(candidate: WidgetCandidate) {
   return getReadablePhotoUri(downloadedPhotoUri);
 }
 
+async function stageReadableWidgetImage(options: {
+  candidate: WidgetCandidate;
+  readablePhotoUri: string;
+  assetKind: string;
+  assetId?: string;
+}) {
+  const { candidate, readablePhotoUri, assetKind, assetId } = options;
+  const filenamePrefix = buildCandidateAssetPrefix(candidate, assetKind, assetId);
+  const versionSeed = `${getCandidateAssetVersion(candidate)}:${assetKind}:${readablePhotoUri}`;
+  const extensionHint = getWidgetFileExtensionFromUri(readablePhotoUri);
+
+  if (/^https?:\/\//i.test(readablePhotoUri)) {
+    return downloadRemoteImageToWidgetContainer({
+      remoteImageUrl: readablePhotoUri,
+      destinationDirectoryName: WIDGET_IMAGE_DIRECTORY_NAME,
+      filenamePrefix,
+      versionSeed,
+      extensionHint,
+    });
+  }
+
+  return stageFileForWidgetContainer({
+    fileUri: readablePhotoUri,
+    destinationDirectoryName: WIDGET_IMAGE_DIRECTORY_NAME,
+    filenamePrefix,
+    versionSeed,
+    extensionHint,
+  });
+}
+
 export async function resolveWidgetPhotoProps(
   candidate: WidgetCandidate
-): Promise<Pick<WidgetProps, 'backgroundImageUrl' | 'backgroundImageBase64'>> {
+): Promise<
+  Partial<
+    Pick<
+    WidgetProps,
+    | 'backgroundImageUrl'
+    | 'backgroundImageBase64'
+    | 'isDualCapture'
+    | 'dualInsetImageUrl'
+    | 'dualLayoutPreset'
+    >
+  >
+> {
   if (candidate.noteType !== 'photo') {
     return {};
+  }
+
+  if (
+    candidate.isDualCapture &&
+    candidate.dualPrimaryPhotoLocalUri?.trim() &&
+    candidate.dualSecondaryPhotoLocalUri?.trim()
+  ) {
+    const [readablePrimaryUri, readableSecondaryUri] = await Promise.all([
+      getReadablePhotoUri(candidate.dualPrimaryPhotoLocalUri),
+      getReadablePhotoUri(candidate.dualSecondaryPhotoLocalUri),
+    ]);
+
+    if (readablePrimaryUri && readableSecondaryUri) {
+      const [stagedPrimaryUri, stagedSecondaryUri] = await Promise.all([
+        stageReadableWidgetImage({
+          candidate,
+          readablePhotoUri: readablePrimaryUri,
+          assetKind: 'photo',
+          assetId: 'primary',
+        }),
+        stageReadableWidgetImage({
+          candidate,
+          readablePhotoUri: readableSecondaryUri,
+          assetKind: 'photo-inset',
+          assetId: 'secondary',
+        }),
+      ]);
+
+      if (stagedPrimaryUri && stagedSecondaryUri) {
+        return {
+          isDualCapture: true,
+          backgroundImageUrl: stagedPrimaryUri,
+          dualInsetImageUrl: stagedSecondaryUri,
+          dualLayoutPreset: candidate.dualLayoutPreset ?? 'top-left',
+        };
+      }
+    }
   }
 
   const readablePhotoUri = await resolveReadablePhotoUriForCandidate(candidate);
@@ -297,33 +375,14 @@ export async function resolveWidgetPhotoProps(
     return {};
   }
 
-  const filenamePrefix = buildCandidateAssetPrefix(candidate, 'photo');
-  const versionSeed = `${getCandidateAssetVersion(candidate)}:${readablePhotoUri}`;
-
-  if (/^https?:\/\//i.test(readablePhotoUri)) {
-    const downloadedPhotoUri = await downloadRemoteImageToWidgetContainer({
-      remoteImageUrl: readablePhotoUri,
-      destinationDirectoryName: WIDGET_IMAGE_DIRECTORY_NAME,
-      filenamePrefix,
-      versionSeed,
-    });
-
-    if (downloadedPhotoUri) {
-      return {
-        backgroundImageUrl: downloadedPhotoUri,
-      };
-    }
-  }
-
-  const copiedPhotoUri = await stageFileForWidgetContainer({
-    fileUri: readablePhotoUri,
-    destinationDirectoryName: WIDGET_IMAGE_DIRECTORY_NAME,
-    filenamePrefix,
-    versionSeed,
-    extensionHint: 'jpg',
+  const copiedPhotoUri = await stageReadableWidgetImage({
+    candidate,
+    readablePhotoUri,
+    assetKind: 'photo',
   });
   if (copiedPhotoUri) {
     return {
+      isDualCapture: false,
       backgroundImageUrl: copiedPhotoUri,
     };
   }

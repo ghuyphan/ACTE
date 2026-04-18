@@ -56,6 +56,18 @@
                 android:visibility="gone" />
 
             <ImageView
+                android:id="@+id/widget_dual_inset"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_alignParentTop="true"
+                android:layout_alignParentStart="true"
+                android:layout_marginStart="10dp"
+                android:layout_marginTop="10dp"
+                android:contentDescription="@null"
+                android:scaleType="fitCenter"
+                android:visibility="gone" />
+
+            <ImageView
                 android:id="@+id/widget_sticker_overlay"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
@@ -72,12 +84,37 @@
                 android:visibility="gone" />
 
             <LinearLayout
-                android:id="@+id/widget_location_chip"
+                android:id="@+id/widget_live_photo_badge"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_alignParentTop="true"
+                android:layout_alignParentStart="true"
+                android:layout_marginTop="12dp"
+                android:layout_marginStart="12dp"
+                android:background="@drawable/noto_widget_overlay_chip_dark"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingLeft="8dp"
+                android:paddingTop="5dp"
+                android:paddingRight="8dp"
+                android:paddingBottom="5dp"
+                android:visibility="gone">
+
+                <ImageView
+                    android:id="@+id/widget_live_photo_icon"
+                    android:layout_width="12dp"
+                    android:layout_height="12dp"
+                    android:contentDescription="@null"
+                    android:src="@drawable/noto_widget_live_photo_icon" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/widget_location_chip_centered"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_alignParentTop="true"
                 android:layout_centerHorizontal="true"
-                android:layout_marginTop="14dp"
+                android:layout_marginTop="12dp"
                 android:background="@drawable/noto_widget_badge_light"
                 android:gravity="center_vertical"
                 android:orientation="horizontal"
@@ -88,18 +125,18 @@
                 android:visibility="gone">
 
                 <ImageView
-                    android:id="@+id/widget_location_icon"
+                    android:id="@+id/widget_location_icon_centered"
                     android:layout_width="11dp"
                     android:layout_height="11dp"
                     android:contentDescription="@null"
                     android:src="@drawable/noto_widget_pin_icon" />
 
                 <TextView
-                    android:id="@+id/widget_location"
+                    android:id="@+id/widget_location_centered"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:ellipsize="end"
-                    android:fontFamily="sans-serif-medium"
+                    android:fontFamily="@font/noto_sans_600semi_bold"
                     android:includeFontPadding="false"
                     android:maxLines="1"
                     android:maxWidth="132dp"
@@ -120,34 +157,46 @@
                 android:orientation="vertical">
 
                 <LinearLayout
-                    android:id="@+id/widget_live_photo_badge"
+                    android:id="@+id/widget_location_chip"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:background="@drawable/noto_widget_overlay_chip_dark"
+                    android:background="@drawable/noto_widget_badge_light"
                     android:gravity="center_vertical"
                     android:orientation="horizontal"
-                    android:paddingLeft="8dp"
-                    android:paddingTop="5dp"
-                    android:paddingRight="8dp"
-                    android:paddingBottom="5dp"
+                    android:paddingLeft="13dp"
+                    android:paddingTop="7dp"
+                    android:paddingRight="14dp"
+                    android:paddingBottom="7dp"
                     android:visibility="gone">
 
                     <ImageView
-                        android:id="@+id/widget_live_photo_icon"
-                        android:layout_width="12dp"
-                        android:layout_height="12dp"
+                        android:id="@+id/widget_location_icon"
+                        android:layout_width="11dp"
+                        android:layout_height="11dp"
                         android:contentDescription="@null"
-                        android:src="@drawable/noto_widget_live_photo_icon" />
+                        android:src="@drawable/noto_widget_pin_icon" />
+
+                    <TextView
+                        android:id="@+id/widget_location"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:ellipsize="end"
+                        android:fontFamily="@font/noto_sans_600semi_bold"
+                        android:includeFontPadding="false"
+                        android:maxLines="1"
+                        android:maxWidth="132dp"
+                        android:paddingLeft="5dp"
+                        android:textColor="#7A6A58"
+                        android:textSize="11sp" />
                 </LinearLayout>
 
                 <TextView
                     android:id="@+id/widget_badge"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="6dp"
                     android:background="@drawable/noto_widget_badge_light"
                     android:ellipsize="end"
-                    android:fontFamily="@font/xml_noto_sans"
+                    android:fontFamily="@font/noto_sans_600semi_bold"
                     android:gravity="center"
                     android:includeFontPadding="false"
                     android:maxLines="1"
@@ -171,7 +220,7 @@
                     android:layout_height="wrap_content"
                     android:layout_gravity="center"
                     android:ellipsize="end"
-                    android:fontFamily="sans-serif"
+                    android:fontFamily="@font/noto_sans_400regular"
                     android:gravity="center"
                     android:includeFontPadding="false"
                     android:lineSpacingExtra="3dp"
@@ -189,10 +238,10 @@
                     android:layout_height="wrap_content"
                     android:layout_gravity="center"
                     android:ellipsize="end"
-                    android:fontFamily="sans-serif-black"
+                    android:fontFamily="@font/noto_sans_700bold"
                     android:gravity="center"
                     android:includeFontPadding="false"
-                    android:letterSpacing="-0.03"
+                    android:letterSpacing="0"
                     android:lineSpacingExtra="3dp"
                     android:maxLines="4"
                     android:paddingLeft="20dp"
@@ -217,7 +266,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:ellipsize="end"
-                    android:fontFamily="sans-serif-black"
+                    android:fontFamily="@font/noto_sans_800extra_bold"
                     android:includeFontPadding="false"
                     android:letterSpacing="-0.03"
                     android:lineSpacingExtra="1dp"
@@ -261,7 +310,7 @@
                             android:id="@+id/widget_author_initials"
                             android:layout_width="18dp"
                             android:layout_height="18dp"
-                            android:fontFamily="@font/xml_noto_sans"
+                            android:fontFamily="@font/noto_sans_700bold"
                             android:gravity="center"
                             android:includeFontPadding="false"
                             android:textColor="#2B2621"
@@ -274,7 +323,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:ellipsize="end"
-                        android:fontFamily="@font/xml_noto_sans"
+                        android:fontFamily="@font/noto_sans_500medium"
                         android:includeFontPadding="false"
                         android:maxLines="1"
                         android:maxWidth="96dp"

@@ -973,6 +973,60 @@ describe('widgetService', () => {
     );
   });
 
+  it('separates dual-capture widget payloads into a background and inset image', async () => {
+    mockGetAllNotes.mockResolvedValue([
+      buildNote({
+        id: 'dual-widget-photo',
+        type: 'photo',
+        content: 'file:///mock-documents/photos/dual-composed.png',
+        photoLocalUri: 'file:///mock-documents/photos/dual-composed.png',
+        captureVariant: 'dual',
+        dualPrimaryPhotoLocalUri: 'file:///mock-documents/photos/dual-primary.jpg',
+        dualSecondaryPhotoLocalUri: 'file:///mock-documents/photos/dual-secondary.jpg',
+        dualComposedPhotoLocalUri: 'file:///mock-documents/photos/dual-composed.png',
+        dualLayoutPreset: 'top-left',
+        caption: 'Dual capture',
+        locationName: 'Dual Place',
+      }),
+    ]);
+    mockGetInfoAsync.mockImplementation(async (uri: string) => ({
+      exists:
+        uri === 'file:///mock-documents/photos/dual-primary.jpg' ||
+        uri === 'file:///mock-documents/photos/dual-secondary.jpg',
+      isDirectory: false,
+      uri,
+      size: 1024,
+      modificationTime: 0,
+    }));
+
+    await updateWidgetData({ referenceDate: new Date('2026-03-10T00:00:00.000Z') });
+
+    const entries = getLastTimelineEntries();
+    const firstImageUrl = String(entries[0]?.props.props.backgroundImageUrl ?? '');
+    const firstInsetUrl = String(entries[0]?.props.props.dualInsetImageUrl ?? '');
+
+    expect(firstImageUrl).toContain('dual-widget-photo');
+    expect(firstInsetUrl).toContain('dual-widget-photo');
+    expect(mockCopyAsync).toHaveBeenCalledWith({
+      from: 'file:///mock-documents/photos/dual-primary.jpg',
+      to: expect.stringContaining('dual-widget-photo'),
+    });
+    expect(mockCopyAsync).toHaveBeenCalledWith({
+      from: 'file:///mock-documents/photos/dual-secondary.jpg',
+      to: expect.stringContaining('dual-widget-photo'),
+    });
+    expect(entries[0]?.props.props).toEqual(
+      expect.objectContaining({
+        noteType: 'photo',
+        text: 'Dual capture',
+        locationName: 'Dual Place',
+        isIdleState: false,
+        isDualCapture: true,
+        dualLayoutPreset: 'top-left',
+      })
+    );
+  });
+
   it('formats localized widget strings inside the payload', async () => {
     i18n.language = 'vi';
 

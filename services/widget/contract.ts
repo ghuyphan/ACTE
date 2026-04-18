@@ -7,8 +7,11 @@ export interface WidgetProps {
   noteCount: number;
   nearbyPlacesCount: number;
   isLivePhoto: boolean;
+  isDualCapture: boolean;
   backgroundImageUrl?: string;
   backgroundImageBase64?: string;
+  dualInsetImageUrl?: string;
+  dualLayoutPreset?: 'top-left';
   backgroundGradientStartColor?: string;
   backgroundGradientEndColor?: string;
   hasDoodle: boolean;
@@ -56,8 +59,11 @@ export const WIDGET_PAYLOAD_FIELD_NAMES = [
   'noteCount',
   'nearbyPlacesCount',
   'isLivePhoto',
+  'isDualCapture',
   'backgroundImageUrl',
   'backgroundImageBase64',
+  'dualInsetImageUrl',
+  'dualLayoutPreset',
   'backgroundGradientStartColor',
   'backgroundGradientEndColor',
   'hasDoodle',

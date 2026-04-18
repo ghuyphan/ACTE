@@ -1,8 +1,15 @@
 import { Image } from 'expo-image';
 import { memo, type RefObject, useEffect, useRef, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Platform, StyleSheet, View } from 'react-native';
 import type { DualCameraFacing } from '../../../services/dualCamera';
 import {
+  DUAL_CAMERA_INSET_FRAME_COLOR,
+  DUAL_CAMERA_INSET_FROST_COLOR,
+  DUAL_CAMERA_INSET_SHELL_BACKGROUND,
+  DUAL_CAMERA_INSET_SHADOW_COLOR,
+  DUAL_CAMERA_INSET_SHADOW_OFFSET,
+  DUAL_CAMERA_INSET_SHADOW_OPACITY,
+  DUAL_CAMERA_INSET_SHADOW_RADIUS,
   getDualCameraInsetMetrics,
 } from './dualCameraLayout';
 
@@ -57,6 +64,7 @@ const DualCaptureComposer = memo(function DualCaptureComposer({
           result: 'tmpfile',
           width: COMPOSER_SIZE,
           height: COMPOSER_SIZE,
+          useRenderInContext: Platform.OS === 'ios',
         });
         if (cancelled) return;
 
@@ -127,6 +135,7 @@ const DualCaptureComposer = memo(function DualCaptureComposer({
               onError={() => setInsetLoaded(false)}
             />
           </View>
+          <View pointerEvents="none" style={styles.insetFrost} />
         </View>
       </View>
     </View>
@@ -140,7 +149,7 @@ const styles = StyleSheet.create({
     top: -9999,
     width: COMPOSER_SIZE,
     height: COMPOSER_SIZE,
-    opacity: 0.01,
+    opacity: 1,
   },
   canvas: {
     width: COMPOSER_SIZE,
@@ -163,20 +172,21 @@ const styles = StyleSheet.create({
     borderCurve: 'continuous',
     overflow: 'hidden',
     borderWidth: INSET_BORDER_WIDTH,
-    borderColor: 'rgba(255,255,255,0.92)',
-    backgroundColor: '#111111',
-    shadowColor: '#000000',
-    shadowOpacity: 0.22,
-    shadowRadius: 18,
-    shadowOffset: {
-      width: 0,
-      height: 10,
-    },
+    borderColor: DUAL_CAMERA_INSET_FRAME_COLOR,
+    backgroundColor: DUAL_CAMERA_INSET_SHELL_BACKGROUND,
+    shadowColor: DUAL_CAMERA_INSET_SHADOW_COLOR,
+    shadowOpacity: DUAL_CAMERA_INSET_SHADOW_OPACITY,
+    shadowRadius: DUAL_CAMERA_INSET_SHADOW_RADIUS,
+    shadowOffset: DUAL_CAMERA_INSET_SHADOW_OFFSET,
   },
   insetImageWrap: {
     width: '100%',
     height: '100%',
     overflow: 'hidden',
+  },
+  insetFrost: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: DUAL_CAMERA_INSET_FROST_COLOR,
   },
   image: {
     width: '100%',
@@ -210,6 +220,7 @@ type ViewShotModule = {
       format?: 'jpg' | 'png';
       quality?: number;
       result?: 'tmpfile';
+      useRenderInContext?: boolean;
     }
   ) => Promise<string>;
 };

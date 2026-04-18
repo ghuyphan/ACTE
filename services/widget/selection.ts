@@ -27,6 +27,10 @@ export interface WidgetCandidate {
   photoPath: string | null;
   photoLocalUri: string | null;
   isLivePhoto: boolean;
+  isDualCapture: boolean;
+  dualPrimaryPhotoLocalUri: string | null;
+  dualSecondaryPhotoLocalUri: string | null;
+  dualLayoutPreset: 'top-left' | null;
   locationName: string | null;
   latitude: number | null;
   longitude: number | null;
@@ -124,6 +128,10 @@ export function createTextFallbackWidgetCandidate(candidate: WidgetCandidate): W
     photoPath: null,
     photoLocalUri: null,
     isLivePhoto: false,
+    isDualCapture: false,
+    dualPrimaryPhotoLocalUri: null,
+    dualSecondaryPhotoLocalUri: null,
+    dualLayoutPreset: null,
   };
 }
 
@@ -137,6 +145,19 @@ export function createPersonalWidgetCandidate(note: Note): WidgetCandidate {
     photoPath: null,
     photoLocalUri: getNotePhotoUri(note),
     isLivePhoto: Boolean(note.type === 'photo' && note.isLivePhoto),
+    isDualCapture: Boolean(note.type === 'photo' && note.captureVariant === 'dual'),
+    dualPrimaryPhotoLocalUri:
+      note.type === 'photo' && note.captureVariant === 'dual'
+        ? note.dualPrimaryPhotoLocalUri ?? null
+        : null,
+    dualSecondaryPhotoLocalUri:
+      note.type === 'photo' && note.captureVariant === 'dual'
+        ? note.dualSecondaryPhotoLocalUri ?? null
+        : null,
+    dualLayoutPreset:
+      note.type === 'photo' && note.captureVariant === 'dual'
+        ? note.dualLayoutPreset ?? 'top-left'
+        : null,
     locationName: note.locationName,
     latitude: note.latitude,
     longitude: note.longitude,
@@ -164,6 +185,10 @@ export function createSharedWidgetCandidate(post: SharedPost): WidgetCandidate {
     photoPath: post.photoPath ?? null,
     photoLocalUri: post.photoLocalUri,
     isLivePhoto: Boolean(post.type === 'photo' && post.isLivePhoto),
+    isDualCapture: false,
+    dualPrimaryPhotoLocalUri: null,
+    dualSecondaryPhotoLocalUri: null,
+    dualLayoutPreset: null,
     locationName: post.placeName,
     latitude: null,
     longitude: null,

@@ -8,6 +8,7 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.ImageDecoder
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.LinearGradient
@@ -31,6 +32,7 @@ import com.acte.app.R
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.ByteArrayInputStream
+import java.io.File
 import kotlin.math.ceil
 import kotlin.math.cos
 import kotlin.math.floor
@@ -63,6 +65,9 @@ private const val STAMP_OUTLINE_COLOR = "#FFFAF0"
 private const val STAMP_OUTLINE_OPACITY = 1f
 private const val STAMP_PAPER_BORDER_COLOR = "#8F7048"
 private const val STAMP_PAPER_BORDER_OPACITY = 0.10f
+private const val WIDGET_DUAL_INSET_SHELL_COLOR = "#131313"
+private const val WIDGET_DUAL_INSET_BORDER_OPACITY = 0.76f
+private const val WIDGET_DUAL_INSET_WASH_OPACITY = 0.04f
 private val STICKER_OUTLINE_OFFSETS = listOf(
   PointF(-1f, 0f),
   PointF(-0.92f, -0.38f),
@@ -102,6 +107,12 @@ private data class WidgetRenderGeometry(
 private data class WidgetGradientColors(
   val startColor: Int,
   val endColor: Int
+)
+
+private data class WidgetDualInsetMetrics(
+  val sizePx: Int,
+  val radiusPx: Float,
+  val borderWidthPx: Float
 )
 
 private data class WidgetOverlayRenderSpec(
@@ -558,24 +569,19 @@ class NotoWidgetProvider : AppWidgetProvider() {
       }
 
       val locationBadgeText = getLocationBadgeText(snapshot.locationName, usesExpandedMetrics)
-      val allowsPhotoHeaderLocation = usesExpandedMetrics && snapshot.noteType == "photo" && hasImage
       val showLocationChip =
         !showIdle &&
-        locationBadgeText.isNotBlank() &&
-        (!showAuthorChip || allowsPhotoHeaderLocation) &&
-        !(snapshot.noteType == "photo" && hasImage && !usesExpandedMetrics)
-      val showTrailingPhotoLocationChip =
+        locationBadgeText.isNotBlank()
+      val showCenteredTextLocationChip =
         showLocationChip &&
-        layoutStage.isMedium &&
-        snapshot.noteType == "photo" &&
-        hasImage
+        snapshot.noteType == "text"
       val textStageInsets = resolveTextStageInsets(
         context = context,
         geometry = geometry,
         usesExpandedMetrics = usesExpandedMetrics,
         showIdle = showIdle,
         showLocationChip = showLocationChip,
-        showTrailingPhotoLocationChip = showTrailingPhotoLocationChip,
+        showCenteredTextLocationChip = showCenteredTextLocationChip,
         showAuthorChip = showAuthorChip,
         showPhotoTitle = showPhotoTitle
       )
@@ -592,12 +598,14 @@ class NotoWidgetProvider : AppWidgetProvider() {
         geometry = geometry,
         textStageInsets = textStageInsets,
         usesExpandedMetrics = usesExpandedMetrics,
+        noteType = snapshot.noteType,
         showLocationChip = showLocationChip,
-        showTrailingPhotoLocationChip = showTrailingPhotoLocationChip,
+        showCenteredTextLocationChip = showCenteredTextLocationChip,
         showAuthorChip = showAuthorChip
       )
       views.setInt(R.id.widget_body, "setMaxLines", bodyTypography.maxLines)
       views.setTextViewTextSize(R.id.widget_body, TypedValue.COMPLEX_UNIT_SP, bodyTypography.textSizeSp)
+      views.setFloat(R.id.widget_body, "setLetterSpacing", if (snapshot.noteType == "text") -0.03f else 0f)
       views.setViewPadding(
         R.id.widget_body,
         bodyTypography.horizontalPaddingPx,
@@ -618,25 +626,23 @@ class NotoWidgetProvider : AppWidgetProvider() {
         chipId = R.id.widget_location_chip,
         textId = R.id.widget_location,
         iconId = R.id.widget_location_icon,
-        isVisible = showLocationChip && !showTrailingPhotoLocationChip,
+        isVisible = showLocationChip && !showCenteredTextLocationChip,
         usesTextSurface = usesTextSurface,
         noteColorId = snapshot.noteColorId,
         textSurfaceGradient = textSurfaceGradient,
         locationText = locationBadgeText
       )
-      if (layoutStage.isMedium) {
-        bindLocationChip(
-          views = views,
-          chipId = R.id.widget_photo_location_chip_end,
-          textId = R.id.widget_location_end,
-          iconId = R.id.widget_location_icon_end,
-          isVisible = showTrailingPhotoLocationChip,
-          usesTextSurface = false,
-          noteColorId = null,
-          textSurfaceGradient = null,
-          locationText = locationBadgeText
-        )
-      }
+      bindLocationChip(
+        views = views,
+        chipId = R.id.widget_location_chip_centered,
+        textId = R.id.widget_location_centered,
+        iconId = R.id.widget_location_icon_centered,
+        isVisible = showCenteredTextLocationChip,
+        usesTextSurface = usesTextSurface,
+        noteColorId = snapshot.noteColorId,
+        textSurfaceGradient = textSurfaceGradient,
+        locationText = locationBadgeText
+      )
 
       views.setViewVisibility(R.id.widget_badge, if (showCountBadge) View.VISIBLE else View.GONE)
       if (showCountBadge) {
@@ -654,7 +660,11 @@ class NotoWidgetProvider : AppWidgetProvider() {
         )
         views.setOnClickPendingIntent(
           R.id.widget_badge,
-          createWidgetPendingIntent(context, (appWidgetId * 10) + 1, snapshot.primaryActionUrl)
+          createWidgetPendingIntent(
+            context,
+            (appWidgetId * 10) + 1,
+            snapshot.badgeActionUrl ?: snapshot.primaryActionUrl
+          )
         )
       }
     }
@@ -756,6 +766,51 @@ class NotoWidgetProvider : AppWidgetProvider() {
           )
         )
       }
+
+      bindDualCaptureInset(
+        context = context,
+        views = views,
+        snapshot = snapshot,
+        showIdle = showIdle || !hasPhoto,
+        geometry = geometry
+      )
+    }
+
+    private fun bindDualCaptureInset(
+      context: Context,
+      views: RemoteViews,
+      snapshot: NotoWidgetSnapshot,
+      showIdle: Boolean,
+      geometry: WidgetRenderGeometry
+    ) {
+      views.setViewVisibility(R.id.widget_dual_inset, View.GONE)
+
+      if (showIdle || !snapshot.isDualCapture || snapshot.dualInsetImageUrl.isNullOrBlank()) {
+        return
+      }
+
+      val normalizedPath = if (snapshot.dualInsetImageUrl.startsWith("file://")) {
+        Uri.parse(snapshot.dualInsetImageUrl).path
+      } else {
+        snapshot.dualInsetImageUrl
+      }
+
+      if (normalizedPath.isNullOrBlank()) {
+        return
+      }
+
+      val insetMetrics = resolveDualInsetMetrics(context, geometry)
+      val insetBitmap = decodeSampledBitmapFromFile(
+        normalizedPath,
+        insetMetrics.sizePx,
+        insetMetrics.sizePx
+      ) ?: return
+
+      views.setImageViewBitmap(
+        R.id.widget_dual_inset,
+        createDualInsetBitmap(insetBitmap, insetMetrics)
+      )
+      views.setViewVisibility(R.id.widget_dual_inset, View.VISIBLE)
     }
 
     private fun bindLocationChip(
@@ -1105,15 +1160,19 @@ class NotoWidgetProvider : AppWidgetProvider() {
       usesExpandedMetrics: Boolean,
       showIdle: Boolean,
       showLocationChip: Boolean,
-      showTrailingPhotoLocationChip: Boolean,
+      showCenteredTextLocationChip: Boolean,
       showAuthorChip: Boolean,
       showPhotoTitle: Boolean
     ): WidgetTextStageInsets {
       var topInsetDp = if (usesExpandedMetrics) 18f else 14f
       var bottomInsetDp = if (usesExpandedMetrics) 18f else 14f
 
-      if (showLocationChip && !showTrailingPhotoLocationChip) {
-        topInsetDp += if (usesExpandedMetrics) 24f else 20f
+      if (showLocationChip) {
+        topInsetDp += if (showCenteredTextLocationChip) {
+          if (usesExpandedMetrics) 20f else 16f
+        } else {
+          if (usesExpandedMetrics) 24f else 20f
+        }
       }
 
       if (showAuthorChip) {
@@ -1140,8 +1199,9 @@ class NotoWidgetProvider : AppWidgetProvider() {
       geometry: WidgetRenderGeometry,
       textStageInsets: WidgetTextStageInsets,
       usesExpandedMetrics: Boolean,
+      noteType: String,
       showLocationChip: Boolean,
-      showTrailingPhotoLocationChip: Boolean,
+      showCenteredTextLocationChip: Boolean,
       showAuthorChip: Boolean
     ): WidgetBodyTypography {
       if (bodyText.isBlank()) {
@@ -1152,7 +1212,7 @@ class NotoWidgetProvider : AppWidgetProvider() {
         )
       }
 
-      val chipSharesVerticalSpace = showLocationChip && !showTrailingPhotoLocationChip
+      val chipSharesVerticalSpace = showLocationChip
       val verticalSafeHeightPx = max(
         1f,
         geometry.contentHeightPx.toFloat() - textStageInsets.topPx - textStageInsets.bottomPx
@@ -1168,7 +1228,13 @@ class NotoWidgetProvider : AppWidgetProvider() {
       } else {
         0f
       }
-      val candidates = if (usesExpandedMetrics) {
+      val candidates = if (noteType == "text") {
+        listOf(
+          24f to if (usesExpandedMetrics) 28f else 24f,
+          18f to if (usesExpandedMetrics) 24f else 22f,
+          16f to if (usesExpandedMetrics) 22f else 20f
+        )
+      } else if (usesExpandedMetrics) {
         listOf(
           (24f + largeCanvasBoostSp) to 26f,
           (23f + largeCanvasBoostSp) to 24f,
@@ -1202,7 +1268,7 @@ class NotoWidgetProvider : AppWidgetProvider() {
           .toInt()
           .coerceIn(minLinesFloor, maxLinesUpperBound)
         val adjustedMaxLines = when {
-          chipSharesVerticalSpace && estimatedLines > maxLinesByHeight -> max(minLinesFloor, maxLinesByHeight - 1)
+          chipSharesVerticalSpace && !showCenteredTextLocationChip && estimatedLines > maxLinesByHeight -> max(minLinesFloor, maxLinesByHeight - 1)
           showAuthorChip && estimatedLines > maxLinesByHeight -> max(minLinesFloor, maxLinesByHeight - 1)
           else -> maxLinesByHeight
         }
@@ -1317,8 +1383,11 @@ class NotoWidgetProvider : AppWidgetProvider() {
         noteCount = json.optInt("noteCount", 0),
         nearbyPlacesCount = json.optInt("nearbyPlacesCount", 0),
         isLivePhoto = json.optBoolean("isLivePhoto", false),
+        isDualCapture = json.optBoolean("isDualCapture", false),
         backgroundImageUrl = json.optString("backgroundImageUrl", "").takeIf { it.isNotBlank() },
         backgroundImageBase64 = json.optString("backgroundImageBase64", "").takeIf { it.isNotBlank() },
+        dualInsetImageUrl = json.optString("dualInsetImageUrl", "").takeIf { it.isNotBlank() },
+        dualLayoutPreset = json.optString("dualLayoutPreset", "").takeIf { it.isNotBlank() },
         backgroundGradientStartColor = json.optString("backgroundGradientStartColor", "").takeIf { it.isNotBlank() },
         backgroundGradientEndColor = json.optString("backgroundGradientEndColor", "").takeIf { it.isNotBlank() },
         hasDoodle = json.optBoolean("hasDoodle", false),
@@ -1343,7 +1412,8 @@ class NotoWidgetProvider : AppWidgetProvider() {
         authorInitials = json.optString("authorInitials", ""),
         authorAvatarImageUrl = json.optString("authorAvatarImageUrl", "").takeIf { it.isNotBlank() },
         authorAvatarImageBase64 = json.optString("authorAvatarImageBase64", "").takeIf { it.isNotBlank() },
-        primaryActionUrl = json.optString("primaryActionUrl", "noto:///").ifBlank { "noto:///" }
+        primaryActionUrl = json.optString("primaryActionUrl", "noto:///").ifBlank { "noto:///" },
+        badgeActionUrl = json.optString("badgeActionUrl", "").takeIf { it.isNotBlank() }
       )
     }
 
@@ -1390,8 +1460,7 @@ class NotoWidgetProvider : AppWidgetProvider() {
         if (!normalizedPath.isNullOrBlank()) {
           val bitmap = decodeSampledBitmapFromFile(normalizedPath, targetWidthPx, targetHeightPx)
           if (bitmap != null) {
-            val normalizedBitmap = normalizeBitmapOrientation(bitmap, readExifOrientationFromPath(normalizedPath))
-            return createRoundedBitmap(normalizedBitmap, targetWidthPx, targetHeightPx, cornerRadiusPx)
+            return createRoundedBitmap(bitmap, targetWidthPx, targetHeightPx, cornerRadiusPx)
           }
         }
       }
@@ -1434,6 +1503,24 @@ class NotoWidgetProvider : AppWidgetProvider() {
       targetWidthPx: Int,
       targetHeightPx: Int
     ): Bitmap? {
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+        runCatching {
+          val source = ImageDecoder.createSource(File(path))
+          ImageDecoder.decodeBitmap(source) { decoder, info, _ ->
+            decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
+            decoder.isMutableRequired = false
+            decoder.setTargetSampleSize(
+              calculateInSampleSize(
+                max(info.size.width, 1),
+                max(info.size.height, 1),
+                targetWidthPx,
+                targetHeightPx
+              )
+            )
+          }
+        }.getOrNull()?.let { return it }
+      }
+
       val bounds = BitmapFactory.Options().apply {
         inJustDecodeBounds = true
       }
@@ -1446,7 +1533,17 @@ class NotoWidgetProvider : AppWidgetProvider() {
           targetHeightPx
         )
       }
-      return BitmapFactory.decodeFile(path, options)
+      BitmapFactory.decodeFile(path, options)?.let { bitmap ->
+        return normalizeBitmapOrientation(bitmap, readExifOrientationFromPath(path))
+      }
+
+      return runCatching {
+        File(path).readBytes().let { bytes ->
+          decodeSampledBitmapFromBytes(bytes, targetWidthPx, targetHeightPx)?.let { bitmap ->
+            normalizeBitmapOrientation(bitmap, readExifOrientationFromPath(path))
+          }
+        }
+      }.getOrNull()
     }
 
     private fun decodeSampledBitmapFromBytes(
@@ -1549,6 +1646,80 @@ class NotoWidgetProvider : AppWidgetProvider() {
       val rect = RectF(-bleedPx, -bleedPx, targetWidthPx.toFloat() + bleedPx, targetHeightPx.toFloat() + bleedPx)
       canvas.drawRoundRect(rect, cornerRadiusPx + bleedPx, cornerRadiusPx + bleedPx, paint)
       return output
+    }
+
+    private fun createDualInsetBitmap(
+      bitmap: Bitmap,
+      metrics: WidgetDualInsetMetrics
+    ): Bitmap {
+      val sizePx = max(metrics.sizePx, 1)
+      val output = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888)
+      val canvas = Canvas(output)
+      val insetRect = RectF(0f, 0f, sizePx.toFloat(), sizePx.toFloat())
+      val insetPath = Path().apply {
+        addRoundRect(insetRect, metrics.radiusPx, metrics.radiusPx, Path.Direction.CW)
+      }
+      val shellPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.parseColor(WIDGET_DUAL_INSET_SHELL_COLOR)
+      }
+      val imagePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        isFilterBitmap = true
+      }
+      val washPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.argb(
+          (255f * WIDGET_DUAL_INSET_WASH_OPACITY).toInt().coerceIn(0, 255),
+          255,
+          255,
+          255
+        )
+      }
+      val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeWidth = metrics.borderWidthPx
+        color = Color.argb((255f * WIDGET_DUAL_INSET_BORDER_OPACITY).toInt().coerceIn(0, 255), 255, 255, 255)
+      }
+
+      canvas.drawRoundRect(insetRect, metrics.radiusPx, metrics.radiusPx, shellPaint)
+      canvas.save()
+      canvas.clipPath(insetPath)
+      drawBitmapAspectFill(
+        canvas,
+        bitmap,
+        0f,
+        0f,
+        insetRect.width(),
+        insetRect.height(),
+        imagePaint
+      )
+      canvas.drawRoundRect(insetRect, metrics.radiusPx, metrics.radiusPx, washPaint)
+      canvas.restore()
+      canvas.drawRoundRect(insetRect, metrics.radiusPx, metrics.radiusPx, borderPaint)
+      return output
+    }
+
+    private fun resolveDualInsetMetrics(
+      context: Context,
+      geometry: WidgetRenderGeometry
+    ): WidgetDualInsetMetrics {
+      val minEdgePx = min(geometry.contentWidthPx, geometry.contentHeightPx)
+
+      return when {
+        minEdgePx >= context.dpToPx(220f) -> WidgetDualInsetMetrics(
+          sizePx = context.dpToPx(48f),
+          radiusPx = context.dpToPx(14f).toFloat(),
+          borderWidthPx = 1.25f
+        )
+        minEdgePx >= context.dpToPx(170f) -> WidgetDualInsetMetrics(
+          sizePx = context.dpToPx(42f),
+          radiusPx = context.dpToPx(13f).toFloat(),
+          borderWidthPx = 1.25f
+        )
+        else -> WidgetDualInsetMetrics(
+          sizePx = context.dpToPx(36f),
+          radiusPx = context.dpToPx(12f).toFloat(),
+          borderWidthPx = 1.25f
+        )
+      }
     }
 
     private fun createRoundedGradientBitmap(

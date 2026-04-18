@@ -12,8 +12,9 @@ import {
 } from 'react-native';
 import { GestureDetector } from 'react-native-gesture-handler';
 import { Camera, type CameraDevice } from 'react-native-vision-camera';
-import Reanimated from 'react-native-reanimated';
+import Reanimated, { FadeIn, FadeOut, ZoomIn } from 'react-native-reanimated';
 import { ENABLE_PHOTO_STICKERS } from '../../../constants/experiments';
+import { useReducedMotion } from '../../../hooks/useReducedMotion';
 import {
   DEFAULT_NOTE_COLOR_ID,
   getCaptureNoteGradient,
@@ -495,7 +496,9 @@ interface LiveCameraSurfaceProps {
   cameraRef: RefObject<Camera | null>;
   dualCameraPreviewRef?: RefObject<DualCameraPreviewHandle | null>;
   dualCaptureAwaitingSecondShot?: boolean;
+  dualCaptureFacingText?: string | null;
   dualCaptureFirstShotUri?: string | null;
+  dualCaptureStepText?: string | null;
   dualCaptureStatusText?: string | null;
   dualCameraSupported?: boolean;
   dualModeEnabled?: boolean;
@@ -535,7 +538,9 @@ export function LiveCameraSurface({
   cameraRef,
   dualCameraPreviewRef,
   dualCaptureAwaitingSecondShot = false,
+  dualCaptureFacingText = null,
   dualCaptureFirstShotUri = null,
+  dualCaptureStepText = null,
   dualCaptureStatusText = null,
   dualCameraSupported = false,
   dualModeEnabled = false,
@@ -563,6 +568,7 @@ export function LiveCameraSurface({
   selectedPhotoFilterId,
   t,
 }: LiveCameraSurfaceProps) {
+  const reduceMotionEnabled = useReducedMotion();
   const showDualCaptureReference =
     dualCaptureAwaitingSecondShot && Boolean(dualCaptureFirstShotUri);
   const shouldShowZoomBadge =
@@ -571,6 +577,13 @@ export function LiveCameraSurface({
     Boolean(cameraInstructionText) &&
     !dualModeEnabled &&
     !showDualCaptureReference &&
+    !needsCameraPermission &&
+    !showCameraUnavailableState &&
+    !isLivePhotoCaptureInProgress;
+  const showDualCaptureGuide =
+    typeof dualCaptureStepText === 'string' &&
+    dualCaptureStepText.length > 0 &&
+    !dualModeEnabled &&
     !needsCameraPermission &&
     !showCameraUnavailableState &&
     !isLivePhotoCaptureInProgress;
@@ -597,6 +610,28 @@ export function LiveCameraSurface({
     },
     [handleCameraStartupFailure]
   );
+  const handoffFadeIn = reduceMotionEnabled ? undefined : FadeIn.duration(160);
+  const handoffFadeOut = reduceMotionEnabled ? undefined : FadeOut.duration(100);
+  const handoffInsetIn = reduceMotionEnabled
+    ? undefined
+    : ZoomIn.springify().damping(18).stiffness(220).mass(0.9);
+  const dualCaptureGuideBackground =
+    colors.captureGlassColorScheme === 'light'
+      ? 'rgba(255,248,239,0.92)'
+      : 'rgba(28,28,30,0.42)';
+  const dualCaptureGuideBorder =
+    colors.captureGlassColorScheme === 'light'
+      ? 'rgba(255,255,255,0.72)'
+      : colors.captureGlassBorder;
+  const dualCaptureGuideActivePip = colors.captureGlassText;
+  const dualCaptureGuideInactivePip =
+    colors.captureGlassColorScheme === 'light'
+      ? 'rgba(43,38,33,0.18)'
+      : 'rgba(255,247,232,0.3)';
+  const dualCaptureGuideDivider =
+    colors.captureGlassColorScheme === 'light'
+      ? 'rgba(43,38,33,0.12)'
+      : 'rgba(255,247,232,0.22)';
 
   return (
     <View
@@ -604,7 +639,12 @@ export function LiveCameraSurface({
       collapsable={false}
     >
       {showDualCaptureReference ? (
-        <View testID="capture-dual-reference-photo" style={styles.cameraDualReferenceLayer}>
+        <Reanimated.View
+          testID="capture-dual-reference-photo"
+          entering={handoffFadeIn}
+          exiting={handoffFadeOut}
+          style={styles.cameraDualReferenceLayer}
+        >
           <Image
             source={{ uri: dualCaptureFirstShotUri! }}
             style={styles.cameraPreview}
@@ -612,7 +652,7 @@ export function LiveCameraSurface({
             transition={0}
             cachePolicy="none"
           />
-        </View>
+        </Reanimated.View>
       ) : null}
       {showDualCameraPreview && dualCameraSupported ? (
         <View style={styles.cameraGestureLayer} collapsable={false}>
@@ -663,27 +703,6 @@ export function LiveCameraSurface({
                 </Text>
               </View>
             ) : null}
-            {showLivePhotoGuide ? (
-              <View pointerEvents="none" style={styles.cameraLivePhotoGuideOverlay}>
-                <View
-                  testID="capture-live-photo-guide"
-                  style={[
-                    styles.cameraLivePhotoGuidePill,
-                    {
-                      backgroundColor: colors.captureGlassFill,
-                      borderColor: colors.captureGlassBorder,
-                    },
-                  ]}
-                >
-                  <LivePhotoIcon size={15} color={colors.captureGlassText} />
-                  <Text
-                    style={[styles.cameraActionHintText, { color: colors.captureGlassText }]}
-                  >
-                    {t('capture.livePhotoCoachLiveHint', 'Hold for live photo')}
-                  </Text>
-                </View>
-              </View>
-            ) : null}
             {cameraFocusPoint ? (
               <Reanimated.View
                 pointerEvents="none"
@@ -701,17 +720,85 @@ export function LiveCameraSurface({
           </View>
         </GestureDetector>
       ) : null}
-      {shouldRenderSingleCameraInsetPreview ? (
-        <GestureDetector gesture={cameraZoomGesture}>
+      {showDualCaptureGuide ? (
+        <View
+          pointerEvents="none"
+          testID="capture-dual-step-indicator"
+          style={styles.cameraLivePhotoGuideOverlay}
+        >
           <View
-            testID="capture-dual-live-inset"
             style={[
-              styles.cameraDualLiveInset,
+              styles.dualCaptureStepIndicator,
+              {
+                backgroundColor: dualCaptureGuideBackground,
+                borderColor: dualCaptureGuideBorder,
+              },
+            ]}
+          >
+            <View style={styles.dualCaptureStepPips}>
+              <View
+                style={[
+                  styles.dualCaptureStepPip,
+                  styles.dualCaptureStepPipActive,
+                  { backgroundColor: dualCaptureGuideActivePip },
+                ]}
+              />
+              <View
+                style={[
+                  styles.dualCaptureStepPip,
+                  { backgroundColor: dualCaptureGuideInactivePip },
+                  dualCaptureAwaitingSecondShot ? styles.dualCaptureStepPipActive : null,
+                  dualCaptureAwaitingSecondShot
+                    ? { backgroundColor: dualCaptureGuideActivePip }
+                    : null,
+                ]}
+              />
+            </View>
+            <Text style={[styles.dualCaptureStepLabel, { color: colors.captureGlassText }]}>
+              {dualCaptureStepText}
+            </Text>
+            {dualCaptureAwaitingSecondShot && dualCaptureFacingText ? (
+              <View
+                style={[
+                  styles.dualCaptureFacingWrap,
+                  { borderLeftColor: dualCaptureGuideDivider },
+                ]}
+              >
+                <Text style={[styles.dualCaptureFacingText, { color: colors.captureGlassText }]}>
+                  {dualCaptureFacingText}
+                </Text>
+              </View>
+            ) : null}
+          </View>
+        </View>
+      ) : showLivePhotoGuide ? (
+        <View pointerEvents="none" style={styles.cameraLivePhotoGuideOverlay}>
+          <View
+            testID="capture-live-photo-guide"
+            style={[
+              styles.cameraLivePhotoGuidePill,
               {
                 backgroundColor: colors.captureGlassFill,
                 borderColor: colors.captureGlassBorder,
               },
             ]}
+          >
+            <LivePhotoIcon size={15} color={colors.captureGlassText} />
+            <Text
+              style={[styles.cameraActionHintText, { color: colors.captureGlassText }]}
+            >
+              {t('capture.livePhotoCoachLiveHint', 'Hold for live photo')}
+            </Text>
+          </View>
+        </View>
+      ) : null}
+      {shouldRenderSingleCameraInsetPreview ? (
+        <GestureDetector gesture={cameraZoomGesture}>
+          <Reanimated.View
+            testID="capture-dual-live-inset"
+            entering={handoffInsetIn}
+            exiting={handoffFadeOut}
+            style={styles.cameraDualLiveInset}
             collapsable={false}
           >
             <Camera
@@ -740,7 +827,8 @@ export function LiveCameraSurface({
               height={DUAL_CAMERA_INSET_SIZE}
               style={styles.cameraPreview}
             />
-          </View>
+            <View pointerEvents="none" style={styles.cameraDualLiveInsetFrost} />
+          </Reanimated.View>
         </GestureDetector>
       ) : null}
       {showDualCaptureStatus ? (
@@ -767,26 +855,22 @@ export function LiveCameraSurface({
         </View>
       ) : null}
       {showDualCaptureInset ? (
-        <View
+        <Reanimated.View
           pointerEvents="none"
           testID="capture-dual-inset-preview"
-          style={[
-            styles.cameraDualPreviewInset,
-            {
-              backgroundColor: colors.captureGlassFill,
-              borderColor: colors.captureGlassBorder,
-            },
-          ]}
-        >
-          <Image
-            source={{ uri: dualCaptureFirstShotUri! }}
-            style={styles.cameraPreview}
-            contentFit="cover"
-            transition={0}
-            cachePolicy="none"
-          />
-          <View style={styles.cameraDualPreviewInsetScrim} />
-        </View>
+          entering={handoffInsetIn}
+          exiting={handoffFadeOut}
+          style={styles.cameraDualPreviewInset}
+          >
+            <Image
+              source={{ uri: dualCaptureFirstShotUri! }}
+              style={styles.cameraPreview}
+              contentFit="cover"
+              transition={0}
+              cachePolicy="none"
+            />
+            <View style={styles.cameraDualPreviewInsetScrim} />
+        </Reanimated.View>
       ) : null}
       <Reanimated.View
         testID="camera-transition-overlay"

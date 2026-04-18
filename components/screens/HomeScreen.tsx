@@ -2219,7 +2219,8 @@ export default function HomeScreen() {
         if (captureMode === 'camera' && capturedPhoto) {
           const directory = `${FileSystem.documentDirectory}photos/`;
           await FileSystem.makeDirectoryAsync(directory, { intermediates: true });
-          const filename = `note-${Date.now()}.jpg`;
+          const filename =
+            cameraSubmode === 'dual' ? `note-${Date.now()}.png` : `note-${Date.now()}.jpg`;
           destinationPath = `${directory}${filename}`;
           if (cameraSubmode === 'dual') {
             await FileSystem.copyAsync({ from: capturedPhoto, to: destinationPath });
