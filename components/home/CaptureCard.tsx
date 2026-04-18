@@ -347,19 +347,17 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
         facing === 'front'
           ? 'capture.dualSecondShotFrontStatus'
           : 'capture.dualSecondShotBackStatus',
-        facing === 'front'
-          ? '1 of 2 saved. Front camera is up next.'
-          : '1 of 2 saved. Back camera is up next.'
+        facing === 'front' ? 'Shot 2: Front' : 'Shot 2: Back'
       );
     }
 
     if (dualCaptureUsesSequentialCapture) {
-      return t('capture.dualFirstShotStatus', 'Dual mode: take the first photo.');
+      return t('capture.dualFirstShotStatus', 'Shot 1');
     }
 
     return t(
       'capture.dualNativeStatus',
-      'Dual mode: captures both cameras together.'
+      'Dual'
     );
   }, [
     dualCaptureAwaitingSecondShot,
@@ -1222,6 +1220,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                     cameraPreviewZoom={cameraPreviewZoom}
                     cameraRef={cameraRef}
                     dualCameraPreviewRef={dualCameraPreviewRef}
+                    dualCaptureAwaitingSecondShot={dualCaptureAwaitingSecondShot}
                     dualCaptureFirstShotUri={
                       dualCaptureAwaitingSecondShot ? dualCaptureFirstShotUri : null
                     }

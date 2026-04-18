@@ -1022,8 +1022,9 @@ describe('CaptureCard doodle handle', () => {
       onResetDualCaptureSequence,
     });
 
-    expect(view.getByTestId('capture-dual-inset-preview')).toBeTruthy();
-    expect(view.getByText('1 of 2 saved. Front camera is up next.')).toBeTruthy();
+    expect(view.getByTestId('capture-dual-reference-photo')).toBeTruthy();
+    expect(view.getByTestId('capture-dual-live-inset')).toBeTruthy();
+    expect(view.getByText('Shot 2: Front')).toBeTruthy();
 
     fireEvent.press(view.getByLabelText('Start over'));
 

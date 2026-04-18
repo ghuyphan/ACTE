@@ -13,6 +13,7 @@ const {
   insetRadius: DUAL_CAMERA_INSET_RADIUS,
   insetSize: DUAL_CAMERA_INSET_SIZE,
 } = getDualCameraInsetMetrics(CARD_SIZE);
+export { DUAL_CAMERA_INSET_SIZE };
 export const TOP_CONTROL_INSET = 24;
 export const TOP_CONTROL_HEIGHT = 38;
 export const TOP_CONTROL_RADIUS = 19;
@@ -311,6 +312,9 @@ export const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  cameraDualReferenceLayer: {
+    ...StyleSheet.absoluteFillObject,
+  },
   cameraSurfaceTopLayer: {
     zIndex: 1,
   },
@@ -359,19 +363,21 @@ export const styles = StyleSheet.create({
     zIndex: 10,
   },
   cameraDualPreviewOnlyBadge: {
-    minHeight: 30,
-    borderRadius: 15,
+    minHeight: 26,
+    borderRadius: 13,
+    borderCurve: 'continuous',
     borderWidth: StyleSheet.hairlineWidth,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
+    gap: 5,
+    maxWidth: 180,
   },
   cameraDualPreviewOnlyBadgeText: {
-    fontSize: 12,
-    fontWeight: '700',
+    fontSize: 11,
+    fontWeight: '600',
     fontFamily: 'Noto Sans',
     flexShrink: 1,
   },
@@ -382,12 +388,41 @@ export const styles = StyleSheet.create({
     width: DUAL_CAMERA_INSET_SIZE,
     height: DUAL_CAMERA_INSET_SIZE,
     borderRadius: DUAL_CAMERA_INSET_RADIUS,
+    borderCurve: 'continuous',
     borderWidth: DUAL_CAMERA_INSET_BORDER_WIDTH,
     overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 4,
     zIndex: 9,
+    shadowColor: '#000000',
+    shadowOpacity: 0.2,
+    shadowRadius: 16,
+    shadowOffset: {
+      width: 0,
+      height: 8,
+    },
+    elevation: 10,
+  },
+  cameraDualLiveInset: {
+    position: 'absolute',
+    top: DUAL_CAMERA_INSET_MARGIN,
+    left: DUAL_CAMERA_INSET_MARGIN,
+    width: DUAL_CAMERA_INSET_SIZE,
+    height: DUAL_CAMERA_INSET_SIZE,
+    borderRadius: DUAL_CAMERA_INSET_RADIUS,
+    borderCurve: 'continuous',
+    borderWidth: DUAL_CAMERA_INSET_BORDER_WIDTH,
+    overflow: 'hidden',
+    zIndex: 9,
+    shadowColor: '#000000',
+    shadowOpacity: 0.2,
+    shadowRadius: 16,
+    shadowOffset: {
+      width: 0,
+      height: 8,
+    },
+    elevation: 10,
   },
   cameraDualPreviewInsetScrim: {
     ...StyleSheet.absoluteFillObject,

@@ -27,24 +27,6 @@ type DualCaptureComposerProps = {
   onComplete: (requestId: string, result: { uri: string | null; error?: string | null }) => void;
 };
 
-function MirroredImage({
-  mirrored,
-  uri,
-}: {
-  mirrored: boolean;
-  uri: string;
-}) {
-  return (
-    <Image
-      source={{ uri }}
-      style={[styles.image, mirrored ? styles.mirroredImage : null]}
-      contentFit="cover"
-      transition={0}
-      cachePolicy="none"
-    />
-  );
-}
-
 const DualCaptureComposer = memo(function DualCaptureComposer({
   request,
   onComplete,
@@ -105,9 +87,12 @@ const DualCaptureComposer = memo(function DualCaptureComposer({
     <View pointerEvents="none" style={styles.host}>
       <View ref={viewRef} collapsable={false} style={styles.canvas}>
         <View style={styles.mainImageWrap}>
-          <MirroredImage
-            mirrored={request.primaryFacing === 'front'}
-            uri={request.primaryUri}
+          <Image
+            source={{ uri: request.primaryUri }}
+            style={styles.image}
+            contentFit="cover"
+            transition={0}
+            cachePolicy="none"
           />
         </View>
         <View style={styles.mainLoader}>
@@ -123,9 +108,12 @@ const DualCaptureComposer = memo(function DualCaptureComposer({
         </View>
         <View style={styles.insetShell}>
           <View style={styles.insetImageWrap}>
-            <MirroredImage
-              mirrored={request.secondaryFacing === 'front'}
-              uri={request.secondaryUri}
+            <Image
+              source={{ uri: request.secondaryUri }}
+              style={styles.image}
+              contentFit="cover"
+              transition={0}
+              cachePolicy="none"
             />
           </View>
           <View style={styles.insetLoader}>
@@ -172,6 +160,7 @@ const styles = StyleSheet.create({
     width: INSET_SIZE,
     height: INSET_SIZE,
     borderRadius: INSET_RADIUS,
+    borderCurve: 'continuous',
     overflow: 'hidden',
     borderWidth: INSET_BORDER_WIDTH,
     borderColor: 'rgba(255,255,255,0.92)',
@@ -192,9 +181,6 @@ const styles = StyleSheet.create({
   image: {
     width: '100%',
     height: '100%',
-  },
-  mirroredImage: {
-    transform: [{ scaleX: -1 }],
   },
   hiddenLoaderImage: {
     width: 1,

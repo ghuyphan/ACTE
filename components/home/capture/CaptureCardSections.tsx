@@ -36,6 +36,7 @@ import { LiveCameraFilterOverlay } from './LiveCameraFilterOverlay';
 import {
   CAMERA_FOCUS_RING_SIZE,
   CARD_SIZE,
+  DUAL_CAMERA_INSET_SIZE,
   LIVE_PHOTO_RING_STROKE_WIDTH,
   PHOTO_CAPTION_MAX_LENGTH,
   styles,
@@ -493,6 +494,7 @@ interface LiveCameraSurfaceProps {
   cameraPreviewZoom: number;
   cameraRef: RefObject<Camera | null>;
   dualCameraPreviewRef?: RefObject<DualCameraPreviewHandle | null>;
+  dualCaptureAwaitingSecondShot?: boolean;
   dualCaptureFirstShotUri?: string | null;
   dualCaptureStatusText?: string | null;
   dualCameraSupported?: boolean;
@@ -532,6 +534,7 @@ export function LiveCameraSurface({
   cameraPreviewZoom,
   cameraRef,
   dualCameraPreviewRef,
+  dualCaptureAwaitingSecondShot = false,
   dualCaptureFirstShotUri = null,
   dualCaptureStatusText = null,
   dualCameraSupported = false,
@@ -560,21 +563,28 @@ export function LiveCameraSurface({
   selectedPhotoFilterId,
   t,
 }: LiveCameraSurfaceProps) {
-  const shouldShowZoomBadge = showCameraZoomBadge || cameraPreviewZoom > 1.01;
+  const showDualCaptureReference =
+    dualCaptureAwaitingSecondShot && Boolean(dualCaptureFirstShotUri);
+  const shouldShowZoomBadge =
+    !showDualCaptureReference && (showCameraZoomBadge || cameraPreviewZoom > 1.01);
   const showLivePhotoGuide =
     Boolean(cameraInstructionText) &&
     !dualModeEnabled &&
+    !showDualCaptureReference &&
     !needsCameraPermission &&
     !showCameraUnavailableState &&
     !isLivePhotoCaptureInProgress;
-  const showDualCaptureInset = Boolean(dualCaptureFirstShotUri);
+  const showDualCaptureInset = Boolean(dualCaptureFirstShotUri) && !showDualCaptureReference;
   const showDualCaptureStatus = Boolean(dualCaptureStatusText);
 
   const showDualCameraPreview =
     dualModeEnabled &&
     !needsCameraPermission &&
     !showCameraUnavailableState;
-  const shouldRenderSingleCameraPreview = !dualModeEnabled && shouldRenderCameraPreview;
+  const shouldRenderSingleCameraPreview =
+    !dualModeEnabled && shouldRenderCameraPreview && !showDualCaptureReference;
+  const shouldRenderSingleCameraInsetPreview =
+    !dualModeEnabled && shouldRenderCameraPreview && showDualCaptureReference;
   const handleDualCameraPreviewReady = useCallback(() => {
     handleCameraInitialized();
     handleCameraPreviewStarted();
@@ -593,6 +603,17 @@ export function LiveCameraSurface({
       style={[styles.cameraContainer, { backgroundColor: colors.captureCameraOverlay }]}
       collapsable={false}
     >
+      {showDualCaptureReference ? (
+        <View testID="capture-dual-reference-photo" style={styles.cameraDualReferenceLayer}>
+          <Image
+            source={{ uri: dualCaptureFirstShotUri! }}
+            style={styles.cameraPreview}
+            contentFit="cover"
+            transition={0}
+            cachePolicy="none"
+          />
+        </View>
+      ) : null}
       {showDualCameraPreview && dualCameraSupported ? (
         <View style={styles.cameraGestureLayer} collapsable={false}>
           <DualCameraPreview
@@ -677,6 +698,48 @@ export function LiveCameraSurface({
                 ]}
               />
             ) : null}
+          </View>
+        </GestureDetector>
+      ) : null}
+      {shouldRenderSingleCameraInsetPreview ? (
+        <GestureDetector gesture={cameraZoomGesture}>
+          <View
+            testID="capture-dual-live-inset"
+            style={[
+              styles.cameraDualLiveInset,
+              {
+                backgroundColor: colors.captureGlassFill,
+                borderColor: colors.captureGlassBorder,
+              },
+            ]}
+            collapsable={false}
+          >
+            <Camera
+              key={cameraKey}
+              style={styles.cameraPreview}
+              device={cameraDevice!}
+              isActive={canShowLiveCameraPreview}
+              preview
+              photo
+              video
+              photoQualityBalance="speed"
+              isMirrored={facing === 'front'}
+              zoom={cameraPreviewZoom}
+              resizeMode="cover"
+              androidPreviewViewType="texture-view"
+              ref={cameraRef}
+              onInitialized={handleCameraInitialized}
+              onPreviewStarted={handleCameraPreviewStarted}
+              onError={(error) => {
+                handleCameraStartupFailure(error.message);
+              }}
+            />
+            <LiveCameraFilterOverlay
+              filterId={selectedPhotoFilterId}
+              width={DUAL_CAMERA_INSET_SIZE}
+              height={DUAL_CAMERA_INSET_SIZE}
+              style={styles.cameraPreview}
+            />
           </View>
         </GestureDetector>
       ) : null}
