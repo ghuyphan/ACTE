@@ -36,6 +36,26 @@ jest.mock('../hooks/useRelativeTimeNow', () => ({
   useRelativeTimeNow: () => new Date('2026-04-10T04:00:00.000Z'),
 }));
 
+jest.mock('../hooks/useTheme', () => ({
+  useTheme: () => ({
+    isDark: false,
+    colors: {
+      background: '#FAF9F6',
+      surface: '#FFFFFF',
+      card: '#FFFFFF',
+      text: '#1C1C1E',
+      secondaryText: '#8E8E93',
+      primary: '#FFC107',
+      primarySoft: 'rgba(255,193,7,0.15)',
+      accent: '#FF9F0A',
+      border: '#E5E5EA',
+      danger: '#FF3B30',
+      success: '#34C759',
+      gradient: ['#FFC107', '#FF9F0A'],
+    },
+  }),
+}));
+
 jest.mock('../components/home/SharedPostCardVisual', () => {
   return function MockSharedPostCardVisual() {
     const React = require('react');

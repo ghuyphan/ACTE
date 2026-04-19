@@ -231,6 +231,39 @@ export async function replaceCachedSharedPosts(userUid: string, posts: SharedPos
     await tx.runAsync('DELETE FROM shared_posts_cache WHERE user_uid = ?', userUid);
 
     for (const post of posts) {
+      const sharedPostInsertValues = [
+        userUid,
+        post.id,
+        post.authorUid,
+        post.authorDisplayName,
+        post.authorPhotoURLSnapshot,
+        JSON.stringify(post.audienceUserIds),
+        post.type,
+        post.text,
+        post.photoPath,
+        post.photoLocalUri,
+        post.captureVariant ?? null,
+        post.dualPrimaryPhotoPath ?? null,
+        post.dualSecondaryPhotoPath ?? null,
+        post.dualPrimaryPhotoLocalUri ?? null,
+        post.dualSecondaryPhotoLocalUri ?? null,
+        post.isLivePhoto ? 1 : 0,
+        post.pairedVideoPath ?? null,
+        post.pairedVideoLocalUri ?? null,
+        post.dualPrimaryFacing ?? null,
+        post.dualSecondaryFacing ?? null,
+        post.dualLayoutPreset ?? null,
+        post.doodleStrokesJson ?? null,
+        post.stickerPlacementsJson ?? null,
+        post.noteColor ?? null,
+        post.placeName,
+        post.sourceNoteId,
+        post.latitude ?? null,
+        post.longitude ?? null,
+        post.createdAt,
+        post.updatedAt,
+      ] as const;
+
       await tx.runAsync(
         `INSERT INTO shared_posts_cache (
           user_uid,
@@ -264,37 +297,8 @@ export async function replaceCachedSharedPosts(userUid: string, posts: SharedPos
           created_at,
           updated_at
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        userUid,
-        post.id,
-        post.authorUid,
-        post.authorDisplayName,
-        post.authorPhotoURLSnapshot,
-        JSON.stringify(post.audienceUserIds),
-        post.type,
-        post.text,
-        post.photoPath,
-        post.photoLocalUri,
-        post.captureVariant ?? null,
-        post.dualPrimaryPhotoPath ?? null,
-        post.dualSecondaryPhotoPath ?? null,
-        post.dualPrimaryPhotoLocalUri ?? null,
-        post.dualSecondaryPhotoLocalUri ?? null,
-        post.isLivePhoto ? 1 : 0,
-        post.pairedVideoPath ?? null,
-        post.pairedVideoLocalUri ?? null,
-        post.dualPrimaryFacing ?? null,
-        post.dualSecondaryFacing ?? null,
-        post.dualLayoutPreset ?? null,
-        post.doodleStrokesJson ?? null,
-        post.stickerPlacementsJson ?? null,
-        post.noteColor ?? null,
-        post.placeName,
-        post.sourceNoteId,
-        post.latitude ?? null,
-        post.longitude ?? null,
-        post.createdAt,
-        post.updatedAt
+        VALUES (${sharedPostInsertValues.map(() => '?').join(', ')})`,
+        ...sharedPostInsertValues
       );
     }
 

@@ -133,6 +133,20 @@ jest.mock('../hooks/useAuth', () => ({
   }),
 }));
 
+jest.mock('../hooks/useSyncStatus', () => ({
+  useSyncStatus: () => ({
+    status: 'idle',
+    bootstrapState: 'complete',
+    lastSyncedAt: null,
+    lastMessage: null,
+    pendingCount: 0,
+    failedCount: 0,
+    blockedCount: 0,
+    isEnabled: true,
+    setSyncEnabled: jest.fn(),
+  }),
+}));
+
 jest.mock('../hooks/useTheme', () => ({
   useTheme: () => ({
     isDark: false,

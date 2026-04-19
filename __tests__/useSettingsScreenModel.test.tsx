@@ -28,6 +28,7 @@ const mockNotesState = {
 };
 
 const mockSharedFeedState = {
+  enabled: false,
   deleteSharedNotes: jest.fn(async () => undefined),
 };
 
@@ -59,6 +60,11 @@ const mockSubscriptionState = {
   isPurchaseAvailable: false,
   plusPriceLabel: null as string | null,
   photoNoteLimit: 10 as number | null,
+};
+const mockSocialPushState = {
+  status: 'denied' as 'skipped' | 'denied' | 'blocked' | 'granted',
+  enableFromPrompt: jest.fn(async () => undefined),
+  openSystemSettings: jest.fn(async () => undefined),
 };
 
 const mockHapticsState = {
@@ -154,6 +160,10 @@ jest.mock('../hooks/useHaptics', () => ({
   useHaptics: () => mockHapticsState,
 }));
 
+jest.mock('../hooks/useSocialPushPermission', () => ({
+  useSocialPushPermission: () => mockSocialPushState,
+}));
+
 jest.mock('../services/legalLinks', () => ({
   hasAccountDeletionLink: () => false,
   hasPrivacyPolicyLink: () => false,
@@ -169,6 +179,7 @@ describe('useSettingsScreenModel', () => {
     mockConnectivityState.isOnline = true;
     mockAuthState.user = null;
     mockAuthState.isAuthAvailable = true;
+    mockSharedFeedState.enabled = false;
     mockSyncState.status = 'idle';
     mockSyncState.bootstrapState = 'complete';
     mockSyncState.lastSyncedAt = null;
@@ -180,6 +191,7 @@ describe('useSettingsScreenModel', () => {
     mockHapticsState.isEnabled = true;
     mockI18nState.language = 'en';
     mockI18nState.resolvedLanguage = 'en';
+    mockSocialPushState.status = 'denied';
   });
 
   it('shows not signed in for cloud sync when there is no signed-in user', () => {
@@ -400,5 +412,44 @@ describe('useSettingsScreenModel', () => {
     const { result } = renderHook(() => useSettingsScreenModel());
 
     expect(result.current.languageLabel).toBe('Tiếng Việt');
+  });
+
+  it('keeps friend activity notifications visible after permission is granted', () => {
+    mockAuthState.user = {
+      id: 'user-1',
+      uid: 'user-1',
+      displayName: 'Huy',
+      email: 'huy@example.com',
+    };
+    mockSharedFeedState.enabled = true;
+    mockSocialPushState.status = 'granted';
+
+    const { result } = renderHook(() => useSettingsScreenModel());
+
+    expect(result.current.showSocialPushEntry).toBe(true);
+    expect(result.current.socialPushValue).toBe('On');
+    expect(result.current.socialPushHint).toBe(
+      'Get alerts when friends accept invites or share moments with you.'
+    );
+  });
+
+  it('opens system settings instead of showing the prompt when social push permission is blocked', async () => {
+    mockAuthState.user = {
+      id: 'user-1',
+      uid: 'user-1',
+      displayName: 'Huy',
+      email: 'huy@example.com',
+    };
+    mockSharedFeedState.enabled = true;
+    mockSocialPushState.status = 'blocked';
+
+    const { result } = renderHook(() => useSettingsScreenModel());
+
+    await act(async () => {
+      await result.current.openSocialPushSettings();
+    });
+
+    expect(mockSocialPushState.openSystemSettings).toHaveBeenCalled();
+    expect(mockSocialPushState.enableFromPrompt).not.toHaveBeenCalled();
   });
 });

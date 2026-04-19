@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 
 /**
- * This script is used to reset the project to a blank state.
- * It deletes or moves the /app, /components, /hooks, /scripts, and /constants directories to /app-example based on user input and creates a new /app directory with an index.tsx and _layout.tsx file.
- * You can remove the `reset-project` script from package.json and safely delete this file after running it.
+ * Template bootstrap helper retained from the Expo starter.
+ * This repo is an active product app, so the reset flow is intentionally gated
+ * behind an explicit CLI flag instead of being discoverable as a normal npm script.
  */
 
 const fs = require("fs");
@@ -15,6 +15,7 @@ const oldDirs = ["app", "components", "hooks", "constants", "scripts"];
 const exampleDir = "app-example";
 const newAppDir = "app";
 const exampleDirPath = path.join(root, exampleDir);
+const CONFIRM_FLAG = "--allow-project-reset";
 
 const indexContent = `import { Text, View } from "react-native";
 
@@ -44,6 +45,17 @@ const rl = readline.createInterface({
   input: process.stdin,
   output: process.stdout,
 });
+
+if (!process.argv.includes(CONFIRM_FLAG)) {
+  console.error(
+    [
+      "This template reset script is disabled by default for this repository.",
+      `If you truly need it, run: node ./scripts/reset-project.js ${CONFIRM_FLAG}`,
+    ].join("\n")
+  );
+  rl.close();
+  process.exit(1);
+}
 
 const moveDirectories = async (userInput) => {
   try {

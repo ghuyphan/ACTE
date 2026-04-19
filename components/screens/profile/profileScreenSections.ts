@@ -50,25 +50,29 @@ export function buildProfileSections(model: ProfileScreenModel): {
       },
     ];
 
-    if (model.user.username) {
+    if (model.user.username || model.canEditUsername) {
       accountItems.push({
         key: 'username',
         icon: 'username',
         title: model.t('profile.username', 'Username'),
-        value: `@${model.user.username}`,
-        trailingAction: {
-          accessibilityLabel: model.isUsernameCopied
-            ? model.t('profile.usernameCopied', 'Noto ID copied')
-            : model.t('profile.copyUsername', 'Copy Noto ID'),
-          icon: model.isUsernameCopied ? 'check' : 'copy',
-          onPress: model.copyUsername,
-        },
+        value: model.user.username ? `@${model.user.username}` : undefined,
+        trailingAction: model.user.username
+          ? {
+              accessibilityLabel: model.isUsernameCopied
+                ? model.t('profile.usernameCopied', 'Noto ID copied')
+                : model.t('profile.copyUsername', 'Copy Noto ID'),
+              icon: model.isUsernameCopied ? 'check' : 'copy',
+              onPress: model.copyUsername,
+            }
+          : undefined,
         subtitle: model.canEditUsername
           ? model.t('profile.usernameEditCta', 'Choose your permanent username')
           : undefined,
         onPress: model.canEditUsername ? model.openUsernameEditor : undefined,
       });
-    } else if (model.user.email) {
+    }
+
+    if (model.user.email) {
       accountItems.push({
         key: 'email',
         icon: 'email',

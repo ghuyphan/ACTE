@@ -179,4 +179,33 @@ describe('useProfileScreenModel', () => {
     });
     expect(result.current.isUsernameCopied).toBe(false);
   });
+
+  it('keeps username editing reachable when the username is missing', () => {
+    mockAuthState.user = {
+      id: 'user-1',
+      uid: 'user-1',
+      displayName: 'Huy',
+      username: null,
+      usernameSetAt: null,
+      email: 'huy@example.com',
+      photoURL: null,
+    };
+
+    const { result } = renderHook(() => useProfileScreenModel());
+    const { signedInSections } = buildProfileSections(result.current);
+    const usernameRow = signedInSections
+      .flatMap((section) => section.items)
+      .find((row) => row.key === 'username');
+    const emailRow = signedInSections
+      .flatMap((section) => section.items)
+      .find((row) => row.key === 'email');
+
+    expect(usernameRow).toMatchObject({
+      title: 'Username',
+      subtitle: 'Choose your permanent username',
+      trailingAction: undefined,
+    });
+    expect(usernameRow?.onPress).toBe(result.current.openUsernameEditor);
+    expect(emailRow?.value).toBe('huy@example.com');
+  });
 });

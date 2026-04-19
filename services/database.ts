@@ -2342,6 +2342,40 @@ export async function upsertNoteForScope(input: UpsertNoteInput, scope: string):
         stickerPlacementsJson: input.stickerPlacementsJson,
     });
     const updatedAt = input.updatedAt ?? input.createdAt;
+    const noteInsertValues = [
+        input.id,
+        scope,
+        input.type,
+        normalizedContent,
+        normalizedCaption,
+        photoLocalUri,
+        photoSyncedLocalUri,
+        input.photoRemoteBase64 ?? null,
+        input.isLivePhoto ? 1 : 0,
+        pairedVideoLocalUri,
+        pairedVideoSyncedLocalUri,
+        input.pairedVideoRemotePath ?? null,
+        input.locationName ?? null,
+        input.promptId ?? null,
+        input.promptTextSnapshot ?? null,
+        input.promptAnswer ?? null,
+        input.moodEmoji ?? null,
+        input.noteColor ?? null,
+        normalizedCaptureVariant,
+        normalizedDualPrimaryPhotoLocalUri,
+        normalizedDualSecondaryPhotoLocalUri,
+        normalizedDualPrimaryFacing,
+        normalizedDualSecondaryFacing,
+        normalizedDualLayoutPreset,
+        normalizedDualComposedPhotoLocalUri,
+        searchText,
+        input.latitude,
+        input.longitude,
+        input.radius ?? DEFAULT_NOTE_RADIUS,
+        input.isFavorite ? 1 : 0,
+        input.createdAt,
+        input.updatedAt ?? null,
+    ] as const;
 
     await withDatabaseTransaction(async (txn) => {
         const existingRow = await txn.getFirstAsync<{ owner_uid: string }>(
@@ -2389,7 +2423,7 @@ export async function upsertNoteForScope(input: UpsertNoteInput, scope: string):
                 created_at,
                 updated_at
             )
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             VALUES (${noteInsertValues.map(() => '?').join(', ')})
              ON CONFLICT(id) DO UPDATE SET
                 owner_uid = excluded.owner_uid,
                 type = excluded.type,
@@ -2422,38 +2456,7 @@ export async function upsertNoteForScope(input: UpsertNoteInput, scope: string):
                 is_favorite = excluded.is_favorite,
                 created_at = excluded.created_at,
                 updated_at = excluded.updated_at`,
-            input.id,
-            scope,
-            input.type,
-            normalizedContent,
-            normalizedCaption,
-            photoLocalUri,
-            photoSyncedLocalUri,
-            input.photoRemoteBase64 ?? null,
-            input.isLivePhoto ? 1 : 0,
-            pairedVideoLocalUri,
-            pairedVideoSyncedLocalUri,
-            input.pairedVideoRemotePath ?? null,
-            input.locationName ?? null,
-            input.promptId ?? null,
-            input.promptTextSnapshot ?? null,
-            input.promptAnswer ?? null,
-            input.moodEmoji ?? null,
-            input.noteColor ?? null,
-            normalizedCaptureVariant,
-            normalizedDualPrimaryPhotoLocalUri,
-            normalizedDualSecondaryPhotoLocalUri,
-            normalizedDualPrimaryFacing,
-            normalizedDualSecondaryFacing,
-            normalizedDualLayoutPreset,
-            normalizedDualComposedPhotoLocalUri,
-            searchText,
-            input.latitude,
-            input.longitude,
-            input.radius ?? DEFAULT_NOTE_RADIUS,
-            input.isFavorite ? 1 : 0,
-            input.createdAt,
-            input.updatedAt ?? null
+            ...noteInsertValues
         );
         await upsertNoteSearchDocument(txn, input.id, scope, searchText);
         await persistNoteDecorationRows(txn, input.id, noteDecorations, updatedAt);

@@ -175,7 +175,7 @@ export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [hasAcceptedPolicyConsent, setHasAcceptedPolicyConsent] = useState(true);
+  const [hasAcceptedPolicyConsent, setHasAcceptedPolicyConsent] = useState(false);
   const [authMessage, setAuthMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [activeAction, setActiveAction] = useState<'google' | 'signIn' | 'register' | 'reset' | null>(null);
@@ -221,6 +221,9 @@ export default function LoginScreen() {
   const openForm = useCallback(
     (mode: Exclude<AuthScreenMode, 'landing'>) => {
       resetMessages();
+      if (mode === 'register') {
+        setHasAcceptedPolicyConsent(false);
+      }
       setScreenMode(mode);
     },
     [resetMessages]

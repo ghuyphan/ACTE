@@ -313,12 +313,7 @@ export function useCaptureCardCameraController({
     setIsCameraReady(false);
     setCameraRetryNonce((current) => current + 1);
   }, [
-    cameraActivationNonce,
-    cameraRetryNonce,
     cameraTransitionMaskOpacity,
-    canShowLiveCameraPreview,
-    facing,
-    isCameraPreviewActive,
     reduceMotionEnabled,
   ]);
 

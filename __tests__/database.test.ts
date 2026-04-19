@@ -83,6 +83,10 @@ jest.mock('../utils/fileSystem', () => ({
   documentDirectory: 'file:///mock-documents/',
 }));
 
+function countSqlPlaceholders(sql: string) {
+  return (sql.match(/\?/g) ?? []).length;
+}
+
 describe('database migrations', () => {
   afterEach(() => {
     jest.resetModules();
@@ -405,6 +409,70 @@ describe('database migrations', () => {
     ).rejects.toThrow('Refusing to overwrite note shared-id from scope user-1 with scope user-2.');
 
     expect(mockRunAsync).not.toHaveBeenCalledWith(expect.stringContaining('INSERT INTO notes'));
+  });
+
+  it('binds one value per placeholder when upserting a scoped note', async () => {
+    let getDB!: () => Promise<unknown>;
+    let upsertNoteForScope!: (input: Record<string, unknown>, scope: string) => Promise<unknown>;
+
+    jest.isolateModules(() => {
+      ({ getDB, upsertNoteForScope } = require('../services/database'));
+    });
+
+    await getDB();
+    mockRunAsync.mockClear();
+    mockGetFirstAsync.mockImplementation(async (sql: string) => {
+      if (sql.includes('PRAGMA user_version')) {
+        return { user_version: 0 };
+      }
+
+      if (sql.includes('SELECT owner_uid FROM notes WHERE id = ?')) {
+        return null;
+      }
+
+      return null;
+    });
+
+    await upsertNoteForScope(
+      {
+        id: 'scoped-note-1',
+        type: 'photo',
+        content: 'file:///mock-documents/photos/photo-1.jpg',
+        caption: 'A bright memory',
+        photoLocalUri: 'file:///mock-documents/photos/photo-1.jpg',
+        photoSyncedLocalUri: 'file:///mock-documents/photos/photo-1.synced.jpg',
+        photoRemoteBase64: 'base64-data',
+        isLivePhoto: true,
+        pairedVideoLocalUri: 'file:///mock-documents/videos/photo-1.mov',
+        pairedVideoSyncedLocalUri: 'file:///mock-documents/videos/photo-1.synced.mov',
+        pairedVideoRemotePath: 'remote/path.mov',
+        locationName: 'District 1',
+        promptId: 'prompt-1',
+        promptTextSnapshot: 'Prompt text',
+        promptAnswer: 'Prompt answer',
+        moodEmoji: 'smile',
+        noteColor: 'skyline',
+        captureVariant: 'dual',
+        dualPrimaryPhotoLocalUri: 'file:///mock-documents/photos/primary.jpg',
+        dualSecondaryPhotoLocalUri: 'file:///mock-documents/photos/secondary.jpg',
+        dualPrimaryFacing: 'front',
+        dualSecondaryFacing: 'back',
+        dualLayoutPreset: 'top-left',
+        dualComposedPhotoLocalUri: 'file:///mock-documents/photos/composed.jpg',
+        latitude: 10.77,
+        longitude: 106.69,
+        radius: 120,
+        isFavorite: true,
+        createdAt: '2026-04-02T00:00:00.000Z',
+        updatedAt: '2026-04-03T00:00:00.000Z',
+      },
+      'user-1'
+    );
+
+    const insertCall = mockRunAsync.mock.calls.find(([sql]) => sql.includes('INSERT INTO notes'));
+
+    expect(insertCall).toBeDefined();
+    expect(countSqlPlaceholders(insertCall![0])).toBe(insertCall!.length - 1);
   });
 
   it('uses explicit native begin/commit/rollback transactions', async () => {

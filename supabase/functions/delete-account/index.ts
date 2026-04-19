@@ -58,6 +58,17 @@ function collectStickerRemotePaths(rawValue: string | null | undefined) {
   }
 }
 
+function throwIfMutationFailed(error: { message?: string | null } | null, context: string) {
+  if (!error) {
+    return;
+  }
+
+  const suffix = typeof error.message === 'string' && error.message.trim().length > 0
+    ? `: ${error.message}`
+    : '.';
+  throw new Error(`${context}${suffix}`);
+}
+
 async function removeStorageObjects(
   adminClient: ReturnType<typeof createClient>,
   bucket: string,
@@ -163,8 +174,23 @@ async function cleanupOwnedMedia(
     ),
   ]);
 
-  await adminClient.from('sticker_asset_refs').delete().eq('owner_user_id', userId);
-  await adminClient.from('sticker_assets').delete().eq('owner_user_id', userId);
+  const { error: stickerAssetRefsDeleteError } = await adminClient
+    .from('sticker_asset_refs')
+    .delete()
+    .eq('owner_user_id', userId);
+  throwIfMutationFailed(
+    stickerAssetRefsDeleteError,
+    'Failed to delete sticker asset refs during account cleanup'
+  );
+
+  const { error: stickerAssetsDeleteError } = await adminClient
+    .from('sticker_assets')
+    .delete()
+    .eq('owner_user_id', userId);
+  throwIfMutationFailed(
+    stickerAssetsDeleteError,
+    'Failed to delete sticker assets during account cleanup'
+  );
 }
 
 Deno.serve(async (request) => {
@@ -223,7 +249,14 @@ Deno.serve(async (request) => {
     }
 
     await cleanupOwnedMedia(adminClient, user.id);
-    await adminClient.from('device_push_tokens').delete().eq('user_id', user.id);
+    const { error: devicePushTokensDeleteError } = await adminClient
+      .from('device_push_tokens')
+      .delete()
+      .eq('user_id', user.id);
+    throwIfMutationFailed(
+      devicePushTokensDeleteError,
+      'Failed to delete device push tokens during account cleanup'
+    );
 
     const { error: deleteError } = await adminClient.auth.admin.deleteUser(user.id);
     if (deleteError) {

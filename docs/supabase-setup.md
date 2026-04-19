@@ -87,6 +87,7 @@ Server env:
 Behavior:
 
 - requires an authenticated user with a recent sign-in
+- aborts before deleting the auth user if owned-media, sticker-asset, or push-token cleanup fails
 - deletes owned media, sticker asset records, and registered push tokens before deleting the auth user
 
 ### `send-social-notifications`
@@ -116,10 +117,12 @@ Path:
 Server env:
 
 - `SUPABASE_SERVICE_ROLE_KEY`
-- `STICKER_GC_SECRET` optional, if you want to require a bearer secret for cleanup runs
+- `STICKER_GC_SECRET` required; callers must send it as `Authorization: Bearer <secret>`
 
 Behavior:
 
+- requires the configured bearer secret even for manual or scheduled runs
+- accepts optional POST JSON for `dryRun`, `maxAgeDays`, and `limit`
 - scans stale sticker assets
 - removes unreferenced storage objects in batches
 - deletes orphaned registry rows

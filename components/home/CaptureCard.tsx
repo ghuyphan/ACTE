@@ -351,7 +351,6 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
       'Dual'
     );
   }, [
-    dualCaptureAwaitingSecondShot,
     dualCaptureModeEnabled,
     dualCaptureUsesSequentialCapture,
     t,

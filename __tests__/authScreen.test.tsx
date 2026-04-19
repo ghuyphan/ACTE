@@ -230,7 +230,7 @@ describe('LoginScreen', () => {
     expect(getByTestId('auth-privacy-policy-link')).toBeTruthy();
     expect(getByTestId('auth-support-link')).toBeTruthy();
     expect(getByTestId('auth-landing-policy-consent')).toBeTruthy();
-    expect(getByTestId('auth-landing-policy-consent').props.accessibilityState.checked).toBe(true);
+    expect(getByTestId('auth-landing-policy-consent').props.accessibilityState.checked).toBe(false);
   });
 
   it('opens the slide-up email form from the landing screen', () => {
@@ -261,13 +261,13 @@ describe('LoginScreen', () => {
     expect(getByTestId('auth-back-to-signin')).toBeTruthy();
   });
 
-  it('defaults privacy consent to checked for registration', () => {
+  it('requires explicit privacy consent for registration', () => {
     const { getByTestId } = render(<LoginScreen />);
 
     fireEvent.press(getByTestId('auth-continue-email'));
     fireEvent.press(getByTestId('auth-switch-register'));
 
-    expect(getByTestId('auth-privacy-consent').props.accessibilityState.checked).toBe(true);
+    expect(getByTestId('auth-privacy-consent').props.accessibilityState.checked).toBe(false);
   });
 
   it('submits registration after consent is checked', async () => {
@@ -279,6 +279,7 @@ describe('LoginScreen', () => {
     fireEvent.changeText(getByTestId('auth-email-input'), 'user@example.com');
     fireEvent.changeText(getByTestId('auth-password-input'), 'secret123');
     fireEvent.changeText(getByTestId('auth-confirm-password-input'), 'secret123');
+    fireEvent.press(getByTestId('auth-privacy-consent'));
     fireEvent.press(getByTestId('auth-form-submit'));
 
     await act(async () => undefined);
@@ -290,8 +291,8 @@ describe('LoginScreen', () => {
     });
   });
 
-  it('keeps consent checked when moving from landing into register', async () => {
-    const { getByTestId } = render(<LoginScreen />);
+  it('blocks registration until privacy consent is explicitly checked', async () => {
+    const { getByTestId, findByText } = render(<LoginScreen />);
 
     fireEvent.press(getByTestId('auth-continue-email'));
     fireEvent.press(getByTestId('auth-switch-register'));
@@ -300,13 +301,20 @@ describe('LoginScreen', () => {
     fireEvent.changeText(getByTestId('auth-confirm-password-input'), 'secret123');
     fireEvent.press(getByTestId('auth-form-submit'));
 
-    await act(async () => undefined);
+    expect(
+      await findByText('Accept the privacy policy before creating your account.')
+    ).toBeTruthy();
+    expect(mockRegisterWithEmail).not.toHaveBeenCalled();
+  });
 
-    expect(mockRegisterWithEmail).toHaveBeenCalledWith({
-      email: 'user@example.com',
-      password: 'secret123',
-      displayName: undefined,
-    });
+  it('requires registration consent even when landing consent was already checked', () => {
+    const { getByTestId } = render(<LoginScreen />);
+
+    fireEvent.press(getByTestId('auth-landing-policy-consent'));
+    fireEvent.press(getByTestId('auth-continue-email'));
+    fireEvent.press(getByTestId('auth-switch-register'));
+
+    expect(getByTestId('auth-privacy-consent').props.accessibilityState.checked).toBe(false);
   });
 
   it('stays on auth and shows the confirmation message when sign-up requires email verification', async () => {
@@ -323,6 +331,7 @@ describe('LoginScreen', () => {
     fireEvent.changeText(getByTestId('auth-email-input'), 'user@example.com');
     fireEvent.changeText(getByTestId('auth-password-input'), 'secret123');
     fireEvent.changeText(getByTestId('auth-confirm-password-input'), 'secret123');
+    fireEvent.press(getByTestId('auth-privacy-consent'));
     fireEvent.press(getByTestId('auth-form-submit'));
 
     expect(
@@ -360,8 +369,22 @@ describe('LoginScreen', () => {
     expect(mockOpenSupport).toHaveBeenCalled();
   });
 
-  it('continues in local mode without extra consent taps because the checkbox starts checked', async () => {
+  it('requires explicit consent before continuing in local mode', async () => {
+    const { getByTestId, findByText } = render(<LoginScreen />);
+
+    fireEvent.press(getByTestId('auth-continue-local'));
+
+    expect(
+      await findByText('Review and accept the privacy policy before continuing in local mode.')
+    ).toBeTruthy();
+    expect(mockMarkOnboardingComplete).not.toHaveBeenCalled();
+    expect(mockReplace).not.toHaveBeenCalled();
+  });
+
+  it('continues in local mode after explicit consent is checked', async () => {
     const { getByTestId } = render(<LoginScreen />);
+
+    fireEvent.press(getByTestId('auth-landing-policy-consent'));
 
     fireEvent.press(getByTestId('auth-continue-local'));
 
@@ -371,8 +394,21 @@ describe('LoginScreen', () => {
     expect(mockReplace).toHaveBeenCalledWith('/');
   });
 
-  it('signs in with Google without extra consent taps because the checkbox starts checked', async () => {
+  it('requires explicit consent before signing in with Google', async () => {
+    const { getByTestId, findByText } = render(<LoginScreen />);
+
+    await act(async () => {
+      fireEvent.press(getByTestId('auth-google-button'));
+    });
+
+    expect(await findByText('Accept the privacy policy before continuing.')).toBeTruthy();
+    expect(mockSignInWithGoogle).not.toHaveBeenCalled();
+  });
+
+  it('signs in with Google after explicit consent is checked', async () => {
     const { getByTestId } = render(<LoginScreen />);
+
+    fireEvent.press(getByTestId('auth-landing-policy-consent'));
 
     await act(async () => {
       fireEvent.press(getByTestId('auth-google-button'));
@@ -390,6 +426,8 @@ describe('LoginScreen', () => {
 
     const { getByTestId } = render(<LoginScreen />);
 
+    fireEvent.press(getByTestId('auth-landing-policy-consent'));
+
     await act(async () => {
       fireEvent.press(getByTestId('auth-google-button'));
     });
@@ -401,7 +439,7 @@ describe('LoginScreen', () => {
     });
   });
 
-  it('does not show a landing policy validation toast on Android because consent starts checked', () => {
+  it('shows a landing policy validation toast on Android until consent is explicitly checked', () => {
     Object.defineProperty(Platform, 'OS', {
       configurable: true,
       value: 'android',
@@ -412,7 +450,10 @@ describe('LoginScreen', () => {
 
     fireEvent.press(getByTestId('auth-continue-local'));
 
-    expect(toastSpy).not.toHaveBeenCalled();
+    expect(toastSpy).toHaveBeenCalledWith(
+      'Review and accept the privacy policy before continuing in local mode.',
+      ToastAndroid.SHORT
+    );
     expect(
       queryByText('Review and accept the privacy policy before continuing in local mode.')
     ).toBeNull();
@@ -465,6 +506,8 @@ describe('LoginScreen', () => {
     });
 
     const { getByTestId } = render(<LoginScreen />);
+
+    fireEvent.press(getByTestId('auth-landing-policy-consent'));
 
     await act(async () => {
       fireEvent.press(getByTestId('auth-google-button'));

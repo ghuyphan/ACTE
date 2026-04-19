@@ -331,7 +331,9 @@ export function useSettingsScreenModel() {
     showSocialPushEntry: Boolean(
       user &&
       sharedFeedEnabled &&
-      (socialPushStatus === 'denied' || socialPushStatus === 'blocked')
+      (socialPushStatus === 'denied' ||
+        socialPushStatus === 'blocked' ||
+        socialPushStatus === 'granted')
     ),
     showSyncEntry: Boolean(user),
     showSync,
