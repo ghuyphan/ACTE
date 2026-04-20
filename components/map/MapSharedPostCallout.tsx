@@ -1,13 +1,6 @@
-import { memo, useEffect } from 'react';
+import { memo } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
-import Animated, {
-  interpolate,
-  useAnimatedStyle,
-  useSharedValue,
-  withSpring,
-  withTiming,
-} from 'react-native-reanimated';
 import { useTranslation } from 'react-i18next';
 import type { ThemeColors } from '../../hooks/useTheme';
 import { getSharedPostPreviewText } from '../../services/noteTextPresentation';
@@ -16,20 +9,15 @@ import type { SharedPost } from '../../services/sharedFeedService';
 interface MapSharedPostCalloutProps {
   post: SharedPost;
   colors: ThemeColors;
-  visible: boolean;
-  reduceMotionEnabled: boolean;
   photoUri: string | null;
 }
 
 function MapSharedPostCallout({
   post,
   colors,
-  visible,
-  reduceMotionEnabled,
   photoUri,
 }: MapSharedPostCalloutProps) {
   const { t } = useTranslation();
-  const visibilityProgress = useSharedValue(visible ? 1 : 0);
   const authorLabel = post.authorDisplayName?.trim() || t('shared.someone', 'Someone');
   const placeLabel = post.placeName?.trim() || t('shared.sharedNow', 'Shared now');
   const previewText = getSharedPostPreviewText(
@@ -41,36 +29,8 @@ function MapSharedPostCallout({
     }
   );
 
-  useEffect(() => {
-    if (reduceMotionEnabled) {
-      visibilityProgress.value = visible ? 1 : 0;
-      return;
-    }
-
-    visibilityProgress.value = visible
-      ? withSpring(1, {
-          damping: 20,
-          stiffness: 220,
-          mass: 0.82,
-        })
-      : withTiming(0, {
-          duration: 180,
-        });
-  }, [reduceMotionEnabled, visibilityProgress, visible]);
-
-  const animatedStyle = useAnimatedStyle(() => ({
-    opacity: visibilityProgress.value,
-    transform: [
-      { translateY: interpolate(visibilityProgress.value, [0, 1], [10, 0]) },
-      { scale: interpolate(visibilityProgress.value, [0, 1], [0.96, 1]) },
-    ],
-  }), [visibilityProgress]);
-
   return (
-    <Animated.View
-      testID={`shared-post-callout-${post.id}`}
-      style={[styles.container, animatedStyle]}
-    >
+    <View testID={`shared-post-callout-${post.id}`} style={styles.container}>
       <View
         style={[
           styles.card,
@@ -167,7 +127,7 @@ function MapSharedPostCallout({
           ]}
         />
       </View>
-    </Animated.View>
+    </View>
   );
 }
 
@@ -175,23 +135,23 @@ export default memo(MapSharedPostCallout);
 
 const styles = StyleSheet.create({
   container: {
-    width: 184,
+    width: 196,
     alignItems: 'center',
   },
   card: {
-    width: 184,
-    minHeight: 98,
-    borderRadius: 18,
-    borderWidth: StyleSheet.hairlineWidth,
+    width: 196,
+    minHeight: 104,
+    borderRadius: 20,
+    borderWidth: 1,
     overflow: 'hidden',
-    shadowOffset: { width: 0, height: 8 },
+    shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.12,
-    shadowRadius: 16,
-    elevation: 4,
+    shadowRadius: 18,
+    elevation: 5,
   },
   mediaWrap: {
     width: '100%',
-    height: 124,
+    height: 120,
   },
   media: {
     width: '100%',
@@ -201,9 +161,9 @@ const styles = StyleSheet.create({
     position: 'absolute',
     right: 10,
     bottom: 10,
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
     borderWidth: 2,
     alignItems: 'center',
     justifyContent: 'center',
@@ -214,25 +174,25 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   avatarBadge: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
   },
   textAvatarWrap: {
     position: 'absolute',
     right: 12,
-    bottom: 12,
-    width: 34,
-    height: 34,
-    borderRadius: 17,
+    top: 12,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     borderWidth: 2,
     alignItems: 'center',
     justifyContent: 'center',
   },
   textAvatar: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
   },
   avatarInitial: {
     fontSize: 11,
@@ -245,27 +205,27 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingTop: 12,
     paddingBottom: 13,
-    paddingRight: 52,
+    paddingRight: 50,
   },
   title: {
-    fontSize: 13,
-    lineHeight: 16,
+    fontSize: 14,
+    lineHeight: 18,
     fontWeight: '700',
     fontFamily: 'Noto Sans',
     marginBottom: 3,
   },
   text: {
-    fontSize: 11,
-    lineHeight: 15,
+    fontSize: 12,
+    lineHeight: 16,
     fontWeight: '500',
     fontFamily: 'Noto Sans',
   },
   meta: {
     fontSize: 11,
     lineHeight: 14,
-    fontWeight: '600',
+    fontWeight: '700',
     fontFamily: 'Noto Sans',
-    marginTop: 7,
+    marginTop: 8,
   },
   pointerWrap: {
     marginTop: -7,

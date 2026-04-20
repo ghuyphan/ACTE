@@ -25,13 +25,52 @@ export function useMapPreviewState({
     persistsWhenAreaEmpty: false,
   });
   const [activeNearbyNoteId, setActiveNearbyNoteId] = useState<string | null>(null);
+  const [stableNearbyItems, setStableNearbyItems] = useState<NearbyNoteItem[]>(nearbyItems);
   const [showFriendsPreview, setShowFriendsPreview] = useState(false);
   const [activeFriendPostId, setActiveFriendPostId] = useState<string | null>(null);
+  const nearbyItemsSignature = useMemo(
+    () => nearbyItems.map((item) => item.note.id).join('|'),
+    [nearbyItems]
+  );
+  const nearbyItemsSnapshot = useMemo(() => nearbyItems, [nearbyItemsSignature]);
 
   const nearbyPreviewItems = useMemo(
-    () => notesPreviewState.itemsOverride ?? nearbyItems,
-    [nearbyItems, notesPreviewState.itemsOverride]
+    () => notesPreviewState.itemsOverride ?? stableNearbyItems,
+    [notesPreviewState.itemsOverride, stableNearbyItems]
   );
+
+  useEffect(() => {
+    if (notesPreviewState.itemsOverride !== null) {
+      return;
+    }
+
+    setStableNearbyItems((current) => {
+      const areListsEqual = (left: NearbyNoteItem[], right: NearbyNoteItem[]) =>
+        left.length === right.length && left.every((item, index) => item.note.id === right[index]?.note.id);
+
+      if (nearbyItemsSnapshot.length === 0) {
+        return current.length === 0 ? current : [];
+      }
+
+      if (current.length === 0) {
+        return nearbyItemsSnapshot;
+      }
+
+      const nextById = new Map(nearbyItemsSnapshot.map((item) => [item.note.id, item] as const));
+      const overlappingItems = current
+        .map((item) => nextById.get(item.note.id))
+        .filter((item): item is NearbyNoteItem => Boolean(item));
+
+      if (overlappingItems.length === 0) {
+        return areListsEqual(current, nearbyItemsSnapshot) ? current : nearbyItemsSnapshot;
+      }
+
+      const preservedIds = new Set(overlappingItems.map((item) => item.note.id));
+      const appendedItems = nearbyItemsSnapshot.filter((item) => !preservedIds.has(item.note.id));
+      const nextItems = [...overlappingItems, ...appendedItems];
+      return areListsEqual(current, nextItems) ? current : nextItems;
+    });
+  }, [nearbyItemsSignature, nearbyItemsSnapshot, notesPreviewState.itemsOverride]);
 
   useEffect(() => {
     setActiveNearbyNoteId((current) => {
@@ -72,7 +111,10 @@ export function useMapPreviewState({
       itemsOverride: options?.resetToNearby ? null : current.itemsOverride,
       persistsWhenAreaEmpty: options?.resetToNearby ? false : current.persistsWhenAreaEmpty,
     }));
-  }, []);
+    if (options?.resetToNearby) {
+      setStableNearbyItems(nearbyItemsSnapshot);
+    }
+  }, [nearbyItemsSnapshot]);
 
   const collapseNotesPreview = useCallback(() => {
     setNotesPreviewState((current) => ({
@@ -111,6 +153,7 @@ export function useMapPreviewState({
   );
 
   const resetToNearbyPreview = useCallback(() => {
+    setStableNearbyItems(nearbyItemsSnapshot);
     setNotesPreviewState((current) =>
       current.itemsOverride === null && !current.persistsWhenAreaEmpty
         ? current
@@ -120,7 +163,7 @@ export function useMapPreviewState({
             persistsWhenAreaEmpty: false,
           }
     );
-  }, []);
+  }, [nearbyItemsSnapshot]);
 
   return {
     activeFriendPostId,

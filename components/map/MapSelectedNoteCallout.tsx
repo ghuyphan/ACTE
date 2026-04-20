@@ -1,14 +1,7 @@
-import { memo, useEffect } from 'react';
+import { memo } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
-import Animated, {
-  interpolate,
-  useAnimatedStyle,
-  useSharedValue,
-  withSpring,
-  withTiming,
-} from 'react-native-reanimated';
 import type { ThemeColors } from '../../hooks/useTheme';
 import type { Note } from '../../services/database';
 import { getNotePhotoUri } from '../../services/photoStorage';
@@ -17,8 +10,6 @@ import { formatNoteTextWithEmoji } from '../../services/noteTextPresentation';
 interface MapSelectedNoteCalloutProps {
   note: Note;
   colors: ThemeColors;
-  visible: boolean;
-  reduceMotionEnabled: boolean;
   showOrb?: boolean;
 }
 
@@ -38,46 +29,16 @@ function getPreviewText(note: Note) {
 function MapSelectedNoteCallout({
   note,
   colors,
-  visible,
-  reduceMotionEnabled,
   showOrb = true,
 }: MapSelectedNoteCalloutProps) {
   const title = note.locationName?.trim() || null;
   const previewText = getPreviewText(note);
   const photoUri = getNotePhotoUri(note);
-  const visibilityProgress = useSharedValue(visible ? 1 : 0);
-
-  useEffect(() => {
-    if (reduceMotionEnabled) {
-      visibilityProgress.value = visible ? 1 : 0;
-      return;
-    }
-
-    visibilityProgress.value = visible
-      ? withSpring(1, {
-          damping: 20,
-          stiffness: 220,
-          mass: 0.82,
-        })
-      : withTiming(0, {
-          duration: 180,
-        });
-  }, [reduceMotionEnabled, visibilityProgress, visible]);
-
-  const animatedStyle = useAnimatedStyle(() => {
-    return {
-      opacity: visibilityProgress.value,
-      transform: [
-        { translateY: interpolate(visibilityProgress.value, [0, 1], [10, 0]) },
-        { scale: interpolate(visibilityProgress.value, [0, 1], [0.96, 1]) },
-      ],
-    };
-  }, [visibilityProgress]);
 
   return (
-    <Animated.View
+    <View
       testID={`note-marker-${note.id}`}
-      style={[styles.container, !showOrb ? styles.cardOnlyContainer : null, animatedStyle]}
+      style={[styles.container, !showOrb ? styles.cardOnlyContainer : null]}
     >
       {showOrb ? (
         <View
@@ -116,16 +77,39 @@ function MapSelectedNoteCallout({
             },
           ]}
         >
-          {title ? (
-            <Text style={[styles.title, { color: colors.text }]} numberOfLines={1}>
-              {title}
-            </Text>
-          ) : null}
-          {previewText ? (
-            <Text style={[styles.text, { color: colors.secondaryText }]} numberOfLines={2}>
-              {previewText}
-            </Text>
-          ) : null}
+          <View style={styles.copyWrap}>
+            {title ? (
+              <Text style={[styles.title, { color: colors.text }]} numberOfLines={1}>
+                {title}
+              </Text>
+            ) : null}
+            {previewText ? (
+              <Text style={[styles.text, { color: colors.secondaryText }]} numberOfLines={2}>
+                {previewText}
+              </Text>
+            ) : null}
+          </View>
+          <View
+            style={[
+              styles.mediaWrap,
+              {
+                backgroundColor: photoUri ? 'transparent' : `${colors.primary}12`,
+                borderColor: `${colors.border}88`,
+              },
+            ]}
+          >
+            {photoUri ? (
+              <Image
+                testID={`note-callout-photo-${note.id}`}
+                source={{ uri: photoUri }}
+                style={styles.cardImage}
+                contentFit="cover"
+                transition={0}
+              />
+            ) : (
+              <Ionicons name="document-text" size={16} color={colors.primary} />
+            )}
+          </View>
         </View>
         {!showOrb ? (
           <View style={styles.pointerWrap}>
@@ -141,7 +125,7 @@ function MapSelectedNoteCallout({
           </View>
         ) : null}
       </View>
-    </Animated.View>
+    </View>
   );
 }
 
@@ -149,16 +133,16 @@ export default memo(MapSelectedNoteCallout);
 
 const styles = StyleSheet.create({
   container: {
-    width: 176,
+    width: 188,
     alignItems: 'center',
     gap: 8,
   },
   cardOnlyContainer: {
-    width: 168,
+    width: 188,
     gap: 0,
   },
   cardStack: {
-    width: 168,
+    width: 188,
     alignItems: 'center',
   },
   orb: {
@@ -187,17 +171,37 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   card: {
-    width: 168,
-    minHeight: 68,
-    borderRadius: 14,
-    borderWidth: StyleSheet.hairlineWidth,
+    width: 188,
+    minHeight: 82,
+    borderRadius: 18,
+    borderWidth: 1,
     paddingHorizontal: 12,
-    paddingVertical: 10,
-    justifyContent: 'center',
-    shadowOffset: { width: 0, height: 8 },
+    paddingVertical: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.12,
-    shadowRadius: 16,
-    elevation: 4,
+    shadowRadius: 18,
+    elevation: 5,
+  },
+  copyWrap: {
+    flex: 1,
+    minWidth: 0,
+  },
+  mediaWrap: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+    flexShrink: 0,
+  },
+  cardImage: {
+    width: '100%',
+    height: '100%',
   },
   pointerWrap: {
     marginTop: -6,
@@ -214,15 +218,15 @@ const styles = StyleSheet.create({
     transform: [{ rotate: '45deg' }],
   },
   title: {
-    fontSize: 13,
-    lineHeight: 16,
+    fontSize: 14,
+    lineHeight: 18,
     fontWeight: '700',
     fontFamily: 'Noto Sans',
-    marginBottom: 2,
+    marginBottom: 3,
   },
   text: {
-    fontSize: 11,
-    lineHeight: 14,
+    fontSize: 12,
+    lineHeight: 16,
     fontWeight: '500',
     fontFamily: 'Noto Sans',
   },

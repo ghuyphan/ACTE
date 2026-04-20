@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { GlassView } from '../ui/GlassView';
+import { FlashList } from '@shopify/flash-list';
 import { Image } from 'expo-image';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -8,28 +8,18 @@ import {
   NativeSyntheticEvent,
   Platform,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   useWindowDimensions,
   View,
 } from 'react-native';
-import { FlashList } from '@shopify/flash-list';
-import Animated, {
-  type SharedValue,
-  useAnimatedStyle,
-  useSharedValue,
-  withSpring,
-} from 'react-native-reanimated';
+import type { SharedValue } from 'react-native-reanimated';
+import { GlassView } from '../ui/GlassView';
 import { useTheme } from '../../hooks/useTheme';
 import { getSharedPostPreviewText } from '../../services/noteTextPresentation';
 import { SharedPost } from '../../services/sharedFeedService';
 import { isOlderIOS } from '../../utils/platform';
-import {
-  MapPreviewExpandButton,
-  MapPreviewPositionPill,
-  mapPreviewFooterStyles,
-} from './MapPreviewFooterControls';
+import { MapPreviewPositionPill } from './MapPreviewFooterControls';
 import MapPreviewSheet from './MapPreviewSheet';
 import {
   getOverlayBorderColor,
@@ -39,16 +29,8 @@ import {
 } from './overlayTokens';
 
 const PREVIEW_HORIZONTAL_INSET = 14;
-const PREVIEW_HEIGHT = 152;
-const EXPANDED_PREVIEW_HEIGHT = 332;
-const EXPANDED_BODY_HEIGHT = EXPANDED_PREVIEW_HEIGHT - PREVIEW_HEIGHT;
-const PREVIEW_MEDIA_SIZE = 56;
+const PREVIEW_MEDIA_SIZE = 64;
 const PREVIEW_ROW_GAP = 12;
-const PREVIEW_MORPH_SPRING = {
-  damping: 24,
-  stiffness: 220,
-  mass: 0.84,
-} as const;
 
 function getPreviewText(post: SharedPost, photoLabel: string, noContentLabel: string) {
   return getSharedPostPreviewText(post, {
@@ -76,7 +58,7 @@ interface MapFriendsPreviewCardProps {
   posts: SharedPost[];
   activePostId: string | null;
   bottomOffset: number;
-  onOpen: () => void;
+  onOpen: (postId?: string) => void;
   onDismiss: () => void;
   onFocusPost: (postId: string) => void;
   onInteraction?: () => void;
@@ -108,9 +90,6 @@ export default function MapFriendsPreviewCard({
   );
 
   const [isMounted, setIsMounted] = useState(visible);
-  const [isExpanded, setIsExpanded] = useState(false);
-  const internalExpansionProgress = useSharedValue(0);
-  const sheetExpansionProgress = externalExpansionProgress ?? internalExpansionProgress;
 
   useEffect(() => {
     if (visible && !isMounted) {
@@ -119,20 +98,10 @@ export default function MapFriendsPreviewCard({
   }, [visible, isMounted]);
 
   useEffect(() => {
-    if (!visible && isExpanded) {
-      setIsExpanded(false);
+    if (externalExpansionProgress) {
+      externalExpansionProgress.value = 0;
     }
-  }, [isExpanded, visible]);
-
-  useEffect(() => {
-    const nextValue = visible && isExpanded ? 1 : 0;
-    if (reduceMotionEnabled) {
-      sheetExpansionProgress.value = nextValue;
-      return;
-    }
-
-    sheetExpansionProgress.value = withSpring(nextValue, PREVIEW_MORPH_SPRING);
-  }, [isExpanded, reduceMotionEnabled, sheetExpansionProgress, visible]);
+  }, [externalExpansionProgress, visible]);
 
   const handleFullyClosed = useCallback(() => {
     setIsMounted(false);
@@ -149,7 +118,6 @@ export default function MapFriendsPreviewCard({
 
   const activePost = activeIndex >= 0 ? posts[activeIndex] ?? posts[0] : null;
 
-  // Survive parent state clearing the posts while we animate out
   const lastValidDataRef = useRef<{
     posts: SharedPost[];
     activeIndex: number;
@@ -164,9 +132,8 @@ export default function MapFriendsPreviewCard({
     };
   }
 
-  const renderData = (activePost && posts.length > 0)
-    ? { posts, activeIndex, activePost }
-    : lastValidDataRef.current;
+  const renderData =
+    activePost && posts.length > 0 ? { posts, activeIndex, activePost } : lastValidDataRef.current;
 
   useEffect(() => {
     if (!previewListRef.current || activeIndex < 0) {
@@ -199,20 +166,19 @@ export default function MapFriendsPreviewCard({
     [onFocusPost, pageWidth, posts]
   );
 
-  const animatedShellStyle = useAnimatedStyle(
-    () => ({
-      height: PREVIEW_HEIGHT + EXPANDED_BODY_HEIGHT * sheetExpansionProgress.value,
-    }),
-    [sheetExpansionProgress]
-  );
+  const handleItemPress = useCallback(
+    (postId: string) => {
+      previewDraggingRef.current = false;
+      onInteraction?.();
 
-  const animatedExpandedBodyStyle = useAnimatedStyle(
-    () => ({
-      height: EXPANDED_BODY_HEIGHT * sheetExpansionProgress.value,
-      opacity: sheetExpansionProgress.value,
-      transform: [{ translateY: (1 - sheetExpansionProgress.value) * 8 }],
-    }),
-    [sheetExpansionProgress]
+      if (postId !== activePostId) {
+        onFocusPost(postId);
+        return;
+      }
+
+      onOpen(postId);
+    },
+    [activePostId, onFocusPost, onInteraction, onOpen]
   );
 
   if (!isMounted && !visible) {
@@ -228,7 +194,7 @@ export default function MapFriendsPreviewCard({
     activeIndex: renderIndex,
     activePost: renderPost,
   } = renderData;
-
+  const showPreviewCount = renderPosts.length > 1;
   const previewPosition = Math.max(renderIndex, 0) + 1;
 
   return (
@@ -240,290 +206,179 @@ export default function MapFriendsPreviewCard({
       bottomOffset={bottomOffset}
       onDismiss={onDismiss}
       reduceMotionEnabled={reduceMotionEnabled}
-      allowDismiss={false}
-      allowExpand
-      isExpanded={isExpanded}
-      expansionProgress={sheetExpansionProgress}
-      expansionGestureRange={EXPANDED_BODY_HEIGHT}
-      onExpand={() => setIsExpanded(true)}
-      onCollapse={() => setIsExpanded(false)}
+      allowHandlePress={false}
+      allowDismiss
+      allowDragDismiss
+      allowExpand={false}
+      handleVisible
     >
       <View style={[styles.surfaceHost, { width: fullSurfaceWidth }]}>
-        <Animated.View style={[styles.inner, animatedShellStyle]}>
-          <Animated.View
+        <View
+          style={[
+            styles.surface,
+            {
+              borderColor: getOverlayBorderColor(isDark),
+              backgroundColor: getOverlayFallbackColor(isDark),
+            },
+          ]}
+        >
+          <GlassView
+            pointerEvents="none"
+            glassEffectStyle="regular"
+            colorScheme={isDark ? 'dark' : 'light'}
+            fallbackColor="transparent"
+            style={StyleSheet.absoluteFill}
+          />
+          <View
+            pointerEvents="none"
             style={[
-              styles.surface,
-              animatedShellStyle,
+              StyleSheet.absoluteFill,
               {
-                borderColor: getOverlayBorderColor(isDark),
-                backgroundColor: getOverlayFallbackColor(isDark),
+                backgroundColor: Platform.OS === 'android'
+                  ? getOverlayScrimColor(isDark)
+                  : isDark
+                    ? 'rgba(24,24,28,0.24)'
+                    : 'rgba(255,255,255,0.44)',
               },
             ]}
-          >
-            <GlassView
-              pointerEvents="none"
-              glassEffectStyle="regular"
-              colorScheme={isDark ? 'dark' : 'light'}
-              fallbackColor="transparent"
-              style={StyleSheet.absoluteFill}
-            />
+          />
+          {isOlderIOS ? (
             <View
-              pointerEvents="none"
               style={[
                 StyleSheet.absoluteFill,
-                { backgroundColor: Platform.OS === 'android' ? getOverlayScrimColor(isDark) : isDark ? 'rgba(24,24,28,0.24)' : 'rgba(255,255,255,0.44)' },
+                {
+                  backgroundColor: getOverlayFallbackColor(isDark),
+                  borderRadius: mapOverlayTokens.overlayRadius,
+                },
               ]}
             />
-            {isOlderIOS ? (
-              <View
-                style={[
-                  StyleSheet.absoluteFill,
-                  {
-                    backgroundColor: getOverlayFallbackColor(isDark),
-                    borderRadius: mapOverlayTokens.overlayRadius,
-                  },
-                ]}
-              />
-            ) : null}
+          ) : null}
 
-            <View style={styles.cardContent}>
-              <FlashList
-                ref={previewListRef}
-                testID="map-friends-preview-list"
-                horizontal
-                data={renderPosts}
-                keyExtractor={(item) => item.id}
-                drawDistance={pageWidth * 2}
-                renderItem={({ item }) => {
-                  const authorLabel = item.authorDisplayName?.trim() || t('shared.someone', 'Someone');
-                  const photoUri = getPostPhotoUri(item);
-                  const previewText = getPreviewText(
-                    item,
-                    t('shared.photoMemory', 'Photo memory'),
-                    t('map.noContent', 'No note content')
-                  );
+          <View style={styles.cardContent}>
+            <FlashList
+              ref={previewListRef}
+              testID="map-friends-preview-list"
+              horizontal
+              data={renderPosts}
+              keyExtractor={(item) => item.id}
+              drawDistance={pageWidth * 2}
+              renderItem={({ item }) => {
+                const authorLabel = item.authorDisplayName?.trim() || t('shared.someone', 'Someone');
+                const photoUri = getPostPhotoUri(item);
+                const previewText = getPreviewText(
+                  item,
+                  t('shared.photoMemory', 'Photo memory'),
+                  t('map.noContent', 'No note content')
+                );
+                const isActive = item.id === renderPost.id;
 
-                  return (
-                    <Pressable
-                      testID={`map-friends-preview-item-${item.id}`}
-                      accessibilityRole="button"
-                      accessibilityState={{ selected: item.id === renderPost.id }}
-                      style={[styles.previewPage, { width: pageWidth }]}
-                      onPress={() => {
-                        previewDraggingRef.current = false;
-                        onInteraction?.();
-                        onFocusPost(item.id);
-                      }}
-                    >
-                      <View style={styles.previewPageInner}>
-                        {photoUri ? (
-                          <View style={styles.previewMediaWrap}>
-                            <Image source={{ uri: photoUri }} style={styles.previewPhoto} contentFit="cover" />
-                            <View style={[styles.previewAvatarBadgeWrap, { backgroundColor: colors.card }]}>
-                              {item.authorPhotoURLSnapshot ? (
-                                <Image
-                                  source={{ uri: item.authorPhotoURLSnapshot }}
-                                  style={styles.previewAvatarBadge}
-                                  contentFit="cover"
-                                />
-                              ) : (
-                                <View style={[styles.previewAvatarBadge, { backgroundColor: colors.primarySoft }]}>
-                                  <Text style={[styles.avatarBadgeLabel, { color: colors.primary }]}>
-                                    {authorLabel.charAt(0).toUpperCase()}
-                                  </Text>
-                                </View>
-                              )}
-                            </View>
-                          </View>
-                        ) : item.authorPhotoURLSnapshot ? (
-                          <Image source={{ uri: item.authorPhotoURLSnapshot }} style={styles.avatar} contentFit="cover" />
-                        ) : (
-                          <View style={[styles.avatar, { backgroundColor: colors.primarySoft }]}>
-                            <Text style={[styles.avatarLabel, { color: colors.primary }]}>
-                              {authorLabel.charAt(0).toUpperCase()}
-                            </Text>
-                          </View>
-                        )}
-
-                        <View style={styles.copyWrap}>
-                          <Text
-                            style={[styles.title, { color: item.id === renderPost.id ? colors.primary : colors.text }]}
-                            numberOfLines={1}
-                          >
-                            {item.placeName || t('shared.sharedNow', 'Shared now')}
-                          </Text>
-                          <Text style={[styles.content, { color: colors.secondaryText }]} numberOfLines={2}>
-                            {previewText}
-                          </Text>
-                          <View style={styles.metaRow}>
-                            <Ionicons name="sparkles-outline" size={12} color={colors.primary} />
-                            <Text style={[styles.metaText, { color: colors.primary }]}>
-                              {t('map.friendFrom', 'From {{name}}', { name: authorLabel })}
-                            </Text>
+                return (
+                  <Pressable
+                    testID={`map-friends-preview-item-${item.id}`}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: isActive }}
+                    style={({ pressed }) => [
+                      styles.previewPage,
+                      { width: pageWidth, opacity: pressed ? 0.88 : 1 },
+                    ]}
+                    onPress={() => handleItemPress(item.id)}
+                  >
+                    <View style={styles.previewPageInner}>
+                      {photoUri ? (
+                        <View style={styles.previewMediaWrap}>
+                          <Image source={{ uri: photoUri }} style={styles.previewPhoto} contentFit="cover" />
+                          <View style={[styles.previewAvatarBadgeWrap, { backgroundColor: colors.card }]}>
+                            {item.authorPhotoURLSnapshot ? (
+                              <Image
+                                source={{ uri: item.authorPhotoURLSnapshot }}
+                                style={styles.previewAvatarBadge}
+                                contentFit="cover"
+                              />
+                            ) : (
+                              <View style={[styles.previewAvatarBadge, { backgroundColor: colors.primarySoft }]}>
+                                <Text style={[styles.avatarBadgeLabel, { color: colors.primary }]}>
+                                  {authorLabel.charAt(0).toUpperCase()}
+                                </Text>
+                              </View>
+                            )}
                           </View>
                         </View>
-                      </View>
-                    </Pressable>
-                  );
-                }}
-                style={styles.previewList}
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.previewListContent}
-                snapToInterval={pageWidth > 0 ? pageWidth : undefined}
-                decelerationRate="fast"
-                snapToAlignment="start"
-                disableIntervalMomentum
-                bounces={false}
-                scrollEnabled={renderPosts.length > 1}
-                onScrollBeginDrag={() => {
-                  previewDraggingRef.current = true;
-                }}
-                onMomentumScrollEnd={handleMomentumEnd}
-              />
+                      ) : item.authorPhotoURLSnapshot ? (
+                        <Image source={{ uri: item.authorPhotoURLSnapshot }} style={styles.avatar} contentFit="cover" />
+                      ) : (
+                        <View style={[styles.avatar, { backgroundColor: colors.primarySoft }]}>
+                          <Text style={[styles.avatarLabel, { color: colors.primary }]}>
+                            {authorLabel.charAt(0).toUpperCase()}
+                          </Text>
+                        </View>
+                      )}
 
-              <View style={mapPreviewFooterStyles.footer}>
-                <View style={mapPreviewFooterStyles.metaRow}>
-                  <MapPreviewPositionPill
-                    current={previewPosition}
-                    total={renderPosts.length}
-                    testID="map-friends-preview-index"
-                  />
-                  <MapPreviewExpandButton
-                    isExpanded={isExpanded}
-                    onPress={() => {
-                      onInteraction?.();
-                      setIsExpanded((current) => !current);
-                    }}
-                  />
-                </View>
-
-                <Pressable
-                  testID="map-friends-preview-open"
-                  style={({ pressed }) => [
-                    mapPreviewFooterStyles.actionButton,
-                    { opacity: pressed ? 0.72 : 1 },
-                  ]}
-                  onPress={() => {
-                    onInteraction?.();
-                    onOpen();
-                  }}
-                >
-                  <Ionicons name="arrow-forward-circle" size={14} color={colors.primary} />
-                  <Text style={[mapPreviewFooterStyles.actionText, { color: colors.primary }]}>
-                    {t('map.openShared', 'Open shared')}
-                  </Text>
-                </Pressable>
-              </View>
-
-              <Animated.View style={[styles.expandedBody, animatedExpandedBodyStyle]} pointerEvents={isExpanded ? 'auto' : 'none'}>
-                <View style={[styles.expandedDivider, { backgroundColor: `${colors.border}B8` }]} />
-                <View style={styles.expandedHeaderRow}>
-                  <Text style={[styles.expandedHeaderTitle, { color: colors.text }]}>
-                    {t('shared.viewAllTitle', 'Shared moments')}
-                  </Text>
-                  <Text style={[styles.expandedHeaderCaption, { color: colors.secondaryText }]}>
-                    {t('shared.postsCount', '{{count}} shared', { count: renderPosts.length })}
-                  </Text>
-                </View>
-                <ScrollView
-                  nestedScrollEnabled
-                  showsVerticalScrollIndicator={false}
-                  contentContainerStyle={styles.expandedListContent}
-                >
-                  {renderPosts.map((item) => {
-                    const authorLabel = item.authorDisplayName?.trim() || t('shared.someone', 'Someone');
-                    const photoUri = getPostPhotoUri(item);
-                    const previewText = getPreviewText(
-                      item,
-                      t('shared.photoMemory', 'Photo memory'),
-                      t('map.noContent', 'No note content')
-                    );
-                    const isActive = item.id === renderPost.id;
-
-                    return (
-                      <Pressable
-                        key={item.id}
-                        testID={`map-friends-preview-expanded-item-${item.id}`}
-                        accessibilityRole="button"
-                        onPress={() => {
-                          onInteraction?.();
-                          onFocusPost(item.id);
-                        }}
-                        style={({ pressed }) => [
-                          styles.expandedRow,
-                          {
-                            backgroundColor: isActive ? colors.primarySoft : 'transparent',
-                            borderColor: isActive ? `${colors.primary}2E` : `${colors.border}88`,
-                            opacity: pressed ? 0.78 : 1,
-                          },
-                        ]}
-                      >
-                        {photoUri ? (
-                          <View style={styles.expandedPhotoWrap}>
-                            <Image source={{ uri: photoUri }} style={styles.expandedPhoto} contentFit="cover" />
-                            <View style={[styles.expandedAvatarBadgeWrap, { backgroundColor: colors.card }]}>
-                              {item.authorPhotoURLSnapshot ? (
-                                <Image
-                                  source={{ uri: item.authorPhotoURLSnapshot }}
-                                  style={styles.expandedAvatarBadge}
-                                  contentFit="cover"
-                                />
-                              ) : (
-                                <View style={[styles.expandedAvatarBadge, { backgroundColor: colors.primarySoft }]}>
-                                  <Text style={[styles.avatarBadgeLabel, { color: colors.primary }]}>
-                                    {authorLabel.charAt(0).toUpperCase()}
-                                  </Text>
-                                </View>
-                              )}
-                            </View>
-                          </View>
-                        ) : null}
-                        <View
-                          style={[
-                            styles.expandedIndexBadge,
-                            {
-                              backgroundColor: isActive ? colors.primary : `${colors.secondaryText}1A`,
-                            },
-                          ]}
+                      <View style={styles.copyWrap}>
+                        <Text
+                          style={[styles.title, { color: isActive ? colors.primary : colors.text }]}
+                          numberOfLines={1}
                         >
-                          <Ionicons
-                            name="sparkles"
-                            size={11}
-                            color={isActive ? colors.background : colors.secondaryText}
-                          />
-                        </View>
-                        <View style={styles.expandedCopyWrap}>
-                          <Text style={[styles.expandedRowTitle, { color: colors.text }]} numberOfLines={1}>
-                            {item.placeName || t('shared.sharedNow', 'Shared now')}
-                          </Text>
-                          <Text style={[styles.expandedRowText, { color: colors.secondaryText }]} numberOfLines={2}>
-                            {previewText}
-                          </Text>
-                        </View>
-                        <View style={styles.expandedMetaWrap}>
-                          <Text
-                            style={[
-                              styles.expandedMetaText,
-                              { color: isActive ? colors.primary : colors.secondaryText },
-                            ]}
-                            numberOfLines={2}
-                          >
+                          {item.placeName || t('shared.sharedNow', 'Shared now')}
+                        </Text>
+                        <Text style={[styles.content, { color: colors.secondaryText }]} numberOfLines={2}>
+                          {previewText}
+                        </Text>
+                        <View style={styles.metaRow}>
+                          <Ionicons name="sparkles-outline" size={12} color={colors.primary} />
+                          <Text style={[styles.metaText, { color: colors.primary }]} numberOfLines={1}>
                             {t('map.friendFrom', 'From {{name}}', { name: authorLabel })}
                           </Text>
-                          <Ionicons
-                            name={isActive ? 'arrow-forward-circle' : 'chevron-forward'}
-                            size={15}
-                            color={isActive ? colors.primary : colors.secondaryText}
-                          />
                         </View>
-                      </Pressable>
-                    );
-                  })}
-                </ScrollView>
-              </Animated.View>
+                      </View>
+                    </View>
+                  </Pressable>
+                );
+              }}
+              style={styles.previewList}
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.previewListContent}
+              snapToInterval={pageWidth > 0 ? pageWidth : undefined}
+              decelerationRate="fast"
+              snapToAlignment="start"
+              disableIntervalMomentum
+              bounces={false}
+              scrollEnabled={renderPosts.length > 1}
+              onScrollBeginDrag={() => {
+                previewDraggingRef.current = true;
+              }}
+              onMomentumScrollEnd={handleMomentumEnd}
+            />
+
+            <View style={styles.footer}>
+              {showPreviewCount ? (
+                <MapPreviewPositionPill
+                  current={previewPosition}
+                  total={renderPosts.length}
+                  testID="map-friends-preview-index"
+                />
+              ) : (
+                <View />
+              )}
+
+              <Pressable
+                testID="map-friends-preview-open"
+                style={({ pressed }) => [
+                  styles.actionButton,
+                  { backgroundColor: `${colors.primary}14`, opacity: pressed ? 0.72 : 1 },
+                ]}
+                onPress={() => {
+                  onInteraction?.();
+                  onOpen(renderPost.id);
+                }}
+              >
+                <Ionicons name="arrow-forward-circle" size={14} color={colors.primary} />
+                <Text style={[styles.actionText, { color: colors.primary }]}>
+                  {t('map.openShared', 'Open shared')}
+                </Text>
+              </Pressable>
             </View>
-          </Animated.View>
-        </Animated.View>
+          </View>
+        </View>
       </View>
     </MapPreviewSheet>
   );
@@ -533,10 +388,6 @@ const styles = StyleSheet.create({
   surfaceHost: {
     alignSelf: 'center',
   },
-  inner: {
-    alignSelf: 'center',
-    width: '100%',
-  },
   surface: {
     borderWidth: Platform.OS === 'android' ? 1 : StyleSheet.hairlineWidth,
     borderRadius: mapOverlayTokens.overlayRadius,
@@ -544,23 +395,23 @@ const styles = StyleSheet.create({
   },
   cardContent: {
     paddingHorizontal: mapOverlayTokens.overlayPadding,
-    paddingTop: 20,
+    paddingTop: 14,
     paddingBottom: 12,
   },
   previewList: {
-    marginBottom: 8,
+    marginBottom: 10,
   },
   previewListContent: {
     gap: 0,
   },
   previewPage: {
-    minHeight: 76,
+    minHeight: 82,
   },
   previewPageInner: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: PREVIEW_ROW_GAP,
-    minHeight: 76,
+    minHeight: 82,
   },
   avatar: {
     width: PREVIEW_MEDIA_SIZE,
@@ -616,18 +467,16 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '500',
     fontFamily: 'Noto Sans',
+    flex: 1,
   },
   avatarBadgeLabel: {
-    fontSize: 9,
-    lineHeight: 10,
-    fontWeight: '800',
-    fontFamily: 'Noto Sans',
-    textAlign: 'center',
+    fontSize: 11,
+    fontWeight: '700',
   },
   title: {
     fontSize: 16,
-    fontWeight: '700',
     lineHeight: 20,
+    fontWeight: '700',
     marginBottom: 6,
     fontFamily: 'Noto Sans',
   },
@@ -636,105 +485,25 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     fontFamily: 'Noto Sans',
   },
-  expandedBody: {
-    overflow: 'hidden',
-  },
-  expandedDivider: {
-    height: StyleSheet.hairlineWidth,
-    marginBottom: 12,
-  },
-  expandedHeaderRow: {
+  footer: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: 12,
-    marginBottom: 8,
-  },
-  expandedHeaderTitle: {
-    fontSize: 12,
-    fontWeight: '700',
-    fontFamily: 'Noto Sans',
-    textTransform: 'uppercase',
-    letterSpacing: 0.4,
-  },
-  expandedHeaderCaption: {
-    fontSize: 11,
-    fontWeight: '500',
-    fontFamily: 'Noto Sans',
-  },
-  expandedListContent: {
     gap: 8,
-    paddingBottom: 4,
   },
-  expandedRow: {
-    minHeight: 64,
-    borderRadius: 18,
-    borderWidth: StyleSheet.hairlineWidth,
+  actionButton: {
+    minHeight: 34,
     paddingHorizontal: 12,
-    paddingVertical: 10,
+    borderRadius: 999,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 6,
+    flexShrink: 1,
   },
-  expandedPhotoWrap: {
-    width: 42,
-    height: 42,
-    borderRadius: 14,
-    overflow: 'hidden',
-  },
-  expandedPhoto: {
-    width: '100%',
-    height: '100%',
-    borderRadius: 14,
-  },
-  expandedAvatarBadgeWrap: {
-    position: 'absolute',
-    right: 4,
-    bottom: 4,
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    padding: 2,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  expandedAvatarBadge: {
-    width: '100%',
-    height: '100%',
-    borderRadius: 7,
-  },
-  expandedIndexBadge: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  expandedCopyWrap: {
-    flex: 1,
-    minWidth: 0,
-  },
-  expandedRowTitle: {
-    fontSize: 14,
+  actionText: {
+    fontSize: 13,
     fontWeight: '700',
-    marginBottom: 3,
     fontFamily: 'Noto Sans',
-  },
-  expandedRowText: {
-    fontSize: 12,
-    lineHeight: 17,
-    fontFamily: 'Noto Sans',
-  },
-  expandedMetaWrap: {
-    alignItems: 'flex-end',
-    gap: 4,
-    maxWidth: 96,
-  },
-  expandedMetaText: {
-    fontSize: 11,
-    lineHeight: 14,
-    fontWeight: '600',
-    textAlign: 'right',
-    fontFamily: 'Noto Sans',
+    flexShrink: 1,
   },
 });

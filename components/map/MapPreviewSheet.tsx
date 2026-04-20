@@ -48,6 +48,7 @@ interface MapPreviewSheetProps {
   dismissTestID: string;
   onDismiss: () => void;
   reduceMotionEnabled: boolean;
+  allowHandlePress?: boolean;
   allowDismiss?: boolean;
   allowDragDismiss?: boolean;
   allowExpand?: boolean;
@@ -72,6 +73,7 @@ export default function MapPreviewSheet({
   dismissTestID,
   onDismiss,
   reduceMotionEnabled,
+  allowHandlePress = true,
   allowDismiss = true,
   allowDragDismiss = true,
   allowExpand = false,
@@ -270,6 +272,10 @@ export default function MapPreviewSheet({
   );
 
   const handlePress = useCallback(() => {
+    if (!allowHandlePress) {
+      return;
+    }
+
     if (allowExpand) {
       if (isExpanded) {
         animateProgressValue(expansionProgress, 0);
@@ -296,6 +302,7 @@ export default function MapPreviewSheet({
       finishDismiss();
     }
   }, [
+    allowHandlePress,
     allowDismiss,
     allowExpand,
     animateProgressValue,
@@ -309,7 +316,9 @@ export default function MapPreviewSheet({
     resetPosition,
   ]);
 
-  const handleAccessibilityLabel = allowExpand
+  const handleAccessibilityLabel = !allowHandlePress
+    ? t('map.dragPreview', 'Drag map preview')
+    : allowExpand
     ? isExpanded
       ? t('map.collapseNearby', 'Collapse')
       : previewProgress

@@ -318,21 +318,20 @@ describe('MapScreen', () => {
   });
 
   it('keeps the top controls mounted while filter empty states appear and clear', async () => {
-    const { getByTestId, getByText, queryByTestId } = render(<MapScreen />);
+    const { getByTestId, getByText, queryByText, queryByTestId } = render(<MapScreen />);
 
     const topHeader = getByTestId('map-top-header');
     const overlayHost = getByTestId('map-overlay-host');
-    expect(within(topHeader).getByTestId('map-inline-count')).toBeTruthy();
     expect(within(topHeader).getByTestId('map-filter-all')).toBeTruthy();
     expect(queryByTestId('map-count-badge')).toBeNull();
     expect(overlayHost).toBeTruthy();
     expect(getByTestId('map-friends-chip')).toBeTruthy();
 
-    expect(getByText('2 notes')).toBeTruthy();
+    expect(queryByText('2 notes')).toBeNull();
 
     fireEvent.press(getByTestId('map-filter-photo'));
     await waitFor(() => {
-      expect(getByText('1 note · filtered')).toBeTruthy();
+      expect(getByTestId('map-filter-clear-inline')).toBeTruthy();
     });
 
     fireEvent.press(getByTestId('map-filter-favorites'));
@@ -345,7 +344,6 @@ describe('MapScreen', () => {
 
     fireEvent.press(getByTestId('map-clear-filters'));
     await waitFor(() => {
-      expect(getByText('2 notes')).toBeTruthy();
       expect(getByTestId('map-top-header')).toBeTruthy();
       expect(getByTestId('map-overlay-host')).toBeTruthy();
     });
@@ -370,8 +368,35 @@ describe('MapScreen', () => {
     });
   });
 
+  it('zooms in on the recenter button after location is already focused', async () => {
+    const { getByTestId } = render(<MapScreen />);
+
+    fireEvent.press(getByTestId('map-recenter'));
+
+    act(() => {
+      getByTestId('map-canvas').props.onRegionChangeComplete({
+        latitude: 10.7605,
+        longitude: 106.6605,
+        latitudeDelta: 0.08,
+        longitudeDelta: 0.08,
+      });
+    });
+
+    fireEvent.press(getByTestId('map-recenter'));
+
+    await waitFor(() => {
+      const lastCall = mockAnimateToRegion.mock.calls[mockAnimateToRegion.mock.calls.length - 1];
+      expect(lastCall?.[0]).toMatchObject({
+        latitude: 10.7605,
+        longitude: 106.6605,
+        latitudeDelta: 0.012,
+        longitudeDelta: 0.012,
+      });
+    });
+  });
+
   it('keeps the nearby tray visible instead of swapping into a show-all state when panning to an empty area', async () => {
-    const { getByTestId, queryByTestId, getByText } = render(<MapScreen />);
+    const { getByTestId, queryByTestId, queryByText } = render(<MapScreen />);
 
     act(() => {
       getByTestId('map-canvas').props.onRegionChangeComplete({
@@ -387,7 +412,7 @@ describe('MapScreen', () => {
       expect(getByTestId('map-preview-shell')).toBeTruthy();
       expect(getByTestId('map-preview-list')).toBeTruthy();
       expect(queryByTestId('map-show-all-results')).toBeNull();
-      expect(getByText('2 notes')).toBeTruthy();
+      expect(queryByText('2 notes')).toBeNull();
     });
   });
 
@@ -660,7 +685,7 @@ describe('MapScreen', () => {
       expect(lastCall?.[0]?.latitude).toBeCloseTo(10.8, 2);
       expect(lastCall?.[0]?.longitude).toBeCloseTo(106.7, 2);
       expect(mockOpenNoteDetail).not.toHaveBeenCalled();
-      expect(getByTestId('map-preview-primary-action').props.accessibilityLabel).toBe('Center on map');
+      expect(getByTestId('map-preview-primary-action').props.accessibilityLabel).toBe('View on map');
       expect(String(getByTestId('map-preview-index').props.children)).toBe('2/2');
     });
 
@@ -681,6 +706,29 @@ describe('MapScreen', () => {
 
     await waitFor(() => {
       expect(mockOpenNoteDetail).toHaveBeenCalledWith('photo-1');
+    });
+  });
+
+  it('keeps the nearby preview item order stable while the same notes remain in range', async () => {
+    const { getByTestId } = render(<MapScreen />);
+
+    const nearbyList = await waitFor(() => getByTestId('map-preview-list'));
+    expect(nearbyList.props.data.map((item: any) => item.note.id)).toEqual(['text-1', 'photo-1']);
+
+    act(() => {
+      getByTestId('map-canvas').props.onRegionChangeComplete({
+        latitude: 10.8,
+        longitude: 106.7,
+        latitudeDelta: 0.08,
+        longitudeDelta: 0.08,
+      });
+    });
+
+    await waitFor(() => {
+      expect(getByTestId('map-preview-list').props.data.map((item: any) => item.note.id)).toEqual([
+        'text-1',
+        'photo-1',
+      ]);
     });
   });
 
@@ -714,7 +762,7 @@ describe('MapScreen', () => {
 
     await waitFor(() => {
       expect(String(getByTestId('map-preview-index').props.children)).toBe('2/2');
-      expect(getByTestId('map-preview-primary-action').props.accessibilityLabel).toBe('Center on map');
+      expect(getByTestId('map-preview-primary-action').props.accessibilityLabel).toBe('View on map');
     });
 
     act(() => {
@@ -849,7 +897,7 @@ describe('MapScreen', () => {
     await waitFor(() => {
       expect(getByTestId('map-preview-item-photo-1')).toBeTruthy();
       expect(String(getByTestId('map-preview-index').props.children)).toBe('2/2');
-      expect(getByTestId('map-preview-primary-action').props.accessibilityLabel).toBe('Center on map');
+      expect(getByTestId('map-preview-primary-action').props.accessibilityLabel).toBe('View on map');
       expect(queryByTestId('map-show-all-results')).toBeNull();
     });
   });
@@ -891,7 +939,7 @@ describe('MapScreen', () => {
     nowSpy.mockRestore();
   });
 
-  it('keeps the note preview visible when the sheet handle is pressed', async () => {
+  it('keeps the note preview open when the drag handle is pressed', async () => {
     const { getAllByTestId, getByTestId, queryByTestId } = render(<MapScreen />);
 
     await waitFor(() => {
@@ -900,11 +948,9 @@ describe('MapScreen', () => {
 
     fireEvent.press(getByTestId('map-preview-dismiss'));
 
-    await waitForPreviewCloseAnimation();
-
     await waitFor(() => {
-      expect(queryByTestId('map-show-preview')).toBeNull();
       expect(getByTestId('map-preview-list')).toBeTruthy();
+      expect(queryByTestId('map-show-preview')).toBeNull();
     });
 
     fireEvent.press(getAllByTestId(/leaf-marker-/)[0]);
@@ -931,7 +977,10 @@ describe('MapScreen', () => {
     });
 
     fireEvent.press(getByTestId('map-preview-item-photo-1'));
-    expect(mockOpenNoteDetail).not.toHaveBeenCalled();
+
+    await waitFor(() => {
+      expect(mockOpenNoteDetail).not.toHaveBeenCalled();
+    });
 
     fireEvent.press(getByTestId('map-filter-text'));
     fireEvent.press(getByTestId('map-preview-item-text-1'));
@@ -950,6 +999,30 @@ describe('MapScreen', () => {
 
     await waitFor(() => {
       expect(getAllByTestId(/leaf-marker-/)[0].props.tracksViewChanges).toBe(true);
+    });
+  });
+
+  it('zooms in when tapping an already selected leaf marker again', async () => {
+    const { getByTestId } = render(<MapScreen />);
+
+    const marker = await waitFor(() => getByTestId('leaf-marker-10.76000:106.66000'));
+
+    fireEvent.press(marker);
+
+    await waitFor(() => {
+      expect(getByTestId('note-marker-text-1')).toBeTruthy();
+    });
+
+    fireEvent.press(marker);
+
+    await waitFor(() => {
+      const lastCall = mockAnimateToRegion.mock.calls[mockAnimateToRegion.mock.calls.length - 1];
+      expect(lastCall?.[0]).toMatchObject({
+        latitude: 10.76,
+        longitude: 106.66,
+        latitudeDelta: 0.012,
+        longitudeDelta: 0.012,
+      });
     });
   });
 
@@ -1001,8 +1074,6 @@ describe('MapScreen', () => {
     });
 
     fireEvent.press(getByTestId('map-preview-dismiss'));
-
-    await waitForPreviewCloseAnimation();
 
     await waitFor(() => {
       expect(getByTestId('map-preview-list')).toBeTruthy();
@@ -1331,12 +1402,95 @@ describe('MapScreen', () => {
       expect(getByTestId('leaf-marker-same-3')).toBeTruthy();
     });
 
+    const leftMarkerCoordinate = getByTestId('leaf-marker-same-1').props.coordinate;
+    const middleMarkerCoordinate = getByTestId('leaf-marker-same-2').props.coordinate;
+    const rightMarkerCoordinate = getByTestId('leaf-marker-same-3').props.coordinate;
+
+    expect(leftMarkerCoordinate.latitude).toBeGreaterThan(10.8);
+    expect(middleMarkerCoordinate.latitude).toBeGreaterThan(10.8);
+    expect(rightMarkerCoordinate.latitude).toBeGreaterThan(10.8);
+    expect(leftMarkerCoordinate.longitude).toBeLessThan(106.7);
+    expect(middleMarkerCoordinate.longitude).toBeCloseTo(106.7, 4);
+    expect(rightMarkerCoordinate.longitude).toBeGreaterThan(106.7);
+
     fireEvent.press(getByTestId('leaf-marker-same-2'));
 
     await waitFor(() => {
       expect(getByTestId('map-preview-shell')).toBeTruthy();
       expect(String(getByTestId('map-preview-index').props.children)).toBe('2/3');
       expect(getByTestId('map-preview-item-same-2')).toBeTruthy();
+    });
+  });
+
+  it('uses each note coordinate for split markers when grouped notes are nearby but not overlapping', async () => {
+    replaceMockNotes([
+      {
+        id: 'near-same-1',
+        type: 'photo',
+        content: 'file:///near-same-1.jpg',
+        locationName: 'Phu Nhuan',
+        latitude: 10.8,
+        longitude: 106.7,
+        radius: 150,
+        isFavorite: false,
+        createdAt: '2026-03-12T00:00:00.000Z',
+        updatedAt: null,
+      },
+      {
+        id: 'near-same-2',
+        type: 'text',
+        content: 'Coffee note',
+        locationName: 'Phu Nhuan',
+        latitude: 10.800004,
+        longitude: 106.700004,
+        radius: 150,
+        isFavorite: true,
+        createdAt: '2026-03-11T00:00:00.000Z',
+        updatedAt: null,
+      },
+      {
+        id: 'near-same-3',
+        type: 'text',
+        content: 'Dinner note',
+        locationName: 'Phu Nhuan',
+        latitude: 10.800002,
+        longitude: 106.700001,
+        radius: 150,
+        isFavorite: false,
+        createdAt: '2026-03-10T00:00:00.000Z',
+        updatedAt: null,
+      },
+    ]);
+
+    const { getByTestId, queryByTestId } = render(<MapScreen />);
+
+    act(() => {
+      getByTestId('map-canvas').props.onRegionChangeComplete({
+        latitude: 10.8,
+        longitude: 106.7,
+        latitudeDelta: 0.002,
+        longitudeDelta: 0.002,
+      });
+    });
+
+    await waitFor(() => {
+      expect(queryByTestId('leaf-marker-10.80000:106.70000')).toBeNull();
+      expect(getByTestId('leaf-marker-near-same-1')).toBeTruthy();
+      expect(getByTestId('leaf-marker-near-same-2')).toBeTruthy();
+      expect(getByTestId('leaf-marker-near-same-3')).toBeTruthy();
+    });
+
+    expect(getByTestId('leaf-marker-near-same-1').props.coordinate).toMatchObject({
+      latitude: 10.8,
+      longitude: 106.7,
+    });
+    expect(getByTestId('leaf-marker-near-same-2').props.coordinate).toMatchObject({
+      latitude: 10.800004,
+      longitude: 106.700004,
+    });
+    expect(getByTestId('leaf-marker-near-same-3').props.coordinate).toMatchObject({
+      latitude: 10.800002,
+      longitude: 106.700001,
     });
   });
 

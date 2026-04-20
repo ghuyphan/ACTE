@@ -29,9 +29,10 @@ interface MapFilterBarProps {
   filterState: MapFilterState;
   onChangeType: (type: MapFilterType) => void;
   onToggleFavorites: () => void;
+  onClearFilters?: () => void;
   onInteraction?: () => void;
   top?: number;
-  countLabel: string;
+  hasActiveFilters?: boolean;
   reduceMotionEnabled: boolean;
   friendsChip?: {
     active: boolean;
@@ -135,9 +136,10 @@ export default function MapFilterBar({
   filterState,
   onChangeType,
   onToggleFavorites,
+  onClearFilters,
   onInteraction,
   top = 0,
-  countLabel,
+  hasActiveFilters = false,
   reduceMotionEnabled,
   friendsChip,
 }: MapFilterBarProps) {
@@ -188,26 +190,10 @@ export default function MapFilterBar({
         },
         testID: 'map-filter-favorites',
       },
-      ...(friendsChip
-        ? [
-            {
-              id: 'friends',
-              label: friendsChip.label,
-              icon: 'sparkles-outline' as const,
-              active: friendsChip.active,
-              onPress: () => {
-                onInteraction?.();
-                friendsChip.onPress();
-              },
-              testID: friendsChip.testID,
-            },
-          ]
-        : []),
     ],
     [
       filterState.favoritesOnly,
       filterState.type,
-      friendsChip,
       onChangeType,
       onInteraction,
       onToggleFavorites,
@@ -261,20 +247,10 @@ export default function MapFilterBar({
         ) : null}
 
         <View style={styles.content}>
-          <View style={styles.headerRow}>
-            <View style={styles.countRow}>
-              <View style={[styles.countDot, { backgroundColor: colors.primary }]} />
-              <View style={styles.countLabelWrap}>
-                <Text testID="map-inline-count" style={[styles.countText, { color: colors.text }]}>
-                  {countLabel}
-                </Text>
-              </View>
-            </View>
-          </View>
-
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
+            style={styles.chipsScroll}
             contentContainerStyle={styles.row}
           >
             {chips.map((chip) => (
@@ -288,6 +264,81 @@ export default function MapFilterBar({
                 reduceMotionEnabled={reduceMotionEnabled}
               />
             ))}
+
+            {hasActiveFilters && onClearFilters ? (
+              <Pressable
+                testID="map-filter-clear-inline"
+                accessibilityRole="button"
+                onPress={() => {
+                  onInteraction?.();
+                  onClearFilters();
+                }}
+                style={({ pressed }) => [
+                  styles.inlineAction,
+                  {
+                    opacity: pressed ? 0.72 : 1,
+                    backgroundColor: isAndroid
+                      ? colors.androidTabShellMutedBackground
+                      : `${colors.primary}12`,
+                    borderColor: isAndroid
+                      ? colors.androidTabShellMutedBorder
+                      : `${colors.primary}24`,
+                  },
+                ]}
+              >
+                <Ionicons name="close-circle-outline" size={13} color={colors.primary} />
+                <Text style={[styles.inlineActionText, { color: colors.primary }]} numberOfLines={1}>
+                  {t('map.clearFilters', 'Clear')}
+                </Text>
+              </Pressable>
+            ) : null}
+
+            {friendsChip ? (
+              <Pressable
+                testID={friendsChip.testID}
+                accessibilityRole="button"
+                accessibilityState={{ selected: friendsChip.active }}
+                onPress={() => {
+                  onInteraction?.();
+                  friendsChip.onPress();
+                }}
+                style={({ pressed }) => [
+                  styles.inlineAction,
+                  {
+                    opacity: pressed ? 0.72 : 1,
+                    backgroundColor: friendsChip.active
+                      ? isAndroid
+                        ? colors.androidTabShellSelectedBackground
+                        : `${colors.primary}18`
+                      : isAndroid
+                        ? colors.androidTabShellMutedBackground
+                        : getOverlayMutedFillColor(isDark),
+                    borderColor: friendsChip.active
+                      ? isAndroid
+                        ? colors.androidTabShellSelectedBorder
+                        : `${colors.primary}36`
+                      : isAndroid
+                        ? colors.androidTabShellMutedBorder
+                        : getOverlayBorderColor(isDark),
+                  },
+                ]}
+              >
+                <Ionicons
+                  name="sparkles-outline"
+                  size={13}
+                  color={friendsChip.active ? colors.primary : colors.secondaryText}
+                />
+                <Text
+                  style={[
+                    styles.inlineActionText,
+                    { color: friendsChip.active ? colors.primary : colors.text },
+                  ]}
+                  numberOfLines={1}
+                >
+                  {friendsChip.label}
+                </Text>
+              </Pressable>
+            ) : null}
           </ScrollView>
         </View>
       </View>
@@ -302,7 +353,6 @@ const styles = StyleSheet.create({
   container: {
     borderWidth: Platform.OS === 'android' ? 1 : StyleSheet.hairlineWidth,
     borderRadius: mapOverlayTokens.overlayRadius,
-    minHeight: mapOverlayTokens.overlayMinHeight,
     overflow: 'hidden',
     ...mapOverlayTokens.overlayShadow,
   },
@@ -313,52 +363,44 @@ const styles = StyleSheet.create({
     borderRadius: mapOverlayTokens.overlayRadius,
   },
   content: {
-    padding: mapOverlayTokens.overlayPadding,
-    gap: mapOverlayTokens.overlayCardGap,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
   },
-  headerRow: {
+  inlineAction: {
+    minHeight: 34,
+    paddingHorizontal: 11,
+    borderRadius: 17,
+    borderWidth: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 10,
+    gap: 6,
+    flexShrink: 1,
   },
-  countRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    flex: 1,
-    minWidth: 0,
-  },
-  countDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 999,
-  },
-  countLabelWrap: {
-    minHeight: 20,
-    justifyContent: 'center',
-  },
-  countText: {
-    fontSize: 14,
-    fontWeight: '600',
+  inlineActionText: {
+    fontSize: 12,
+    fontWeight: '700',
     fontFamily: 'Noto Sans',
+    flexShrink: 1,
+  },
+  chipsScroll: {
+    width: '100%',
   },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    paddingRight: 2,
+    paddingRight: 8,
   },
   chipOuter: {
-    minHeight: mapOverlayTokens.controlHeight,
+    minHeight: 34,
     flexDirection: 'row',
     alignItems: 'center',
-    borderRadius: mapOverlayTokens.overlayCompactRadius,
-    paddingHorizontal: 13,
+    borderRadius: 17,
+    paddingHorizontal: 14,
     borderWidth: 1,
   },
   chipIcon: {
-    marginRight: 6,
+    marginRight: 5,
   },
   chipText: {
     fontSize: 12,

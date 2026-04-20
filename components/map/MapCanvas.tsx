@@ -174,6 +174,12 @@ function getLeafMarkerBaseScale(
   return 0.84 + zoomProgress * 0.14;
 }
 
+const OVERLAP_COORDINATE_PRECISION = 6;
+
+function getOverlapCoordinateKey(latitude: number, longitude: number) {
+  return `${latitude.toFixed(OVERLAP_COORDINATE_PRECISION)}:${longitude.toFixed(OVERLAP_COORDINATE_PRECISION)}`;
+}
+
 function getSeparatedNoteCoordinate(
   latitude: number,
   longitude: number,
@@ -187,18 +193,60 @@ function getSeparatedNoteCoordinate(
 
   const earthMetersPerDegree = 111111;
   const metersPerPixel = 156543.03392 / Math.pow(2, zoomLevel);
-  const ringRadiusMeters = Math.max(5, Math.min(14, metersPerPixel * (count === 2 ? 22 : 26)));
-  const angleOffset = count === 2 ? 0 : -Math.PI / 2;
-  const angle = angleOffset + (index / count) * Math.PI * 2;
+  const clampedCount = Math.min(count, 6);
+  const horizontalRadiusMeters = Math.max(
+    4,
+    Math.min(10, metersPerPixel * (12 + clampedCount * 1.75))
+  );
+  const verticalRadiusMeters = Math.max(
+    3,
+    Math.min(8, metersPerPixel * (8 + clampedCount * 1.25))
+  );
+  const arcStart = (5 * Math.PI) / 6;
+  const arcEnd = Math.PI / 6;
+  const angleProgress = count === 1 ? 0.5 : index / (count - 1);
+  const angle = arcStart + (arcEnd - arcStart) * angleProgress;
   const longitudeMetersPerDegree = Math.max(
     1,
     Math.cos((latitude * Math.PI) / 180) * earthMetersPerDegree
   );
 
   return {
-    latitude: latitude + (ringRadiusMeters * Math.sin(angle)) / earthMetersPerDegree,
-    longitude: longitude + (ringRadiusMeters * Math.cos(angle)) / longitudeMetersPerDegree,
+    latitude: latitude + (verticalRadiusMeters * Math.sin(angle)) / earthMetersPerDegree,
+    longitude: longitude + (horizontalRadiusMeters * Math.cos(angle)) / longitudeMetersPerDegree,
   };
+}
+
+function getSplitNoteCoordinate(
+  note: Note,
+  siblingNotes: Note[],
+  zoomLevel: number
+) {
+  const overlapKey = getOverlapCoordinateKey(note.latitude, note.longitude);
+  const overlappingNotes = siblingNotes.filter(
+    (candidate) => getOverlapCoordinateKey(candidate.latitude, candidate.longitude) === overlapKey
+  );
+
+  if (overlappingNotes.length <= 1) {
+    return {
+      latitude: note.latitude,
+      longitude: note.longitude,
+    };
+  }
+
+  const overlapIndex = overlappingNotes.findIndex((candidate) => candidate.id === note.id);
+  const anchorLatitude =
+    overlappingNotes.reduce((sum, candidate) => sum + candidate.latitude, 0) / overlappingNotes.length;
+  const anchorLongitude =
+    overlappingNotes.reduce((sum, candidate) => sum + candidate.longitude, 0) / overlappingNotes.length;
+
+  return getSeparatedNoteCoordinate(
+    anchorLatitude,
+    anchorLongitude,
+    overlapIndex === -1 ? 0 : overlapIndex,
+    overlappingNotes.length,
+    zoomLevel
+  );
 }
 
 const MarkerContent = memo(function MarkerContent({
@@ -595,19 +643,13 @@ function MapCanvas({
             .filter((note): note is Note => note != null);
 
           if (splitNotes.length > 1) {
-            splitNotes.forEach((note, index) => {
+            splitNotes.forEach((note) => {
               const canShowPhotoThumbnail = note.type === 'photo' && currentZoom >= photoOrbMinZoom;
 
               items.push({
                 key: `split-${note.id}`,
                 testID: `leaf-marker-${note.id}`,
-                coordinate: getSeparatedNoteCoordinate(
-                  node.latitude,
-                  node.longitude,
-                  index,
-                  splitNotes.length,
-                  currentZoom
-                ),
+                coordinate: getSplitNoteCoordinate(note, splitNotes, currentZoom),
                 node,
                 pointCount: 1,
                 isSelected: selectedNote?.id === note.id,
@@ -705,11 +747,20 @@ function MapCanvas({
 
   useEffect(() => {
     if (!isAndroid) {
-      setPendingMarkerImageKeys(new Set());
+      setPendingMarkerImageKeys((current) => (current.size === 0 ? current : new Set()));
       return;
     }
 
-    setPendingMarkerImageKeys(new Set(expectedMarkerImageKeys));
+    setPendingMarkerImageKeys((current) => {
+      if (
+        current.size === expectedMarkerImageKeys.size &&
+        Array.from(expectedMarkerImageKeys).every((key) => current.has(key))
+      ) {
+        return current;
+      }
+
+      return new Set(expectedMarkerImageKeys);
+    });
   }, [expectedMarkerImageKeys, isAndroid]);
 
   const handleMarkerImageLoadStart = (imageKey: string) => {
@@ -826,16 +877,15 @@ function MapCanvas({
           node.groupId === selectedGroup!.id;
         const markerZIndex = showSelectedCallout ? 30 : isSelected ? 20 : node.isCluster ? 5 : 10;
         const imageTrackingKey = photoUri ? `${key}::${photoUri}` : null;
-        const markerRenderKey =
-          isAndroid
-            ? `${key}-${
-                showSelectedCallout
-                  ? `callout-${selectedNote?.id ?? 'none'}`
-                  : isSelected
-                    ? `selected-${noteId ?? node.groupId ?? key}`
-                    : 'idle'
-              }`
-            : key;
+        const markerRenderKey = isAndroid
+          ? `${key}-${
+              showSelectedCallout
+                ? `callout-${selectedNote?.id ?? 'none'}`
+                : isSelected
+                  ? `selected-${noteId ?? node.groupId ?? key}`
+                  : 'idle'
+            }`
+          : key;
 
         return (
           preferLiteMarkers && !node.isCluster ? (
@@ -896,8 +946,6 @@ function MapCanvas({
                     <MapSelectedNoteCallout
                       note={selectedNote}
                       colors={colors}
-                      visible
-                      reduceMotionEnabled={reduceMotionEnabled}
                       showOrb={false}
                     />
                   </View>
@@ -995,8 +1043,6 @@ function MapCanvas({
                     <MapSharedPostCallout
                       post={post}
                       colors={colors}
-                      visible
-                      reduceMotionEnabled={reduceMotionEnabled}
                       photoUri={sharedPhotoUri}
                     />
                   </View>
@@ -1127,25 +1173,25 @@ const styles = StyleSheet.create({
     minHeight: 60,
   },
   selectedMarkerHitArea: {
-    minWidth: 176,
-    minHeight: 136,
+    minWidth: 196,
+    minHeight: 148,
     justifyContent: 'flex-end',
   },
   selectedMarkerOverlay: {
     position: 'absolute',
-    bottom: 50,
-    width: 176,
+    bottom: 52,
+    width: 188,
     alignItems: 'center',
   },
   selectedFriendMarkerHitArea: {
-    minWidth: 192,
-    minHeight: 202,
+    minWidth: 204,
+    minHeight: 206,
     justifyContent: 'flex-end',
   },
   selectedFriendMarkerOverlay: {
     position: 'absolute',
-    bottom: 52,
-    width: 184,
+    bottom: 54,
+    width: 196,
     alignItems: 'center',
   },
   richMarkerHitArea: {

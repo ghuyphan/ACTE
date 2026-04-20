@@ -398,6 +398,11 @@ describe('NotesIndexScreen', () => {
 
     fireEvent.press(getByTestId('notes-mode-recap'));
 
+    expect(getByTestId('notes-recap-day-back-photo-2026-03-11').props.source).toBeTruthy();
+    expect(getByTestId('notes-recap-day-front-photo-2026-03-11').props.source).toBeTruthy();
+    expect(getByTestId('notes-recap-day-back-photo-2026-03-11').props.source).not.toEqual(
+      getByTestId('notes-recap-day-front-photo-2026-03-11').props.source
+    );
     expect(getByTestId('notes-recap-day-secondary-photo-2026-03-11')).toBeTruthy();
     expect(getByTestId('notes-recap-day-text-body-2026-03-07')).toBeTruthy();
   });

@@ -85,6 +85,7 @@ const RecapCalendarDayCell = memo(function RecapCalendarDayCell({
 
   const photoPreviewUris = day.photoPreviewUris?.filter(Boolean) ?? [];
   const primaryPhotoUri = photoPreviewUris[0] ?? day.photoPreviewUri;
+  const secondaryPhotoUri = photoPreviewUris[1];
   const photoCount = day.photoCount ?? (primaryPhotoUri ? 1 : 0);
   const textCount = day.textCount ?? Math.max(day.count - photoCount, 0);
   const hasPhotoPreview = Boolean(primaryPhotoUri);
@@ -112,6 +113,7 @@ const RecapCalendarDayCell = memo(function RecapCalendarDayCell({
     overflowLabel ? (
       <View
         pointerEvents="none"
+        testID={day.dateKey ? `notes-recap-day-overflow-${day.dateKey}` : undefined}
         style={mergeStyles(
           styles.dayOverflowBadge,
           compact ? styles.dayOverflowBadgeCompact : null,
@@ -216,14 +218,15 @@ const RecapCalendarDayCell = memo(function RecapCalendarDayCell({
                   !isPhotoMode && !isTextOnlyDay && !isEmptyDay ? styles.dayTileMarker : null,
                   isEmptyDay ? styles.dayTileEmpty : null,
                   {
-                    backgroundColor: isEmptyDay ? palette.surface : palette.card,
-                    borderColor: isSelected ? 'transparent' : `${palette.border}B8`,
+                    backgroundColor: isPhotoMode ? 'transparent' : isEmptyDay ? palette.surface : palette.card,
+                    borderColor: isPhotoMode || isSelected ? 'transparent' : `${palette.border}B8`,
                   }
                 )}
               >
+                {overflowLabel ? floatingOverflowBadge : null}
                 {isPhotoMode ? (
                   <>
-                    {photoPreviewUris[1] ? (
+                    {secondaryPhotoUri ? (
                       <View
                         style={mergeStyles(
                           styles.photoStackWrap,
@@ -237,10 +240,17 @@ const RecapCalendarDayCell = memo(function RecapCalendarDayCell({
                             {
                               borderColor: PHOTO_FRAME_BORDER_COLOR,
                               backgroundColor: PHOTO_BACKING_COLOR,
-                              transform: [{ rotate: '8deg' }],
+                              transform: [{ rotate: '9deg' }],
                             }
                           )}
-                        />
+                        >
+                          <Image
+                            testID={day.dateKey ? `notes-recap-day-back-photo-${day.dateKey}` : undefined}
+                            source={{ uri: secondaryPhotoUri }}
+                            style={styles.photoStackImage}
+                            contentFit="cover"
+                          />
+                        </View>
                         <View
                           testID={day.dateKey ? `notes-recap-day-secondary-photo-${day.dateKey}` : undefined}
                           style={mergeStyles(
@@ -254,33 +264,12 @@ const RecapCalendarDayCell = memo(function RecapCalendarDayCell({
                           )}
                         >
                           <Image
+                            testID={day.dateKey ? `notes-recap-day-front-photo-${day.dateKey}` : undefined}
                             source={{ uri: primaryPhotoUri }}
                             style={styles.photoStackImage}
                             contentFit="cover"
                           />
                         </View>
-                        {overflowLabel ? (
-                          <View
-                            pointerEvents="none"
-                            style={mergeStyles(
-                              styles.photoStackCountBadge,
-                              compact ? styles.photoStackCountBadgeCompact : null,
-                              {
-                                backgroundColor: palette.primary,
-                                borderColor: palette.card,
-                              }
-                            )}
-                          >
-                            <Text
-                              style={mergeStyles(
-                                styles.photoStackCountText,
-                                compact ? styles.photoStackCountTextCompact : null
-                              )}
-                            >
-                              {overflowLabel}
-                            </Text>
-                          </View>
-                        ) : null}
                       </View>
                     ) : (
                       <View
@@ -292,19 +281,17 @@ const RecapCalendarDayCell = memo(function RecapCalendarDayCell({
                             backgroundColor: PHOTO_FRAME_BORDER_COLOR,
                           }
                         )}
-                      >
-                        <Image
-                          source={{ uri: primaryPhotoUri }}
-                          style={styles.photoStackImage}
-                          contentFit="cover"
-                        />
-                        {overflowLabel ? floatingOverflowBadge : null}
+                        >
+                          <Image
+                            source={{ uri: primaryPhotoUri }}
+                            style={styles.photoStackImage}
+                            contentFit="cover"
+                          />
                       </View>
                     )}
                   </>
                 ) : contentMode === 'text' ? (
                   <>
-                    {floatingOverflowBadge}
                     <View
                       style={mergeStyles(
                         styles.textDaySheet,
@@ -378,28 +365,6 @@ const RecapCalendarDayCell = memo(function RecapCalendarDayCell({
                         )
                       )}
                     </View>
-                    {overflowLabel ? (
-                      <View
-                        style={mergeStyles(
-                          styles.overflowBadge,
-                          compact ? styles.overflowBadgeCompact : null,
-                          {
-                            backgroundColor: palette.primarySoft,
-                            borderColor: 'transparent',
-                          }
-                        )}
-                      >
-                        <Text
-                          style={mergeStyles(
-                            styles.overflowText,
-                            compact ? styles.overflowTextCompact : null,
-                            { color: palette.primary }
-                          )}
-                        >
-                          {overflowLabel}
-                        </Text>
-                      </View>
-                    ) : null}
                   </View>
                 ) : (
                   <View
@@ -667,10 +632,11 @@ const styles = StyleSheet.create({
     borderRadius: 16,
   },
   photoStackWrap: {
-    width: '100%',
-    height: '100%',
+    width: '108%',
+    height: '108%',
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'visible',
   },
   photoStackWrapCompact: {
   },
@@ -685,15 +651,15 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     padding: 1,
     overflow: 'hidden',
-    zIndex: 2,
+    zIndex: 1,
   },
   photoStackBackFrameCompact: {
     borderRadius: 14,
   },
   photoStackFrontFrame: {
     position: 'absolute',
-    top: 0,
-    left: -2,
+    top: 5,
+    left: -3,
     width: '78%',
     height: '78%',
     borderRadius: 16,
@@ -701,7 +667,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     padding: 1,
     overflow: 'hidden',
-    zIndex: 1,
+    zIndex: 2,
   },
   photoStackFrontFrameCompact: {
     borderRadius: 14,
@@ -711,47 +677,10 @@ const styles = StyleSheet.create({
     height: '100%',
     borderRadius: 14,
   },
-  photoStackCountBadge: {
-    position: 'absolute',
-    top: -3,
-    right: -2,
-    minWidth: 18,
-    height: 18,
-    borderRadius: 10,
-    paddingHorizontal: 4,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1.5,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-    elevation: 2,
-  },
-  photoStackCountBadgeCompact: {
-    top: -2,
-    right: -1,
-    minWidth: 16,
-    height: 16,
-    borderRadius: 9,
-    paddingHorizontal: 3,
-  },
-  photoStackCountText: {
-    ...Typography.pill,
-    fontSize: 9,
-    lineHeight: 10,
-    fontWeight: '800',
-    color: '#FFFFFF',
-    includeFontPadding: false,
-  },
-  photoStackCountTextCompact: {
-    fontSize: 8,
-    lineHeight: 9,
-  },
   dayOverflowBadge: {
     position: 'absolute',
-    top: -4,
-    right: -4,
+    top: -6,
+    right: -7,
     minWidth: 18,
     maxWidth: 28,
     height: 18,
@@ -768,8 +697,8 @@ const styles = StyleSheet.create({
     zIndex: 5,
   },
   dayOverflowBadgeCompact: {
-    top: -3,
-    right: -3,
+    top: -5,
+    right: -5,
     minWidth: 16,
     maxWidth: 24,
     height: 16,
@@ -860,32 +789,6 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
     borderRadius: 7,
-  },
-  overflowBadge: {
-    minWidth: 22,
-    height: 18,
-    borderRadius: 9,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 4,
-    borderWidth: StyleSheet.hairlineWidth,
-  },
-  overflowBadgeCompact: {
-    minWidth: 20,
-    height: 16,
-    borderRadius: 8,
-    paddingHorizontal: 3,
-  },
-  overflowText: {
-    ...Typography.pill,
-    fontSize: 10,
-    lineHeight: 12,
-    fontWeight: '800',
-    includeFontPadding: false,
-  },
-  overflowTextCompact: {
-    fontSize: 9,
-    lineHeight: 10,
   },
   markerBoard: {
     width: '100%',
