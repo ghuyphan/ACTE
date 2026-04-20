@@ -1352,7 +1352,6 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                     inlinePasteLoading={inlinePasteLoading}
                     noteColor={effectiveTextModeNoteColor}
                     showInlinePasteButton={showInlinePasteButton}
-                    stickerCount={stickerPlacements.length}
                     stickerModeEnabled={stickerModeEnabled}
                     t={t}
                     useNativeInlinePasteButton={useNativeInlinePasteButton}
@@ -1380,7 +1379,6 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                     importingSticker={importingSticker}
                     onImportMotionClip={onImportMotionClip}
                     onRemoveMotionClip={onRemoveMotionClip}
-                    stickerCount={stickerPlacements.length}
                     stickerModeEnabled={stickerModeEnabled}
                     t={t}
                   />

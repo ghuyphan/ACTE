@@ -13,7 +13,6 @@ type NoteDetailEditToolbarProps = {
     };
     doodleModeEnabled: boolean;
     editDoodleStrokesCount: number;
-    hasStickerPlacements: boolean;
     importingSticker: boolean;
     isEditing: boolean;
     onClearDoodle: () => void;
@@ -29,7 +28,6 @@ export default function NoteDetailEditToolbar({
     colors,
     doodleModeEnabled,
     editDoodleStrokesCount,
-    hasStickerPlacements,
     importingSticker,
     isEditing,
     onClearDoodle,
@@ -51,7 +49,6 @@ export default function NoteDetailEditToolbar({
             : 'rgba(43,38,33,0.12)';
     const detailBadgeIconColor = colors.text;
     const detailBadgeActiveIconColor = colors.primary;
-    const showStickerImportShortcut = stickersEnabled && (stickerModeEnabled || hasStickerPlacements);
 
     return (
         <View pointerEvents="box-none" style={styles.textEditHeader}>
@@ -128,7 +125,7 @@ export default function NoteDetailEditToolbar({
                         </Pressable>
                     </>
                 ) : null}
-                {showStickerImportShortcut ? (
+                {stickerModeEnabled ? (
                     <Pressable
                         testID="note-detail-sticker-import"
                         onPress={onShowStickerSourceOptions}

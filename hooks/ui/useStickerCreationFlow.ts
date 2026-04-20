@@ -164,29 +164,17 @@ export function useStickerCreationFlow({
     setCreationDraft(null);
   }, [scheduleStampCutterDraftCleanup]);
 
-  const handleCloseStampCutterEditor = useCallback(() => {
-    if (importingSticker) {
-      return;
-    }
-
+  const handleCloseCreationEditor = useCallback(() => {
+    // Successful confirm paths can call onClose before the parent render that
+    // flips importingSticker back to false has been observed here.
     clearStickerCreationDraft();
-  }, [clearStickerCreationDraft, importingSticker]);
+  }, [clearStickerCreationDraft]);
 
-  const handleCloseStampPreviewEditor = useCallback(() => {
-    if (importingSticker) {
-      return;
-    }
+  const handleCloseStampCutterEditor = handleCloseCreationEditor;
 
-    clearStickerCreationDraft();
-  }, [clearStickerCreationDraft, importingSticker]);
+  const handleCloseStampPreviewEditor = handleCloseCreationEditor;
 
-  const handleCloseStickerCutoutPreviewEditor = useCallback(() => {
-    if (importingSticker) {
-      return;
-    }
-
-    clearStickerCreationDraft();
-  }, [clearStickerCreationDraft, importingSticker]);
+  const handleCloseStickerCutoutPreviewEditor = handleCloseCreationEditor;
 
   const handlePrepareStampPreview = useCallback(async () => {
     if (!enablePhotoStickers || importingSticker) {

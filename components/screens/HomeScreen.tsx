@@ -80,6 +80,10 @@ import {
 import { resolveLocationNameFromCoordinates } from '../../services/locationLookup';
 import { saveNoteStickerPlacementsWithAssets } from '../../services/noteStickers';
 import {
+  getPhotoLibraryImportPickerOptions,
+  type PhotoLibraryImportIntent,
+} from '../../services/photoLibraryImport';
+import {
   getFallbackFreeNoteColor,
   getPremiumNoteSaveDecision,
   isPreviewablePremiumNoteColor,
@@ -2451,7 +2455,9 @@ export default function HomeScreen() {
     user,
   ]);
 
-  const handleImportPhoto = useCallback(async () => {
+  const handleImportPhoto = useCallback(async (
+    intent: PhotoLibraryImportIntent = 'editable-photo'
+  ) => {
     let mediaPermission = await ImagePicker.getMediaLibraryPermissionsAsync();
     if (mediaPermission.status !== 'granted') {
       mediaPermission = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -2477,12 +2483,9 @@ export default function HomeScreen() {
 
     setImportingPhoto(true);
     try {
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: Platform.OS === 'ios' ? ['images', 'livePhotos'] : ['images'],
-        allowsEditing: false,
-        quality: 0.35,
-        selectionLimit: 1,
-      });
+      const result = await ImagePicker.launchImageLibraryAsync(
+        getPhotoLibraryImportPickerOptions(intent, Platform.OS)
+      );
 
       const selectedAsset = result.assets?.[0];
       if (!result.canceled && selectedAsset?.uri) {
@@ -2515,6 +2518,39 @@ export default function HomeScreen() {
     showDoneSheet,
     t,
   ]);
+
+  const handleOpenPhotoLibrary = useCallback(() => {
+    if (Platform.OS !== 'ios') {
+      void handleImportPhoto('editable-photo');
+      return;
+    }
+
+    showAppAlert(
+      t('capture.photoImportOptionsTitle', 'Import photo'),
+      t(
+        'capture.photoImportOptionsMessage',
+        'Crop and frame a still photo before importing, or keep a Live Photo with its motion.'
+      ),
+      [
+        {
+          text: t('common.cancel', 'Cancel'),
+          style: 'cancel',
+        },
+        {
+          text: t('capture.importLivePhotoOption', 'Import Live Photo'),
+          onPress: () => {
+            void handleImportPhoto('live-photo');
+          },
+        },
+        {
+          text: t('capture.editPhotoOption', 'Edit Photo'),
+          onPress: () => {
+            void handleImportPhoto('editable-photo');
+          },
+        },
+      ]
+    );
+  }, [handleImportPhoto, t]);
 
   const handleImportMotionClip = useCallback(async () => {
     let mediaPermission = await ImagePicker.getMediaLibraryPermissionsAsync();
@@ -2662,7 +2698,7 @@ export default function HomeScreen() {
           onToggleFacing={handleToggleFacing}
           onChangeCameraSubmode={handleChangeCameraSubmode}
           onOpenPhotoLibrary={() => {
-            void handleImportPhoto();
+            handleOpenPhotoLibrary();
           }}
           selectedPhotoFilterId={selectedPhotoFilterId}
           onChangePhotoFilter={handleChangePhotoFilter}
@@ -2742,6 +2778,7 @@ export default function HomeScreen() {
       handleTakeDualPicture,
       handleCaptureTextEntryFocusChange,
       handleImportMotionClip,
+      handleOpenPhotoLibrary,
       handleImportPhoto,
       handleRequestCameraPermission,
       handleShutterPressIn,
