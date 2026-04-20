@@ -449,6 +449,7 @@ export default function NoteDetailSheetContent({
                     colors={colors}
                     doodleModeEnabled={doodleModeEnabled}
                     editDoodleStrokesCount={editDoodleStrokes.length}
+                    hasStickerPlacements={editStickerPlacements.length > 0}
                     importingSticker={importingSticker}
                     isEditing={isEditing}
                     onClearDoodle={onClearDoodle}
@@ -631,6 +632,7 @@ export default function NoteDetailSheetContent({
                     colors={colors}
                     doodleModeEnabled={doodleModeEnabled}
                     editDoodleStrokesCount={editDoodleStrokes.length}
+                    hasStickerPlacements={editStickerPlacements.length > 0}
                     importingSticker={importingSticker}
                     isEditing={isEditing}
                     onClearDoodle={onClearDoodle}

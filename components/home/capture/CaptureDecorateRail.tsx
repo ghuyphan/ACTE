@@ -105,6 +105,7 @@ interface CaptureDecorateRailProps {
   handleToggleDoodleMode: () => void;
   handleToggleStickerMode: () => void;
   handleUndoDoodle: () => void;
+  hasStickerPlacements?: boolean;
   importingSticker: boolean;
   railStyle?: ViewStyle;
   rowStyle?: ViewStyle;
@@ -129,6 +130,7 @@ function CaptureDecorateRail({
   handleToggleDoodleMode,
   handleToggleStickerMode,
   handleUndoDoodle,
+  hasStickerPlacements = false,
   importingSticker,
   railStyle,
   rowStyle,
@@ -138,6 +140,34 @@ function CaptureDecorateRail({
 }: CaptureDecorateRailProps) {
   const isShowingDoodleControls = doodleModeEnabled;
   const isShowingStickerControls = !isShowingDoodleControls && stickerModeEnabled;
+  const showPersistentStickerImportShortcut =
+    enableStickers && !isShowingDoodleControls && !isShowingStickerControls && hasStickerPlacements;
+
+  const stickerImportButton = (
+    <CaptureAnimatedPressable
+      testID="capture-sticker-import"
+      onPress={handleShowStickerSourceOptions}
+      disabled={importingSticker}
+      disabledOpacity={0.45}
+      style={[
+        styles.textCardActionPill,
+        {
+          backgroundColor: theme.detailBackgroundColor,
+          borderColor: theme.detailBorderColor,
+        },
+      ]}
+    >
+      {importingSticker ? (
+        <ActivityIndicator
+          testID="capture-sticker-import-loading"
+          size="small"
+          color={theme.detailIconColor}
+        />
+      ) : (
+        <Ionicons name="add-outline" size={14} color={theme.detailIconColor} />
+      )}
+    </CaptureAnimatedPressable>
+  );
 
   return (
     <CaptureControlRail
@@ -246,33 +276,12 @@ function CaptureDecorateRail({
           />
         </>
       ) : isShowingStickerControls ? (
-        <>
-          <CaptureAnimatedPressable
-            testID="capture-sticker-import"
-            onPress={handleShowStickerSourceOptions}
-            disabled={importingSticker}
-            disabledOpacity={0.45}
-            style={[
-              styles.textCardActionPill,
-              {
-                backgroundColor: theme.detailBackgroundColor,
-                borderColor: theme.detailBorderColor,
-              },
-            ]}
-          >
-            {importingSticker ? (
-              <ActivityIndicator
-                testID="capture-sticker-import-loading"
-                size="small"
-                color={theme.detailIconColor}
-              />
-            ) : (
-              <Ionicons name="add-outline" size={14} color={theme.detailIconColor} />
-            )}
-          </CaptureAnimatedPressable>
-        </>
+        <>{stickerImportButton}</>
       ) : (
-        defaultActions
+        <>
+          {showPersistentStickerImportShortcut ? stickerImportButton : null}
+          {defaultActions}
+        </>
       )}
     </CaptureControlRail>
   );
@@ -298,6 +307,7 @@ interface TextCaptureBottomBarProps {
   inlinePasteLoading: boolean;
   noteColor?: string | null;
   showInlinePasteButton: boolean;
+  stickerCount: number;
   stickerModeEnabled: boolean;
   t: TFunction;
   useNativeInlinePasteButton: boolean;
@@ -323,6 +333,7 @@ export function TextCaptureBottomBar({
   inlinePasteLoading,
   noteColor,
   showInlinePasteButton,
+  stickerCount,
   stickerModeEnabled,
   t,
   useNativeInlinePasteButton,
@@ -347,6 +358,7 @@ export function TextCaptureBottomBar({
         handleToggleDoodleMode={handleToggleDoodleMode}
         handleToggleStickerMode={handleToggleStickerMode}
         handleUndoDoodle={handleUndoDoodle}
+        hasStickerPlacements={stickerCount > 0}
         importingSticker={importingSticker}
         stickerModeEnabled={stickerModeEnabled}
         t={t}
@@ -461,6 +473,7 @@ interface PhotoCaptureBottomBarProps {
   importingSticker: boolean;
   onImportMotionClip: () => void;
   onRemoveMotionClip: () => void;
+  stickerCount: number;
   stickerModeEnabled: boolean;
   t: TFunction;
 }
@@ -482,6 +495,7 @@ export function PhotoCaptureBottomBar({
   importingSticker,
   onImportMotionClip,
   onRemoveMotionClip,
+  stickerCount,
   stickerModeEnabled,
   t,
 }: PhotoCaptureBottomBarProps) {
@@ -505,6 +519,7 @@ export function PhotoCaptureBottomBar({
         handleToggleDoodleMode={handleToggleDoodleMode}
         handleToggleStickerMode={handleToggleStickerMode}
         handleUndoDoodle={handleUndoDoodle}
+        hasStickerPlacements={stickerCount > 0}
         importingSticker={importingSticker}
         stickerModeEnabled={stickerModeEnabled}
         t={t}

@@ -1255,6 +1255,112 @@ describe('NoteDetailSheet', () => {
     expect(mockCleanupSubjectCutoutImportSource).toHaveBeenCalledWith(null);
   });
 
+  it('keeps the first sticker when adding a second sticker while editing', async () => {
+    const mockImagePicker = jest.requireMock('expo-image-picker') as {
+      getMediaLibraryPermissionsAsync: jest.Mock;
+      requestMediaLibraryPermissionsAsync: jest.Mock;
+      launchImageLibraryAsync: jest.Mock;
+    };
+    mockShouldImportSourceDirectlyAsSticker.mockResolvedValue(true);
+    mockImagePicker.getMediaLibraryPermissionsAsync.mockResolvedValue({
+      status: 'granted',
+      canAskAgain: true,
+    });
+    mockImagePicker.launchImageLibraryAsync
+      .mockResolvedValueOnce({
+        canceled: false,
+        assets: [
+          {
+            uri: 'file:///transparent-detail-sticker-1.png',
+            mimeType: 'image/png',
+            fileName: 'transparent-detail-sticker-1.png',
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        canceled: false,
+        assets: [
+          {
+            uri: 'file:///transparent-detail-sticker-2.png',
+            mimeType: 'image/png',
+            fileName: 'transparent-detail-sticker-2.png',
+          },
+        ],
+      });
+
+    const { getByTestId } = render(
+      <NoteDetailSheet noteId="note-1" visible onClose={() => undefined} />
+    );
+
+    await waitFor(() => {
+      expect(getByTestId('note-detail-edit')).toBeTruthy();
+    });
+
+    fireEvent.press(getByTestId('note-detail-edit'));
+    fireEvent.press(getByTestId('note-detail-sticker-toggle'));
+
+    await act(async () => {
+      fireEvent.press(getByTestId('note-detail-sticker-import'));
+    });
+    await act(async () => {
+      fireEvent.press(getByTestId('sticker-source-option-create-sticker'));
+    });
+    await waitFor(() => {
+      expect(getByTestId('sticker-cutout-preview-confirm')).toBeTruthy();
+    });
+    await act(async () => {
+      fireEvent.press(getByTestId('sticker-cutout-preview-confirm'));
+    });
+
+    await waitFor(() => {
+      expect(getByTestId('mock-note-sticker-count')).toHaveTextContent('1');
+    });
+
+    fireEvent.press(getByTestId('note-detail-sticker-toggle'));
+
+    expect(getByTestId('note-detail-sticker-import')).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.press(getByTestId('note-detail-sticker-import'));
+    });
+    await act(async () => {
+      fireEvent.press(getByTestId('sticker-source-option-create-sticker'));
+    });
+    await waitFor(() => {
+      expect(getByTestId('sticker-cutout-preview-confirm')).toBeTruthy();
+    });
+    await act(async () => {
+      fireEvent.press(getByTestId('sticker-cutout-preview-confirm'));
+    });
+
+    await waitFor(() => {
+      expect(getByTestId('mock-note-sticker-count')).toHaveTextContent('2');
+    });
+
+    await act(async () => {
+      fireEvent.press(getByTestId('note-detail-edit'));
+    });
+
+    expect(mockSaveNoteStickerPlacementsWithAssets).toHaveBeenCalledWith(
+      'note-1',
+      expect.arrayContaining([
+        expect.objectContaining({ id: 'detail-placement-1', zIndex: 1 }),
+        expect.objectContaining({ id: 'detail-placement-2', zIndex: 2 }),
+      ])
+    );
+    const latestUpdatePayload = mockUpdateNote.mock.calls.at(-1)?.[1] as {
+      hasStickers?: boolean;
+      stickerPlacementsJson?: string | null;
+    };
+    expect(latestUpdatePayload?.hasStickers).toBe(true);
+    expect(JSON.parse(latestUpdatePayload?.stickerPlacementsJson ?? '[]')).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: 'detail-placement-1', zIndex: 1 }),
+        expect.objectContaining({ id: 'detail-placement-2', zIndex: 2 }),
+      ])
+    );
+  });
+
   it('anchors the photo location cursor at the start when edit mode opens', async () => {
     mockGetNoteById.mockResolvedValue({
       id: 'photo-1',
