@@ -1,6 +1,7 @@
 import React from 'react';
 import { StyleProp, StyleSheet, Text, TextStyle, View, ViewStyle } from 'react-native';
 import { Typography } from '../../constants/theme';
+import { glassTokens } from '../ui/glassTokens';
 
 type PhotoCaptionChipProps = {
   caption: string;
@@ -63,12 +64,12 @@ const styles = StyleSheet.create({
   },
   field: {
     maxWidth: '72%',
-    minHeight: 38,
-    borderRadius: 19,
+    minHeight: glassTokens.compactControlHeight,
+    borderRadius: glassTokens.compactControlRadius,
     borderWidth: StyleSheet.hairlineWidth,
     justifyContent: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 0,
   },
   text: {
     flexShrink: 1,

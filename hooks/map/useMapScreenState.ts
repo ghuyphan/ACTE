@@ -280,6 +280,7 @@ export function useMapScreenState({
     selectNoteById,
     clusterNodes,
     pointGroupMap,
+    notesInVisibleRegion,
     nearbyItems,
     filteredNotes,
     filteredCount,

@@ -58,6 +58,19 @@ function getPreviewText(post: SharedPost, photoLabel: string, noContentLabel: st
   });
 }
 
+function getPostPhotoUri(post: SharedPost) {
+  if (post.type !== 'photo') {
+    return null;
+  }
+
+  return (
+    post.dualPrimaryPhotoLocalUri?.trim() ||
+    post.photoLocalUri?.trim() ||
+    post.dualSecondaryPhotoLocalUri?.trim() ||
+    null
+  );
+}
+
 interface MapFriendsPreviewCardProps {
   visible: boolean;
   posts: SharedPost[];
@@ -283,6 +296,7 @@ export default function MapFriendsPreviewCard({
                 drawDistance={pageWidth * 2}
                 renderItem={({ item }) => {
                   const authorLabel = item.authorDisplayName?.trim() || t('shared.someone', 'Someone');
+                  const photoUri = getPostPhotoUri(item);
                   const previewText = getPreviewText(
                     item,
                     t('shared.photoMemory', 'Photo memory'),
@@ -302,7 +316,26 @@ export default function MapFriendsPreviewCard({
                       }}
                     >
                       <View style={styles.previewPageInner}>
-                        {item.authorPhotoURLSnapshot ? (
+                        {photoUri ? (
+                          <View style={styles.previewMediaWrap}>
+                            <Image source={{ uri: photoUri }} style={styles.previewPhoto} contentFit="cover" />
+                            <View style={[styles.previewAvatarBadgeWrap, { backgroundColor: colors.card }]}>
+                              {item.authorPhotoURLSnapshot ? (
+                                <Image
+                                  source={{ uri: item.authorPhotoURLSnapshot }}
+                                  style={styles.previewAvatarBadge}
+                                  contentFit="cover"
+                                />
+                              ) : (
+                                <View style={[styles.previewAvatarBadge, { backgroundColor: colors.primarySoft }]}>
+                                  <Text style={[styles.avatarBadgeLabel, { color: colors.primary }]}>
+                                    {authorLabel.charAt(0).toUpperCase()}
+                                  </Text>
+                                </View>
+                              )}
+                            </View>
+                          </View>
+                        ) : item.authorPhotoURLSnapshot ? (
                           <Image source={{ uri: item.authorPhotoURLSnapshot }} style={styles.avatar} contentFit="cover" />
                         ) : (
                           <View style={[styles.avatar, { backgroundColor: colors.primarySoft }]}>
@@ -399,6 +432,7 @@ export default function MapFriendsPreviewCard({
                 >
                   {renderPosts.map((item) => {
                     const authorLabel = item.authorDisplayName?.trim() || t('shared.someone', 'Someone');
+                    const photoUri = getPostPhotoUri(item);
                     const previewText = getPreviewText(
                       item,
                       t('shared.photoMemory', 'Photo memory'),
@@ -424,6 +458,26 @@ export default function MapFriendsPreviewCard({
                           },
                         ]}
                       >
+                        {photoUri ? (
+                          <View style={styles.expandedPhotoWrap}>
+                            <Image source={{ uri: photoUri }} style={styles.expandedPhoto} contentFit="cover" />
+                            <View style={[styles.expandedAvatarBadgeWrap, { backgroundColor: colors.card }]}>
+                              {item.authorPhotoURLSnapshot ? (
+                                <Image
+                                  source={{ uri: item.authorPhotoURLSnapshot }}
+                                  style={styles.expandedAvatarBadge}
+                                  contentFit="cover"
+                                />
+                              ) : (
+                                <View style={[styles.expandedAvatarBadge, { backgroundColor: colors.primarySoft }]}>
+                                  <Text style={[styles.avatarBadgeLabel, { color: colors.primary }]}>
+                                    {authorLabel.charAt(0).toUpperCase()}
+                                  </Text>
+                                </View>
+                              )}
+                            </View>
+                          </View>
+                        ) : null}
                         <View
                           style={[
                             styles.expandedIndexBadge,
@@ -515,6 +569,34 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  previewMediaWrap: {
+    width: PREVIEW_MEDIA_SIZE,
+    height: PREVIEW_MEDIA_SIZE,
+    borderRadius: 18,
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  previewPhoto: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 18,
+  },
+  previewAvatarBadgeWrap: {
+    position: 'absolute',
+    right: 6,
+    bottom: 6,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    padding: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  previewAvatarBadge: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 10,
+  },
   avatarLabel: {
     fontSize: 17,
     fontWeight: '800',
@@ -534,6 +616,13 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '500',
     fontFamily: 'Noto Sans',
+  },
+  avatarBadgeLabel: {
+    fontSize: 9,
+    lineHeight: 10,
+    fontWeight: '800',
+    fontFamily: 'Noto Sans',
+    textAlign: 'center',
   },
   title: {
     fontSize: 16,
@@ -586,6 +675,33 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
+  },
+  expandedPhotoWrap: {
+    width: 42,
+    height: 42,
+    borderRadius: 14,
+    overflow: 'hidden',
+  },
+  expandedPhoto: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 14,
+  },
+  expandedAvatarBadgeWrap: {
+    position: 'absolute',
+    right: 4,
+    bottom: 4,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    padding: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  expandedAvatarBadge: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 7,
   },
   expandedIndexBadge: {
     width: 24,

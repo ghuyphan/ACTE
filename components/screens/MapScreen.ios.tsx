@@ -66,7 +66,7 @@ type MapRegionChangeDetails = {
   isGesture?: boolean;
 };
 
-type OverlayState = 'content' | 'no-filter-results' | 'no-notes';
+type OverlayState = 'content' | 'no-filter-results' | 'no-notes' | 'area-empty';
 
 function areRegionsClose(left: Region | null, right: Region) {
   if (!left) {
@@ -95,8 +95,8 @@ function isCoordinateCenteredInRegion(region: Region | null, latitude: number, l
   );
 }
 
-function getStatusPreviewHeight(kind: 'collapsed' | 'filtered-empty' | 'no-notes') {
-  if (kind === 'filtered-empty') {
+function getStatusPreviewHeight(kind: 'collapsed' | 'filtered-empty' | 'no-notes' | 'area-empty') {
+  if (kind === 'filtered-empty' || kind === 'area-empty') {
     return STATUS_PREVIEW_FILTERED_HEIGHT;
   }
 
@@ -168,6 +168,8 @@ export default function MapScreenIOS() {
     selectNoteById,
     clusterNodes,
     nearbyItems,
+    notesInVisibleRegion,
+    filteredNotes,
     filteredCount,
     hasActiveFilters,
   } = useMapScreenState({
@@ -251,6 +253,14 @@ export default function MapScreenIOS() {
   const friendsPreviewVisible = showFriendsPreview && friendPosts.length > 0;
   const hasFriendLayer = sharedEnabled && friendPosts.length > 0;
   const hasOwnNotes = notes.length > 0;
+  const hasNotesInVisibleRegion = notesInVisibleRegion.length > 0;
+  const shouldShowAreaEmptyState =
+    mapUiReady &&
+    visibleRegion != null &&
+    selectedGroup == null &&
+    !notesPreviewPersistsWhenAreaEmpty &&
+    filteredCount > 0 &&
+    !hasNotesInVisibleRegion;
   const hasPreviewItems = selectedGroup ? selectedGroup.notes.length > 0 : nearbyPreviewItems.length > 0;
   const overlayState: OverlayState =
     !mapUiReady
@@ -259,18 +269,28 @@ export default function MapScreenIOS() {
       ? 'no-notes'
       : notes.length > 0 && filteredCount === 0
         ? 'no-filter-results'
+        : shouldShowAreaEmptyState
+          ? 'area-empty'
         : 'content';
   const overlayShowsNotesPreview =
     mapUiReady &&
     hasPreviewItems &&
     (overlayState === 'content' || notesPreviewPersistsWhenAreaEmpty);
-  const bottomOverlayKind: 'hidden' | 'preview' | 'collapsed' | 'filtered-empty' | 'no-notes' =
+  const bottomOverlayKind:
+    | 'hidden'
+    | 'preview'
+    | 'collapsed'
+    | 'filtered-empty'
+    | 'no-notes'
+    | 'area-empty' =
     !mapUiReady || friendsPreviewVisible
       ? 'hidden'
       : overlayShowsNotesPreview && notesPreviewVisibility === 'visible'
         ? 'preview'
         : overlayShowsNotesPreview && notesPreviewVisibility === 'collapsed'
           ? 'collapsed'
+          : overlayState === 'area-empty'
+            ? 'area-empty'
           : overlayState === 'no-notes'
             ? 'no-notes'
             : overlayState === 'no-filter-results'
@@ -280,7 +300,8 @@ export default function MapScreenIOS() {
   const isStatusOverlay =
     bottomOverlayKind === 'collapsed' ||
     bottomOverlayKind === 'filtered-empty' ||
-    bottomOverlayKind === 'no-notes';
+    bottomOverlayKind === 'no-notes' ||
+    bottomOverlayKind === 'area-empty';
   const notesPreviewVisible = bottomOverlayKind === 'preview';
   const recenterPreviewRestingOffset =
     notesPreviewVisible
@@ -488,6 +509,40 @@ export default function MapScreenIOS() {
     reduceMotionEnabled,
     requestForegroundLocation,
   ]);
+
+  const fitToFilteredResults = useCallback(() => {
+    if (!mapRef.current || filteredNotes.length === 0) {
+      return;
+    }
+
+    const coordinates = filteredNotes.map((note) => ({
+      latitude: note.latitude,
+      longitude: note.longitude,
+    }));
+
+    if (coordinates.length === 1) {
+      const [onlyCoordinate] = coordinates;
+      if (!onlyCoordinate) {
+        return;
+      }
+
+      animateToRegion(
+        {
+          latitude: onlyCoordinate.latitude,
+          longitude: onlyCoordinate.longitude,
+          latitudeDelta: 0.025,
+          longitudeDelta: 0.025,
+        },
+        reduceMotionEnabled ? 0 : 350
+      );
+      return;
+    }
+
+    mapRef.current.fitToCoordinates(coordinates, {
+      edgePadding: { top: 150, right: 90, bottom: 210, left: 90 },
+      animated: !reduceMotionEnabled,
+    });
+  }, [animateToRegion, filteredNotes, reduceMotionEnabled]);
 
   const handleClusterPress = useCallback(
     (node: MapClusterNode) => {
@@ -947,6 +1002,8 @@ export default function MapScreenIOS() {
               ? t('map.emptyTitleShort', 'No notes')
               : bottomOverlayKind === 'filtered-empty'
                 ? t('map.filteredEmptyTitle', 'No notes match these filters')
+                : bottomOverlayKind === 'area-empty'
+                  ? t('map.areaEmptyTitle', 'No memories around here yet')
                 : undefined
           }
           subtitle={
@@ -955,6 +1012,11 @@ export default function MapScreenIOS() {
                   'map.filteredEmptySubtitle',
                   'Try another filter combination or reset to view all notes'
                 )
+              : bottomOverlayKind === 'area-empty'
+                ? t(
+                    'map.areaEmptySubtitle',
+                    'Pan the map a little further, or show all your saved memories.'
+                  )
               : undefined
           }
           icon={
@@ -962,11 +1024,15 @@ export default function MapScreenIOS() {
               ? 'pin-outline'
               : bottomOverlayKind === 'filtered-empty'
                 ? 'filter-outline'
+                : bottomOverlayKind === 'area-empty'
+                  ? 'compass-outline'
                 : 'albums-outline'
           }
           actionLabel={
             bottomOverlayKind === 'filtered-empty'
               ? t('map.clearFilters', 'Clear filters')
+              : bottomOverlayKind === 'area-empty'
+                ? t('map.showAllResults', 'Show all results')
               : bottomOverlayKind === 'collapsed'
                 ? t('map.showPreview', 'Show preview')
                 : undefined
@@ -974,6 +1040,8 @@ export default function MapScreenIOS() {
           actionTestID={
             bottomOverlayKind === 'filtered-empty'
               ? 'map-clear-filters'
+              : bottomOverlayKind === 'area-empty'
+                ? 'map-show-all-results'
               : bottomOverlayKind === 'collapsed'
                 ? 'map-show-preview'
                 : undefined
@@ -982,6 +1050,11 @@ export default function MapScreenIOS() {
             if (bottomOverlayKind === 'filtered-empty') {
               revealNotesPreview({ resetToNearby: true });
               clearFilters();
+              return;
+            }
+
+            if (bottomOverlayKind === 'area-empty') {
+              fitToFilteredResults();
               return;
             }
 

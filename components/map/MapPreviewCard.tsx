@@ -48,6 +48,7 @@ const PREVIEW_HEIGHT = 168;
 const EXPANDED_PREVIEW_HEIGHT = 344;
 const EXPANDED_BODY_HEIGHT = EXPANDED_PREVIEW_HEIGHT - PREVIEW_HEIGHT;
 const PREVIEW_MEDIA_SIZE = 56;
+const PREVIEW_EXPANDED_MEDIA_SIZE = 68;
 const PREVIEW_ROW_GAP = 12;
 const PREVIEW_MORPH_SPRING = {
   damping: 26,
@@ -327,7 +328,6 @@ export default function MapPreviewCard({
       expansionGestureRange={EXPANDED_BODY_HEIGHT}
       onExpand={() => setIsExpanded(true)}
       onCollapse={() => setIsExpanded(false)}
-      onMinimize={onDismiss}
     >
       <View style={[styles.surfaceHost, { width: fullSurfaceWidth }]} pointerEvents="box-none">
         <Animated.View style={[styles.surfaceShadow, animatedShellStyle]} pointerEvents="auto">
@@ -392,6 +392,8 @@ export default function MapPreviewCard({
                     noteColor: item.note.noteColor,
                   });
                   const isActive = item.note.id === renderData.activePreviewItem.note.id;
+                  const mediaSize = isExpanded ? PREVIEW_EXPANDED_MEDIA_SIZE : PREVIEW_MEDIA_SIZE;
+                  const mediaRadius = isExpanded ? 18 : 15;
 
                   return (
                     <Pressable
@@ -410,6 +412,9 @@ export default function MapPreviewCard({
                               style={[
                                 styles.photoThumb,
                                 {
+                                  width: mediaSize,
+                                  height: mediaSize,
+                                  borderRadius: mediaRadius,
                                   backgroundColor: isDark
                                     ? 'rgba(255,255,255,0.06)'
                                     : 'rgba(0,0,0,0.04)',
@@ -424,7 +429,14 @@ export default function MapPreviewCard({
                             colors={textTileGradient}
                             start={{ x: 0, y: 0 }}
                             end={{ x: 1, y: 1 }}
-                            style={styles.textThumb}
+                            style={[
+                              styles.textThumb,
+                              {
+                                width: mediaSize,
+                                height: mediaSize,
+                                borderRadius: mediaRadius,
+                              },
+                            ]}
                           >
                             <View
                               style={[
@@ -485,7 +497,7 @@ export default function MapPreviewCard({
                           </Text>
                           <Text
                             style={[styles.content, { color: colors.secondaryText }]}
-                            numberOfLines={2}
+                            numberOfLines={1}
                           >
                             {cardPreview}
                           </Text>

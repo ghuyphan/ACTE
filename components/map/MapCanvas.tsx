@@ -22,6 +22,7 @@ import {
   mapMotionMarkerSettleSpring,
   mapMotionMarkerSpring,
 } from './mapMotion';
+import MapSharedPostCallout from './MapSharedPostCallout';
 import { photoOrbMinZoom, samePlaceSplitMinZoom } from './mapMarkerTokens';
 import MapSelectedNoteCallout from './MapSelectedNoteCallout';
 
@@ -141,6 +142,19 @@ function getMapPalette(colors: ThemeColors, isDark: boolean) {
     friendSoft: colors.primarySoft,
     labelShadow: isDark ? 'rgba(0,0,0,0.3)' : 'rgba(43,38,33,0.14)',
   };
+}
+
+function getSharedPostMarkerPhotoUri(post: SharedPost) {
+  if (post.type !== 'photo') {
+    return null;
+  }
+
+  return (
+    post.dualPrimaryPhotoLocalUri?.trim() ||
+    post.photoLocalUri?.trim() ||
+    post.dualSecondaryPhotoLocalUri?.trim() ||
+    null
+  );
 }
 
 function getLeafMarkerBaseScale(
@@ -679,6 +693,11 @@ function MapCanvas({
       if (avatarUri) {
         nextKeys.add(`friend-${post.id}::${avatarUri}`);
       }
+
+      const sharedPhotoUri = getSharedPostMarkerPhotoUri(post);
+      if (sharedPhotoUri) {
+        nextKeys.add(`friend-post-${post.id}::${sharedPhotoUri}`);
+      }
     }
 
     return nextKeys;
@@ -918,11 +937,14 @@ function MapCanvas({
       {friendMarkers.map((post) => {
         const isSelected = selectedFriendPostId === post.id;
         const authorLabel = post.authorDisplayName?.trim() || 'F';
+        const sharedPhotoUri = getSharedPostMarkerPhotoUri(post);
         const friendImageTrackingKey = post.authorPhotoURLSnapshot?.trim()
           ? `friend-${post.id}::${post.authorPhotoURLSnapshot.trim()}`
           : null;
+        const friendPhotoTrackingKey = sharedPhotoUri ? `friend-post-${post.id}::${sharedPhotoUri}` : null;
+        const showSelectedFriendCallout = isSelected;
         const friendMarkerKey = isAndroid
-          ? `friend-${post.id}-${isSelected ? 'selected' : 'idle'}`
+          ? `friend-${post.id}-${showSelectedFriendCallout ? 'callout' : isSelected ? 'selected' : 'idle'}`
           : `friend-${post.id}`;
 
         return (
@@ -942,33 +964,82 @@ function MapCanvas({
               key={friendMarkerKey}
               testID={`friend-marker-${post.id}`}
               coordinate={{ latitude: post.latitude, longitude: post.longitude }}
-              anchor={{ x: 0.5, y: 0.5 }}
+              anchor={showSelectedFriendCallout ? selectedCalloutAnchor : { x: 0.5, y: 0.5 }}
               tracksViewChanges={
                 reduceMotionEnabled ||
-                (!isAndroid && isSelected) ||
+                (!isAndroid && showSelectedFriendCallout) ||
                 (isAndroid &&
                   (androidShouldTrackMarkerViews ||
                     (friendImageTrackingKey
                       ? pendingMarkerImageKeys.has(friendImageTrackingKey)
+                      : false) ||
+                    (friendPhotoTrackingKey
+                      ? pendingMarkerImageKeys.has(friendPhotoTrackingKey)
                       : false)))
               }
-              zIndex={isSelected ? 20 : 10}
+              zIndex={showSelectedFriendCallout ? 30 : isSelected ? 20 : 10}
               onPress={(event) => {
                 event.stopPropagation?.();
                 onFriendPress(post.id);
               }}
             >
-              <View style={styles.markerWrap} collapsable={false}>
+              <View
+                style={[
+                  styles.markerWrap,
+                  showSelectedFriendCallout ? styles.selectedFriendMarkerHitArea : null,
+                ]}
+                collapsable={false}
+              >
+                {showSelectedFriendCallout ? (
+                  <View pointerEvents="none" style={styles.selectedFriendMarkerOverlay} collapsable={false}>
+                    <MapSharedPostCallout
+                      post={post}
+                      colors={colors}
+                      visible
+                      reduceMotionEnabled={reduceMotionEnabled}
+                      photoUri={sharedPhotoUri}
+                    />
+                  </View>
+                ) : null}
+
                 <View
                   style={[
-                    styles.friendMarker,
+                    sharedPhotoUri ? styles.friendPhotoMarker : styles.friendMarker,
                     {
                       borderColor: isSelected ? palette.friend : '#FFFFFF',
-                      backgroundColor: isSelected ? `${palette.friend}24` : palette.friendSoft,
+                      backgroundColor: sharedPhotoUri
+                        ? palette.cardBackground
+                        : isSelected
+                          ? `${palette.friend}24`
+                          : palette.friendSoft,
                     },
                   ]}
                 >
-                  {post.authorPhotoURLSnapshot ? (
+                  {sharedPhotoUri ? (
+                    <View style={styles.friendPhotoImageWrap}>
+                      <Image
+                        source={{ uri: sharedPhotoUri }}
+                        style={styles.friendPhotoImage}
+                        contentFit="cover"
+                        transition={0}
+                        onLoadStart={() => {
+                          if (friendPhotoTrackingKey) {
+                            handleMarkerImageLoadStart(friendPhotoTrackingKey);
+                          }
+                        }}
+                        onLoad={() => {
+                          if (friendPhotoTrackingKey) {
+                            handleMarkerImageLoadEnd(friendPhotoTrackingKey);
+                          }
+                        }}
+                        onError={() => {
+                          if (friendPhotoTrackingKey) {
+                            handleMarkerImageLoadEnd(friendPhotoTrackingKey);
+                          }
+                        }}
+                      />
+                    </View>
+                  ) : post.authorPhotoURLSnapshot ? (
                     <Image
                       source={{ uri: post.authorPhotoURLSnapshot }}
                       style={styles.friendAvatar}
@@ -997,8 +1068,44 @@ function MapCanvas({
                       </Text>
                     </View>
                   )}
-                  <View style={[styles.friendBadge, { backgroundColor: palette.friend }]}>
-                    <Ionicons name="sparkles" size={9} color="#FFFFFF" />
+
+                  <View
+                    style={[
+                      sharedPhotoUri ? styles.friendAuthorBadgeWrap : styles.friendBadge,
+                      { backgroundColor: sharedPhotoUri ? palette.cardBackground : palette.friend },
+                    ]}
+                  >
+                    {post.authorPhotoURLSnapshot ? (
+                      <Image
+                        source={{ uri: post.authorPhotoURLSnapshot }}
+                        style={sharedPhotoUri ? styles.friendAuthorBadge : styles.friendBadgeAvatar}
+                        contentFit="cover"
+                        transition={0}
+                        onLoadStart={() => {
+                          if (friendImageTrackingKey) {
+                            handleMarkerImageLoadStart(friendImageTrackingKey);
+                          }
+                        }}
+                        onLoad={() => {
+                          if (friendImageTrackingKey) {
+                            handleMarkerImageLoadEnd(friendImageTrackingKey);
+                          }
+                        }}
+                        onError={() => {
+                          if (friendImageTrackingKey) {
+                            handleMarkerImageLoadEnd(friendImageTrackingKey);
+                          }
+                        }}
+                      />
+                    ) : sharedPhotoUri ? (
+                      <View style={[styles.friendAuthorBadge, { backgroundColor: palette.friendSoft }]}>
+                        <Text style={[styles.friendBadgeInitial, { color: palette.friend }]}>
+                          {authorLabel.charAt(0).toUpperCase()}
+                        </Text>
+                      </View>
+                    ) : (
+                      <Ionicons name="sparkles" size={9} color="#FFFFFF" />
+                    )}
                   </View>
                 </View>
               </View>
@@ -1028,6 +1135,17 @@ const styles = StyleSheet.create({
     position: 'absolute',
     bottom: 50,
     width: 176,
+    alignItems: 'center',
+  },
+  selectedFriendMarkerHitArea: {
+    minWidth: 192,
+    minHeight: 202,
+    justifyContent: 'flex-end',
+  },
+  selectedFriendMarkerOverlay: {
+    position: 'absolute',
+    bottom: 52,
+    width: 184,
     alignItems: 'center',
   },
   richMarkerHitArea: {
@@ -1287,6 +1405,32 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     overflow: 'visible',
   },
+  friendPhotoMarker: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    borderWidth: 3,
+    justifyContent: 'center',
+    alignItems: 'center',
+    overflow: 'visible',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.12,
+    shadowRadius: 16,
+    elevation: 5,
+  },
+  friendPhotoImageWrap: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    overflow: 'hidden',
+    backgroundColor: 'rgba(255,255,255,0.14)',
+  },
+  friendPhotoImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 17,
+  },
   friendAvatar: {
     width: 28,
     height: 28,
@@ -1300,6 +1444,28 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     fontFamily: 'Noto Sans',
   },
+  friendAuthorBadgeWrap: {
+    position: 'absolute',
+    right: -2,
+    bottom: -2,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.14,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  friendAuthorBadge: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+  },
   friendBadge: {
     position: 'absolute',
     right: -1,
@@ -1311,5 +1477,17 @@ const styles = StyleSheet.create({
     borderColor: '#FFFFFF',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  friendBadgeAvatar: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+  },
+  friendBadgeInitial: {
+    fontSize: 7,
+    lineHeight: 8,
+    fontWeight: '800',
+    fontFamily: 'Noto Sans',
+    textAlign: 'center',
   },
 });

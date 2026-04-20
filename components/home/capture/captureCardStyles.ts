@@ -1,6 +1,7 @@
 import { Dimensions, Platform, StyleSheet } from 'react-native';
 import { STICKER_ARTBOARD_FRAME } from '../../../constants/doodleLayout';
 import { Layout, Radii, Shadows, Sheet, Typography } from '../../../constants/theme';
+import { glassTokens } from '../../ui/glassTokens';
 import {
   DUAL_CAMERA_INSET_FRAME_COLOR,
   DUAL_CAMERA_INSET_FROST_COLOR,
@@ -549,13 +550,13 @@ export const styles = StyleSheet.create({
   },
   photoCaptionOverlayField: {
     width: '84%',
-    minHeight: 38,
-    borderRadius: 19,
+    minHeight: glassTokens.compactControlHeight,
+    borderRadius: glassTokens.compactControlRadius,
     borderWidth: StyleSheet.hairlineWidth,
     paddingHorizontal: 12,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 6,
   },
   photoCaptionOverlayInput: {
     flex: 1,
