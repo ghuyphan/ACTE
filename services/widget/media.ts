@@ -365,11 +365,7 @@ export async function resolveWidgetPhotoProps(
     return {};
   }
 
-  if (
-    candidate.isDualCapture &&
-    ((candidate.dualPrimaryPhotoLocalUri?.trim() && candidate.dualSecondaryPhotoLocalUri?.trim()) ||
-      (candidate.dualPrimaryPhotoPath?.trim() && candidate.dualSecondaryPhotoPath?.trim()))
-  ) {
+  if (candidate.isDualCapture) {
     const [readablePrimaryUri, readableSecondaryUri] = await Promise.all([
       resolveReadableDualPhotoUriForCandidate(candidate, 'primary'),
       resolveReadableDualPhotoUriForCandidate(candidate, 'secondary'),
@@ -399,6 +395,20 @@ export async function resolveWidgetPhotoProps(
           dualLayoutPreset: candidate.dualLayoutPreset ?? 'top-left',
         };
       }
+
+      console.warn('[widgetService] Failed to stage dual widget images, falling back to composed photo.', {
+        candidateKey: candidate.candidateKey,
+        hasPrimarySource: Boolean(readablePrimaryUri),
+        hasSecondarySource: Boolean(readableSecondaryUri),
+        hasPrimaryStagedFile: Boolean(stagedPrimaryUri),
+        hasSecondaryStagedFile: Boolean(stagedSecondaryUri),
+      });
+    } else if (readablePrimaryUri || readableSecondaryUri) {
+      console.warn('[widgetService] Dual widget image is partially unavailable, falling back to composed photo.', {
+        candidateKey: candidate.candidateKey,
+        hasPrimarySource: Boolean(readablePrimaryUri),
+        hasSecondarySource: Boolean(readableSecondaryUri),
+      });
     }
   }
 

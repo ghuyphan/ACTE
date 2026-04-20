@@ -423,7 +423,7 @@ const LocketWidget = (props: { props: WidgetViewProps }) => {
                                 ) : null}
                                 <Text
                                     modifiers={[
-                                        font({ weight: 'regular', size: textLayout.fontSize, design: 'serif' }),
+                                        font({ weight: 'bold', size: textLayout.fontSize, design: 'default' }),
                                         foregroundStyle('#2A1A11'),
                                         frame({ maxWidth: 9999, alignment: 'leading' }),
                                         lineLimit(textLayout.lineLimit),
@@ -463,7 +463,7 @@ const LocketWidget = (props: { props: WidgetViewProps }) => {
 
                                 <Text
                                     modifiers={[
-                                        font({ weight: 'regular', size: textLayout.fontSize, design: 'serif' }),
+                                        font({ weight: 'bold', size: textLayout.fontSize, design: 'default' }),
                                         foregroundStyle('#2A1A11'),
                                         frame({ maxWidth: 9999 }),
                                         lineLimit(textLayout.lineLimit),

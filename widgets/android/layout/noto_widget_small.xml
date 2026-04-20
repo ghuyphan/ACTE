@@ -238,7 +238,7 @@
                     android:layout_height="wrap_content"
                     android:layout_gravity="center"
                     android:ellipsize="end"
-                    android:fontFamily="@font/noto_sans_800extra_bold"
+                    android:fontFamily="@font/noto_sans_700bold"
                     android:gravity="center"
                     android:includeFontPadding="false"
                     android:letterSpacing="0"
@@ -279,7 +279,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:ellipsize="end"
-                    android:fontFamily="@font/noto_sans_800extra_bold"
+                    android:fontFamily="@font/noto_sans_700bold"
                     android:includeFontPadding="false"
                     android:letterSpacing="-0.03"
                     android:lineSpacingExtra="1dp"
@@ -291,6 +291,15 @@
                     android:shadowRadius="8"
                     android:textColor="#FFFFFF"
                     android:textSize="26sp"
+                    android:visibility="gone" />
+
+                <ImageView
+                    android:id="@+id/widget_photo_title_bitmap"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:adjustViewBounds="true"
+                    android:contentDescription="@null"
+                    android:scaleType="fitStart"
                     android:visibility="gone" />
 
                 <LinearLayout

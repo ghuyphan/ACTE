@@ -1992,12 +1992,12 @@ private struct LocketWidgetEntryView: View {
 
     private var photoTitleFont: Font {
         if isLarge {
-            return .custom("Noto Sans ExtraBold", size: 28)
+            return .custom("Noto Sans Bold", size: 28)
         }
         if isMedium {
-            return .custom("Noto Sans ExtraBold", size: 22)
+            return .custom("Noto Sans Bold", size: 22)
         }
-        return .custom("Noto Sans ExtraBold", size: compactPhotoCaptionText.count > 28 ? 16 : 17)
+        return .custom("Noto Sans Bold", size: compactPhotoCaptionText.count > 28 ? 16 : 17)
     }
 
     @ViewBuilder
@@ -2070,7 +2070,7 @@ private struct LocketWidgetEntryView: View {
             baseSize = trimmedCount > 110 ? 16 : 18
         }
 
-        return .custom("Noto Sans ExtraBold", size: baseSize)
+        return .custom("Noto Sans Bold", size: baseSize)
     }
 
     private var noteCardLineSpacing: CGFloat {

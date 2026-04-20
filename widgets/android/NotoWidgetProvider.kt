@@ -581,6 +581,7 @@ class NotoWidgetProvider : AppWidgetProvider() {
       views.setTextViewText(R.id.widget_body, bodyText)
       views.setViewVisibility(R.id.widget_body, if (bodyText.isBlank()) View.GONE else View.VISIBLE)
       views.setViewVisibility(R.id.widget_body_bitmap, View.GONE)
+      views.setViewVisibility(R.id.widget_photo_title_bitmap, View.GONE)
       views.setViewVisibility(R.id.widget_photo_title, if (showPhotoTitle) View.VISIBLE else View.GONE)
       if (showPhotoTitle) {
         views.setTextViewText(R.id.widget_photo_title, photoTitleText)
@@ -597,6 +598,16 @@ class NotoWidgetProvider : AppWidgetProvider() {
             views.setInt(R.id.widget_photo_title, "setMaxLines", 3)
             views.setTextViewTextSize(R.id.widget_photo_title, TypedValue.COMPLEX_UNIT_SP, 28f)
           }
+        }
+        val renderedPhotoTitleBitmap = renderPhotoTitleBitmap(
+          context = context,
+          photoTitleText = photoTitleText,
+          layoutStage = layoutStage
+        )
+        if (renderedPhotoTitleBitmap != null) {
+          views.setImageViewBitmap(R.id.widget_photo_title_bitmap, renderedPhotoTitleBitmap)
+          views.setViewVisibility(R.id.widget_photo_title_bitmap, View.VISIBLE)
+          views.setViewVisibility(R.id.widget_photo_title, View.GONE)
         }
       }
 
@@ -1368,7 +1379,7 @@ class NotoWidgetProvider : AppWidgetProvider() {
         return null
       }
 
-      val typefaceRes = if (noteType == "text") R.font.noto_sans_800extra_bold else R.font.noto_sans_700bold
+      val typefaceRes = R.font.noto_sans_700bold
       val typeface = ResourcesCompat.getFont(context, typefaceRes) ?: return null
       val availableWidthPx = max(1, geometry.contentWidthPx - (typography.horizontalPaddingPx * 2))
       val textSizePx = context.spToPx(typography.textSizeSp)
@@ -1404,6 +1415,71 @@ class NotoWidgetProvider : AppWidgetProvider() {
         .build()
 
       val insetPx = context.dpToPx(4f)
+      val bitmapWidth = max(1, staticLayout.width + insetPx * 2)
+      val bitmapHeight = max(1, staticLayout.height + insetPx * 2)
+
+      return Bitmap.createBitmap(bitmapWidth, bitmapHeight, Bitmap.Config.ARGB_8888).also { bitmap ->
+        val canvas = Canvas(bitmap)
+        canvas.translate(insetPx.toFloat(), insetPx.toFloat())
+        staticLayout.draw(canvas)
+      }
+    }
+
+    private fun renderPhotoTitleBitmap(
+      context: Context,
+      photoTitleText: String,
+      layoutStage: WidgetLayoutStage
+    ): Bitmap? {
+      val normalizedText = photoTitleText.trim()
+      if (normalizedText.isBlank()) {
+        return null
+      }
+
+      val typeface = ResourcesCompat.getFont(context, R.font.noto_sans_800extra_bold) ?: return null
+      val textSizeSp = when (layoutStage) {
+        WidgetLayoutStage.SMALL -> 20f
+        WidgetLayoutStage.MEDIUM -> 30f
+        WidgetLayoutStage.LARGE -> 28f
+      }
+      val maxLines = when (layoutStage) {
+        WidgetLayoutStage.SMALL -> 1
+        WidgetLayoutStage.MEDIUM -> 2
+        WidgetLayoutStage.LARGE -> 3
+      }
+      val maxWidthDp = when (layoutStage) {
+        WidgetLayoutStage.SMALL -> 162f
+        WidgetLayoutStage.MEDIUM -> 286f
+        WidgetLayoutStage.LARGE -> 248f
+      }
+      val lineSpacingExtraDp = if (layoutStage == WidgetLayoutStage.LARGE) 2f else 1f
+      val textPaint = TextPaint(Paint.ANTI_ALIAS_FLAG or Paint.SUBPIXEL_TEXT_FLAG).apply {
+        color = Color.parseColor("#FFFFFF")
+        textSize = context.spToPx(textSizeSp)
+        this.typeface = typeface
+        textAlign = Paint.Align.LEFT
+        letterSpacing = -0.03f
+        setShadowLayer(
+          when (layoutStage) {
+            WidgetLayoutStage.SMALL -> context.dpToPx(8f).toFloat()
+            WidgetLayoutStage.MEDIUM -> context.dpToPx(10f).toFloat()
+            WidgetLayoutStage.LARGE -> context.dpToPx(12f).toFloat()
+          },
+          0f,
+          context.dpToPx(2f).toFloat(),
+          Color.parseColor("#80000000")
+        )
+      }
+
+      val staticLayout = StaticLayout.Builder
+        .obtain(normalizedText, 0, normalizedText.length, textPaint, context.dpToPx(maxWidthDp))
+        .setAlignment(Layout.Alignment.ALIGN_NORMAL)
+        .setIncludePad(false)
+        .setMaxLines(maxLines)
+        .setEllipsize(TextUtils.TruncateAt.END)
+        .setLineSpacing(context.dpToPx(lineSpacingExtraDp).toFloat(), 1f)
+        .build()
+
+      val insetPx = context.dpToPx(6f)
       val bitmapWidth = max(1, staticLayout.width + insetPx * 2)
       val bitmapHeight = max(1, staticLayout.height + insetPx * 2)
 

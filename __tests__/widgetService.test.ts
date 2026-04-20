@@ -1027,6 +1027,62 @@ describe('widgetService', () => {
     );
   });
 
+  it('keeps dual widget payloads when dual images are split across local and remote shared sources', async () => {
+    mockCurrentUser = { id: 'me', uid: 'me' };
+    mockGetAllNotes.mockResolvedValue([]);
+    mockRefreshSharedFeed.mockResolvedValue({
+      friends: [],
+      sharedPosts: [
+        buildSharedPost({
+          id: 'shared-dual-photo',
+          authorUid: 'friend-2',
+          authorDisplayName: 'Bao',
+          type: 'photo',
+          text: 'Shared dual capture',
+          photoLocalUri: 'file:///mock-documents/photos/shared-dual-composed.png',
+          captureVariant: 'dual',
+          dualPrimaryPhotoLocalUri: 'file:///mock-documents/photos/shared-dual-primary.jpg',
+          dualSecondaryPhotoPath: 'shared/dual-secondary.jpg',
+          dualLayoutPreset: 'top-left',
+          placeName: 'Friend Cafe',
+          createdAt: '2026-03-10T12:00:00.000Z',
+        }),
+      ],
+      activeInvite: null,
+    });
+    mockGetInfoAsync.mockImplementation(async (uri: string) => ({
+      exists:
+        uri === 'file:///mock-documents/photos/shared-dual-primary.jpg' ||
+        uri === 'file:///mock-documents/photos/shared-downloaded.jpg',
+      isDirectory: false,
+      uri,
+      size: 1024,
+      modificationTime: 0,
+    }));
+
+    await updateWidgetData({
+      referenceDate: new Date('2026-03-10T12:00:00.000Z'),
+      includeSharedRefresh: true,
+    });
+
+    const entries = getLastTimelineEntries();
+    expect(mockDownloadPhotoFromStorage).toHaveBeenCalledWith(
+      'shared-post-media',
+      'shared/dual-secondary.jpg',
+      'shared-post-shared-dual-photo-secondary'
+    );
+    expect(entries[0]?.props.props).toEqual(
+      expect.objectContaining({
+        isSharedContent: true,
+        isDualCapture: true,
+        dualLayoutPreset: 'top-left',
+        text: 'Shared dual capture',
+      })
+    );
+    expect(String(entries[0]?.props.props.backgroundImageUrl ?? '')).toContain('shared-dual-photo');
+    expect(String(entries[0]?.props.props.dualInsetImageUrl ?? '')).toContain('shared-dual-photo');
+  });
+
   it('formats localized widget strings inside the payload', async () => {
     i18n.language = 'vi';
 
