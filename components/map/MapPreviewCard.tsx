@@ -339,6 +339,7 @@ export default function MapPreviewCard({
                   noteId: item.note.id,
                   emoji: item.note.moodEmoji,
                   noteColor: item.note.noteColor,
+                  fallbackGradient: colors.captureGradient,
                 });
                 const isActive = item.note.id === renderData.activePreviewItem.note.id;
 

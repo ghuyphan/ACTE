@@ -328,6 +328,7 @@ export function NoteMemoryCard({
   isActive = false,
   isSharedByMe = false,
 }: NoteMemoryCardProps) {
+  const { colors: themeColors } = useTheme();
   const { width } = useWindowDimensions();
   const reduceMotionEnabled = useReducedMotion();
   const now = useRelativeTimeNow();
@@ -575,6 +576,7 @@ export function NoteMemoryCard({
               noteId={note.id}
               emoji={note.moodEmoji}
               noteColor={note.noteColor}
+              fallbackGradient={themeColors.captureGradient}
               doodleStrokesJson={note.doodleStrokesJson}
               stickerPlacementsJson={note.stickerPlacementsJson}
               isActive={isActive}
@@ -676,6 +678,7 @@ export function NoteMemoryCard({
               ref={polaroidCaptureRef}
               note={note}
               fallbackLocationLabel={t('noteDetail.unknownLocation', 'Unknown place')}
+              fallbackGradient={themeColors.captureGradient}
               onReady={handlePolaroidRenderReady}
             />
           </View>

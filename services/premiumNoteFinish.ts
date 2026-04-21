@@ -1,8 +1,10 @@
 import type { PlanTier } from '../constants/subscription';
 import {
   DEFAULT_NOTE_COLOR_ID,
+  getEditableTextNoteColor,
   getNoteColorPreset,
   getNoteColorFinish,
+  isAppThemeDefaultNoteColor,
   isPremiumNoteColor,
   normalizeSavedTextNoteColor,
 } from './noteAppearance';
@@ -56,22 +58,32 @@ export function getFallbackFreeNoteColor(
   lastFreeNoteColor?: string | null,
   currentNoteColor?: string | null
 ) {
+  if (lastFreeNoteColor == null || isAppThemeDefaultNoteColor(lastFreeNoteColor)) {
+    return null;
+  }
+
   if (typeof lastFreeNoteColor === 'string' && lastFreeNoteColor.trim()) {
     if (getNoteColorPreset(lastFreeNoteColor) && !isPremiumNoteColor(lastFreeNoteColor)) {
       return normalizeSavedTextNoteColor(lastFreeNoteColor);
     }
 
     if (!getNoteColorPreset(lastFreeNoteColor)) {
+      const normalizedCurrent = getEditableTextNoteColor(currentNoteColor);
+      if (normalizedCurrent == null) {
+        return null;
+      }
+
       return DEFAULT_NOTE_COLOR_ID;
     }
   }
 
-  if (
-    currentNoteColor &&
-    getNoteColorPreset(currentNoteColor) &&
-    !isPremiumNoteColor(currentNoteColor)
-  ) {
-    return normalizeSavedTextNoteColor(currentNoteColor);
+  const normalizedCurrent = getEditableTextNoteColor(currentNoteColor);
+  if (normalizedCurrent == null) {
+    return null;
+  }
+
+  if (getNoteColorPreset(normalizedCurrent) && !isPremiumNoteColor(normalizedCurrent)) {
+    return normalizeSavedTextNoteColor(normalizedCurrent);
   }
 
   return DEFAULT_NOTE_COLOR_ID;

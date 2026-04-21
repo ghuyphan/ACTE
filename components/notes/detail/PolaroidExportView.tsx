@@ -34,6 +34,7 @@ const POLAROID_BOTTOM_PADDING = 164;
 type PolaroidExportViewProps = {
   note: Note;
   fallbackLocationLabel: string;
+  fallbackGradient?: readonly [string, string] | null;
   onReady?: () => void;
 };
 
@@ -52,7 +53,7 @@ function formatPolaroidDate(createdAt: string) {
 }
 
 function PolaroidExportViewInner(
-  { note, fallbackLocationLabel, onReady }: PolaroidExportViewProps,
+  { note, fallbackLocationLabel, fallbackGradient = null, onReady }: PolaroidExportViewProps,
   ref: React.ForwardedRef<View>
 ) {
   const [layoutReady, setLayoutReady] = useState(false);
@@ -80,8 +81,9 @@ function PolaroidExportViewInner(
         noteId: note.id,
         emoji: note.moodEmoji,
         noteColor: note.noteColor,
+        fallbackGradient,
       }),
-    [note.content, note.id, note.moodEmoji, note.noteColor]
+    [fallbackGradient, note.content, note.id, note.moodEmoji, note.noteColor]
   );
   const doodleStrokes = useMemo(
     () => parseNoteDoodleStrokes(note.doodleStrokesJson),

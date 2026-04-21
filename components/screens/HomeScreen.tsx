@@ -65,7 +65,7 @@ import {
   getRemainingPhotoSlots,
 } from '../../constants/subscription';
 import { DEFAULT_NOTE_RADIUS } from '../../constants/noteRadius';
-import { DEFAULT_NOTE_COLOR_ID, PREMIUM_NOTE_COLOR_IDS } from '../../services/noteAppearance';
+import { PREMIUM_NOTE_COLOR_IDS } from '../../services/noteAppearance';
 import { resolveAutoNoteEmoji } from '../../services/noteDecorations';
 import { saveNoteDoodle } from '../../services/noteDoodles';
 import {
@@ -366,7 +366,7 @@ export default function HomeScreen() {
   const dualCameraPreviewRef = useRef<DualCameraPreviewHandle | null>(null);
   const dualCaptureComposeResolverRef = useRef<((uri: string | null) => void) | null>(null);
   const dualCaptureComposeRequestIdRef = useRef(0);
-  const lastFreeNoteColorRef = useRef<string>(DEFAULT_NOTE_COLOR_ID);
+  const lastFreeNoteColorRef = useRef<string | null>(null);
   const finalizeInlineSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const resetSaveStateTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const persistCaptureDraftTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -731,13 +731,13 @@ export default function HomeScreen() {
     setCaptureTarget('private');
     setSelectedSharedAudienceUserId(null);
     setNoteColor(null);
-    lastFreeNoteColorRef.current = DEFAULT_NOTE_COLOR_ID;
+    lastFreeNoteColorRef.current = null;
     flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
   }, [clearPersistedCaptureDraft, resetCaptureDraft]);
 
   const handleChangeNoteColor = useCallback((nextColor: string | null) => {
     setNoteColor(nextColor);
-    if (nextColor && !isPreviewablePremiumNoteColor(nextColor)) {
+    if (!isPreviewablePremiumNoteColor(nextColor)) {
       lastFreeNoteColorRef.current = nextColor;
     }
   }, []);

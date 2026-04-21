@@ -3,7 +3,7 @@ import {
   BottomSheetModal,
   BottomSheetView,
 } from '@gorhom/bottom-sheet';
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { BackHandler, Platform, StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
 import { useTheme } from '../../hooks/useTheme';
 
@@ -39,6 +39,7 @@ export default function AppBottomSheet({
   wrapContentInView?: boolean;
 }) {
   const modalRef = useRef<BottomSheetModal>(null);
+  const skipNextDismissCallbackRef = useRef(false);
   const { colors, isDark } = useTheme();
   const backgroundColor = detached ? colors.surface : colors.card;
   const backdropOpacity = isDark ? 0.52 : 0.38;
@@ -46,16 +47,32 @@ export default function AppBottomSheet({
   const maxSnapPointIndex = hasExplicitSnapPoints ? androidSnapPoints.length - 1 : null;
   const resolvedInitialIndex =
     maxSnapPointIndex == null
-      ? androidInitialIndex
+      ? Math.min(Math.max(androidInitialIndex, -1), 0)
       : Math.min(Math.max(androidInitialIndex, -1), maxSnapPointIndex);
   const initialIndexProps = resolvedInitialIndex === 0 ? {} : { index: resolvedInitialIndex };
 
-  useEffect(() => {
-    if (Platform.OS !== 'android' || !visible) {
+  const handleDismiss = useCallback(() => {
+    if (skipNextDismissCallbackRef.current) {
+      skipNextDismissCallbackRef.current = false;
       return;
     }
 
-    modalRef.current?.present();
+    onClose();
+  }, [onClose]);
+
+  useEffect(() => {
+    if (Platform.OS !== 'android') {
+      return;
+    }
+
+    if (visible) {
+      skipNextDismissCallbackRef.current = false;
+      modalRef.current?.present();
+      return;
+    }
+
+    skipNextDismissCallbackRef.current = true;
+    modalRef.current?.dismiss();
   }, [visible]);
 
   useEffect(() => {
@@ -77,14 +94,11 @@ export default function AppBottomSheet({
     return null;
   }
 
-  if (!visible) {
-    return null;
-  }
-
   return (
     <BottomSheetModal
       ref={modalRef}
       {...initialIndexProps}
+      stackBehavior="push"
       detached={detached}
       bottomInset={detached ? 16 : 0}
       topInset={topInset}
@@ -116,7 +130,7 @@ export default function AppBottomSheet({
           pressBehavior={dismissible ? 'close' : 'none'}
         />
       )}
-      onDismiss={onClose}
+      onDismiss={handleDismiss}
       style={detached ? styles.detached : styles.edge}
     >
       {wrapContentInView ? (

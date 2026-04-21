@@ -35,8 +35,9 @@ import { useSubscription } from '../../hooks/useSubscription';
 import { useTheme } from '../../hooks/useTheme';
 import { Note } from '../../services/database';
 import {
-    normalizeSavedTextNoteColor,
+    getEditableTextNoteColor,
     PREMIUM_NOTE_COLOR_IDS,
+    resolveSavedTextNoteColor,
 } from '../../services/noteAppearance';
 import { resolveAutoNoteEmoji } from '../../services/noteDecorations';
 import { clearNoteDoodle, parseNoteDoodleStrokes, saveNoteDoodle } from '../../services/noteDoodles';
@@ -291,7 +292,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
     const missingNoteCloseRequestedRef = useRef(false);
     const isMountedRef = useRef(true);
     const activeNoteKeyRef = useRef(`note-detail-${Math.random().toString(36).slice(2)}`);
-    const lastFreeEditNoteColorRef = useRef('marigold-glow');
+    const lastFreeEditNoteColorRef = useRef<string | null>(null);
     const subjectCutoutPrewarmRequestedRef = useRef(false);
     const polaroidCaptureRef = useRef<any>(null);
     const polaroidTempUriRef = useRef<string | null>(null);
@@ -674,11 +675,11 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                     setEditRadius(nextNote.radius);
                     setEditNoteColor(
                         nextNote.type === 'text'
-                            ? normalizeSavedTextNoteColor(nextNote.noteColor)
+                            ? getEditableTextNoteColor(nextNote.noteColor)
                             : null
                     );
                     if (nextNote.type === 'text' && !isPreviewablePremiumNoteColor(nextNote.noteColor)) {
-                        lastFreeEditNoteColorRef.current = normalizeSavedTextNoteColor(nextNote.noteColor);
+                        lastFreeEditNoteColorRef.current = getEditableTextNoteColor(nextNote.noteColor);
                     }
                     setEditDoodleStrokes(parseNoteDoodleStrokes(nextNote.doodleStrokesJson));
                     setEditStickerPlacements(parseNoteStickerPlacements(nextNote.stickerPlacementsJson));
@@ -830,11 +831,11 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
     }, [dismissPastePrompt, doodleModeEnabled, importingSticker, isEditing, stickerModeEnabled, visible]);
 
     useEffect(() => {
-        if (!editNoteColor || isPreviewablePremiumNoteColor(editNoteColor)) {
+        if (isPreviewablePremiumNoteColor(editNoteColor)) {
             return;
         }
 
-        lastFreeEditNoteColorRef.current = normalizeSavedTextNoteColor(editNoteColor);
+        lastFreeEditNoteColorRef.current = editNoteColor;
     }, [editNoteColor]);
 
     const handleToggleDoodleMode = useCallback(() => {
@@ -1428,7 +1429,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
         if (!note || isDeleting) return;
         const updates: Partial<Pick<Note, 'content' | 'caption' | 'locationName' | 'moodEmoji' | 'noteColor' | 'radius'>> = {};
         const currentNoteColor =
-            note.type === 'text' ? normalizeSavedTextNoteColor(note.noteColor) : null;
+            note.type === 'text' ? getEditableTextNoteColor(note.noteColor) : null;
         if (note.type === 'text') {
             const saveDecision = getPremiumNoteSaveDecision({
                 tier,
@@ -1487,7 +1488,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
             updates.radius = editRadius;
         }
         if (note.type === 'text' && editNoteColor !== currentNoteColor) {
-            updates.noteColor = editNoteColor ?? currentNoteColor;
+            updates.noteColor = editNoteColor;
         }
 
         if (Object.keys(updates).length > 0 || doodleChanged || stickersChanged) {
@@ -1513,7 +1514,10 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                 content: nextContent,
                 caption: nextCaption,
                 locationName: nextLocationName ?? null,
-                noteColor: updates.noteColor !== undefined ? updates.noteColor : currentNoteColor,
+                noteColor:
+                    updates.noteColor !== undefined
+                        ? resolveSavedTextNoteColor(updates.noteColor)
+                        : note.noteColor,
                 hasDoodle: doodleChanged ? nextHasDoodle : note.hasDoodle,
                 doodleStrokesJson: doodleChanged ? nextDoodleStrokesJson : note.doodleStrokesJson ?? null,
                 hasStickers: stickersChanged ? nextHasStickers : note.hasStickers,
@@ -1583,7 +1587,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
             setEditRadius(nextNote.radius);
             setEditNoteColor(
                 nextNote.type === 'text'
-                    ? normalizeSavedTextNoteColor(nextNote.noteColor)
+                    ? getEditableTextNoteColor(nextNote.noteColor)
                     : null
             );
             blurEditorInputs();
@@ -1740,6 +1744,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
             lockedPremiumNoteColorIds={lockedPremiumNoteColorIds}
             locationInputRef={locationInputRef}
             previewOnlyNoteColorIds={previewOnlyNoteColorIds}
+            themeCaptureGradient={colors.captureGradient}
             onClose={onClose}
             onStartEditing={() => setIsEditing(true)}
             onToggleDoodleMode={handleToggleDoodleMode}

@@ -16,6 +16,7 @@ export type NoteCardTextPalette = {
   shadowColor: string;
   placeholderColor: string;
 };
+export const APP_THEME_DEFAULT_NOTE_COLOR_ID = 'app-theme-default';
 
 type NotePalette = {
   capture: GradientPair;
@@ -327,8 +328,28 @@ export function getNoteColorStickerMotion(noteColor?: string | null): NoteColorS
   return getNoteColorPreset(noteColor)?.stickerMotion ?? null;
 }
 
+export function isAppThemeDefaultNoteColor(noteColor?: string | null) {
+  return noteColor === APP_THEME_DEFAULT_NOTE_COLOR_ID;
+}
+
 export function normalizeSavedTextNoteColor(noteColor?: string | null): NoteColorId {
   return getNoteColorPreset(noteColor)?.id ?? DEFAULT_NOTE_COLOR_ID;
+}
+
+export function resolveSavedTextNoteColor(noteColor?: string | null): string {
+  if (noteColor == null || isAppThemeDefaultNoteColor(noteColor)) {
+    return APP_THEME_DEFAULT_NOTE_COLOR_ID;
+  }
+
+  return normalizeSavedTextNoteColor(noteColor);
+}
+
+export function getEditableTextNoteColor(noteColor?: string | null): string | null {
+  if (noteColor == null || isAppThemeDefaultNoteColor(noteColor)) {
+    return null;
+  }
+
+  return normalizeSavedTextNoteColor(noteColor);
 }
 
 export function getCaptureNoteGradient(options?: {
@@ -364,10 +385,19 @@ export function getTextNoteCardGradient(options: {
   noteId?: string;
   emoji?: string | null;
   noteColor?: string | null;
+  fallbackGradient?: readonly [string, string] | null;
 }): GradientPair {
   const selectedGradient = getNoteColorCardGradient(options.noteColor);
   if (selectedGradient) {
     return selectedGradient;
+  }
+
+  if (isAppThemeDefaultNoteColor(options.noteColor)) {
+    if (options.fallbackGradient) {
+      return [options.fallbackGradient[0], options.fallbackGradient[1]];
+    }
+
+    return DEFAULT_CAPTURE_GRADIENT;
   }
 
   const baseGradient = getBaseGradientSeed(options.text, options.noteId);

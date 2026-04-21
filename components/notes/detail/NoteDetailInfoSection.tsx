@@ -98,6 +98,8 @@ export default function NoteDetailInfoSection({
                                 label={t('noteDetail.colorField', 'Color')}
                                 selectedColor={editNoteColor}
                                 onSelectColor={onSelectColor}
+                                autoLabel={t('capture.noteColorDefault', 'Default')}
+                                includeAutoOption
                                 lockedColorIds={lockedPremiumNoteColorIds}
                                 previewOnlyColorIds={previewOnlyNoteColorIds}
                                 onLockedColorPress={onLockedColorPress}

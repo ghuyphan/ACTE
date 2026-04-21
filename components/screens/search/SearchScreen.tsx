@@ -165,6 +165,7 @@ export default function SearchScreen() {
         noteId: item.id,
         emoji: item.moodEmoji,
         noteColor: item.noteColor,
+        fallbackGradient: colors.captureGradient,
       });
       const createdAt = formatDate(item.createdAt, 'short');
       const locationLabel = item.locationName ?? t('home.unknownLocation', 'Unknown location');
@@ -252,7 +253,17 @@ export default function SearchScreen() {
         </Pressable>
       );
     },
-    [colors.border, colors.danger, colors.secondaryText, colors.surface, colors.text, isDark, openNote, t]
+    [
+      colors.border,
+      colors.captureGradient,
+      colors.danger,
+      colors.secondaryText,
+      colors.surface,
+      colors.text,
+      isDark,
+      openNote,
+      t,
+    ]
   );
 
   const renderSeparator = useCallback(() => <View style={styles.resultSeparator} />, []);

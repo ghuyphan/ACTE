@@ -5,7 +5,7 @@ import { DEFAULT_NOTE_RADIUS } from '../constants/noteRadius';
 import { getPersistentItem, getPersistentItemSync, setPersistentItem } from '../utils/appStorage';
 import type { SyncChange } from './syncService';
 import { buildNoteSearchText, tokenizeSearchQuery } from './noteSearch';
-import { normalizeSavedTextNoteColor } from './noteAppearance';
+import { resolveSavedTextNoteColor } from './noteAppearance';
 import { resolveStoredPhotoUri } from './photoStorage';
 import { resolveStoredPairedVideoUri } from './livePhotoStorage';
 import {
@@ -1587,7 +1587,7 @@ export async function createNote(
     const normalizedContent = input.type === 'photo' ? photoLocalUri ?? '' : input.content;
     const normalizedCaption = input.type === 'photo' ? normalizePhotoCaption(input.caption) : null;
     const normalizedNoteColor =
-        input.type === 'text' ? normalizeSavedTextNoteColor(input.noteColor) : null;
+        input.type === 'text' ? resolveSavedTextNoteColor(input.noteColor) : null;
     const normalizedCaptureVariant = normalizeNoteCaptureVariant(input.type, input.captureVariant);
     const normalizedDualPrimaryPhotoLocalUri =
         normalizedCaptureVariant === 'dual'
@@ -1872,7 +1872,7 @@ export async function updateNote(
         updates.moodEmoji !== undefined ? updates.moodEmoji : existing.moodEmoji ?? null;
     const nextNoteColor =
         nextType === 'text'
-            ? normalizeSavedTextNoteColor(
+            ? resolveSavedTextNoteColor(
                 updates.noteColor !== undefined ? updates.noteColor : existing.noteColor ?? null
             )
             : null;

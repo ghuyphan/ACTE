@@ -283,10 +283,11 @@ export default function NotesIndexScreen() {
   const tileModels = useMemo(
     () =>
       buildNotesGridTileModels(items, {
+        captureGradient: colors.captureGradient,
         photoFallbackLabel,
         showDecorations: showGridDecorations && mode === 'all',
       }),
-    [items, mode, photoFallbackLabel, showGridDecorations]
+    [colors.captureGradient, items, mode, photoFallbackLabel, showGridDecorations]
   );
 
   const handleViewableItemsChanged = useCallback(

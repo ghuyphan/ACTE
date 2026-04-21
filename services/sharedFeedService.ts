@@ -18,7 +18,7 @@ import {
   NoteDualLayoutPreset,
   NoteType,
 } from './database';
-import { normalizeSavedTextNoteColor } from './noteAppearance';
+import { resolveSavedTextNoteColor } from './noteAppearance';
 import { getNoteDoodle, parseNoteDoodleStrokes } from './noteDoodles';
 import {
   deletePairedVideoFromStorage,
@@ -1499,7 +1499,7 @@ export async function createSharedPost(
       paired_video_path: pairedVideoPath ?? null,
       doodle_strokes_json: shareableNote.doodleStrokesJson ?? null,
       sticker_placements_json: stickerPlacementsJson,
-      note_color: shareableNote.type === 'text' ? normalizeSavedTextNoteColor(shareableNote.noteColor) : null,
+      note_color: shareableNote.type === 'text' ? resolveSavedTextNoteColor(shareableNote.noteColor) : null,
       place_name: shareableNote.locationName ?? null,
       source_note_id: shareableNote.id,
       latitude: shareableNote.latitude,
@@ -1539,7 +1539,7 @@ export async function createSharedPost(
       pairedVideoLocalUri: shareableNote.type === 'photo' ? shareableNote.pairedVideoLocalUri ?? null : null,
       hasStickers: hasStoredStickerPayload(stickerPlacementsJson),
       stickerPlacementsJson,
-      noteColor: shareableNote.type === 'text' ? normalizeSavedTextNoteColor(shareableNote.noteColor) : null,
+      noteColor: shareableNote.type === 'text' ? resolveSavedTextNoteColor(shareableNote.noteColor) : null,
     };
   } catch (error) {
     await cleanupRemoteArtifacts(SHARED_POST_MEDIA_BUCKET, {
@@ -1657,7 +1657,7 @@ export async function updateSharedPost(
       paired_video_path: nextPairedVideoPath ?? null,
       doodle_strokes_json: shareableNote.doodleStrokesJson ?? null,
       sticker_placements_json: nextStickerPlacementsJson,
-      note_color: shareableNote.type === 'text' ? normalizeSavedTextNoteColor(shareableNote.noteColor) : null,
+      note_color: shareableNote.type === 'text' ? resolveSavedTextNoteColor(shareableNote.noteColor) : null,
       place_name: shareableNote.locationName ?? null,
       latitude: shareableNote.latitude,
       longitude: shareableNote.longitude,

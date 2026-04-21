@@ -113,6 +113,7 @@ const baseProps = {
   showPolaroidCapture: false,
   stickerModeEnabled: false,
   t: ((_: string, fallback?: string) => fallback ?? '') as any,
+  themeCaptureGradient: ['#F6D365', '#FDA085'] as const,
 };
 
 const note = {

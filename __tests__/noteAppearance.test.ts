@@ -1,4 +1,5 @@
 import {
+  APP_THEME_DEFAULT_NOTE_COLOR_ID,
   getCaptureNoteGradient,
   getGradientStickerMotionVariant,
   getNoteColorStickerMotion,
@@ -43,6 +44,27 @@ describe('noteAppearance', () => {
     expect(getCaptureNoteGradient({ noteColor: 'sunset-coral' })).toEqual(
       getTextNoteCardGradient({ text: 'Cafe note', noteId: '1', noteColor: 'sunset-coral' })
     );
+  });
+
+  it('uses the theme fallback for saved notes that stay on the app default color', () => {
+    expect(
+      getTextNoteCardGradient({
+        text: 'Just a quiet note',
+        noteId: 'note-default',
+        noteColor: APP_THEME_DEFAULT_NOTE_COLOR_ID,
+        fallbackGradient: ['#D9D3FF', '#F3CBE9'],
+      })
+    ).toEqual(['#D9D3FF', '#F3CBE9']);
+  });
+
+  it('falls back to the original capture gradient when a saved default note has no theme context', () => {
+    expect(
+      getTextNoteCardGradient({
+        text: 'Just a quiet note',
+        noteId: 'note-default',
+        noteColor: APP_THEME_DEFAULT_NOTE_COLOR_ID,
+      })
+    ).toEqual(['#F6D365', '#FDA085']);
   });
 
   it('falls back to a stable hashed gradient when no emoji palette matches', () => {

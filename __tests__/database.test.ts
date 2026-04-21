@@ -138,7 +138,7 @@ describe('database migrations', () => {
     await expect(getDB()).rejects.toThrow('migration failed');
   });
 
-  it('normalizes saved text note colors on create and update', async () => {
+  it('preserves the theme default text note color on create and update', async () => {
     let getDB!: () => Promise<unknown>;
     let createNote!: (input: Record<string, unknown>) => Promise<unknown>;
     let updateNote!: (id: string, updates: Record<string, unknown>) => Promise<void>;
@@ -214,7 +214,7 @@ describe('database migrations', () => {
       null,
       null,
       null,
-      'marigold-glow',
+      'app-theme-default',
       null,
       null,
       null,
@@ -255,7 +255,7 @@ describe('database migrations', () => {
       null,
       null,
       null,
-      'marigold-glow',
+      'app-theme-default',
       null,
       null,
       null,

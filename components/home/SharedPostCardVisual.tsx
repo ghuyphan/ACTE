@@ -83,6 +83,7 @@ export default function SharedPostCardVisual({
       text={shouldShowFallbackText ? fallbackText : previewText}
       noteId={post.id}
       noteColor={post.noteColor}
+      fallbackGradient={colors.captureGradient}
       doodleStrokesJson={post.doodleStrokesJson}
       stickerPlacementsJson={post.stickerPlacementsJson}
       remoteBucket={SHARED_POST_MEDIA_BUCKET}

@@ -4,16 +4,21 @@ import { Platform, View } from 'react-native';
 import AppBottomSheet from '../components/sheets/AppBottomSheet';
 
 let latestBottomSheetModalProps: Record<string, unknown> | null = null;
+let mockBottomSheetModalMethods: { dismiss: jest.Mock; present: jest.Mock } | null = null;
 
 jest.mock('@gorhom/bottom-sheet', () => {
-  const React = require('react');
-  const { View } = require('react-native');
+  const React = jest.requireActual('react');
+  const { View } = jest.requireActual('react-native');
 
-  const BottomSheetModal = React.forwardRef((props: any, ref: any) => {
+  const BottomSheetModal = React.forwardRef(function MockBottomSheetModal(props: any, ref: any) {
     latestBottomSheetModalProps = props;
-    React.useImperativeHandle(ref, () => ({
+    mockBottomSheetModalMethods = {
       dismiss: jest.fn(),
       present: jest.fn(),
+    };
+    React.useImperativeHandle(ref, () => ({
+      dismiss: mockBottomSheetModalMethods?.dismiss,
+      present: mockBottomSheetModalMethods?.present,
     }));
     return <View>{props.children}</View>;
   });
@@ -42,6 +47,7 @@ describe('AppBottomSheet', () => {
 
   beforeEach(() => {
     latestBottomSheetModalProps = null;
+    mockBottomSheetModalMethods = null;
     (Platform as any).OS = 'android';
   });
 
@@ -65,6 +71,23 @@ describe('AppBottomSheet', () => {
     expect(latestBottomSheetModalProps).not.toBeNull();
     expect(latestBottomSheetModalProps?.index).toBeUndefined();
     expect(latestBottomSheetModalProps?.snapPoints).toEqual([420]);
+    expect(latestBottomSheetModalProps?.stackBehavior).toBe('push');
+  });
+
+  it('omits a positive initial index when snap points are dynamic', () => {
+    render(
+      <AppBottomSheet
+        visible={false}
+        onClose={jest.fn()}
+        androidInitialIndex={1}
+      >
+        <View />
+      </AppBottomSheet>
+    );
+
+    expect(latestBottomSheetModalProps).not.toBeNull();
+    expect(latestBottomSheetModalProps?.index).toBeUndefined();
+    expect(latestBottomSheetModalProps?.snapPoints).toBeUndefined();
   });
 
   it('preserves a valid non-zero initial index when multiple snap points exist', () => {
@@ -82,5 +105,26 @@ describe('AppBottomSheet', () => {
 
     expect(latestBottomSheetModalProps?.index).toBe(1);
     expect(latestBottomSheetModalProps?.snapPoints).toEqual([320, 520]);
+  });
+
+  it('dismisses programmatically when visibility turns off without firing onClose again', () => {
+    const onClose = jest.fn();
+    const { rerender } = render(
+      <AppBottomSheet visible onClose={onClose}>
+        <View />
+      </AppBottomSheet>
+    );
+
+    expect(mockBottomSheetModalMethods?.present).toHaveBeenCalledTimes(1);
+
+    rerender(
+      <AppBottomSheet visible={false} onClose={onClose}>
+        <View />
+      </AppBottomSheet>
+    );
+
+    expect(mockBottomSheetModalMethods?.dismiss).toHaveBeenCalledTimes(1);
+    (latestBottomSheetModalProps?.onDismiss as (() => void) | undefined)?.();
+    expect(onClose).not.toHaveBeenCalled();
   });
 });

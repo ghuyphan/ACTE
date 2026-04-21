@@ -30,6 +30,7 @@ export interface NotesGridTileModel {
 export function buildNotesGridTileModels(
   items: HomeFeedItem[],
   options: {
+    captureGradient?: readonly [string, string] | null;
     photoFallbackLabel: string;
     showDecorations: boolean;
   }
@@ -60,6 +61,7 @@ export function buildNotesGridTileModels(
       noteId,
       emoji: noteEmoji,
       noteColor,
+      fallbackGradient: options.captureGradient ?? null,
     });
 
     return {

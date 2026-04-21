@@ -34,6 +34,7 @@ import {
     getNoteCardTextPalette,
     getNoteColorStickerMotion,
     getTextNoteCardGradient,
+    resolveSavedTextNoteColor,
 } from '../../../services/noteAppearance';
 import { parseNoteDoodleStrokes } from '../../../services/noteDoodles';
 import { getNotePairedVideoUri } from '../../../services/livePhotoStorage';
@@ -167,6 +168,7 @@ type NoteDetailSheetContentProps = {
     stickerEntryAnimation?: StickerEntryAnimation | null;
     stickerModeEnabled: boolean;
     t: TFunction;
+    themeCaptureGradient: readonly [string, string];
     onStickerEntryAnimationComplete?: (placementId: string) => void;
 };
 
@@ -251,6 +253,7 @@ export default function NoteDetailSheetContent({
     stickerEntryAnimation = null,
     stickerModeEnabled,
     t,
+    themeCaptureGradient,
     onStickerEntryAnimationComplete,
     onDownloadPolaroid,
     polaroidAnimationSuccess,
@@ -267,7 +270,13 @@ export default function NoteDetailSheetContent({
     const [deleteConfirmVisible, setDeleteConfirmVisible] = useState(false);
     const showRichDecorations = Boolean(note) && (richDecorationsReady || isEditing);
     const displayedCardText = note ? (isEditing ? editContent : note.content) : '';
-    const displayedNoteColor = note ? (isEditing ? editNoteColor : note.noteColor) : null;
+    const displayedNoteColor = note
+        ? (
+            isEditing && note.type === 'text'
+                ? resolveSavedTextNoteColor(editNoteColor)
+                : note.noteColor
+        )
+        : null;
     const dateStr = useMemo(
         () => (note ? formatDate(note.createdAt, 'long') : ''),
         [note]
@@ -280,10 +289,11 @@ export default function NoteDetailSheetContent({
                     noteId: note.id,
                     emoji: note.moodEmoji,
                     noteColor: displayedNoteColor,
+                    fallbackGradient: themeCaptureGradient,
                 })
                 : FALLBACK_TEXT_GRADIENT
         ),
-        [displayedCardText, displayedNoteColor, note]
+        [displayedCardText, displayedNoteColor, note, themeCaptureGradient]
     );
     const textStickerMotionVariant = useMemo(
         () => getNoteColorStickerMotion(displayedNoteColor) ?? getGradientStickerMotionVariant(gradient),
@@ -893,6 +903,7 @@ export default function NoteDetailSheetContent({
                         ref={polaroidCaptureRef}
                         note={note}
                         fallbackLocationLabel={polaroidFallbackLocationLabel}
+                        fallbackGradient={themeCaptureGradient}
                         onReady={onPolaroidCaptureReady}
                     />
                 </View>

@@ -1263,11 +1263,14 @@ describe('sharedFeedService', () => {
     } as any;
 
     const post = await createSharedPost(ownerUser, note, [friendUser.id]);
+    const storedPost = mockSharedPosts.get(post.id);
 
     expect(mockGetNoteDoodle).toHaveBeenCalledWith('note-decorated');
     expect(mockGetNoteStickers).toHaveBeenCalledWith('note-decorated');
     expect(post.doodleStrokesJson).toContain('#111111');
     expect(post.hasStickers).toBe(true);
+    expect(post.noteColor).toBe('app-theme-default');
+    expect(storedPost.note_color).toBe('app-theme-default');
     expect(post.stickerPlacementsJson).toContain('"renderMode":"stamp"');
   });
 
