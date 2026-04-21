@@ -74,6 +74,8 @@ import {
 import {
   CAPTURE_BUTTON_PRESS_IN,
   CAPTURE_BUTTON_PRESS_OUT,
+  CAPTURE_BUTTON_STATE_IN,
+  CAPTURE_BUTTON_STATE_OUT,
   CAPTURE_EMOJI_POP_BOUNCE,
   CAPTURE_EMOJI_POP_DRIFT,
   CAPTURE_EMOJI_POP_ENTER,
@@ -295,8 +297,17 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   const effectiveTextModeNoteColor =
     captureMode === 'text' ? (noteColor ?? DEFAULT_NOTE_COLOR_ID) : noteColor;
   const hasLivePhotoMotion = Boolean(capturedPairedVideo);
+  const isSaveBusy =
+    saving ||
+    saveState === 'saving' ||
+    isLivePhotoCaptureSettling ||
+    isLivePhotoSaveGuardActive;
+  const isSaveSuccessful = saveState === 'success';
+  const isSaveDisabled = isSaveBusy || isSaveSuccessful;
+  const interactionsDisabled = isSaveBusy || isSaveSuccessful;
   const saveStateScale = useSharedValue(1);
-  const saveSuccessProgress = useSharedValue(saveState === 'success' ? 1 : 0);
+  const saveBusyProgress = useSharedValue(isSaveBusy ? 1 : 0);
+  const saveSuccessProgress = useSharedValue(isSaveSuccessful ? 1 : 0);
   const savePressScale = useSharedValue(1);
   const autoEmojiPopOpacity = useSharedValue(0);
   const autoEmojiPopTranslateY = useSharedValue(12);
@@ -324,14 +335,6 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
           : null,
     [noteText.length]
   );
-  const isSaveBusy =
-    saving ||
-    saveState === 'saving' ||
-    isLivePhotoCaptureSettling ||
-    isLivePhotoSaveGuardActive;
-  const isSaveSuccessful = saveState === 'success';
-  const isSaveDisabled = isSaveBusy || isSaveSuccessful;
-  const interactionsDisabled = isSaveBusy || isSaveSuccessful;
   const dualCaptureModeEnabled =
     captureMode === 'camera' &&
     cameraSubmode === 'dual' &&
@@ -828,7 +831,15 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   const captureKeyboardVerticalOffset = topInset + 76;
 
   useEffect(() => {
-    if (saveState === 'success') {
+    saveBusyProgress.value = withTiming(
+      isSaveBusy ? 1 : 0,
+      getCaptureTiming(
+        isSaveBusy ? CAPTURE_BUTTON_STATE_IN : CAPTURE_BUTTON_STATE_OUT,
+        reduceMotionEnabled
+      )
+    );
+
+    if (isSaveSuccessful) {
       saveSuccessProgress.value = withTiming(
         1,
         getCaptureTiming(CAPTURE_SAVE_SUCCESS_SCALE, reduceMotionEnabled)
@@ -845,10 +856,17 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
       getCaptureTiming(CAPTURE_SAVE_SUCCESS_EXIT, reduceMotionEnabled)
     );
     saveStateScale.value = withTiming(
-      saveState === 'saving' ? 0.98 : 1,
+      isSaveBusy ? 0.98 : 1,
       getCaptureTiming(CAPTURE_SAVE_BUSY_SCALE, reduceMotionEnabled)
     );
-  }, [reduceMotionEnabled, saveState, saveStateScale, saveSuccessProgress]);
+  }, [
+    isSaveBusy,
+    isSaveSuccessful,
+    reduceMotionEnabled,
+    saveBusyProgress,
+    saveStateScale,
+    saveSuccessProgress,
+  ]);
 
   useEffect(() => {
     if (isSaveDisabled) {
@@ -984,7 +1002,27 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
     ],
   }));
   const animatedSaveIconStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: 1 + saveSuccessProgress.value * 0.12 }],
+    opacity: 1 - saveBusyProgress.value,
+    transform: [
+      { translateY: saveBusyProgress.value * (reduceMotionEnabled ? 0 : -4) },
+      {
+        scale:
+          1 +
+          saveSuccessProgress.value * 0.12 -
+          saveBusyProgress.value * (reduceMotionEnabled ? 0.01 : 0.04),
+      },
+    ],
+  }));
+  const animatedSaveSpinnerStyle = useAnimatedStyle(() => ({
+    opacity: saveBusyProgress.value,
+    transform: [
+      { translateY: (1 - saveBusyProgress.value) * (reduceMotionEnabled ? 0 : 4) },
+      {
+        scale:
+          (reduceMotionEnabled ? 0.98 : 0.92) +
+          saveBusyProgress.value * (reduceMotionEnabled ? 0.02 : 0.08),
+      },
+    ],
   }));
   const animatedAutoEmojiPopStyle = useAnimatedStyle(
     () => ({
@@ -1412,6 +1450,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
               animatedSaveHaloStyle={animatedSaveHaloStyle}
               animatedSaveIconStyle={animatedSaveIconStyle}
               animatedSaveInnerStyle={animatedSaveInnerStyle}
+              animatedSaveSpinnerStyle={animatedSaveSpinnerStyle}
               colors={colors}
               cameraUiStage={controlsUiStage}
               handleSavePressIn={handleSavePressIn}

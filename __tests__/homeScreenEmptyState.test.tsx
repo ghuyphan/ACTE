@@ -447,7 +447,7 @@ describe('HomeScreen empty state', () => {
 
     const screen = await renderHomeScreen();
 
-    expect(screen.getByText('Loading shared memories')).toBeTruthy();
+    expect(screen.getByText('Importing your cloud notes')).toBeTruthy();
     expect(screen.queryByText('Cloud sync is turned off')).toBeNull();
     expect(screen.queryByText('You are offline right now')).toBeNull();
     expect(screen.queryByText('Your journal is waiting')).toBeNull();

@@ -13,13 +13,24 @@ export interface ThemeColors {
     card: string;
     text: string;
     secondaryText: string;
+    inverseText: string;
     primary: string;
     primarySoft: string;
+    onPrimary: string;
     accent: string;
     border: string;
     danger: string;
+    dangerSoft: string;
+    onDanger: string;
     success: string;
     gradient: string[];
+    chromeSurface: string;
+    chromeBorder: string;
+    noticeSurface: string;
+    noticeBorder: string;
+    glassOverlaySurface: string;
+    glassOverlayBorder: string;
+    glassBackdrop: string;
     captureButtonBg: string;
     tabBarBg: string;
     captureCardText: string;
@@ -63,13 +74,24 @@ export const Colors: { light: ThemeColors; dark: ThemeColors } = {
         card: '#FFFDFC',
         text: '#2B2621',
         secondaryText: '#85786A',
+        inverseText: '#FFFFFF',
         primary: '#E0B15B',          // Honey accent keeps the app warm without turning everything brown
         primarySoft: 'rgba(224, 177, 91, 0.18)',
+        onPrimary: '#1C1C1E',
         accent: '#B77845',           // Deeper clay reserved for higher-contrast emphasis
         border: '#EBE1D6',
         danger: '#FF3B30',
+        dangerSoft: 'rgba(255,59,48,0.1)',
+        onDanger: '#FFFFFF',
         success: '#34C759',
         gradient: ['#F2DEC0', '#E0B15B'],
+        chromeSurface: 'rgba(0,0,0,0.04)',
+        chromeBorder: 'rgba(43,38,33,0.12)',
+        noticeSurface: 'rgba(255,255,255,0.76)',
+        noticeBorder: 'rgba(0,0,0,0.06)',
+        glassOverlaySurface: 'rgba(255,255,255,0.36)',
+        glassOverlayBorder: 'rgba(255,255,255,0.42)',
+        glassBackdrop: 'rgba(255,255,255,0.75)',
         captureButtonBg: '#1C1C1E',
         tabBarBg: 'rgba(247,242,235,0.94)',
         captureCardText: '#1C1C1E',
@@ -103,13 +125,24 @@ export const Colors: { light: ThemeColors; dark: ThemeColors } = {
         card: '#1C1C1E',             // Standard elevated card
         text: '#FFFFFF',
         secondaryText: '#98989E',
+        inverseText: '#FFFFFF',
         primary: '#FFC107',          // Keep the original brighter accent in dark mode
         primarySoft: 'rgba(255, 193, 7, 0.2)',
+        onPrimary: '#1C1C1E',
         accent: '#FF9F0A',
         border: '#2C2C2E',
         danger: '#FF453A',
+        dangerSoft: 'rgba(255,69,58,0.16)',
+        onDanger: '#FFFFFF',
         success: '#30D158',
         gradient: ['#FFC107', '#FF9F0A'],
+        chromeSurface: 'rgba(255,255,255,0.08)',
+        chromeBorder: 'rgba(255,255,255,0.14)',
+        noticeSurface: 'rgba(255,255,255,0.06)',
+        noticeBorder: 'rgba(255,255,255,0.08)',
+        glassOverlaySurface: 'rgba(22,22,24,0.42)',
+        glassOverlayBorder: 'rgba(255,255,255,0.16)',
+        glassBackdrop: 'rgba(0,0,0,0.5)',
         captureButtonBg: '#FFFFFF',
         tabBarBg: 'rgba(0,0,0,0.92)',
         captureCardText: '#1C1C1E',

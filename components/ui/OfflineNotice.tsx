@@ -18,15 +18,15 @@ export default function OfflineNotice({
   trailing,
   compact = false,
 }: OfflineNoticeProps) {
-  const { colors, isDark } = useTheme();
+  const { colors } = useTheme();
 
   return (
     <View
       style={[
         styles.container,
         {
-          backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.76)',
-          borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
+          backgroundColor: colors.noticeSurface,
+          borderColor: colors.noticeBorder,
           paddingVertical: compact ? 12 : 14,
         },
       ]}

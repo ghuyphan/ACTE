@@ -3,14 +3,10 @@ import DoodleIcon from '../../ui/DoodleIcon';
 import StickerIcon from '../../ui/StickerIcon';
 import React from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
+import { getNoteDetailTheme, type NoteDetailColors } from './noteDetailTheme';
 
 type NoteDetailEditToolbarProps = {
-    colors: {
-        card: string;
-        captureGlassColorScheme: 'light' | 'dark';
-        primary: string;
-        text: string;
-    };
+    colors: NoteDetailColors;
     doodleModeEnabled: boolean;
     editDoodleStrokesCount: number;
     importingSticker: boolean;
@@ -42,11 +38,9 @@ export default function NoteDetailEditToolbar({
         return null;
     }
 
-    const detailBadgeFill = colors.card;
-    const detailBadgeBorder =
-        colors.captureGlassColorScheme === 'dark'
-            ? 'rgba(255,255,255,0.14)'
-            : 'rgba(43,38,33,0.12)';
+    const noteDetailTheme = getNoteDetailTheme(colors);
+    const detailBadgeFill = noteDetailTheme.badgeSurface;
+    const detailBadgeBorder = noteDetailTheme.badgeBorder;
     const detailBadgeIconColor = colors.text;
     const detailBadgeActiveIconColor = colors.primary;
 
@@ -176,9 +170,7 @@ const styles = StyleSheet.create({
         borderRadius: 17,
         alignItems: 'center',
         justifyContent: 'center',
-        backgroundColor: '#FFFFFF',
         borderWidth: StyleSheet.hairlineWidth,
-        borderColor: 'rgba(43,38,33,0.08)',
     },
     textCardActionPill: {
         minWidth: 34,
@@ -187,9 +179,7 @@ const styles = StyleSheet.create({
         paddingHorizontal: 9,
         alignItems: 'center',
         justifyContent: 'center',
-        backgroundColor: '#FFFFFF',
         borderWidth: StyleSheet.hairlineWidth,
-        borderColor: 'rgba(43,38,33,0.08)',
     },
     textCardActionDisabled: {
         opacity: 0.45,

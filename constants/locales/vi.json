@@ -19,6 +19,7 @@
         "noResultsMsg": "Thử một từ khóa khác nhé.",
         "openDetails": "Chi tiết",
         "openNoteDetailsA11y": "Mở chi tiết trang nhật ký tại {{location}}",
+        "openNoteDetailsButtonA11y": "Mở chi tiết trang nhật ký",
         "noteStatusShared": "Đã chia sẻ",
         "noteStatusLivePhoto": "Live Photo",
         "noteStatusLivePhotoHint": "Giữ để xem",

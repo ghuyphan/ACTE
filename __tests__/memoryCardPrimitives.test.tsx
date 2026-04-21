@@ -1,6 +1,16 @@
 import React from 'react';
-import { act, fireEvent, render } from '@testing-library/react-native';
+import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import { NoteMemoryCard, SharedPostMemoryCard } from '../components/home/MemoryCardPrimitives';
+
+const mockRequestSavePermission = jest.fn();
+const mockCaptureViewAsImage = jest.fn();
+const mockSavePolaroidToLibrary = jest.fn();
+const mockCleanupCapturedImage = jest.fn();
+const mockImpactAsync = jest.fn();
+const mockNotificationAsync = jest.fn();
+const mockShowAppAlert = jest.fn();
+const mockPolaroidAnimation = jest.fn();
+let mockShouldSignalPolaroidReady = true;
 
 const mockT = ((key: string, fallbackOrOptions?: string | { defaultValue?: string; location?: string }) => {
   if (typeof fallbackOrOptions === 'string') {
@@ -31,6 +41,35 @@ jest.mock('expo-image', () => ({
 }));
 
 jest.mock('react-native-reanimated', () => require('react-native-reanimated/mock'));
+
+jest.mock('../hooks/useReducedMotion', () => ({
+  useReducedMotion: () => false,
+}));
+
+jest.mock('../hooks/useHaptics', () => ({
+  ImpactFeedbackStyle: {
+    Light: 'light',
+  },
+  NotificationFeedbackType: {
+    Success: 'success',
+  },
+  impactAsync: (...args: any[]) => mockImpactAsync(...args),
+  notificationAsync: (...args: any[]) => mockNotificationAsync(...args),
+}));
+
+jest.mock('../services/polaroidExport', () => ({
+  PolaroidExportError: class MockPolaroidExportError extends Error {
+    code = 'requires-update' as const;
+  },
+  requestSavePermission: (...args: any[]) => mockRequestSavePermission(...args),
+  captureViewAsImage: (...args: any[]) => mockCaptureViewAsImage(...args),
+  savePolaroidToLibrary: (...args: any[]) => mockSavePolaroidToLibrary(...args),
+  cleanupCapturedImage: (...args: any[]) => mockCleanupCapturedImage(...args),
+}));
+
+jest.mock('../utils/alert', () => ({
+  showAppAlert: (...args: any[]) => mockShowAppAlert(...args),
+}));
 
 jest.mock('../hooks/useRelativeTimeNow', () => ({
   useRelativeTimeNow: () => new Date('2026-04-10T04:00:00.000Z'),
@@ -88,6 +127,40 @@ jest.mock('../components/ui/LivePhotoIcon', () => {
   };
 });
 
+jest.mock('../components/notes/detail/PolaroidExportView', () => {
+  const React = require('react');
+
+  return React.forwardRef(function MockPolaroidExportView(props: any, ref: any) {
+    const { View } = require('react-native');
+
+    React.useImperativeHandle(ref, () => ({}));
+    if (mockShouldSignalPolaroidReady) {
+      props.onReady?.();
+    }
+    return <View testID="mock-polaroid-export-view" />;
+  });
+});
+
+jest.mock('../components/notes/detail/PolaroidExportAnimation', () => {
+  const React = require('react');
+  const { View } = require('react-native');
+
+  return function MockPolaroidExportAnimation(props: any) {
+    React.useEffect(() => {
+      if (props.uri && props.success) {
+        mockPolaroidAnimation(props);
+        props.onFinished?.();
+      }
+    }, [props]);
+
+    if (!props.uri) {
+      return null;
+    }
+
+    return <View testID="mock-polaroid-export-animation" />;
+  };
+});
+
 jest.mock('../components/ui/InfoPill', () => {
   return function MockInfoPill({ children, style }: any) {
     const React = require('react');
@@ -103,6 +176,18 @@ const colors = {
   danger: '#FF3B30',
   card: '#FFFFFF',
 };
+
+beforeEach(() => {
+  jest.useRealTimers();
+  jest.clearAllMocks();
+  mockShouldSignalPolaroidReady = true;
+  mockRequestSavePermission.mockResolvedValue('granted');
+  mockCaptureViewAsImage.mockResolvedValue('file:///tmp/noto-polaroid.png');
+  mockSavePolaroidToLibrary.mockResolvedValue(undefined);
+  mockCleanupCapturedImage.mockImplementation(() => undefined);
+  mockImpactAsync.mockResolvedValue(undefined);
+  mockNotificationAsync.mockResolvedValue(undefined);
+});
 
 describe('SharedPostMemoryCard', () => {
   it('formats timestamps the same way as note cards', () => {
@@ -304,7 +389,7 @@ describe('NoteMemoryCard', () => {
     expect(getByTestId('note-memory-favorite-badge').props.accessibilityState).toEqual({ expanded: false });
   });
 
-  it('renders the text card branch and exposes the metadata press action', () => {
+  it('renders the text card branch with location-pill, polaroid, and detail actions', () => {
     const onPress = jest.fn();
     const note = {
       id: 'note-text-1',
@@ -336,7 +421,7 @@ describe('NoteMemoryCard', () => {
       updatedAt: null,
     } as any;
 
-    const { getByLabelText, getByTestId, getByText } = render(
+    const { getAllByRole, getByLabelText, getByTestId, getByText } = render(
       <NoteMemoryCard
         note={note}
         colors={colors}
@@ -347,10 +432,141 @@ describe('NoteMemoryCard', () => {
 
     expect(getByTestId('text-memory-card')).toBeTruthy();
     expect(getByText('District 5')).toBeTruthy();
+    expect(getAllByRole('button')).toHaveLength(3);
 
     fireEvent.press(getByLabelText('Open note details for District 5'));
+    fireEvent.press(getByLabelText('Open note details'));
 
-    expect(onPress).toHaveBeenCalledTimes(1);
+    expect(onPress).toHaveBeenCalledTimes(2);
+  });
+
+  it('exports a polaroid from the note-card footer action', async () => {
+    const note = {
+      id: 'note-polaroid-1',
+      type: 'text',
+      content: 'Shared memory',
+      caption: null,
+      photoLocalUri: null,
+      photoSyncedLocalUri: null,
+      photoRemoteBase64: null,
+      isLivePhoto: false,
+      pairedVideoLocalUri: null,
+      pairedVideoSyncedLocalUri: null,
+      pairedVideoRemotePath: null,
+      locationName: 'District 5',
+      promptId: null,
+      promptTextSnapshot: null,
+      promptAnswer: null,
+      moodEmoji: null,
+      noteColor: null,
+      latitude: 10.77,
+      longitude: 106.69,
+      radius: 150,
+      isFavorite: false,
+      hasDoodle: true,
+      doodleStrokesJson: '[]',
+      hasStickers: false,
+      stickerPlacementsJson: null,
+      createdAt: '2026-04-10T02:00:00.000Z',
+      updatedAt: null,
+    } as any;
+
+    const { getByLabelText } = render(
+      <NoteMemoryCard
+        note={note}
+        colors={colors}
+        t={mockT}
+        onPress={jest.fn()}
+      />
+    );
+
+    await act(async () => {
+      fireEvent.press(getByLabelText('Save as Polaroid'));
+      await Promise.resolve();
+    });
+
+    await waitFor(() => expect(mockCaptureViewAsImage).toHaveBeenCalledTimes(1), {
+      timeout: 1000,
+    });
+
+    expect(mockRequestSavePermission).toHaveBeenCalledTimes(1);
+    expect(mockSavePolaroidToLibrary).toHaveBeenCalledWith('file:///tmp/noto-polaroid.png');
+    expect(mockCleanupCapturedImage).toHaveBeenCalledWith('file:///tmp/noto-polaroid.png');
+    expect(mockNotificationAsync).toHaveBeenCalledWith('success');
+    expect(mockPolaroidAnimation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        presentation: 'modal',
+        success: true,
+        successLabel: 'Saved to your photos',
+        uri: 'file:///tmp/noto-polaroid.png',
+        variant: 'home-feed',
+      })
+    );
+    expect(mockShowAppAlert).not.toHaveBeenCalled();
+  });
+
+  it('falls back to the render-ready timeout when the export view does not signal ready', async () => {
+    jest.useFakeTimers();
+    mockShouldSignalPolaroidReady = false;
+
+    const note = {
+      id: 'note-polaroid-timeout-1',
+      type: 'text',
+      content: 'Shared memory',
+      caption: null,
+      photoLocalUri: null,
+      photoSyncedLocalUri: null,
+      photoRemoteBase64: null,
+      isLivePhoto: false,
+      pairedVideoLocalUri: null,
+      pairedVideoSyncedLocalUri: null,
+      pairedVideoRemotePath: null,
+      locationName: 'District 5',
+      promptId: null,
+      promptTextSnapshot: null,
+      promptAnswer: null,
+      moodEmoji: null,
+      noteColor: null,
+      latitude: 10.77,
+      longitude: 106.69,
+      radius: 150,
+      isFavorite: false,
+      hasDoodle: true,
+      doodleStrokesJson: '[]',
+      hasStickers: false,
+      stickerPlacementsJson: null,
+      createdAt: '2026-04-10T02:00:00.000Z',
+      updatedAt: null,
+    } as any;
+
+    const { getByLabelText } = render(
+      <NoteMemoryCard
+        note={note}
+        colors={colors}
+        t={mockT}
+        onPress={jest.fn()}
+      />
+    );
+
+    await act(async () => {
+      fireEvent.press(getByLabelText('Save as Polaroid'));
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      jest.advanceTimersByTime(900);
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      jest.advanceTimersByTime(140);
+      await Promise.resolve();
+    });
+
+    expect(mockCaptureViewAsImage).toHaveBeenCalledTimes(1);
+    expect(mockSavePolaroidToLibrary).toHaveBeenCalledWith('file:///tmp/noto-polaroid.png');
+    expect(mockCleanupCapturedImage).toHaveBeenCalledWith('file:///tmp/noto-polaroid.png');
+    expect(mockShowAppAlert).not.toHaveBeenCalled();
   });
 
   it('renders the photo card branch when a note has photo media', () => {

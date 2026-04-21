@@ -1076,7 +1076,7 @@ describe('NotesFeed capture visibility', () => {
       act(() => {
         list.props.onScrollEndDrag({
           nativeEvent: {
-            contentOffset: { y: 350 },
+            contentOffset: { y: 120 },
             velocity: { y: 0.01 },
           },
         });
@@ -1144,6 +1144,72 @@ describe('NotesFeed capture visibility', () => {
           nativeEvent: {
             contentOffset: { y: 520 },
             velocity: { y: 0.01 },
+          },
+        });
+      });
+
+      expect(scrollToOffset).not.toHaveBeenCalled();
+    } finally {
+      Platform.OS = originalPlatform;
+    }
+  });
+
+  it('allows leaving the capture page on an upward flick before halfway', () => {
+    const originalPlatform = Platform.OS;
+    Platform.OS = 'android';
+    const scrollToOffset = jest.fn();
+    const flatListRef = { current: null as any };
+
+    try {
+      const { UNSAFE_getByType } = render(
+        <NotesFeed
+          flatListRef={flatListRef}
+          captureHeader={<View testID="capture-header" />}
+          captureMode="text"
+          notes={[
+            {
+              id: 'note-1',
+              type: 'text',
+              content: 'hello',
+              locationName: 'Cafe',
+              latitude: 0,
+              longitude: 0,
+              radius: 150,
+              isFavorite: false,
+              createdAt: '2026-03-19T00:00:00.000Z',
+              updatedAt: null,
+            },
+          ] as any}
+          sharedPosts={[]}
+          refreshing={false}
+          onRefresh={jest.fn()}
+          topInset={0}
+          snapHeight={700}
+          onOpenNote={jest.fn()}
+          onOpenSharedPost={jest.fn()}
+          colors={{
+            primary: '#FFC107',
+            text: '#1C1C1E',
+            secondaryText: '#8E8E93',
+            danger: '#FF3B30',
+            card: '#FFFFFF',
+          }}
+          t={((key: string, fallback?: string) => fallback ?? key) as any}
+        />
+      );
+
+      const list = UNSAFE_getByType(FlatList);
+      flatListRef.current = { scrollToOffset };
+
+      act(() => {
+        list.props.onScrollBeginDrag();
+      });
+
+      act(() => {
+        list.props.onScrollEndDrag({
+          nativeEvent: {
+            contentOffset: { y: 180 },
+            velocity: { y: 0.24 },
           },
         });
       });
@@ -1429,6 +1495,201 @@ describe('NotesFeed capture visibility', () => {
             t={((key: string, fallback?: string) => fallback ?? key) as any}
           />
         );
+      });
+
+      expect(scrollToOffset).toHaveBeenCalledWith({ offset: 700, animated: false });
+    } finally {
+      Platform.OS = originalPlatform;
+    }
+  });
+
+  it('re-snaps android when an empty loading page becomes real content mid-scroll', () => {
+    const originalPlatform = Platform.OS;
+    Platform.OS = 'android';
+    const scrollToOffset = jest.fn();
+    const flatListRef = { current: null as any };
+
+    try {
+      const { UNSAFE_getByType, rerender } = render(
+        <NotesFeed
+          flatListRef={flatListRef}
+          captureHeader={<View testID="capture-header" />}
+          emptyState={<Text testID="loading-feed-result">Loading…</Text>}
+          captureMode="text"
+          notes={[]}
+          sharedPosts={[]}
+          refreshing={false}
+          onRefresh={jest.fn()}
+          topInset={0}
+          snapHeight={700}
+          onOpenNote={jest.fn()}
+          onOpenSharedPost={jest.fn()}
+          colors={{
+            primary: '#FFC107',
+            text: '#1C1C1E',
+            secondaryText: '#8E8E93',
+            danger: '#FF3B30',
+            card: '#FFFFFF',
+          }}
+          t={((key: string, fallback?: string) => fallback ?? key) as any}
+        />
+      );
+
+      const list = UNSAFE_getByType(FlatList);
+      flatListRef.current = { scrollToOffset };
+
+      act(() => {
+        list.props.onScroll({
+          nativeEvent: {
+            contentOffset: { y: 350 },
+          },
+        });
+      });
+
+      scrollToOffset.mockClear();
+
+      act(() => {
+        rerender(
+          <NotesFeed
+            flatListRef={flatListRef}
+            captureHeader={<View testID="capture-header" />}
+            emptyState={<Text testID="loading-feed-result">Loading…</Text>}
+            captureMode="text"
+            notes={[
+              {
+                id: 'note-1',
+                type: 'text',
+                content: 'hello',
+                locationName: 'Cafe',
+                latitude: 0,
+                longitude: 0,
+                radius: 150,
+                isFavorite: false,
+                createdAt: '2026-03-19T00:00:00.000Z',
+                updatedAt: null,
+              },
+            ] as any}
+            sharedPosts={[]}
+            refreshing={false}
+            onRefresh={jest.fn()}
+            topInset={0}
+            snapHeight={700}
+            onOpenNote={jest.fn()}
+            onOpenSharedPost={jest.fn()}
+            colors={{
+              primary: '#FFC107',
+              text: '#1C1C1E',
+              secondaryText: '#8E8E93',
+              danger: '#FF3B30',
+              card: '#FFFFFF',
+            }}
+            t={((key: string, fallback?: string) => fallback ?? key) as any}
+          />
+        );
+      });
+
+      expect(scrollToOffset).not.toHaveBeenCalled();
+
+      act(() => {
+        list.props.onContentSizeChange(100, 1400);
+      });
+
+      expect(scrollToOffset).toHaveBeenCalledWith({ offset: 700, animated: false });
+    } finally {
+      Platform.OS = originalPlatform;
+    }
+  });
+
+  it('reapplies the loading-page snap after content height updates on android', () => {
+    const originalPlatform = Platform.OS;
+    Platform.OS = 'android';
+    const scrollToOffset = jest.fn();
+    const flatListRef = { current: null as any };
+
+    try {
+      const { UNSAFE_getByType, rerender } = render(
+        <NotesFeed
+          flatListRef={flatListRef}
+          captureHeader={<View testID="capture-header" />}
+          emptyState={<Text testID="loading-feed-result">Loading…</Text>}
+          captureMode="text"
+          notes={[]}
+          sharedPosts={[]}
+          refreshing={false}
+          onRefresh={jest.fn()}
+          topInset={0}
+          snapHeight={700}
+          onOpenNote={jest.fn()}
+          onOpenSharedPost={jest.fn()}
+          colors={{
+            primary: '#FFC107',
+            text: '#1C1C1E',
+            secondaryText: '#8E8E93',
+            danger: '#FF3B30',
+            card: '#FFFFFF',
+          }}
+          t={((key: string, fallback?: string) => fallback ?? key) as any}
+        />
+      );
+
+      let list = UNSAFE_getByType(FlatList);
+      flatListRef.current = { scrollToOffset };
+
+      act(() => {
+        list.props.onMomentumScrollEnd({
+          nativeEvent: {
+            contentOffset: { y: 700 },
+          },
+        });
+      });
+
+      scrollToOffset.mockClear();
+
+      act(() => {
+        rerender(
+          <NotesFeed
+            flatListRef={flatListRef}
+            captureHeader={<View testID="capture-header" />}
+            emptyState={<Text testID="loading-feed-result">Loading…</Text>}
+            captureMode="text"
+            notes={[
+              {
+                id: 'note-1',
+                type: 'text',
+                content: 'hello',
+                locationName: 'Cafe',
+                latitude: 0,
+                longitude: 0,
+                radius: 150,
+                isFavorite: false,
+                createdAt: '2026-03-19T00:00:00.000Z',
+                updatedAt: null,
+              },
+            ] as any}
+            sharedPosts={[]}
+            refreshing={false}
+            onRefresh={jest.fn()}
+            topInset={0}
+            snapHeight={700}
+            onOpenNote={jest.fn()}
+            onOpenSharedPost={jest.fn()}
+            colors={{
+              primary: '#FFC107',
+              text: '#1C1C1E',
+              secondaryText: '#8E8E93',
+              danger: '#FF3B30',
+              card: '#FFFFFF',
+            }}
+            t={((key: string, fallback?: string) => fallback ?? key) as any}
+          />
+        );
+      });
+
+      scrollToOffset.mockClear();
+      list = UNSAFE_getByType(FlatList);
+
+      act(() => {
+        list.props.onContentSizeChange(100, 1400);
       });
 
       expect(scrollToOffset).toHaveBeenCalledWith({ offset: 700, animated: false });

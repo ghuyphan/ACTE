@@ -188,7 +188,7 @@ export default function FriendInviteJoinBody({
               <Text
                 style={[
                   styles.segmentedLabel,
-                  { color: selected ? '#1C1C1E' : colors.secondaryText },
+                  { color: selected ? colors.onPrimary : colors.secondaryText },
                 ]}
               >
                 {option === 'username'
@@ -314,7 +314,7 @@ export default function FriendInviteJoinBody({
                 : 'person-circle-outline'
             }
             size={18}
-            color="#1C1C1E"
+            color={colors.onPrimary}
           />
         )}
         style={[styles.primaryAction, primaryActionStyle]}

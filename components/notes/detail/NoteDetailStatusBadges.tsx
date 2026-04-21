@@ -3,13 +3,10 @@ import React from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import Animated from 'react-native-reanimated';
 import LivePhotoIcon from '../../ui/LivePhotoIcon';
+import { getNoteDetailTheme, type NoteDetailColors } from './noteDetailTheme';
 
 type NoteDetailStatusBadgesProps = {
-    captureGlassColorScheme: 'light' | 'dark';
-    colors: {
-        card: string;
-        danger: string;
-    };
+    colors: NoteDetailColors;
     favoriteFilledIconStyle: any;
     favoriteFilledTintStyle: any;
     favoriteOutlineIconStyle: any;
@@ -20,7 +17,6 @@ type NoteDetailStatusBadgesProps = {
 };
 
 export default function NoteDetailStatusBadges({
-    captureGlassColorScheme,
     colors,
     favoriteFilledIconStyle,
     favoriteFilledTintStyle,
@@ -30,10 +26,7 @@ export default function NoteDetailStatusBadges({
     isSharedByMe,
     onToggleFavorite,
 }: NoteDetailStatusBadgesProps) {
-    const borderColor =
-        captureGlassColorScheme === 'dark'
-            ? 'rgba(255,255,255,0.14)'
-            : 'rgba(43,38,33,0.12)';
+    const noteDetailTheme = getNoteDetailTheme(colors);
 
     return (
         <View pointerEvents="box-none" style={styles.cardStatusBadgeRow}>
@@ -46,8 +39,8 @@ export default function NoteDetailStatusBadges({
                             styles.cardStatusBadge,
                             styles.cardSharedBadge,
                             {
-                                backgroundColor: colors.card,
-                                borderColor,
+                                backgroundColor: noteDetailTheme.badgeSurface,
+                                borderColor: noteDetailTheme.badgeBorder,
                             },
                         ]}
                     >
@@ -62,8 +55,8 @@ export default function NoteDetailStatusBadges({
                             styles.cardStatusBadge,
                             styles.cardLivePhotoBadge,
                             {
-                                backgroundColor: colors.card,
-                                borderColor,
+                                backgroundColor: noteDetailTheme.badgeSurface,
+                                borderColor: noteDetailTheme.badgeBorder,
                             },
                         ]}
                     >
@@ -78,8 +71,8 @@ export default function NoteDetailStatusBadges({
                     styles.cardStatusBadge,
                     styles.cardFavBadge,
                     {
-                        backgroundColor: colors.card,
-                        borderColor,
+                        backgroundColor: noteDetailTheme.badgeSurface,
+                        borderColor: noteDetailTheme.badgeBorder,
                     },
                 ]}
             >
@@ -87,6 +80,7 @@ export default function NoteDetailStatusBadges({
                     pointerEvents="none"
                     style={[
                         styles.favoriteBadgeTint,
+                        { backgroundColor: noteDetailTheme.favoriteTint },
                         favoriteFilledTintStyle,
                     ]}
                 />
@@ -150,7 +144,7 @@ const styles = StyleSheet.create({
     },
     favoriteBadgeTint: {
         ...StyleSheet.absoluteFillObject,
-        backgroundColor: 'rgba(255, 85, 115, 0.16)',
+        backgroundColor: 'transparent',
     },
     favoriteIconStack: {
         width: 18,

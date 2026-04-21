@@ -58,6 +58,7 @@ import PolaroidExportAnimation from './PolaroidExportAnimation';
 import PolaroidExportView from './PolaroidExportView';
 import { SkeletonCard } from './NoteDetailPrimitives';
 import NoteDetailStatusBadges from './NoteDetailStatusBadges';
+import { getNoteDetailTheme, type NoteDetailColors } from './noteDetailTheme';
 
 const CARD_FEEDBACK_TOP_OFFSET = 34;
 const CARD_FEEDBACK_SIDE_PADDING = 34;
@@ -98,7 +99,7 @@ type InteractionFeedbackType = 'favorited' | 'unfavorited' | 'deleted';
 
 type NoteDetailSheetContentProps = {
     cardAnimatedStyle: any;
-    colors: any;
+    colors: NoteDetailColors;
     contentInputRef: any;
     dismissPastePrompt: () => void;
     doodleModeEnabled: boolean;
@@ -262,6 +263,7 @@ export default function NoteDetailSheetContent({
     onPolaroidCaptureReady,
     showPolaroidCapture,
 }: NoteDetailSheetContentProps) {
+    const noteDetailTheme = useMemo(() => getNoteDetailTheme(colors), [colors]);
     const [deleteConfirmVisible, setDeleteConfirmVisible] = useState(false);
     const showRichDecorations = Boolean(note) && (richDecorationsReady || isEditing);
     const displayedCardText = note ? (isEditing ? editContent : note.content) : '';
@@ -433,7 +435,7 @@ export default function NoteDetailSheetContent({
                             <NoteDoodleCanvas
                                 strokes={displayedDoodleStrokes}
                                 editable={isEditing && doodleModeEnabled}
-                                activeColor="#FFFFFF"
+                                activeColor={colors.inverseText ?? colors.text}
                                 onChangeStrokes={setEditDoodleStrokes}
                             />
                         </View>
@@ -463,7 +465,6 @@ export default function NoteDetailSheetContent({
                 />
                 {!isEditing ? (
                     <NoteDetailStatusBadges
-                        captureGlassColorScheme={colors.captureGlassColorScheme}
                         colors={colors}
                         favoriteFilledIconStyle={favoriteFilledIconStyle}
                         favoriteFilledTintStyle={favoriteFilledTintStyle}
@@ -481,11 +482,11 @@ export default function NoteDetailSheetContent({
                     containerHeight={CARD_SIZE}
                     label={t('capture.pasteStickerAction', 'Paste sticker')}
                     description={t('capture.clipboardStickerReadyHint', 'Copied image will be added as a sticker.')}
-                    backgroundColor="rgba(255, 255, 255, 0.96)"
-                    borderColor="rgba(255,255,255,0.24)"
-                    secondaryTextColor="rgba(28,28,30,0.6)"
-                    buttonBackgroundColor="#1C1C1E"
-                    buttonTextColor="#FFFFFF"
+                    backgroundColor={noteDetailTheme.popoverSurface}
+                    borderColor={noteDetailTheme.popoverBorder}
+                    secondaryTextColor={noteDetailTheme.popoverSecondaryText}
+                    buttonBackgroundColor={noteDetailTheme.popoverButtonBackground}
+                    buttonTextColor={noteDetailTheme.popoverButtonText}
                     onPress={onConfirmPasteFromPrompt}
                     onDismiss={dismissPastePrompt}
                     popoverTestID="note-detail-card-paste-popover"
@@ -500,8 +501,8 @@ export default function NoteDetailSheetContent({
                                     styles.photoCaptionOverlayField,
                                     styles.photoCaptionOverlayFieldEditing,
                                     {
-                                        backgroundColor: isDark ? 'rgba(20,20,20,0.5)' : 'rgba(255,255,255,0.72)',
-                                        borderColor: isDark ? 'rgba(255,255,255,0.16)' : 'rgba(255,255,255,0.42)',
+                                        backgroundColor: noteDetailTheme.captionEditorSurface,
+                                        borderColor: noteDetailTheme.captionEditorBorder,
                                     },
                                 ]}
                             >
@@ -646,7 +647,6 @@ export default function NoteDetailSheetContent({
                 />
                 {!isEditing ? (
                     <NoteDetailStatusBadges
-                        captureGlassColorScheme={colors.captureGlassColorScheme}
                         colors={colors}
                         favoriteFilledIconStyle={favoriteFilledIconStyle}
                         favoriteFilledTintStyle={favoriteFilledTintStyle}
@@ -715,11 +715,11 @@ export default function NoteDetailSheetContent({
                     containerHeight={CARD_SIZE}
                     label={t('capture.pasteStickerAction', 'Paste sticker')}
                     description={t('capture.clipboardStickerReadyHint', 'Copied image will be added as a sticker.')}
-                    backgroundColor="rgba(255, 255, 255, 0.96)"
-                    borderColor="rgba(255,255,255,0.24)"
-                    secondaryTextColor="rgba(28,28,30,0.6)"
-                    buttonBackgroundColor="#1C1C1E"
-                    buttonTextColor="#FFFFFF"
+                    backgroundColor={noteDetailTheme.popoverSurface}
+                    borderColor={noteDetailTheme.popoverBorder}
+                    secondaryTextColor={noteDetailTheme.popoverSecondaryText}
+                    buttonBackgroundColor={noteDetailTheme.popoverButtonBackground}
+                    buttonTextColor={noteDetailTheme.popoverButtonText}
                     onPress={onConfirmPasteFromPrompt}
                     onDismiss={dismissPastePrompt}
                     popoverTestID="note-detail-card-paste-popover"
@@ -739,7 +739,6 @@ export default function NoteDetailSheetContent({
             <NoteDetailActionSection
                 colors={colors}
                 editIconAnimatedStyle={editIconAnimatedStyle}
-                isDark={isDark}
                 isDeleting={isDeleting}
                 isDownloadingPolaroid={polaroidExporting}
                 isEditing={isEditing}
@@ -783,8 +782,8 @@ export default function NoteDetailSheetContent({
                             style={[
                                 styles.deleteConfirmBox,
                                 {
-                                    backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.04)',
-                                    borderColor: isDark ? 'rgba(255,255,255,0.14)' : 'rgba(43,38,33,0.12)',
+                                    backgroundColor: noteDetailTheme.actionSurface,
+                                    borderColor: noteDetailTheme.actionBorder,
                                 },
                             ]}
                         >
@@ -807,8 +806,8 @@ export default function NoteDetailSheetContent({
                                         style={[
                                             styles.deleteConfirmAction,
                                             {
-                                                backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.04)',
-                                                borderColor: isDark ? 'rgba(255,255,255,0.14)' : 'rgba(43,38,33,0.12)',
+                                                backgroundColor: noteDetailTheme.actionSurface,
+                                                borderColor: noteDetailTheme.actionBorder,
                                             },
                                         ]}
                                     >
@@ -831,7 +830,7 @@ export default function NoteDetailSheetContent({
                                             styles.deleteConfirmAction,
                                             styles.deleteConfirmDestructiveAction,
                                             {
-                                                backgroundColor: isDark ? 'rgba(255,69,58,0.16)' : 'rgba(255,59,48,0.1)',
+                                                backgroundColor: noteDetailTheme.destructiveSurface,
                                                 borderColor: colors.danger,
                                             },
                                             isDeleting ? styles.deleteButtonDisabled : null,
@@ -857,12 +856,12 @@ export default function NoteDetailSheetContent({
                                 onPress={() => setDeleteConfirmVisible(true)}
                                 disabled={isDeleting}
                                 style={[
-                                    styles.deleteButton,
-                                    {
-                                        backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.04)',
-                                        borderColor: isDark ? 'rgba(255,255,255,0.14)' : 'rgba(43,38,33,0.12)',
-                                    },
-                                    isDeleting ? styles.deleteButtonDisabled : null,
+                                styles.deleteButton,
+                                {
+                                    backgroundColor: noteDetailTheme.actionSurface,
+                                    borderColor: noteDetailTheme.actionBorder,
+                                },
+                                isDeleting ? styles.deleteButtonDisabled : null,
                                 ]}
                             >
                                 <Ionicons name="trash-outline" size={18} color={colors.danger} />

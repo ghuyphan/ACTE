@@ -1125,6 +1125,19 @@ describe('CaptureCard doodle handle', () => {
     expect(queryByTestId('capture-shutter-button')).toBeNull();
   });
 
+  it('keeps both save button content layers mounted while saving', () => {
+    const ref = React.createRef<CaptureCardHandle>();
+    const { getByTestId } = renderCaptureCard(ref, {
+      captureMode: 'camera',
+      capturedPhoto: 'file:///captured-photo.jpg',
+      saveState: 'saving',
+    });
+
+    expect(getByTestId('capture-save-button-icon')).toBeTruthy();
+    expect(getByTestId('capture-save-button-spinner')).toBeTruthy();
+    expect(getByTestId('capture-save-button-spinner-indicator').props.animating).toBe(true);
+  });
+
   it('renders live photo playback on the captured-photo review surface', () => {
     const ref = React.createRef<CaptureCardHandle>();
     const { getByLabelText, queryByTestId } = renderCaptureCard(ref, {

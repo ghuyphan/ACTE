@@ -47,9 +47,9 @@ export default function PrimaryButton({
 
   const labelColor =
     variant === 'destructive'
-      ? '#FFFFFF'
+      ? colors.onDanger
       : variant === 'primary'
-        ? '#1C1C1E'
+        ? colors.onPrimary
         : variant === 'secondary'
           ? colors.text
           : colors.background;

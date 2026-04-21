@@ -28,7 +28,7 @@ export default function InfoPill({
       style={[
         styles.container,
         {
-          borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(43,38,33,0.12)',
+          borderColor: colors.chromeBorder,
         },
         style,
       ]}
@@ -38,7 +38,7 @@ export default function InfoPill({
           style={[
             StyleSheet.absoluteFill,
             {
-              backgroundColor: isDark ? 'rgba(0,0,0,0.5)' : 'rgba(255,255,255,0.75)',
+              backgroundColor: colors.glassBackdrop,
             },
           ]}
         />

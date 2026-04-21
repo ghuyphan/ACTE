@@ -1,8 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import { TFunction } from 'i18next';
 import { Image } from 'expo-image';
-import { type ReactNode, useEffect, useMemo, useState } from 'react';
-import { Platform, Pressable, StyleProp, StyleSheet, Text, useWindowDimensions, View, ViewStyle } from 'react-native';
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Linking, Platform, Pressable, StyleProp, StyleSheet, Text, useWindowDimensions, View, ViewStyle } from 'react-native';
 import Animated, {
   Easing,
   useAnimatedStyle,
@@ -10,18 +10,32 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { Layout, Typography } from '../../constants/theme';
+import * as Haptics from '../../hooks/useHaptics';
 import { useRelativeTimeNow } from '../../hooks/useRelativeTimeNow';
+import { useReducedMotion } from '../../hooks/useReducedMotion';
 import { useTheme } from '../../hooks/useTheme';
 import { Note } from '../../services/database';
+import {
+  captureViewAsImage,
+  cleanupCapturedImage,
+  PolaroidExportError,
+  requestSavePermission,
+  savePolaroidToLibrary,
+  type SavePermissionStatus,
+} from '../../services/polaroidExport';
 import { getNotePairedVideoUri } from '../../services/livePhotoStorage';
 import { getNotePhotoUri } from '../../services/photoStorage';
 import { SharedPost } from '../../services/sharedFeedService';
+import { showAppAlert } from '../../utils/alert';
 import { formatNoteTimestamp } from '../../utils/dateUtils';
 import ImageMemoryCard from '../notes/ImageMemoryCard';
 import {
   DEFAULT_DEBUG_TILT_STATE,
   type DebugTiltState,
 } from '../notes/StickerPhysicsDebugControls';
+import PolaroidCaptureButton from '../notes/detail/PolaroidCaptureButton';
+import PolaroidExportAnimation from '../notes/detail/PolaroidExportAnimation';
+import PolaroidExportView from '../notes/detail/PolaroidExportView';
 import TextMemoryCard from '../notes/TextMemoryCard';
 import { GlassView } from '../ui/GlassView';
 import { glassTokens, getGlassSurfacePalette } from '../ui/glassTokens';
@@ -60,14 +74,56 @@ interface SharedPostMemoryCardProps {
   showSharedBadge?: boolean;
 }
 
+function delay(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 function MetadataContainer({
   accessibilityLabel,
   children,
   onPress,
+  containerStyle,
+  pillStyle,
 }: {
   accessibilityLabel?: string;
   children: ReactNode;
   onPress?: () => void;
+  containerStyle?: StyleProp<ViewStyle>;
+  pillStyle?: StyleProp<ViewStyle>;
+}) {
+  const pill = (
+    <MetadataSurface style={[styles.metadataPill, pillStyle]}>
+      {children}
+    </MetadataSurface>
+  );
+
+  if (!onPress) {
+    return pill;
+  }
+
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel}
+      hitSlop={8}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.metadataPressable,
+        containerStyle,
+        pressed ? styles.metadataPressablePressed : null,
+      ]}
+    >
+      {pill}
+    </Pressable>
+  );
+}
+
+function MetadataSurface({
+  children,
+  style,
+}: {
+  children: ReactNode;
+  style?: StyleProp<ViewStyle>;
 }) {
   const { colors, isDark } = useTheme();
   const glassPalette = getGlassSurfacePalette({
@@ -75,11 +131,11 @@ function MetadataContainer({
     borderColor: colors.border,
   });
 
-  const pill = (
+  return (
     <View
       style={[
-        styles.metadataPill,
         styles.metadataPillShell,
+        style,
         {
           borderColor: glassPalette.controlBorderColor,
           backgroundColor: Platform.OS === 'android' ? glassPalette.controlBackgroundColor : 'transparent',
@@ -98,25 +154,6 @@ function MetadataContainer({
       {children}
     </View>
   );
-
-  if (!onPress) {
-    return pill;
-  }
-
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={accessibilityLabel}
-      hitSlop={8}
-      onPress={onPress}
-      style={({ pressed }) => [
-        styles.metadataPressable,
-        pressed ? styles.metadataPressablePressed : null,
-      ]}
-    >
-      {pill}
-    </Pressable>
-  );
 }
 
 function MetadataAction({
@@ -131,6 +168,38 @@ function MetadataAction({
       <Text style={[styles.metadataActionText, { color }]}>{label}</Text>
       <Ionicons name="chevron-forward" size={14} color={color} />
     </View>
+  );
+}
+
+function MetadataIconButton({
+  accessibilityLabel,
+  children,
+  disabled = false,
+  onPress,
+}: {
+  accessibilityLabel: string;
+  children: ReactNode;
+  disabled?: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel}
+      accessibilityState={{ disabled }}
+      hitSlop={8}
+      disabled={disabled}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.metadataIconButtonPressable,
+        disabled ? styles.metadataIconButtonDisabled : null,
+        pressed && !disabled ? styles.metadataIconButtonPressablePressed : null,
+      ]}
+    >
+      <MetadataSurface style={[styles.metadataPill, styles.metadataIconButton]}>
+        {children}
+      </MetadataSurface>
+    </Pressable>
   );
 }
 
@@ -260,12 +329,20 @@ export function NoteMemoryCard({
   isSharedByMe = false,
 }: NoteMemoryCardProps) {
   const { width } = useWindowDimensions();
+  const reduceMotionEnabled = useReducedMotion();
   const now = useRelativeTimeNow();
   const resolvedCardSize = cardSize ?? width - (Layout.screenPadding - 8) * 2;
   const dateStr = formatNoteTimestamp(note.createdAt, 'card', now);
   const debugTiltOverride = useSharedValue<DebugTiltState>(DEFAULT_DEBUG_TILT_STATE);
   const locationLabel = note.locationName ?? t('home.unknownLocation', 'Unknown location');
   const [expandedBadgeKey, setExpandedBadgeKey] = useState<'shared' | 'live-photo' | 'favorite' | null>(null);
+  const [polaroidExporting, setPolaroidExporting] = useState(false);
+  const [showPolaroidCapture, setShowPolaroidCapture] = useState(false);
+  const [polaroidAnimationUri, setPolaroidAnimationUri] = useState<string | null>(null);
+  const [polaroidAnimationSuccess, setPolaroidAnimationSuccess] = useState(false);
+  const polaroidCaptureRef = useRef<View | null>(null);
+  const polaroidTempUriRef = useRef<string | null>(null);
+  const polaroidReadyResolverRef = useRef<(() => void) | null>(null);
   const sharedStatusLabel = t('home.noteStatusShared', 'Shared');
   const sharedStatusA11yLabel = t('home.noteStatusSharedA11y', 'Shared with friends');
   const livePhotoPreviewHintLabel = t('home.noteStatusLivePhotoHint', 'Hold to preview');
@@ -276,6 +353,189 @@ export function NoteMemoryCard({
   const toggleExpandedBadge = (key: 'shared' | 'live-photo' | 'favorite') => {
     setExpandedBadgeKey((current) => (current === key ? null : key));
   };
+  const noteCardAccessibilityLabel = onPress
+    ? t('home.openNoteDetailsA11y', {
+        defaultValue: 'Open note details for {{location}}',
+        location: locationLabel,
+      })
+    : undefined;
+  const noteCardIconAccessibilityLabel = onPress
+    ? t('home.openNoteDetailsButtonA11y', 'Open note details')
+    : undefined;
+  const noteCardPolaroidAccessibilityLabel = onPress
+    ? t('noteDetail.downloadPolaroid', 'Save as Polaroid')
+    : undefined;
+
+  const cleanupPolaroidCaptureResources = useCallback(() => {
+    cleanupCapturedImage(polaroidTempUriRef.current);
+    polaroidTempUriRef.current = null;
+    polaroidReadyResolverRef.current = null;
+  }, []);
+
+  const resetPolaroidCaptureState = useCallback(() => {
+    cleanupPolaroidCaptureResources();
+    setPolaroidAnimationUri(null);
+    setPolaroidAnimationSuccess(false);
+    setShowPolaroidCapture(false);
+    setPolaroidExporting(false);
+  }, [cleanupPolaroidCaptureResources]);
+
+  const waitForPolaroidRenderReady = useCallback(() => {
+    return new Promise<void>((resolve) => {
+      let settled = false;
+      const timeoutId = setTimeout(() => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        polaroidReadyResolverRef.current = null;
+        resolve();
+      }, 900);
+
+      polaroidReadyResolverRef.current = () => {
+        if (settled) {
+          return;
+        }
+
+        settled = true;
+        clearTimeout(timeoutId);
+        polaroidReadyResolverRef.current = null;
+        resolve();
+      };
+    });
+  }, []);
+
+  const handlePolaroidRenderReady = useCallback(() => {
+    polaroidReadyResolverRef.current?.();
+  }, []);
+
+  const handlePolaroidAnimationFinished = useCallback(() => {
+    resetPolaroidCaptureState();
+  }, [resetPolaroidCaptureState]);
+
+  const showPolaroidPermissionAlert = useCallback((status: SavePermissionStatus) => {
+    const buttons = status === 'blocked'
+      ? [
+          {
+            text: t('common.cancel', 'Cancel'),
+            style: 'cancel' as const,
+          },
+          {
+            text: t('common.openSettings', 'Open Settings'),
+            onPress: () => {
+              void Linking.openSettings();
+            },
+          },
+        ]
+      : undefined;
+
+    showAppAlert(
+      t('noteDetail.polaroidPermissionTitle', 'Photo library access needed'),
+      t(
+        status === 'blocked'
+          ? 'noteDetail.polaroidPermissionSettingsMsg'
+          : 'noteDetail.polaroidPermissionMsg',
+        status === 'blocked'
+          ? 'Photo library access is blocked for Noto. Open Settings so polaroids can be saved to your camera roll.'
+          : 'Allow photo library access so Noto can save polaroid cards to your camera roll.'
+      ),
+      buttons
+    );
+  }, [t]);
+
+  const showPolaroidRequiresUpdateAlert = useCallback(() => {
+    showAppAlert(
+      t('noteDetail.polaroidRequiresUpdateTitle', 'Update required'),
+      t(
+        'noteDetail.polaroidRequiresUpdateMsg',
+        'Saving polaroids needs the latest app build. Restart after rebuilding to use this feature.'
+      )
+    );
+  }, [t]);
+
+  const handleDownloadPolaroid = useCallback(async () => {
+    if (!noteCardPolaroidAccessibilityLabel || polaroidExporting) {
+      return;
+    }
+
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setPolaroidExporting(true);
+    setPolaroidAnimationSuccess(false);
+    setPolaroidAnimationUri(null);
+
+    let permissionStatus: SavePermissionStatus;
+
+    try {
+      permissionStatus = await requestSavePermission();
+    } catch (error) {
+      setPolaroidExporting(false);
+      if (error instanceof PolaroidExportError && error.code === 'requires-update') {
+        showPolaroidRequiresUpdateAlert();
+        return;
+      }
+
+      showAppAlert(
+        t('noteDetail.polaroidExportFailedTitle', 'Could not save polaroid'),
+        t(
+          'noteDetail.polaroidExportFailed',
+          'Could not create the polaroid right now. Please try again.'
+        )
+      );
+      return;
+    }
+
+    if (permissionStatus !== 'granted') {
+      setPolaroidExporting(false);
+      showPolaroidPermissionAlert(permissionStatus);
+      return;
+    }
+
+    setShowPolaroidCapture(true);
+    await waitForPolaroidRenderReady();
+    await delay(reduceMotionEnabled ? 60 : 140);
+
+    let capturedUri: string | null = null;
+
+    try {
+      capturedUri = await captureViewAsImage(polaroidCaptureRef);
+      polaroidTempUriRef.current = capturedUri;
+      setPolaroidAnimationUri(capturedUri);
+      await savePolaroidToLibrary(capturedUri);
+      setPolaroidAnimationSuccess(true);
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (error) {
+      console.warn('Note card polaroid export failed:', error);
+      resetPolaroidCaptureState();
+      if (error instanceof PolaroidExportError && error.code === 'requires-update') {
+        showPolaroidRequiresUpdateAlert();
+        return;
+      }
+
+      showAppAlert(
+        t('noteDetail.polaroidExportFailedTitle', 'Could not save polaroid'),
+        t(
+          'noteDetail.polaroidExportFailed',
+          'Could not create the polaroid right now. Please try again.'
+        )
+      );
+      return;
+    } finally {
+      setPolaroidExporting(false);
+    }
+  }, [
+    noteCardPolaroidAccessibilityLabel,
+    polaroidExporting,
+    reduceMotionEnabled,
+    resetPolaroidCaptureState,
+    showPolaroidPermissionAlert,
+    showPolaroidRequiresUpdateAlert,
+    t,
+    waitForPolaroidRenderReady,
+  ]);
+
+  useEffect(() => () => {
+    cleanupPolaroidCaptureResources();
+  }, [cleanupPolaroidCaptureResources]);
   const noteMetadata = (
     <View style={styles.metadataPillContent}>
       <View style={styles.metadataPillMain}>
@@ -288,21 +548,8 @@ export function NoteMemoryCard({
         <View style={[styles.metadataPillDot, { backgroundColor: colors.secondaryText }]} />
         <Text style={[styles.metadataPillDate, { color: colors.secondaryText }]}>{dateStr}</Text>
       </View>
-      {onPress ? (
-        <MetadataAction
-          color={colors.primary}
-          label={t('home.openDetails', 'Details')}
-        />
-      ) : null}
     </View>
   );
-
-  const noteCardAccessibilityLabel = onPress
-    ? t('home.openNoteDetailsA11y', {
-        defaultValue: 'Open note details for {{location}}',
-        location: locationLabel,
-      })
-    : undefined;
 
   const noteCardBody = (
     <View style={[styles.cardRoot, containerStyle, { width: resolvedCardSize }]}>
@@ -387,32 +634,65 @@ export function NoteMemoryCard({
       </View>
 
       <View style={[styles.metaContainer, { width: resolvedCardSize }]}>
-        <MetadataContainer>
-          {noteMetadata}
-        </MetadataContainer>
+        {onPress ? (
+          <View style={styles.noteMetaRow}>
+            <MetadataContainer
+              accessibilityLabel={noteCardAccessibilityLabel}
+              onPress={onPress}
+              containerStyle={styles.noteMetaPrimaryAction}
+              pillStyle={styles.noteMetadataPill}
+            >
+              {noteMetadata}
+            </MetadataContainer>
+            {noteCardPolaroidAccessibilityLabel ? (
+              <MetadataIconButton
+                accessibilityLabel={noteCardPolaroidAccessibilityLabel}
+                disabled={polaroidExporting}
+                onPress={handleDownloadPolaroid}
+              >
+                <PolaroidCaptureButton
+                  color={colors.primary}
+                  isCapturing={polaroidExporting}
+                />
+              </MetadataIconButton>
+            ) : null}
+            {noteCardIconAccessibilityLabel ? (
+              <MetadataIconButton
+                accessibilityLabel={noteCardIconAccessibilityLabel}
+                onPress={onPress}
+              >
+                <Ionicons name="chevron-forward" size={16} color={colors.primary} />
+              </MetadataIconButton>
+            ) : null}
+          </View>
+        ) : (
+          <MetadataContainer>
+            {noteMetadata}
+          </MetadataContainer>
+        )}
+        {showPolaroidCapture ? (
+          <View pointerEvents="none" style={styles.offscreenPolaroidCapture}>
+            <PolaroidExportView
+              ref={polaroidCaptureRef}
+              note={note}
+              fallbackLocationLabel={t('noteDetail.unknownLocation', 'Unknown place')}
+              onReady={handlePolaroidRenderReady}
+            />
+          </View>
+        ) : null}
+        <PolaroidExportAnimation
+          uri={polaroidAnimationUri}
+          success={polaroidAnimationSuccess}
+          successLabel={t('noteDetail.polaroidSaved', 'Saved to your photos')}
+          presentation="modal"
+          variant="home-feed"
+          onFinished={handlePolaroidAnimationFinished}
+        />
       </View>
     </View>
   );
 
-  const content = (
-    onPress ? (
-      <Pressable
-        accessibilityLabel={noteCardAccessibilityLabel}
-        accessibilityRole="button"
-        hitSlop={8}
-        onPress={onPress}
-        style={({ pressed }) => [
-          styles.noteCardPressable,
-          pressed ? styles.noteCardPressablePressed : null,
-        ]}
-      >
-        {noteCardBody}
-      </Pressable>
-    ) : (
-      noteCardBody
-    )
-  );
-  return content;
+  return noteCardBody;
 }
 
 export function SharedPostMemoryCard({
@@ -544,13 +824,6 @@ const styles = StyleSheet.create({
   cardFill: {
     flex: 1,
   },
-  noteCardPressable: {
-    alignSelf: 'center',
-  },
-  noteCardPressablePressed: {
-    opacity: 0.92,
-    transform: [{ scale: 0.992 }],
-  },
   noteCardWrapper: {
     alignSelf: 'center',
     justifyContent: 'center',
@@ -594,6 +867,31 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     minHeight: 56,
     paddingTop: 16,
+  },
+  offscreenPolaroidCapture: {
+    position: 'absolute',
+    left: -9999,
+    top: 0,
+    width: 1080,
+    height: 1350,
+    opacity: 1,
+    zIndex: -1,
+  },
+  noteMetaRow: {
+    width: '88%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    minWidth: 0,
+  },
+  noteMetaPrimaryAction: {
+    flexShrink: 1,
+    minWidth: 0,
+    maxWidth: '100%',
+  },
+  noteMetadataPill: {
+    maxWidth: '100%',
   },
   expandableBadge: {
     width: BADGE_COLLAPSED_SIZE,
@@ -694,6 +992,27 @@ const styles = StyleSheet.create({
   },
   metadataPressablePressed: {
     opacity: 0.84,
+  },
+  metadataIconButtonPressable: {
+    flexShrink: 0,
+  },
+  metadataIconButtonDisabled: {
+    opacity: 0.68,
+  },
+  metadataIconButtonPressablePressed: {
+    opacity: 0.84,
+  },
+  metadataIconButton: {
+    minHeight: glassTokens.pillControlHeight,
+    width: glassTokens.pillControlHeight,
+    height: glassTokens.pillControlHeight,
+    maxWidth: glassTokens.pillControlHeight,
+    paddingHorizontal: 0,
+    paddingVertical: 0,
+    borderRadius: glassTokens.pillControlRadius,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
   },
   metadataPillText: {
     ...Typography.pill,

@@ -48,9 +48,9 @@ export const DoodleColorPalette = memo(function DoodleColorPalette({
               onPress={() => onSelectColor(color)}
               active={isSelected}
               activeScale={1.035}
-              activeTranslateY={-1.5}
+              activeTranslateY={0}
               contentActiveScale={1.06}
-              contentActiveTranslateY={-0.5}
+              contentActiveTranslateY={0}
               style={[
                 styles.doodleColorButton,
                 {

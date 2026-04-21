@@ -3,15 +3,12 @@ import React from 'react';
 import { StyleSheet, View } from 'react-native';
 import Animated from 'react-native-reanimated';
 import { AnimatedActionButton } from './NoteDetailPrimitives';
+import { getNoteDetailTheme, type NoteDetailColors } from './noteDetailTheme';
 import PolaroidCaptureButton from './PolaroidCaptureButton';
 
 type NoteDetailActionSectionProps = {
-    colors: {
-        secondaryText: string;
-        success: string;
-    };
+    colors: NoteDetailColors;
     editIconAnimatedStyle: any;
-    isDark: boolean;
     isDeleting: boolean;
     isDownloadingPolaroid: boolean;
     isEditing: boolean;
@@ -23,7 +20,6 @@ type NoteDetailActionSectionProps = {
 export default function NoteDetailActionSection({
     colors,
     editIconAnimatedStyle,
-    isDark,
     isDeleting,
     isDownloadingPolaroid,
     isEditing,
@@ -31,8 +27,8 @@ export default function NoteDetailActionSection({
     onPrimaryPress,
     saveIconAnimatedStyle,
 }: NoteDetailActionSectionProps) {
-    const actionButtonBackground = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.04)';
-    const actionButtonBorder = isDark ? 'rgba(255,255,255,0.14)' : 'rgba(43,38,33,0.12)';
+    const noteDetailTheme = getNoteDetailTheme(colors);
+    const successColor = colors.success ?? colors.primary;
 
     return (
         <Animated.View style={styles.actionRow}>
@@ -42,8 +38,8 @@ export default function NoteDetailActionSection({
                 style={[
                     styles.actionBtn,
                     {
-                        backgroundColor: actionButtonBackground,
-                        borderColor: actionButtonBorder,
+                        backgroundColor: noteDetailTheme.actionSurface,
+                        borderColor: noteDetailTheme.actionBorder,
                     },
                 ]}
                 delay={100}
@@ -61,7 +57,7 @@ export default function NoteDetailActionSection({
                         <Ionicons
                             name="checkmark"
                             size={20}
-                            color={colors.success}
+                            color={successColor}
                         />
                     </Animated.View>
                 </View>
@@ -74,8 +70,8 @@ export default function NoteDetailActionSection({
                     style={[
                         styles.actionBtn,
                         {
-                            backgroundColor: actionButtonBackground,
-                            borderColor: actionButtonBorder,
+                            backgroundColor: noteDetailTheme.actionSurface,
+                            borderColor: noteDetailTheme.actionBorder,
                         },
                     ]}
                     delay={140}

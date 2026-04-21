@@ -2,6 +2,7 @@ import { BlurView } from 'expo-blur';
 import React, { type RefObject } from 'react';
 import { StyleProp, StyleSheet, Text, TextStyle, View, ViewStyle } from 'react-native';
 import { Typography } from '../../constants/theme';
+import { useTheme } from '../../hooks/useTheme';
 import { glassTokens } from '../ui/glassTokens';
 
 type PhotoCaptionChipProps = {
@@ -27,6 +28,7 @@ export default function PhotoCaptionChip({
   textStyle,
   testID,
 }: PhotoCaptionChipProps) {
+  const { colors } = useTheme();
   const normalizedCaption = caption.trim();
 
   if (!normalizedCaption) {
@@ -39,7 +41,7 @@ export default function PhotoCaptionChip({
         style={[
           styles.field,
           {
-            borderColor: isDark ? 'rgba(255,255,255,0.16)' : 'rgba(255,255,255,0.42)',
+            borderColor: colors.glassOverlayBorder,
           },
           fieldStyle,
         ]}
@@ -58,7 +60,7 @@ export default function PhotoCaptionChip({
           style={[
             StyleSheet.absoluteFill,
             {
-              backgroundColor: isDark ? 'rgba(22,22,24,0.42)' : 'rgba(255,255,255,0.36)',
+              backgroundColor: colors.glassOverlaySurface,
             },
           ]}
         />

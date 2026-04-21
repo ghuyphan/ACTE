@@ -108,6 +108,13 @@ export function useCaptureFlow() {
   const captureTranslateY = useSharedValue(0);
   const shutterScale = useSharedValue(1);
 
+  const completeModeSwitch = useCallback((callback: () => void) => {
+    callback();
+    captureScale.value = 1;
+    captureTranslateY.value = 0;
+    setIsModeSwitchAnimating(false);
+  }, [captureScale, captureTranslateY]);
+
   useEffect(() => {
     setCameraPermissionGranted(hasPermission);
     setCameraPermissionStatus(hasPermission ? 'granted' : Camera.getCameraPermissionStatus());
@@ -254,6 +261,11 @@ export function useCaptureFlow() {
   }, [cameraPermissionGranted, cameraPermissionStatus]);
 
   const animateModeSwitch = useCallback((callback: () => void) => {
+    if (Platform.OS === 'android') {
+      completeModeSwitch(callback);
+      return;
+    }
+
     setIsModeSwitchAnimating(true);
     captureScale.value = withTiming(0.97, CAPTURE_MODE_SWITCH_OUT);
     captureTranslateY.value = withTiming(-10, CAPTURE_MODE_SWITCH_OUT, (finished) => {
@@ -271,7 +283,7 @@ export function useCaptureFlow() {
         runOnJS(setIsModeSwitchAnimating)(false);
       });
     });
-  }, [captureScale, captureTranslateY]);
+  }, [captureScale, captureTranslateY, completeModeSwitch]);
 
   const toggleCaptureMode = useCallback(() => {
     if (isModeSwitchAnimating) {

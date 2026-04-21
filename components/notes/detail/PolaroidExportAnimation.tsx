@@ -3,6 +3,7 @@ import React, { useEffect, useRef } from 'react';
 import {
   Dimensions,
   Image,
+  Modal,
   StyleSheet,
   Text,
   View,
@@ -20,12 +21,21 @@ import { Layout, Typography } from '../../../constants/theme';
 import { useReducedMotion } from '../../../hooks/useReducedMotion';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
+const DETAIL_POLAROID_WIDTH = Math.min(screenWidth - 64, 264);
+const HOME_POLAROID_WIDTH = Math.min(screenWidth - 112, 224);
+const HOME_BOTTOM_PADDING = 34;
+
+type PolaroidExportAnimationVariant = 'detail-sheet' | 'home-feed';
+type PolaroidExportAnimationPresentation = 'inline' | 'modal';
 
 type PolaroidExportAnimationProps = {
   uri: string | null;
   success: boolean;
   successLabel: string;
   onFinished: () => void;
+  presentation?: PolaroidExportAnimationPresentation;
+  variant?: PolaroidExportAnimationVariant;
+  bottomPadding?: number;
 };
 
 export default function PolaroidExportAnimation({
@@ -33,10 +43,16 @@ export default function PolaroidExportAnimation({
   success,
   successLabel,
   onFinished,
+  presentation = 'inline',
+  variant = 'detail-sheet',
+  bottomPadding,
 }: PolaroidExportAnimationProps) {
   const reduceMotionEnabled = useReducedMotion();
   const dismissTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const stackTranslateY = useSharedValue(screenHeight * 0.72);
+  const isHomeFeed = variant === 'home-feed';
+  const initialTranslateY = isHomeFeed ? screenHeight * 0.44 : screenHeight * 0.72;
+  const restingTranslateY = isHomeFeed && !reduceMotionEnabled ? 8 : 0;
+  const stackTranslateY = useSharedValue(initialTranslateY);
   const cardOpacity = useSharedValue(0);
   const cardScale = useSharedValue(0.96);
   const cardRotation = useSharedValue(2);
@@ -58,7 +74,7 @@ export default function PolaroidExportAnimation({
         clearTimeout(dismissTimeoutRef.current);
         dismissTimeoutRef.current = null;
       }
-      stackTranslateY.value = screenHeight * 0.72;
+      stackTranslateY.value = initialTranslateY;
       cardOpacity.value = 0;
       cardScale.value = 0.96;
       cardRotation.value = 2;
@@ -68,7 +84,7 @@ export default function PolaroidExportAnimation({
       return;
     }
 
-    stackTranslateY.value = withTiming(0, {
+    stackTranslateY.value = withTiming(restingTranslateY, {
       duration: reduceMotionEnabled ? 140 : 620,
       easing: Easing.out(Easing.cubic),
     });
@@ -100,8 +116,10 @@ export default function PolaroidExportAnimation({
     cardScale,
     flashOpacity,
     reduceMotionEnabled,
+    restingTranslateY,
     stackTranslateY,
     uri,
+    initialTranslateY,
   ]);
 
   useEffect(() => {
@@ -175,12 +193,33 @@ export default function PolaroidExportAnimation({
     return null;
   }
 
-  return (
+  const content = isHomeFeed ? (
+    <View
+      pointerEvents="none"
+      style={[
+        styles.homeOverlay,
+        { paddingBottom: bottomPadding ?? HOME_BOTTOM_PADDING },
+      ]}
+    >
+      <Animated.View style={[styles.homeContent, stackAnimatedStyle]}>
+        <Animated.View style={[styles.homePolaroidWrap, cardAnimatedStyle]}>
+          <Image resizeMode="contain" source={{ uri }} style={styles.previewImage} />
+          <Animated.View pointerEvents="none" style={[styles.flashOverlay, flashAnimatedStyle]} />
+        </Animated.View>
+        <Animated.View style={[styles.badge, styles.homeBadge, badgeAnimatedStyle]}>
+          <Ionicons name="checkmark-circle" size={18} color="#2D6A4F" />
+          <Text style={styles.badgeLabel} numberOfLines={1}>
+            {successLabel}
+          </Text>
+        </Animated.View>
+      </Animated.View>
+    </View>
+  ) : (
     <View pointerEvents="none" style={styles.overlay}>
       <Animated.View style={[styles.cardStack, stackAnimatedStyle]}>
-        <Animated.View style={[styles.polaroidWrap, cardAnimatedStyle]}>
+        <Animated.View style={[styles.detailPolaroidWrap, cardAnimatedStyle]}>
           <Image resizeMode="contain" source={{ uri }} style={styles.previewImage} />
-          <Animated.View style={[styles.flashOverlay, flashAnimatedStyle]} />
+          <Animated.View pointerEvents="none" style={[styles.flashOverlay, flashAnimatedStyle]} />
         </Animated.View>
       </Animated.View>
       <Animated.View style={[styles.badge, badgeAnimatedStyle]}>
@@ -191,6 +230,25 @@ export default function PolaroidExportAnimation({
       </Animated.View>
     </View>
   );
+
+  if (presentation === 'modal') {
+    return (
+      <Modal
+        animationType="none"
+        hardwareAccelerated
+        navigationBarTranslucent
+        onRequestClose={() => {}}
+        presentationStyle="overFullScreen"
+        statusBarTranslucent
+        transparent
+        visible={Boolean(uri)}
+      >
+        {content}
+      </Modal>
+    );
+  }
+
+  return content;
 }
 
 const styles = StyleSheet.create({
@@ -206,14 +264,35 @@ const styles = StyleSheet.create({
     bottom: 42,
     alignItems: 'center',
   },
-  polaroidWrap: {
-    width: Math.min(screenWidth - 64, 264),
+  detailPolaroidWrap: {
+    width: DETAIL_POLAROID_WIDTH,
     aspectRatio: 1080 / 1350,
     borderRadius: 20,
     overflow: 'hidden',
     shadowColor: '#201109',
     shadowOffset: { width: 0, height: 18 },
     shadowOpacity: 0.22,
+    shadowRadius: 24,
+    elevation: 12,
+  },
+  homeOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 20,
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+    backgroundColor: 'rgba(29, 21, 15, 0.18)',
+  },
+  homeContent: {
+    alignItems: 'center',
+  },
+  homePolaroidWrap: {
+    width: HOME_POLAROID_WIDTH,
+    aspectRatio: 1080 / 1350,
+    borderRadius: 20,
+    overflow: 'hidden',
+    shadowColor: '#201109',
+    shadowOffset: { width: 0, height: 18 },
+    shadowOpacity: 0.2,
     shadowRadius: 24,
     elevation: 12,
   },
@@ -238,6 +317,12 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: Layout.pillRadius,
     backgroundColor: 'rgba(251, 248, 242, 0.94)',
+  },
+  homeBadge: {
+    position: 'relative',
+    bottom: 0,
+    marginTop: 18,
+    maxWidth: Math.min(screenWidth - 64, 320),
   },
   badgeLabel: {
     color: '#2C241E',

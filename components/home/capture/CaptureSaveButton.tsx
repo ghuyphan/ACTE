@@ -11,6 +11,7 @@ interface CaptureSaveButtonProps {
   animatedSaveHaloStyle: CaptureCardAnimatedStyle;
   animatedSaveIconStyle: CaptureCardAnimatedStyle;
   animatedSaveInnerStyle: CaptureCardAnimatedStyle;
+  animatedSaveSpinnerStyle: CaptureCardAnimatedStyle;
   colors: CaptureCardColors;
   isSaveBusy: boolean;
   isSaveDisabled: boolean;
@@ -27,6 +28,7 @@ export function CaptureSaveButton({
   animatedSaveHaloStyle,
   animatedSaveIconStyle,
   animatedSaveInnerStyle,
+  animatedSaveSpinnerStyle,
   colors,
   isSaveBusy,
   isSaveDisabled,
@@ -78,17 +80,29 @@ export function CaptureSaveButton({
               animatedSaveHaloStyle,
             ]}
           />
-          {isSaveBusy ? (
-            <ActivityIndicator size="small" color="#FFFFFF" />
-          ) : (
-            <Reanimated.View style={animatedSaveIconStyle}>
-              <Ionicons
-                name="paper-plane"
-                size={22}
-                color="#FFFFFF"
-              />
-            </Reanimated.View>
-          )}
+          <Reanimated.View
+            testID="capture-save-button-icon"
+            pointerEvents="none"
+            style={[styles.captureToggleIconLayer, animatedSaveIconStyle]}
+          >
+            <Ionicons
+              name="paper-plane"
+              size={22}
+              color="#FFFFFF"
+            />
+          </Reanimated.View>
+          <Reanimated.View
+            testID="capture-save-button-spinner"
+            pointerEvents="none"
+            style={[styles.captureToggleIconLayer, animatedSaveSpinnerStyle]}
+          >
+            <ActivityIndicator
+              testID="capture-save-button-spinner-indicator"
+              size="small"
+              color="#FFFFFF"
+              animating
+            />
+          </Reanimated.View>
         </Reanimated.View>
       </Reanimated.View>
     </CaptureAnimatedPressable>

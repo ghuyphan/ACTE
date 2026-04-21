@@ -28,6 +28,10 @@ const HOME_PAGE_VISUAL_BOTTOM_INSET = 90;
 const INACTIVE_CARD_SCALE = 0.968;
 const INACTIVE_CARD_OPACITY = 0.78;
 const INACTIVE_CARD_TRANSLATE_Y = 24;
+const ANDROID_CAPTURE_STICKY_RELEASE_DISTANCE_RATIO = 0.2;
+const ANDROID_CAPTURE_STICKY_RELEASE_MIN_DISTANCE = 84;
+const ANDROID_CAPTURE_STICKY_RELEASE_MAX_DISTANCE = 140;
+const ANDROID_CAPTURE_STICKY_MAX_RELEASE_VELOCITY = 0.12;
 
 const AnimatedNoteCard = memo(function AnimatedNoteCard({
   item,
@@ -259,7 +263,9 @@ export default function NotesFeed({
   const liveOffsetYRef = useRef(0);
   const settledPageIndexRef = useRef(0);
   const dragStartPageIndexRef = useRef(0);
+  const pendingStructuralSnapOffsetRef = useRef<number | null>(null);
   const previousItemKeysRef = useRef<string[] | null>(null);
+  const previousHasEmptyStatePageRef = useRef<boolean | null>(null);
   const scrollOffsetY = useSharedValue(0);
   const [activeCardKey, setActiveCardKey] = useState<string | null>(null);
   const [refreshGestureActive, setRefreshGestureActive] = useState(false);
@@ -285,6 +291,17 @@ export default function NotesFeed({
     () => ({
       height: snapHeight,
     }),
+    [snapHeight]
+  );
+  const androidCaptureStickyReleaseDistance = useMemo(
+    () =>
+      Math.min(
+        Math.max(
+          snapHeight * ANDROID_CAPTURE_STICKY_RELEASE_DISTANCE_RATIO,
+          ANDROID_CAPTURE_STICKY_RELEASE_MIN_DISTANCE
+        ),
+        ANDROID_CAPTURE_STICKY_RELEASE_MAX_DISTANCE
+      ),
     [snapHeight]
   );
   const nativeSnapEnabled = !snapSuspended;
@@ -436,11 +453,15 @@ export default function NotesFeed({
     ]
   );
 
+  const syncNearestSnapOffset = useCallback(
+    (offsetY: number) => {
+      applySettledOffset(getNearestSnapOffset(offsetY));
+    },
+    [applySettledOffset, getNearestSnapOffset]
+  );
+
   const maybeCorrectSnapOffset = useCallback(
-    (
-      offsetY: number,
-      { animated }: { animated: boolean }
-    ) => {
+    (offsetY: number, { animated }: { animated: boolean }) => {
       if (Platform.OS !== 'android') {
         return false;
       }
@@ -466,21 +487,74 @@ export default function NotesFeed({
     applySettledOffset(0);
   }, [applySettledOffset, flatListRef]);
 
+  const applyPendingStructuralSnapOffset = useCallback(
+    (contentHeight: number) => {
+      if (Platform.OS !== 'android') {
+        return;
+      }
+
+      const pendingOffset = pendingStructuralSnapOffsetRef.current;
+      if (pendingOffset === null) {
+        return;
+      }
+
+      if (pendingOffset <= SCROLL_SNAP_EPSILON) {
+        pendingStructuralSnapOffsetRef.current = null;
+        return;
+      }
+
+      const requiredContentHeight = pendingOffset + snapHeight;
+      if (contentHeight + SCROLL_SNAP_EPSILON < requiredContentHeight) {
+        return;
+      }
+
+      pendingStructuralSnapOffsetRef.current = null;
+      flatListRef.current?.scrollToOffset({ offset: pendingOffset, animated: false });
+      applySettledOffset(pendingOffset);
+    },
+    [applySettledOffset, flatListRef, snapHeight]
+  );
+
   useLayoutEffect(() => {
     if (Platform.OS !== 'android') {
       previousItemKeysRef.current = itemKeys;
-      return;
-    }
-
-    if (capturePageLocked) {
-      previousItemKeysRef.current = itemKeys;
+      previousHasEmptyStatePageRef.current = hasEmptyStatePage;
       return;
     }
 
     const previousItemKeys = previousItemKeysRef.current;
+    const previousHasEmptyStatePage = previousHasEmptyStatePageRef.current;
     previousItemKeysRef.current = itemKeys;
+    previousHasEmptyStatePageRef.current = hasEmptyStatePage;
 
     if (!previousItemKeys) {
+      return;
+    }
+
+    if (capturePageLocked) {
+      return;
+    }
+
+    const emptyStatePageModeChanged =
+      previousHasEmptyStatePage !== null &&
+      previousHasEmptyStatePage !== hasEmptyStatePage;
+
+    if (emptyStatePageModeChanged) {
+      const targetSnapOffset = getNearestSnapOffset(liveOffsetYRef.current);
+      const shouldWaitForContentLayout =
+        previousHasEmptyStatePage &&
+        !hasEmptyStatePage &&
+        targetSnapOffset > SCROLL_SNAP_EPSILON;
+
+      pendingStructuralSnapOffsetRef.current = shouldWaitForContentLayout ? targetSnapOffset : null;
+
+      if (shouldWaitForContentLayout) {
+        return;
+      }
+
+      if (!maybeCorrectSnapOffset(liveOffsetYRef.current, { animated: false })) {
+        syncNearestSnapOffset(liveOffsetYRef.current);
+      }
       return;
     }
 
@@ -497,8 +571,11 @@ export default function NotesFeed({
     maybeCorrectSnapOffset(liveOffsetYRef.current, { animated: false });
   }, [
     itemKeys,
+    hasEmptyStatePage,
     capturePageLocked,
+    getNearestSnapOffset,
     maybeCorrectSnapOffset,
+    syncNearestSnapOffset,
   ]);
 
   useLayoutEffect(() => {
@@ -507,6 +584,10 @@ export default function NotesFeed({
     }
 
     if (capturePageLocked) {
+      return;
+    }
+
+    if (pendingStructuralSnapOffsetRef.current !== null) {
       return;
     }
 
@@ -642,6 +723,9 @@ export default function NotesFeed({
           onInitialContentDraw?.();
         }
       }}
+      onContentSizeChange={(_width, heightValue) => {
+        applyPendingStructuralSnapOffset(heightValue);
+      }}
       onScroll={(event) => {
         const offsetY = event.nativeEvent.contentOffset.y;
         const previousSettledOffsetY = settledOffsetYRef.current;
@@ -666,7 +750,20 @@ export default function NotesFeed({
         }
 
         const offsetY = event.nativeEvent.contentOffset.y;
+        const releaseVelocityY = Math.max(0, event.nativeEvent.velocity?.y ?? 0);
         if (offsetY <= 0) {
+          applySettledOffset(0);
+          return;
+        }
+
+        if (
+          Platform.OS === 'android' &&
+          nativeSnapEnabled &&
+          dragStartPageIndexRef.current === 0 &&
+          offsetY <= androidCaptureStickyReleaseDistance &&
+          releaseVelocityY <= ANDROID_CAPTURE_STICKY_MAX_RELEASE_VELOCITY
+        ) {
+          flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
           applySettledOffset(0);
           return;
         }

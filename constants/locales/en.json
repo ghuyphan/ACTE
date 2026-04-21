@@ -19,6 +19,7 @@
         "noResultsMsg": "Try a different keyword",
         "openDetails": "Details",
         "openNoteDetailsA11y": "Open note details for {{location}}",
+        "openNoteDetailsButtonA11y": "Open note details",
         "noteStatusShared": "Shared",
         "noteStatusLivePhoto": "Live Photo",
         "noteStatusLivePhotoHint": "Hold to preview",

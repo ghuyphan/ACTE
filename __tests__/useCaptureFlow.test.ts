@@ -385,6 +385,21 @@ describe('useCaptureFlow', () => {
     expect(result.current.cameraSessionKey).toBe(sessionKeyBeforePermission + 1);
   });
 
+  it('switches capture modes on Android without animating the card shell', () => {
+    mockPlatformOS = 'android';
+
+    const { result } = renderHook(() => useCaptureFlow());
+
+    act(() => {
+      result.current.toggleCaptureMode();
+    });
+
+    expect(result.current.captureMode).toBe('camera');
+    expect(result.current.isModeSwitchAnimating).toBe(false);
+    expect(result.current.captureScale.value).toBe(1);
+    expect(result.current.captureTranslateY.value).toBe(0);
+  });
+
   it('refreshes the camera session when returning from the permission sheet', () => {
     AppState.currentState = 'inactive';
     let appStateListener: ((state: 'active' | 'background' | 'inactive') => void) | null = null;
