@@ -6,6 +6,7 @@ Keep app chrome themeable without forcing every artistic or feature-specific pal
 
 ## Where Colors Should Live
 
+- Color-scheme preference and app-theme style state both live in [hooks/useTheme.tsx](/Users/huyphan/Downloads/ACTE/hooks/useTheme.tsx).
 - Global semantic app colors belong in [hooks/useTheme.tsx](/Users/huyphan/Downloads/ACTE/hooks/useTheme.tsx).
 - Shared non-color design tokens belong in [constants/theme.ts](/Users/huyphan/Downloads/ACTE/constants/theme.ts).
 - Feature-specific UI palettes should live in a local token helper near the feature, like [components/notes/detail/noteDetailTheme.ts](/Users/huyphan/Downloads/ACTE/components/notes/detail/noteDetailTheme.ts).
@@ -15,6 +16,7 @@ Keep app chrome themeable without forcing every artistic or feature-specific pal
 
 - Do not add new raw hex, `rgb(a)`, `hsl(a)`, `white`, or `black` literals directly inside ordinary screen/component logic when a semantic token would do.
 - If a feature needs several tightly-coupled custom colors, create a local `*Theme.ts` or `*Tokens.ts` module for that feature instead of adding one-off inline values across multiple files.
+- Keep `Theme` for light/dark/system behavior and `App Theme` for palette style choices such as Default, Peach Sorbet, Matcha Latte, Blueberry Dream, or Cotton Candy.
 - Keep route files and general UI wrappers on semantic theme tokens whenever possible.
 - Treat the baseline in [scripts/theme-audit-baseline.json](/Users/huyphan/Downloads/ACTE/scripts/theme-audit-baseline.json) as a debt ledger, not a dumping ground.
 

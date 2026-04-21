@@ -16,7 +16,6 @@ import Reanimated, { FadeIn, FadeOut, ZoomIn } from 'react-native-reanimated';
 import { ENABLE_PHOTO_STICKERS } from '../../../constants/experiments';
 import { useReducedMotion } from '../../../hooks/useReducedMotion';
 import {
-  DEFAULT_NOTE_COLOR_ID,
   getCaptureNoteGradient,
 } from '../../../services/noteAppearance';
 import type { NoteStickerPlacement } from '../../../services/noteStickers';
@@ -98,7 +97,7 @@ export function TextCaptureSurface({
   handleSelectSticker,
   interactionsDisabled,
   noteInputRef,
-  noteColor = DEFAULT_NOTE_COLOR_ID,
+  noteColor = null,
   noteText,
   onCanvasGestureActiveChange,
   recentAutoEmoji,
@@ -110,7 +109,10 @@ export function TextCaptureSurface({
   textInputDynamicStyle,
   onStickerEntryAnimationComplete,
 }: TextCaptureSurfaceProps) {
-  const captureGradient = getCaptureNoteGradient({ noteColor });
+  const captureGradient = getCaptureNoteGradient({
+    noteColor,
+    fallbackGradient: colors.gradient ?? null,
+  });
   const usesLightCaptureChrome = colors.captureGlassColorScheme === 'light';
 
   return (

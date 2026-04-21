@@ -34,10 +34,6 @@ import { ENABLE_PHOTO_STICKERS } from '../../constants/experiments';
 import { formatRadiusLabel, NOTE_RADIUS_OPTIONS } from '../../constants/noteRadius';
 import { Layout } from '../../constants/theme';
 import { useReducedMotion } from '../../hooks/useReducedMotion';
-import type { ThemeColors } from '../../hooks/useTheme';
-import {
-  DEFAULT_NOTE_COLOR_ID,
-} from '../../services/noteAppearance';
 import { type NoteStickerPlacement } from '../../services/noteStickers';
 import type { PhotoFilterId } from '../../services/photoFilters';
 import type { DoodleStroke } from '../notes/NoteDoodleCanvas';
@@ -52,7 +48,7 @@ import {
   TextCaptureSurface,
 } from './capture/CaptureCardSections';
 import type { DualCameraPreviewHandle } from './capture/DualCameraPreview';
-import type { CameraUiStage } from './capture/captureShared';
+import type { CameraUiStage, CaptureCardColors } from './capture/captureShared';
 import { CaptureActionRow } from './capture/CaptureActionRow';
 import {
   PhotoCaptureBottomBar,
@@ -141,29 +137,7 @@ interface CaptureCardProps {
   captureScale: SharedValue<number>;
   captureTranslateY: SharedValue<number>;
   isModeSwitchAnimating?: boolean;
-  colors: Pick<
-    ThemeColors,
-    | 'primary'
-    | 'primarySoft'
-    | 'captureButtonBg'
-    | 'card'
-    | 'border'
-    | 'text'
-    | 'secondaryText'
-    | 'captureCardText'
-    | 'captureCardPlaceholder'
-    | 'captureCardBorder'
-    | 'captureGlassFill'
-    | 'captureGlassBorder'
-    | 'captureGlassText'
-    | 'captureGlassIcon'
-    | 'captureGlassPlaceholder'
-    | 'captureGlassColorScheme'
-    | 'captureCameraOverlay'
-    | 'captureCameraOverlayBorder'
-    | 'captureCameraOverlayText'
-    | 'captureFlashOverlay'
-  >;
+  colors: CaptureCardColors;
   t: TFunction;
   noteText: string;
   onChangeNoteText: (nextText: string) => void;
@@ -294,8 +268,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
 }, ref) {
   const reduceMotionEnabled = useReducedMotion();
   const isSharedTarget = shareTarget === 'shared';
-  const effectiveTextModeNoteColor =
-    captureMode === 'text' ? (noteColor ?? DEFAULT_NOTE_COLOR_ID) : noteColor;
+  const effectiveTextModeNoteColor = noteColor;
   const hasLivePhotoMotion = Boolean(capturedPairedVideo);
   const isSaveBusy =
     saving ||
@@ -1147,8 +1120,10 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
     >
       <View>
         <NoteColorPicker
-          selectedColor={effectiveTextModeNoteColor ?? DEFAULT_NOTE_COLOR_ID}
+          selectedColor={effectiveTextModeNoteColor}
           onSelectColor={handleSelectNoteColor}
+          autoLabel={t('capture.noteColorDefault', 'Default')}
+          includeAutoOption
           lockedColorIds={lockedNoteColorIds}
           previewOnlyColorIds={previewOnlyNoteColorIds}
           onLockedColorPress={handlePressLockedNoteColor}

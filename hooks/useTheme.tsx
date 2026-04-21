@@ -1,9 +1,11 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { Appearance, AppState, Platform } from 'react-native';
+import { APP_THEME_VALUES, DEFAULT_APP_THEME, type AppThemeType } from '../constants/appThemes';
 import { NOTE_CARD_GRADIENTS } from '../constants/noteColors';
 import { getPersistentItem, getPersistentItemSync, setPersistentItem } from '../utils/appStorage';
 
 export type ThemeType = 'light' | 'dark' | 'system';
+export type { AppThemeType } from '../constants/appThemes';
 type ResolvedColorScheme = 'light' | 'dark';
 type NativeColorScheme = ReturnType<typeof Appearance.getColorScheme>;
 
@@ -23,7 +25,7 @@ export interface ThemeColors {
     dangerSoft: string;
     onDanger: string;
     success: string;
-    gradient: string[];
+    gradient: [string, string];
     chromeSurface: string;
     chromeBorder: string;
     noticeSurface: string;
@@ -61,13 +63,122 @@ export interface ThemeColors {
 
 interface ThemeContextType {
     theme: ThemeType;
+    appTheme: AppThemeType;
     isDark: boolean;
     setTheme: (theme: ThemeType) => void;
+    setAppTheme: (appTheme: AppThemeType) => void;
     colors: ThemeColors;
     themeReady: boolean;
 }
 
-export const Colors: { light: ThemeColors; dark: ThemeColors } = {
+type ThemePalette = { light: ThemeColors; dark: ThemeColors };
+
+const pastelPalette: ThemePalette = {
+    light: {
+        background: '#FFF6F7',
+        surface: '#FFFDFE',
+        card: '#FFFFFF',
+        text: '#5E5564',
+        secondaryText: '#998EA0',
+        inverseText: '#FFFFFF',
+        primary: '#F3B6C6',
+        primarySoft: 'rgba(243, 182, 198, 0.22)',
+        onPrimary: '#5A4754',
+        accent: '#C7BBF6',
+        border: '#F1E1E8',
+        danger: '#F28C95',
+        dangerSoft: 'rgba(242,140,149,0.16)',
+        onDanger: '#FFFFFF',
+        success: '#8CC9B3',
+        gradient: ['#F8D7E2', '#D4C9FA'],
+        chromeSurface: 'rgba(132,111,130,0.08)',
+        chromeBorder: 'rgba(132,111,130,0.14)',
+        noticeSurface: 'rgba(255,255,255,0.82)',
+        noticeBorder: 'rgba(132,111,130,0.08)',
+        glassOverlaySurface: 'rgba(255,255,255,0.42)',
+        glassOverlayBorder: 'rgba(255,255,255,0.54)',
+        glassBackdrop: 'rgba(255,247,250,0.78)',
+        captureButtonBg: '#5A4754',
+        tabBarBg: 'rgba(255,246,247,0.94)',
+        captureCardText: '#5A4754',
+        captureCardPlaceholder: 'rgba(90,71,84,0.48)',
+        captureCardBorder: 'rgba(137,118,130,0.16)',
+        captureGlassFill: 'rgba(255,250,252,0.68)',
+        captureGlassBorder: 'rgba(255,255,255,0.34)',
+        captureGlassText: '#5E5564',
+        captureGlassIcon: 'rgba(94,85,100,0.54)',
+        captureGlassPlaceholder: 'rgba(94,85,100,0.34)',
+        captureGlassColorScheme: 'light',
+        captureCameraOverlay: 'rgba(90,71,84,0.44)',
+        captureCameraOverlayBorder: 'rgba(255,255,255,0.18)',
+        captureCameraOverlayText: '#FFF8FA',
+        captureFlashOverlay: 'rgba(56,40,51,0.88)',
+        androidTabShellBackground: 'rgba(255,250,252,0.9)',
+        androidTabShellBorder: 'rgba(167,143,160,0.18)',
+        androidTabShellShadow: 'rgba(182,147,165,0.12)',
+        androidTabShellScrim: 'rgba(255,255,255,0.5)',
+        androidTabShellMutedBackground: 'rgba(255,255,255,0.72)',
+        androidTabShellMutedBorder: 'rgba(167,143,160,0.12)',
+        androidTabShellSelectedBackground: 'rgba(255,255,255,0.92)',
+        androidTabShellSelectedBorder: 'rgba(167,143,160,0.12)',
+        androidTabShellSelectedGradient: ['rgba(255,255,255,0.96)', 'rgba(249,240,247,0.9)'],
+        androidTabShellActive: '#7E6573',
+        androidTabShellInactive: '#998EA0',
+    },
+    dark: {
+        background: '#17131C',
+        surface: '#221B28',
+        card: '#2C2433',
+        text: '#FFF4F7',
+        secondaryText: '#C6B8C6',
+        inverseText: '#FFFFFF',
+        primary: '#F1B7C9',
+        primarySoft: 'rgba(241,183,201,0.2)',
+        onPrimary: '#4F3E49',
+        accent: '#C6BCFF',
+        border: '#43364A',
+        danger: '#FF9EAB',
+        dangerSoft: 'rgba(255,158,171,0.18)',
+        onDanger: '#FFFFFF',
+        success: '#93D2BB',
+        gradient: ['#F1B7C9', '#C6BCFF'],
+        chromeSurface: 'rgba(255,244,247,0.08)',
+        chromeBorder: 'rgba(255,244,247,0.14)',
+        noticeSurface: 'rgba(255,244,247,0.07)',
+        noticeBorder: 'rgba(255,244,247,0.1)',
+        glassOverlaySurface: 'rgba(36,29,43,0.5)',
+        glassOverlayBorder: 'rgba(255,244,247,0.18)',
+        glassBackdrop: 'rgba(12,8,16,0.56)',
+        captureButtonBg: '#FFF4F7',
+        tabBarBg: 'rgba(18,14,22,0.92)',
+        captureCardText: '#2C2433',
+        captureCardPlaceholder: 'rgba(44,36,51,0.48)',
+        captureCardBorder: 'rgba(255,244,247,0.16)',
+        captureGlassFill: 'rgba(44,36,51,0.3)',
+        captureGlassBorder: 'rgba(255,244,247,0.18)',
+        captureGlassText: '#FFF4F7',
+        captureGlassIcon: 'rgba(255,244,247,0.78)',
+        captureGlassPlaceholder: 'rgba(255,244,247,0.56)',
+        captureGlassColorScheme: 'dark',
+        captureCameraOverlay: 'rgba(20,14,26,0.7)',
+        captureCameraOverlayBorder: 'rgba(255,244,247,0.16)',
+        captureCameraOverlayText: '#FFF4F7',
+        captureFlashOverlay: 'rgba(0,0,0,0.9)',
+        androidTabShellBackground: 'rgba(39,31,46,0.72)',
+        androidTabShellBorder: 'rgba(255,244,247,0.12)',
+        androidTabShellShadow: 'rgba(0,0,0,0.28)',
+        androidTabShellScrim: 'rgba(39,31,46,0.24)',
+        androidTabShellMutedBackground: 'rgba(255,244,247,0.1)',
+        androidTabShellMutedBorder: 'rgba(255,244,247,0.12)',
+        androidTabShellSelectedBackground: 'rgba(255,244,247,0.22)',
+        androidTabShellSelectedBorder: 'rgba(255,244,247,0.16)',
+        androidTabShellSelectedGradient: ['rgba(255,244,247,0.26)', 'rgba(232,225,255,0.14)'],
+        androidTabShellActive: '#FFF4F7',
+        androidTabShellInactive: 'rgba(255,244,247,0.72)',
+    },
+};
+
+const classicPalette: ThemePalette = {
     light: {
         background: '#F7F2EB',       // Subtle stone tint lifted from the widget, but lighter for app-wide use
         surface: '#FCF9F5',
@@ -172,19 +283,293 @@ export const Colors: { light: ThemeColors; dark: ThemeColors } = {
     },
 };
 
+const peachPalette: ThemePalette = {
+    light: {
+        ...pastelPalette.light,
+        background: '#FFF8F4',
+        surface: '#FFFDFC',
+        text: '#664E49',
+        secondaryText: '#A28A83',
+        primary: '#F4C4A4',
+        primarySoft: 'rgba(244,196,164,0.22)',
+        onPrimary: '#5F4742',
+        accent: '#F0ADC2',
+        border: '#F4E4DC',
+        danger: '#F29A9A',
+        dangerSoft: 'rgba(242,154,154,0.16)',
+        success: '#9BC9B0',
+        gradient: ['#FFD9C6', '#F6BCCB'],
+        chromeSurface: 'rgba(143,114,105,0.08)',
+        chromeBorder: 'rgba(143,114,105,0.14)',
+        noticeBorder: 'rgba(143,114,105,0.08)',
+        glassBackdrop: 'rgba(255,248,244,0.78)',
+        captureButtonBg: '#664E49',
+        tabBarBg: 'rgba(255,248,244,0.94)',
+        captureCardText: '#664E49',
+        captureCardPlaceholder: 'rgba(102,78,73,0.48)',
+        captureCardBorder: 'rgba(160,129,120,0.16)',
+        captureGlassText: '#664E49',
+        captureGlassIcon: 'rgba(102,78,73,0.54)',
+        captureGlassPlaceholder: 'rgba(102,78,73,0.34)',
+        captureCameraOverlay: 'rgba(102,78,73,0.44)',
+        captureCameraOverlayText: '#FFF8F5',
+        androidTabShellBackground: 'rgba(255,251,248,0.9)',
+        androidTabShellBorder: 'rgba(177,145,135,0.18)',
+        androidTabShellShadow: 'rgba(205,159,147,0.12)',
+        androidTabShellMutedBorder: 'rgba(177,145,135,0.12)',
+        androidTabShellSelectedBorder: 'rgba(177,145,135,0.12)',
+        androidTabShellSelectedGradient: ['rgba(255,255,255,0.96)', 'rgba(252,242,239,0.9)'],
+        androidTabShellActive: '#8A665F',
+        androidTabShellInactive: '#A28A83',
+    },
+    dark: {
+        ...pastelPalette.dark,
+        background: '#1B1416',
+        surface: '#261D20',
+        card: '#302528',
+        text: '#FFF4F1',
+        secondaryText: '#D3C0BC',
+        primary: '#F4C4A4',
+        primarySoft: 'rgba(244,196,164,0.2)',
+        onPrimary: '#503C37',
+        accent: '#F0ADC2',
+        border: '#4A3B3D',
+        danger: '#FFB0B0',
+        dangerSoft: 'rgba(255,176,176,0.18)',
+        success: '#9ED1B7',
+        gradient: ['#F4C4A4', '#F0ADC2'],
+        chromeSurface: 'rgba(255,244,241,0.08)',
+        chromeBorder: 'rgba(255,244,241,0.14)',
+        noticeSurface: 'rgba(255,244,241,0.07)',
+        noticeBorder: 'rgba(255,244,241,0.1)',
+        glassOverlayBorder: 'rgba(255,244,241,0.18)',
+        captureButtonBg: '#FFF4F1',
+        captureCardText: '#302528',
+        captureCardPlaceholder: 'rgba(48,37,40,0.48)',
+        captureCardBorder: 'rgba(255,244,241,0.16)',
+        captureGlassText: '#FFF4F1',
+        captureGlassIcon: 'rgba(255,244,241,0.78)',
+        captureGlassPlaceholder: 'rgba(255,244,241,0.56)',
+        captureCameraOverlay: 'rgba(27,20,22,0.7)',
+        captureCameraOverlayBorder: 'rgba(255,244,241,0.16)',
+        captureCameraOverlayText: '#FFF4F1',
+        androidTabShellBackground: 'rgba(46,35,38,0.72)',
+        androidTabShellBorder: 'rgba(255,244,241,0.12)',
+        androidTabShellMutedBackground: 'rgba(255,244,241,0.1)',
+        androidTabShellMutedBorder: 'rgba(255,244,241,0.12)',
+        androidTabShellSelectedBackground: 'rgba(255,244,241,0.22)',
+        androidTabShellSelectedBorder: 'rgba(255,244,241,0.16)',
+        androidTabShellSelectedGradient: ['rgba(255,244,241,0.26)', 'rgba(243,223,232,0.14)'],
+        androidTabShellActive: '#FFF4F1',
+        androidTabShellInactive: 'rgba(255,244,241,0.72)',
+    },
+};
+
+const matchaPalette: ThemePalette = {
+    light: {
+        ...pastelPalette.light,
+        background: '#F7FBF4',
+        surface: '#FEFFFC',
+        text: '#566053',
+        secondaryText: '#8E9A8C',
+        primary: '#BFD8A6',
+        primarySoft: 'rgba(191,216,166,0.22)',
+        onPrimary: '#4B5848',
+        accent: '#A8D9C5',
+        border: '#E4EEDC',
+        danger: '#EEA0A0',
+        dangerSoft: 'rgba(238,160,160,0.16)',
+        success: '#83BEA6',
+        gradient: ['#D8E9C1', '#BEE7D7'],
+        chromeSurface: 'rgba(110,128,107,0.08)',
+        chromeBorder: 'rgba(110,128,107,0.14)',
+        noticeBorder: 'rgba(110,128,107,0.08)',
+        glassBackdrop: 'rgba(247,252,244,0.78)',
+        captureButtonBg: '#4B5848',
+        tabBarBg: 'rgba(247,251,244,0.94)',
+        captureCardText: '#4B5848',
+        captureCardPlaceholder: 'rgba(75,88,72,0.48)',
+        captureCardBorder: 'rgba(126,146,122,0.16)',
+        captureGlassText: '#566053',
+        captureGlassIcon: 'rgba(86,96,83,0.54)',
+        captureGlassPlaceholder: 'rgba(86,96,83,0.34)',
+        captureCameraOverlay: 'rgba(75,88,72,0.44)',
+        captureCameraOverlayText: '#F8FFF5',
+        androidTabShellBackground: 'rgba(251,255,248,0.9)',
+        androidTabShellBorder: 'rgba(126,150,121,0.18)',
+        androidTabShellShadow: 'rgba(141,177,152,0.12)',
+        androidTabShellMutedBorder: 'rgba(126,150,121,0.12)',
+        androidTabShellSelectedBorder: 'rgba(126,150,121,0.12)',
+        androidTabShellSelectedGradient: ['rgba(255,255,255,0.96)', 'rgba(243,250,244,0.9)'],
+        androidTabShellActive: '#64805F',
+        androidTabShellInactive: '#8E9A8C',
+    },
+    dark: {
+        ...pastelPalette.dark,
+        background: '#141916',
+        surface: '#1E2520',
+        card: '#273028',
+        text: '#F4FAF0',
+        secondaryText: '#C1D0C0',
+        primary: '#BFD8A6',
+        primarySoft: 'rgba(191,216,166,0.2)',
+        onPrimary: '#465144',
+        accent: '#A8D9C5',
+        border: '#39463D',
+        danger: '#F2B0B0',
+        dangerSoft: 'rgba(242,176,176,0.18)',
+        success: '#8DC8AF',
+        gradient: ['#BFD8A6', '#A8D9C5'],
+        chromeSurface: 'rgba(244,250,240,0.08)',
+        chromeBorder: 'rgba(244,250,240,0.14)',
+        noticeSurface: 'rgba(244,250,240,0.07)',
+        noticeBorder: 'rgba(244,250,240,0.1)',
+        glassOverlayBorder: 'rgba(244,250,240,0.18)',
+        captureButtonBg: '#F4FAF0',
+        captureCardText: '#273028',
+        captureCardPlaceholder: 'rgba(39,48,40,0.48)',
+        captureCardBorder: 'rgba(244,250,240,0.16)',
+        captureGlassText: '#F4FAF0',
+        captureGlassIcon: 'rgba(244,250,240,0.78)',
+        captureGlassPlaceholder: 'rgba(244,250,240,0.56)',
+        captureCameraOverlay: 'rgba(20,25,22,0.7)',
+        captureCameraOverlayBorder: 'rgba(244,250,240,0.16)',
+        captureCameraOverlayText: '#F4FAF0',
+        androidTabShellBackground: 'rgba(38,47,40,0.72)',
+        androidTabShellBorder: 'rgba(244,250,240,0.12)',
+        androidTabShellMutedBackground: 'rgba(244,250,240,0.1)',
+        androidTabShellMutedBorder: 'rgba(244,250,240,0.12)',
+        androidTabShellSelectedBackground: 'rgba(244,250,240,0.22)',
+        androidTabShellSelectedBorder: 'rgba(244,250,240,0.16)',
+        androidTabShellSelectedGradient: ['rgba(244,250,240,0.26)', 'rgba(226,246,235,0.14)'],
+        androidTabShellActive: '#F4FAF0',
+        androidTabShellInactive: 'rgba(244,250,240,0.72)',
+    },
+};
+
+const berryPalette: ThemePalette = {
+    light: {
+        ...pastelPalette.light,
+        background: '#F7F6FF',
+        surface: '#FEFDFF',
+        text: '#5D5770',
+        secondaryText: '#958FAA',
+        primary: '#C9C2FF',
+        primarySoft: 'rgba(201,194,255,0.22)',
+        onPrimary: '#544F69',
+        accent: '#F0C0E7',
+        border: '#E8E4F7',
+        danger: '#F1A0B6',
+        dangerSoft: 'rgba(241,160,182,0.16)',
+        success: '#8FBCE6',
+        gradient: ['#D9D3FF', '#F3CBE9'],
+        chromeSurface: 'rgba(118,112,148,0.08)',
+        chromeBorder: 'rgba(118,112,148,0.14)',
+        noticeBorder: 'rgba(118,112,148,0.08)',
+        glassBackdrop: 'rgba(247,246,255,0.78)',
+        captureButtonBg: '#544F69',
+        tabBarBg: 'rgba(247,246,255,0.94)',
+        captureCardText: '#544F69',
+        captureCardPlaceholder: 'rgba(84,79,105,0.48)',
+        captureCardBorder: 'rgba(137,130,168,0.16)',
+        captureGlassText: '#5D5770',
+        captureGlassIcon: 'rgba(93,87,112,0.54)',
+        captureGlassPlaceholder: 'rgba(93,87,112,0.34)',
+        captureCameraOverlay: 'rgba(84,79,105,0.44)',
+        captureCameraOverlayText: '#FBF9FF',
+        androidTabShellBackground: 'rgba(252,251,255,0.9)',
+        androidTabShellBorder: 'rgba(146,138,185,0.18)',
+        androidTabShellShadow: 'rgba(162,153,214,0.12)',
+        androidTabShellMutedBorder: 'rgba(146,138,185,0.12)',
+        androidTabShellSelectedBorder: 'rgba(146,138,185,0.12)',
+        androidTabShellSelectedGradient: ['rgba(255,255,255,0.96)', 'rgba(246,242,255,0.9)'],
+        androidTabShellActive: '#706792',
+        androidTabShellInactive: '#958FAA',
+    },
+    dark: {
+        ...pastelPalette.dark,
+        background: '#151521',
+        surface: '#1F2030',
+        card: '#292A3C',
+        text: '#F7F4FF',
+        secondaryText: '#C9C3E0',
+        primary: '#C9C2FF',
+        primarySoft: 'rgba(201,194,255,0.2)',
+        onPrimary: '#4B4761',
+        accent: '#F0C0E7',
+        border: '#393A51',
+        danger: '#FFB0C5',
+        dangerSoft: 'rgba(255,176,197,0.18)',
+        success: '#9BC8F0',
+        gradient: ['#C9C2FF', '#F0C0E7'],
+        chromeSurface: 'rgba(247,244,255,0.08)',
+        chromeBorder: 'rgba(247,244,255,0.14)',
+        noticeSurface: 'rgba(247,244,255,0.07)',
+        noticeBorder: 'rgba(247,244,255,0.1)',
+        glassOverlayBorder: 'rgba(247,244,255,0.18)',
+        captureButtonBg: '#F7F4FF',
+        captureCardText: '#292A3C',
+        captureCardPlaceholder: 'rgba(41,42,60,0.48)',
+        captureCardBorder: 'rgba(247,244,255,0.16)',
+        captureGlassText: '#F7F4FF',
+        captureGlassIcon: 'rgba(247,244,255,0.78)',
+        captureGlassPlaceholder: 'rgba(247,244,255,0.56)',
+        captureCameraOverlay: 'rgba(21,21,33,0.7)',
+        captureCameraOverlayBorder: 'rgba(247,244,255,0.16)',
+        captureCameraOverlayText: '#F7F4FF',
+        androidTabShellBackground: 'rgba(41,42,60,0.72)',
+        androidTabShellBorder: 'rgba(247,244,255,0.12)',
+        androidTabShellMutedBackground: 'rgba(247,244,255,0.1)',
+        androidTabShellMutedBorder: 'rgba(247,244,255,0.12)',
+        androidTabShellSelectedBackground: 'rgba(247,244,255,0.22)',
+        androidTabShellSelectedBorder: 'rgba(247,244,255,0.16)',
+        androidTabShellSelectedGradient: ['rgba(247,244,255,0.26)', 'rgba(240,224,250,0.14)'],
+        androidTabShellActive: '#F7F4FF',
+        androidTabShellInactive: 'rgba(247,244,255,0.72)',
+    },
+};
+
+export const ThemePalettes: Record<AppThemeType, ThemePalette> = {
+    default: classicPalette,
+    peach: peachPalette,
+    matcha: matchaPalette,
+    berry: berryPalette,
+    'cotton-candy': pastelPalette,
+};
+
+// Compatibility export for existing callers that still expect light/dark tokens.
+export const Colors = ThemePalettes[DEFAULT_APP_THEME];
+
 // Compatibility export for existing callers that still read note gradients from the theme module.
 export const CardGradients: [string, string][] = NOTE_CARD_GRADIENTS;
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
 const THEME_STORAGE_KEY = 'settings.theme';
+const APP_THEME_STORAGE_KEY = 'settings.appTheme';
 const VALID_THEMES: ThemeType[] = ['light', 'dark', 'system'];
+const VALID_APP_THEMES: AppThemeType[] = APP_THEME_VALUES;
 
 function normalizeTheme(value: string | null): ThemeType {
     if (value && VALID_THEMES.includes(value as ThemeType)) {
         return value as ThemeType;
     }
     return 'system';
+}
+
+export function normalizeAppTheme(value: string | null): AppThemeType {
+    if (value === 'pastel') {
+        return 'cotton-candy';
+    }
+
+    if (value === 'classic') {
+        return DEFAULT_APP_THEME;
+    }
+
+    if (value && VALID_APP_THEMES.includes(value as AppThemeType)) {
+        return value as AppThemeType;
+    }
+    return DEFAULT_APP_THEME;
 }
 
 function isResolvedColorScheme(colorScheme: NativeColorScheme): colorScheme is ResolvedColorScheme {
@@ -209,6 +594,10 @@ export function resolveThemePreference(
     return theme === 'system' ? systemColorScheme : theme;
 }
 
+export function getThemePalette(appTheme: AppThemeType): ThemePalette {
+    return ThemePalettes[appTheme] ?? ThemePalettes[DEFAULT_APP_THEME];
+}
+
 function syncNativeColorScheme(theme: ThemeType) {
     if (Platform.OS !== 'ios') {
         return;
@@ -223,11 +612,17 @@ function syncNativeColorScheme(theme: ThemeType) {
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
     const initialSavedTheme = getPersistentItemSync(THEME_STORAGE_KEY);
+    const initialSavedAppTheme = getPersistentItemSync(APP_THEME_STORAGE_KEY);
     const [theme, setThemeState] = useState<ThemeType>(() => normalizeTheme(initialSavedTheme ?? null));
+    const [appTheme, setAppThemeState] = useState<AppThemeType>(() =>
+        normalizeAppTheme(initialSavedAppTheme ?? null)
+    );
     const [systemTheme, setSystemTheme] = useState<ResolvedColorScheme>(() =>
         readSystemColorScheme()
     );
-    const [themeReady, setThemeReady] = useState(() => initialSavedTheme !== undefined);
+    const [themeReady, setThemeReady] = useState(
+        () => initialSavedTheme !== undefined && initialSavedAppTheme !== undefined
+    );
 
     useEffect(() => {
         const syncSystemTheme = () => {
@@ -260,13 +655,18 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
         let cancelled = false;
 
-        getPersistentItem(THEME_STORAGE_KEY).then((savedTheme) => {
+        Promise.all([
+            getPersistentItem(THEME_STORAGE_KEY),
+            getPersistentItem(APP_THEME_STORAGE_KEY),
+        ]).then(([savedTheme, savedAppTheme]) => {
             if (cancelled) {
                 return;
             }
 
             const nextTheme = normalizeTheme(savedTheme);
+            const nextAppTheme = normalizeAppTheme(savedAppTheme);
             setThemeState(nextTheme);
+            setAppThemeState(nextAppTheme);
             syncNativeColorScheme(nextTheme);
             setThemeReady(true);
         }).catch(() => {
@@ -289,12 +689,18 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
         await setPersistentItem(THEME_STORAGE_KEY, newTheme);
     };
 
+    const setAppTheme = async (nextAppTheme: AppThemeType) => {
+        setAppThemeState(nextAppTheme);
+        await setPersistentItem(APP_THEME_STORAGE_KEY, nextAppTheme);
+    };
+
     const resolvedTheme = resolveThemePreference(theme, systemTheme);
     const isDark = resolvedTheme === 'dark';
-    const colors = isDark ? Colors.dark : Colors.light;
+    const palette = getThemePalette(appTheme);
+    const colors = isDark ? palette.dark : palette.light;
 
     return (
-        <ThemeContext.Provider value={{ theme, isDark, setTheme, colors, themeReady }}>
+        <ThemeContext.Provider value={{ theme, appTheme, isDark, setTheme, setAppTheme, colors, themeReady }}>
             {children}
         </ThemeContext.Provider>
     );

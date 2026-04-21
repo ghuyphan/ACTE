@@ -5,7 +5,7 @@ import type { TFunction } from 'i18next';
 import { type ComponentProps, type ReactNode } from 'react';
 import { ActivityIndicator, StyleSheet, View, type ViewStyle } from 'react-native';
 import { ENABLE_PHOTO_STICKERS } from '../../../constants/experiments';
-import { DEFAULT_NOTE_COLOR_ID, getCaptureNoteGradient } from '../../../services/noteAppearance';
+import { getCaptureNoteGradient } from '../../../services/noteAppearance';
 import DoodleIcon from '../../ui/DoodleIcon';
 import LivePhotoIcon from '../../ui/LivePhotoIcon';
 import StickerIcon from '../../ui/StickerIcon';
@@ -50,7 +50,7 @@ interface CaptureTextColorButtonProps {
 
 function CaptureTextColorButton({
   colors,
-  noteColor = DEFAULT_NOTE_COLOR_ID,
+  noteColor = null,
   onPress,
   t,
 }: CaptureTextColorButtonProps) {
@@ -80,7 +80,10 @@ function CaptureTextColorButton({
         pointerEvents="none"
       >
         <LinearGradient
-          colors={getCaptureNoteGradient({ noteColor })}
+          colors={getCaptureNoteGradient({
+            noteColor,
+            fallbackGradient: colors.gradient ?? null,
+          })}
           start={{ x: 0.08, y: 0.06 }}
           end={{ x: 0.94, y: 0.94 }}
           style={StyleSheet.absoluteFillObject}

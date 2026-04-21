@@ -335,10 +335,15 @@ export function getCaptureNoteGradient(options?: {
   emoji?: string | null;
   text?: string;
   noteColor?: string | null;
+  fallbackGradient?: readonly [string, string] | null;
 }): GradientPair {
   const selectedGradient = getNoteColorCardGradient(options?.noteColor);
   if (selectedGradient) {
     return selectedGradient;
+  }
+
+  if (options?.fallbackGradient) {
+    return [options.fallbackGradient[0], options.fallbackGradient[1]];
   }
 
   return DEFAULT_CAPTURE_GRADIENT;

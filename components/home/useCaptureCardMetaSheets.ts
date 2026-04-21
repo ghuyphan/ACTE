@@ -1,10 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { DEFAULT_NOTE_COLOR_ID } from '../../services/noteAppearance';
 
 interface UseCaptureCardMetaSheetsOptions {
   captureMode: 'text' | 'camera';
   isSearching: boolean;
-  onChangeNoteColor?: ((nextColor: string) => void) | null;
+  onChangeNoteColor?: ((nextColor: string | null) => void) | null;
   onChangeRadius: (nextRadius: number) => void;
   onPressLockedNoteColor?: ((colorId: string) => void) | null;
   onHaptic: () => void;
@@ -48,7 +47,7 @@ export function useCaptureCardMetaSheets({
       }
 
       onHaptic();
-      onChangeNoteColor(nextColor ?? DEFAULT_NOTE_COLOR_ID);
+      onChangeNoteColor(nextColor);
       setShowNoteColorSheet(false);
     },
     [onChangeNoteColor, onHaptic]

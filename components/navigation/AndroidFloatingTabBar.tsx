@@ -16,10 +16,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import { useSavedNoteRevealUi } from '../../hooks/ui/useSavedNoteRevealUi';
 import { useTheme } from '../../hooks/useTheme';
-import {
-  glassTokens,
-  getGlassSurfacePalette,
-} from '../ui/glassTokens';
+import { glassTokens } from '../ui/glassTokens';
 import {
   requestAndroidTabSearchFocus,
   setAndroidTabSearchQuery,
@@ -272,11 +269,7 @@ export default function AndroidFloatingTabBar({
   navigation,
 }: BottomTabBarProps) {
   const { t } = useTranslation();
-  const { colors, isDark } = useTheme();
-  const glassPalette = getGlassSurfacePalette({
-    isDark,
-    borderColor: colors.androidTabShellBorder,
-  });
+  const { colors } = useTheme();
   const { isSavedNoteRevealActive } = useSavedNoteRevealUi();
   const { width: windowWidth } = useWindowDimensions();
   const insets = useSafeAreaInsets();
@@ -419,23 +412,19 @@ export default function AndroidFloatingTabBar({
   const searchPlaceholder = responsiveMetrics.isCompact
     ? t('tabs.search', 'Search')
     : t('home.searchPlaceholder', 'Search your journal...');
-  const shellBackgroundColor = glassPalette.controlBackgroundColor;
-  const shellBorderColor = glassPalette.controlBorderColor;
-  const selectedShellBackgroundColor = glassPalette.activeControlBackgroundColor;
+  const shellBackgroundColor = colors.androidTabShellBackground;
+  const shellBorderColor = colors.androidTabShellBorder;
+  const selectedShellBackgroundColor = colors.androidTabShellSelectedBackground;
   const focusedSearchBackgroundColor = searchSelected
-    ? glassPalette.fallbackSurfaceColor
-    : shellBackgroundColor;
+    ? colors.androidTabShellSelectedBackground
+    : colors.androidTabShellMutedBackground;
   const focusedSearchBorderColor = searchSelected
-    ? shellBorderColor
-    : shellBorderColor;
+    ? colors.androidTabShellSelectedBorder
+    : colors.androidTabShellMutedBorder;
+  const shellGradientColors: [string, string] = [colors.androidTabShellScrim, 'transparent'];
   const searchShellGradientColors: [string, string] = searchSelected
-    ? [
-        isDark ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.22)',
-        'transparent',
-      ]
-    : isDark
-      ? ['rgba(255,255,255,0.06)', 'rgba(255,255,255,0.01)']
-      : ['rgba(255,255,255,0.14)', 'rgba(255,255,255,0.02)'];
+    ? colors.androidTabShellSelectedGradient
+    : shellGradientColors;
 
   const tabWidth = useMemo(() => {
     if (primaryBarExpandedWidth <= 0 || primaryRoutes.length === 0) {
@@ -660,11 +649,7 @@ export default function AndroidFloatingTabBar({
         >
           <LinearGradient
             pointerEvents="none"
-            colors={
-              isDark
-                ? ['rgba(255,255,255,0.06)', 'rgba(255,255,255,0.01)']
-                : ['rgba(255,255,255,0.14)', 'rgba(255,255,255,0.02)']
-            }
+            colors={shellGradientColors}
             start={{ x: 0.1, y: 0 }}
             end={{ x: 0.9, y: 1 }}
             style={StyleSheet.absoluteFill}
@@ -677,7 +662,7 @@ export default function AndroidFloatingTabBar({
               indicatorAnimatedStyle,
               {
                 backgroundColor: selectedShellBackgroundColor,
-                borderColor: shellBorderColor,
+                borderColor: colors.androidTabShellSelectedBorder,
                 bottom: responsiveMetrics.barContentInset,
                 left: responsiveMetrics.barContentInset,
                 top: responsiveMetrics.barContentInset,
@@ -685,11 +670,7 @@ export default function AndroidFloatingTabBar({
             ]}
           >
             <LinearGradient
-              colors={
-                isDark
-                  ? ['rgba(255,255,255,0.08)', 'rgba(255,255,255,0.02)']
-                  : ['rgba(255,255,255,0.26)', 'rgba(255,255,255,0.08)']
-              }
+              colors={colors.androidTabShellSelectedGradient}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
               style={StyleSheet.absoluteFill}

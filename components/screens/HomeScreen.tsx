@@ -215,7 +215,7 @@ function parsePersistedCaptureDraft(rawValue: string | null): PersistedCaptureDr
       typeof parsed.selectedPhotoFilterId === 'string'
         ? parsed.selectedPhotoFilterId as PhotoFilterId
         : 'original';
-    const noteColor = typeof parsed.noteColor === 'string' ? parsed.noteColor : DEFAULT_NOTE_COLOR_ID;
+    const noteColor = typeof parsed.noteColor === 'string' ? parsed.noteColor : null;
     const captureTarget = parsed.captureTarget === 'shared' ? 'shared' : 'private';
     const selectedSharedAudienceUserId =
       typeof parsed.selectedSharedAudienceUserId === 'string' &&
@@ -340,7 +340,7 @@ export default function HomeScreen() {
   const [isFriendsFilterEnabled, setIsFriendsFilterEnabled] = useState(false);
   const [captureTarget, setCaptureTarget] = useState<'private' | 'shared'>('private');
   const [selectedSharedAudienceUserId, setSelectedSharedAudienceUserId] = useState<string | null>(null);
-  const [noteColor, setNoteColor] = useState<string | null>(DEFAULT_NOTE_COLOR_ID);
+  const [noteColor, setNoteColor] = useState<string | null>(null);
   const [showSharedManageSheet, setShowSharedManageSheet] = useState(false);
   const [savedNoteRevealNote, setSavedNoteRevealNote] = useState<Note | null>(null);
   const [savedNoteRevealToken, setSavedNoteRevealToken] = useState(0);
@@ -730,16 +730,15 @@ export default function HomeScreen() {
     resetCaptureDraft();
     setCaptureTarget('private');
     setSelectedSharedAudienceUserId(null);
-    setNoteColor(DEFAULT_NOTE_COLOR_ID);
+    setNoteColor(null);
     lastFreeNoteColorRef.current = DEFAULT_NOTE_COLOR_ID;
     flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
   }, [clearPersistedCaptureDraft, resetCaptureDraft]);
 
   const handleChangeNoteColor = useCallback((nextColor: string | null) => {
-    const resolvedColor = nextColor ?? DEFAULT_NOTE_COLOR_ID;
-    setNoteColor(resolvedColor);
-    if (!isPreviewablePremiumNoteColor(resolvedColor)) {
-      lastFreeNoteColorRef.current = resolvedColor;
+    setNoteColor(nextColor);
+    if (nextColor && !isPreviewablePremiumNoteColor(nextColor)) {
+      lastFreeNoteColorRef.current = nextColor;
     }
   }, []);
 
@@ -2779,7 +2778,6 @@ export default function HomeScreen() {
       handleCaptureTextEntryFocusChange,
       handleImportMotionClip,
       handleOpenPhotoLibrary,
-      handleImportPhoto,
       handleRequestCameraPermission,
       handleShutterPressIn,
       handleShutterPressOut,

@@ -6,6 +6,7 @@ export type SettingsIconKey =
   | 'notifications'
   | 'plus'
   | 'language'
+  | 'palette'
   | 'theme'
   | 'haptics'
   | 'notes'
@@ -112,6 +113,14 @@ export function buildSettingsSections(model: SettingsScreenModel): {
           title: model.t('settings.language', 'Language'),
           value: model.languageLabel,
           onPress: () => model.setShowLanguage(true),
+        },
+        {
+          key: 'app-theme',
+          icon: 'palette',
+          title: model.t('settings.appTheme', 'App Theme'),
+          subtitle: model.t('settings.appThemeHint', 'Choose the color personality for cards, tabs, and sheets.'),
+          value: model.appThemeLabel,
+          onPress: () => model.setShowAppTheme(true),
         },
         {
           key: 'theme',

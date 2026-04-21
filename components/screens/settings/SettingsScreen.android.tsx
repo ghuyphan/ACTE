@@ -7,6 +7,7 @@ import { useAndroidBottomTabOverlayInset } from '../../../hooks/useAndroidBottom
 import type { ThemeColors } from '../../../hooks/useTheme';
 import AppSheet from '../../sheets/AppSheet';
 import AppSheetAlert from '../../sheets/AppSheetAlert';
+import SettingsAppThemeSheetAndroid from '../../settings/SettingsAppThemeSheet.android';
 import SettingsHapticsSheetAndroid from '../../settings/SettingsHapticsSheet.android';
 import SettingsLanguageSheetAndroid from '../../settings/SettingsLanguageSheet.android';
 import SettingsSyncSheetAndroid from '../../settings/SettingsSyncSheet.android';
@@ -18,7 +19,7 @@ import {
 } from './settingsScreenSections';
 import { useSettingsScreenModel } from './useSettingsScreenModel';
 
-type SheetKey = 'language' | 'theme' | 'haptics' | 'sync' | null;
+type SheetKey = 'language' | 'appTheme' | 'theme' | 'haptics' | 'sync' | null;
 
 function getAndroidIconName(icon: SettingsIconKey): React.ComponentProps<typeof Ionicons>['name'] {
   switch (icon) {
@@ -32,6 +33,8 @@ function getAndroidIconName(icon: SettingsIconKey): React.ComponentProps<typeof 
       return 'sparkles-outline';
     case 'language':
       return 'language-outline';
+    case 'palette':
+      return 'color-palette-outline';
     case 'theme':
       return 'contrast-outline';
     case 'haptics':
@@ -153,7 +156,9 @@ export default function SettingsScreenAndroid() {
   const bottomTabOverlayInset = useAndroidBottomTabOverlayInset();
 
   let sheetContent: React.ReactNode = null;
-  const sheet: SheetKey = model.showTheme
+  const sheet: SheetKey = model.showAppTheme
+    ? 'appTheme'
+    : model.showTheme
     ? 'theme'
     : model.showLanguage
       ? 'language'
@@ -163,7 +168,9 @@ export default function SettingsScreenAndroid() {
           ? 'sync'
           : null;
 
-  if (sheet === 'theme') {
+  if (sheet === 'appTheme') {
+    sheetContent = <SettingsAppThemeSheetAndroid onClose={() => model.setShowAppTheme(false)} />;
+  } else if (sheet === 'theme') {
     sheetContent = <SettingsThemeSheetAndroid onClose={() => model.setShowTheme(false)} />;
   } else if (sheet === 'language') {
     sheetContent = <SettingsLanguageSheetAndroid onClose={() => model.setShowLanguage(false)} />;
@@ -234,6 +241,7 @@ export default function SettingsScreenAndroid() {
       <AppSheet
         visible={sheet !== null}
         onClose={() => {
+          model.setShowAppTheme(false);
           model.setShowTheme(false);
           model.setShowHaptics(false);
           model.setShowLanguage(false);

@@ -15,6 +15,7 @@ import { useHaptics } from '../../../hooks/useHaptics';
 import { useTheme } from '../../../hooks/useTheme';
 import { createLegalLinkActions, getLegalLinkAvailability } from '../shared/legalLinkActions';
 import {
+  getAppThemeLabel,
   getHapticsLabel,
   getLanguageLabel,
   getThemeLabel,
@@ -41,7 +42,7 @@ function formatSyncTimestamp(dateString: string | null) {
 
 export function useSettingsScreenModel() {
   const { t, i18n } = useTranslation();
-  const { theme, colors, isDark } = useTheme();
+  const { theme, appTheme, colors, isDark } = useTheme();
   const { isEnabled: hapticsEnabled } = useHaptics();
   const { isOnline } = useConnectivity();
   const { notes, deleteAllNotes } = useNotes();
@@ -66,6 +67,7 @@ export function useSettingsScreenModel() {
   const legalLinkActions = useMemo(createLegalLinkActions, []);
 
   const [showTheme, setShowTheme] = useState(false);
+  const [showAppTheme, setShowAppTheme] = useState(false);
   const [showLanguage, setShowLanguage] = useState(false);
   const [showHaptics, setShowHaptics] = useState(false);
   const [showSync, setShowSync] = useState(false);
@@ -106,6 +108,7 @@ export function useSettingsScreenModel() {
   }, [isAuthAvailable, openAccountScreen, user]);
 
   const themeLabel = getThemeLabel(theme, t);
+  const appThemeLabel = getAppThemeLabel(appTheme, t);
   const hapticsValue = getHapticsLabel(hapticsEnabled ? 'on' : 'off', t);
   const languageLabel = getLanguageLabel(
     resolveAppLanguageKey(i18n.resolvedLanguage ?? i18n.language)
@@ -306,6 +309,7 @@ export function useSettingsScreenModel() {
     accountHint,
     accountValue,
     appVersion,
+    appThemeLabel,
     alertProps,
     colors,
     hapticsValue,
@@ -323,10 +327,12 @@ export function useSettingsScreenModel() {
     plusValue,
     promptClearAll,
     setShowHaptics,
+    setShowAppTheme,
     setShowLanguage,
     setShowSync,
     setShowTheme,
     showHaptics,
+    showAppTheme,
     showLanguage,
     showSocialPushEntry: Boolean(
       user &&

@@ -18,13 +18,24 @@ describe('noteAppearance', () => {
     );
   });
 
-  it('keeps the capture gradient fixed regardless of note content', () => {
-    expect(getCaptureNoteGradient({ text: 'Just a quiet note' })).toEqual(
-      getCaptureNoteGradient({ text: 'Different note', emoji: '🌿' })
+  it('keeps the capture gradient stable for a given theme fallback regardless of note content', () => {
+    const fallbackGradient: [string, string] = ['#D8E9C1', '#BEE7D7'];
+
+    expect(getCaptureNoteGradient({ text: 'Just a quiet note', fallbackGradient })).toEqual(
+      getCaptureNoteGradient({ text: 'Different note', emoji: '🌿', fallbackGradient })
     );
   });
 
-  it('uses the configured marigold default gradient when no note color is selected', () => {
+  it('uses the provided theme fallback gradient when no note color is selected', () => {
+    expect(
+      getCaptureNoteGradient({
+        text: 'Just a quiet note',
+        fallbackGradient: ['#D9D3FF', '#F3CBE9'],
+      })
+    ).toEqual(['#D9D3FF', '#F3CBE9']);
+  });
+
+  it('keeps the legacy marigold fallback when no theme gradient is provided', () => {
     expect(getCaptureNoteGradient({ text: 'Just a quiet note' })).toEqual(['#F6D365', '#FDA085']);
   });
 

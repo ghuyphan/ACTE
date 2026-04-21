@@ -27,6 +27,7 @@ import { StyleSheet, View } from 'react-native';
 import { Layout } from '../../../constants/theme';
 import AppSheet from '../../sheets/AppSheet';
 import AppSheetAlert from '../../sheets/AppSheetAlert';
+import SettingsAppThemeSheet from '../../settings/SettingsAppThemeSheet';
 import SettingsHapticsSheet from '../../settings/SettingsHapticsSheet';
 import SettingsLanguageSheet from '../../settings/SettingsLanguageSheet';
 import SettingsSyncSheet from '../../settings/SettingsSyncSheet';
@@ -46,6 +47,8 @@ function getIOSSymbolName(icon: SettingsIconKey, isDark: boolean) {
       return 'sparkles';
     case 'language':
       return 'globe';
+    case 'palette':
+      return 'swatchpalette';
     case 'theme':
       return isDark ? 'moon' : 'sun.max';
     case 'haptics':
@@ -232,6 +235,14 @@ export default function SettingsScreenIOS() {
             ) : null}
           </Section>
         </List>
+
+        <AppSheet
+          visible={model.showAppTheme}
+          onClose={() => model.setShowAppTheme(false)}
+          iosContentType="swift-ui"
+        >
+          <SettingsAppThemeSheet />
+        </AppSheet>
 
         <AppSheet
           visible={model.showTheme}

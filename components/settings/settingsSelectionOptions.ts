@@ -1,3 +1,4 @@
+import { APP_THEME_METADATA, APP_THEME_VALUES, type AppThemeType } from '../../constants/appThemes';
 import type { TFunction } from 'i18next';
 import type { AppLanguageCode } from '../../constants/i18n';
 import type { ThemeType } from '../../hooks/useTheme';
@@ -9,6 +10,7 @@ export type SettingsOption<Key extends string> = {
 
 export type HapticsSettingValue = 'on' | 'off';
 export const THEME_SETTING_VALUES: ThemeType[] = ['system', 'light', 'dark'];
+export const APP_THEME_SETTING_VALUES: AppThemeType[] = APP_THEME_VALUES;
 export const LANGUAGE_SETTING_VALUES: AppLanguageCode[] = ['en', 'vi'];
 export const HAPTICS_SETTING_VALUES: HapticsSettingValue[] = ['on', 'off'];
 
@@ -37,6 +39,18 @@ export function getThemeOptions(t: TFunction): SettingsOption<ThemeType>[] {
   return THEME_SETTING_VALUES.map((key) => ({
     key,
     label: getThemeLabel(key, t),
+  }));
+}
+
+export function getAppThemeLabel(appTheme: AppThemeType, t: TFunction): string {
+  const label = APP_THEME_METADATA[appTheme];
+  return t(label.labelKey, label.labelFallback);
+}
+
+export function getAppThemeOptions(t: TFunction): SettingsOption<AppThemeType>[] {
+  return APP_THEME_SETTING_VALUES.map((key) => ({
+    key,
+    label: getAppThemeLabel(key, t),
   }));
 }
 

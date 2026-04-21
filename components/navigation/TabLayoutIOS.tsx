@@ -1,54 +1,36 @@
 import { NativeTabs } from 'expo-router/unstable-native-tabs';
 import { useTranslation } from 'react-i18next';
-import { DynamicColorIOS, Platform } from 'react-native';
-import { Colors, useTheme } from '../../hooks/useTheme';
+import { Platform } from 'react-native';
+import { useTheme } from '../../hooks/useTheme';
 import { isIOS26OrNewer, isOlderIOS } from '../../utils/platform';
 import { getAppTabDefinitions } from './tabConfig';
 
 export default function TabLayoutIOS() {
   const { t } = useTranslation();
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   const tabs = getAppTabDefinitions(t);
   const homeTab = tabs.find((tab) => tab.key === 'index');
   const mapTab = tabs.find((tab) => tab.key === 'map');
   const settingsTab = tabs.find((tab) => tab.key === 'settings');
   const searchTab = tabs.find((tab) => tab.key === 'search');
 
-  const dynamicPrimary =
-    Platform.OS === 'ios'
-      ? DynamicColorIOS({ light: Colors.light.primary, dark: Colors.dark.primary })
-      : colors.primary;
-
-  const dynamicSecondaryText =
-    Platform.OS === 'ios'
-      ? DynamicColorIOS({
-          light: Colors.light.secondaryText,
-          dark: Colors.dark.secondaryText,
-        })
-      : colors.secondaryText;
-
-  const dynamicTabBarBg =
-    Platform.OS === 'ios'
-      ? DynamicColorIOS({ light: Colors.light.tabBarBg, dark: Colors.dark.tabBarBg })
-      : colors.tabBarBg;
-
   return (
     <NativeTabs
       blurEffect={
         Platform.OS === 'ios'
           ? isOlderIOS
-            ? colors === Colors.dark
+            ? isDark
               ? 'dark'
               : 'light'
             : 'systemChromeMaterial'
           : undefined
       }
-      backgroundColor={dynamicTabBarBg}
-      tintColor={dynamicPrimary}
-      iconColor={{ default: dynamicSecondaryText, selected: dynamicPrimary }}
+      backgroundColor={colors.tabBarBg}
+      tintColor={colors.primary}
+      iconColor={{ default: colors.secondaryText, selected: colors.primary }}
       labelStyle={{
-        default: { color: dynamicSecondaryText },
-        selected: { color: dynamicPrimary },
+        default: { color: colors.secondaryText },
+        selected: { color: colors.primary },
       }}
     >
       <NativeTabs.Trigger name="index" disableTransparentOnScrollEdge>

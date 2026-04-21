@@ -237,18 +237,20 @@ export default function MapPreviewCard({
     [commitNearbyFocus, nearbyPageWidth]
   );
 
+  const activeRenderPreviewNoteId = renderData?.activePreviewItem.note.id ?? null;
+
   const handlePreviewItemPress = useCallback(
     (noteId: string) => {
       previewDraggingRef.current = false;
       onInteraction?.();
-      if (renderData?.activePreviewItem.note.id === noteId) {
+      if (activeRenderPreviewNoteId === noteId) {
         onOpenPreviewNote(noteId);
         return;
       }
 
       onFocusPreviewNote(noteId);
     },
-    [onFocusPreviewNote, onInteraction, onOpenPreviewNote, renderData]
+    [activeRenderPreviewNoteId, onFocusPreviewNote, onInteraction, onOpenPreviewNote]
   );
 
   const previewActionLabel = activeNoteReadyToOpen

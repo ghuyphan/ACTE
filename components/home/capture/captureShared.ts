@@ -27,7 +27,9 @@ export type CaptureCardColors = Pick<
   | 'captureCameraOverlayBorder'
   | 'captureCameraOverlayText'
   | 'captureFlashOverlay'
->;
+> & {
+  gradient?: ThemeColors['gradient'];
+};
 
 export type CameraUiStage = 'text' | 'live' | 'capturing' | 'review';
 export type StickerAction = 'remove' | 'motion-lock-toggle' | 'outline-toggle';

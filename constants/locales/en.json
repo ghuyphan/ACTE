@@ -65,7 +65,8 @@
         "switchText": "Text",
         "decorate": "Decorate",
         "noteColor": "Card color",
-        "noteColorHint": "Pick the gradient you want before saving this note.",
+        "noteColorHint": "Pick a fixed gradient, or choose Default to match your app theme.",
+        "noteColorDefault": "Default",
         "details": "Details",
         "restaurantPlaceholder": "Place name (e.g. Phở Hòa)",
         "textPlaceholder": "Note about this place...",
@@ -536,8 +537,15 @@
         "appearance": "Appearance",
         "preferences": "Style & Language",
         "language": "Language",
+        "appTheme": "App Theme",
+        "appThemeHint": "Choose the color personality for cards, tabs, sheets, and the capture card.",
         "theme": "Theme",
         "haptics": "Haptics",
+        "default": "Default",
+        "peach": "Peach Sorbet",
+        "matcha": "Matcha Latte",
+        "berry": "Blueberry Dream",
+        "cottonCandy": "Cotton Candy",
         "system": "System",
         "dark": "Dark",
         "light": "Light",
@@ -984,6 +992,6 @@
         "close": "Close",
         "back": "Back",
         "loading": "Loading",
-        "previewLivePhotoMotion": "Preview Live Photo motion"
+        "previewLivePhotoMotion": "Preview live photo motion"
     }
 }
