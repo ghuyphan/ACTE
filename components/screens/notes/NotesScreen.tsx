@@ -96,6 +96,7 @@ function areStringArraysEqual(left: readonly string[], right: readonly string[])
 }
 
 const GridTile = memo(function GridTile({
+  accessibilityLabel,
   model,
   size,
   gap,
@@ -104,6 +105,7 @@ const GridTile = memo(function GridTile({
   index,
   sharedPhotoUri,
 }: {
+  accessibilityLabel: string;
   model: ReturnType<typeof buildNotesGridTileModels>[number];
   size: number;
   gap: number;
@@ -124,6 +126,8 @@ const GridTile = memo(function GridTile({
   const showPhotoPlaceholder = model.showPhotoPlaceholder && !imageUri;
   return (
     <Pressable
+      accessibilityLabel={accessibilityLabel}
+      accessibilityRole="button"
       onPress={onPress}
       style={({ pressed }) => [
         styles.tilePressable,
@@ -227,6 +231,7 @@ const GridTile = memo(function GridTile({
     </Pressable>
   );
 }, (prevProps, nextProps) => (
+  prevProps.accessibilityLabel === nextProps.accessibilityLabel &&
   prevProps.index === nextProps.index &&
   prevProps.size === nextProps.size &&
   prevProps.gap === nextProps.gap &&
@@ -557,6 +562,17 @@ export default function NotesIndexScreen() {
                       removeClippedSubviews={Platform.OS === 'android'}
                       renderItem={({ item: model, index }) => (
                         <GridTile
+                          accessibilityLabel={
+                            model.item.kind === 'shared-post'
+                              ? t('shared.openSharedDetailsA11y', {
+                                  defaultValue: 'Open shared post details for {{location}}',
+                                  location: model.item.post.placeName ?? t('shared.sharedNow', 'Shared now'),
+                                })
+                              : t('home.openNoteDetailsA11y', {
+                                  defaultValue: 'Open note details for {{location}}',
+                                  location: model.item.note.locationName ?? t('home.unknownLocation', 'Unknown location'),
+                                })
+                          }
                           model={model}
                           index={index}
                           size={gridSize}

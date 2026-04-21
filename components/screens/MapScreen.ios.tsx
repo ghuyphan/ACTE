@@ -44,6 +44,7 @@ import { useSharedFeedStore } from '../../hooks/useSharedFeed';
 import { useTheme } from '../../hooks/useTheme';
 import { useAndroidBottomTabOverlayInset } from '../../hooks/useAndroidBottomTabOverlayInset';
 import type { SharedPost } from '../../services/sharedFeedService';
+import { showAppAlert } from '../../utils/alert';
 import { isOlderIOS } from '../../utils/platform';
 import { scheduleOnIdle } from '../../utils/scheduleOnIdle';
 import { Shadows } from '../../constants/theme';
@@ -491,14 +492,34 @@ export default function MapScreenIOS() {
   }, [clearFilters, revealNotesPreview]);
 
   const goToMyLocation = useCallback(async () => {
-    let target = location;
+    const result = await requestForegroundLocation();
+    const target = result.location;
+
+    if (!target && result.requiresSettings) {
+      await openAppSettings();
+      return;
+    }
+
+    if (!target && result.reason === 'permission_denied') {
+      showAppAlert(
+        t('map.locationPermissionTitle', 'Location access is off'),
+        t(
+          'map.locationPermissionBody',
+          'Allow location access so Noto can center the map on you.'
+        )
+      );
+      return;
+    }
+
     if (!target) {
-      const result = await requestForegroundLocation();
-      target = result.location;
-      if (!target && result.requiresSettings) {
-        await openAppSettings();
-        return;
-      }
+      showAppAlert(
+        t('capture.locationUnavailableTitle', 'Location unavailable'),
+        t(
+          'capture.noLocation',
+          'Noto could not get your current location yet. Please try again in a moment.'
+        )
+      );
+      return;
     }
 
     if (target && mapRef.current) {
@@ -539,11 +560,11 @@ export default function MapScreenIOS() {
     animateToRegion,
     emitLightHaptic,
     initialRegion,
-    location,
     openAppSettings,
     reduceMotionEnabled,
     requestForegroundLocation,
     settledRegion,
+    t,
     visibleRegion,
   ]);
 
@@ -1000,6 +1021,9 @@ export default function MapScreenIOS() {
         style={[styles.fabContainer, recenterFabAnimatedStyle]}
       >
         <Pressable
+          accessibilityHint={t('map.recenterHint', 'Center the map on your current location')}
+          accessibilityLabel={t('map.recenter', 'Recenter map')}
+          accessibilityRole="button"
           testID="map-recenter"
           onPress={goToMyLocation}
           style={({ pressed }) => [{ opacity: pressed ? 0.9 : 1 }]}

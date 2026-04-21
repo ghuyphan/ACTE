@@ -124,6 +124,17 @@ export default function SharedMomentsStrip({
         </View>
 
         <Pressable
+          accessibilityHint={
+            signedIn
+              ? t('shared.sectionTitle', 'Shared with friends')
+              : t('shared.signInBody', 'Connect your account to start a private shared feed with friends.')
+          }
+          accessibilityLabel={
+            signedIn
+              ? t('shared.manageTitle', 'Friends')
+              : t('shared.signInButton', 'Sign in')
+          }
+          accessibilityRole="button"
           onPress={signedIn ? onOpenManage : onOpenAuth}
           style={({ pressed }) => [
             styles.manageButton,
@@ -168,6 +179,15 @@ export default function SharedMomentsStrip({
         {loading ? (
           <View style={styles.loadingState}>
             <ActivityIndicator size="small" color={colors.primary} />
+            <Text style={[styles.loadingTitle, { color: colors.text }]}>
+              {t('home.bootstrapLoadingSharedTitle', 'Loading shared memories')}
+            </Text>
+            <Text style={[styles.loadingBody, { color: colors.secondaryText }]}>
+              {t(
+                'home.bootstrapLoadingSharedBody',
+                'We are checking your shared feed and friend activity before showing Home.'
+              )}
+            </Text>
           </View>
         ) : sharedPosts.length > 0 ? (
           <View style={styles.content}>
@@ -304,6 +324,20 @@ const styles = StyleSheet.create({
     minHeight: 182,
     alignItems: 'center',
     justifyContent: 'center',
+    paddingHorizontal: 24,
+    gap: 10,
+  },
+  loadingTitle: {
+    fontSize: 16,
+    lineHeight: 20,
+    fontWeight: '700',
+  },
+  loadingBody: {
+    ...Typography.body,
+    maxWidth: 220,
+    fontSize: 13,
+    lineHeight: 18,
+    textAlign: 'center',
   },
   content: {
     paddingVertical: 14,

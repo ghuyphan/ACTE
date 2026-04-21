@@ -160,6 +160,7 @@ export function LiveCameraActionBar({
                 ? t('capture.plusLibraryLocked', 'Plus')
                 : t('capture.importPhoto', 'Photos')
             }
+            accessibilityRole="button"
             onPress={onOpenPhotoLibrary}
             disabled={importingPhoto || dualModeEnabled}
             disabledOpacity={0.55}

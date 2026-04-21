@@ -1,6 +1,7 @@
 import { useRootNavigationState, useRouter } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, View } from 'react-native';
+import { ActivityIndicator, Text, View } from 'react-native';
 import {
   getCachedStartupRoute,
   loadStartupRoute,
@@ -9,6 +10,7 @@ import {
 import { useTheme } from '../hooks/useTheme';
 
 export default function Index() {
+  const { t } = useTranslation();
   const { colors } = useTheme();
   const router = useRouter();
   const rootNavigationState = useRootNavigationState();
@@ -45,6 +47,9 @@ export default function Index() {
 
   return (
     <View
+      accessible
+      accessibilityLabel={t('common.loading', 'Loading')}
+      accessibilityState={{ busy: true }}
       style={{
         flex: 1,
         alignItems: 'center',
@@ -53,6 +58,16 @@ export default function Index() {
       }}
     >
       <ActivityIndicator color={colors.primary} size="small" />
+      <Text
+        style={{
+          marginTop: 12,
+          color: colors.secondaryText,
+          fontSize: 14,
+          fontFamily: 'Noto Sans',
+        }}
+      >
+        {t('common.loading', 'Loading')}
+      </Text>
     </View>
   );
 }

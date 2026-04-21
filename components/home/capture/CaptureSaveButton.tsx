@@ -6,6 +6,8 @@ import { CaptureAnimatedPressable } from './CaptureAnimatedPressable';
 import { styles } from './captureCardStyles';
 
 interface CaptureSaveButtonProps {
+  accessibilityHint?: string;
+  accessibilityLabel: string;
   animatedSaveHaloStyle: CaptureCardAnimatedStyle;
   animatedSaveIconStyle: CaptureCardAnimatedStyle;
   animatedSaveInnerStyle: CaptureCardAnimatedStyle;
@@ -20,6 +22,8 @@ interface CaptureSaveButtonProps {
 }
 
 export function CaptureSaveButton({
+  accessibilityHint,
+  accessibilityLabel,
   animatedSaveHaloStyle,
   animatedSaveIconStyle,
   animatedSaveInnerStyle,
@@ -35,6 +39,13 @@ export function CaptureSaveButton({
   return (
     <CaptureAnimatedPressable
       testID="capture-save-button"
+      accessibilityHint={accessibilityHint}
+      accessibilityLabel={accessibilityLabel}
+      accessibilityRole="button"
+      accessibilityState={{
+        busy: isSaveBusy,
+        disabled: isSaveDisabled,
+      }}
       onPress={onSaveNote}
       onPressIn={onPressIn}
       onPressOut={onPressOut}

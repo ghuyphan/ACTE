@@ -58,6 +58,7 @@ function CaptureTextColorButton({
     <CaptureAnimatedPressable
       testID="capture-note-color-trigger"
       accessibilityLabel={t('capture.noteColor', 'Card color')}
+      accessibilityRole="button"
       onPress={onPress}
       style={[
         styles.textBottomToolsButton,
@@ -205,6 +206,8 @@ function CaptureDecorateRail({
         <>
           <CaptureAnimatedPressable
             testID="capture-doodle-undo"
+            accessibilityLabel={t('capture.undoDrawing', 'Undo last stroke')}
+            accessibilityRole="button"
             onPress={handleUndoDoodle}
             disabled={doodleStrokes.length === 0}
             disabledOpacity={0.45}
@@ -220,6 +223,8 @@ function CaptureDecorateRail({
           </CaptureAnimatedPressable>
           <CaptureAnimatedPressable
             testID="capture-doodle-clear"
+            accessibilityLabel={t('capture.clearDrawing', 'Clear drawing')}
+            accessibilityRole="button"
             onPress={handleClearDoodle}
             disabled={doodleStrokes.length === 0}
             disabledOpacity={0.45}
@@ -249,6 +254,8 @@ function CaptureDecorateRail({
         <>
           <CaptureAnimatedPressable
             testID="capture-sticker-import"
+            accessibilityLabel={t('capture.addSticker', 'Add sticker')}
+            accessibilityRole="button"
             onPress={handleShowStickerSourceOptions}
             disabled={importingSticker}
             disabledOpacity={0.45}
@@ -527,11 +534,14 @@ export function PhotoCaptureBottomBar({
         afterToggles={
           <CaptureAnimatedPressable
             testID="capture-live-photo-toggle"
-            accessibilityLabel={
+            accessibilityHint={
               hasLivePhotoMotion
                 ? t('capture.removeLivePhotoMotion', 'Remove live photo motion')
                 : t('capture.addLivePhotoMotion', 'Add live photo motion')
             }
+            accessibilityLabel={t('capture.livePhotoMotionToggle', 'Live photo motion')}
+            accessibilityRole="switch"
+            accessibilityState={{ checked: hasLivePhotoMotion }}
             onPress={hasLivePhotoMotion ? onRemoveMotionClip : onImportMotionClip}
             active={hasLivePhotoMotion}
             activeScale={1.02}

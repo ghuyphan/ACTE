@@ -15,9 +15,12 @@ import {
   font,
   foregroundStyle,
   frame,
+  layoutPriority,
+  lineLimit,
   multilineTextAlignment,
   padding,
   scrollContentBackground,
+  truncationMode,
 } from '@expo/ui/swift-ui/modifiers';
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
@@ -91,16 +94,48 @@ function SettingsRowIOS({
       >
         <SwiftUIImage systemName={getIOSSymbolName(row.icon, isDark)} color={iconColor} size={18} />
       </HStack>
-      <SwiftUIText
-        modifiers={[foregroundStyle(row.destructive ? colors.danger : row.icon === 'plusUnavailable' ? colors.secondaryText : colors.text)]}
+      <VStack
+        alignment="leading"
+        modifiers={[
+          padding({ trailing: 12 }),
+          frame({
+            maxWidth: row.value || row.onPress || row.external ? 220 : 260,
+            alignment: 'leading',
+          }),
+          layoutPriority(1),
+        ]}
       >
-        {row.title}
-      </SwiftUIText>
+        <SwiftUIText
+          modifiers={[
+            foregroundStyle(row.destructive ? colors.danger : row.icon === 'plusUnavailable' ? colors.secondaryText : colors.text),
+            lineLimit(2),
+            truncationMode('tail'),
+          ]}
+        >
+          {row.title}
+        </SwiftUIText>
+        {row.subtitle ? (
+          <SwiftUIText
+            modifiers={[
+              foregroundStyle(colors.secondaryText),
+              font({ size: 13 }),
+              padding({ top: 2 }),
+              lineLimit(2),
+              truncationMode('tail'),
+            ]}
+          >
+            {row.subtitle}
+          </SwiftUIText>
+        ) : null}
+      </VStack>
       <Spacer />
       {row.value ? (
         <SwiftUIText
           modifiers={[
             foregroundStyle(row.destructive ? colors.danger : row.icon === 'plusUnavailable' ? colors.secondaryText : colors.primary),
+            frame({ maxWidth: 140, alignment: 'trailing' }),
+            lineLimit(1),
+            truncationMode('tail'),
             ...(row.onPress || row.external ? [padding({ trailing: 4 })] : []),
           ]}
         >

@@ -254,6 +254,14 @@ export function CaptureActionRow({
         style={styles.belowCardLeadingAction}
       />
       <CaptureSaveButton
+        accessibilityHint={t('capture.saveHint', 'Save this memory to your journal')}
+        accessibilityLabel={
+          isSaveBusy
+            ? t('common.loading', 'Loading')
+            : isSaveSuccessful
+              ? t('capture.savedQuick', 'Saved to your journal')
+              : t('capture.save', 'Save Memory 💛')
+        }
         animatedSaveHaloStyle={animatedSaveHaloStyle}
         animatedSaveIconStyle={animatedSaveIconStyle}
         animatedSaveInnerStyle={animatedSaveInnerStyle}

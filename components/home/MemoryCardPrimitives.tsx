@@ -297,7 +297,14 @@ export function NoteMemoryCard({
     </View>
   );
 
-  const content = (
+  const noteCardAccessibilityLabel = onPress
+    ? t('home.openNoteDetailsA11y', {
+        defaultValue: 'Open note details for {{location}}',
+        location: locationLabel,
+      })
+    : undefined;
+
+  const noteCardBody = (
     <View style={[styles.cardRoot, containerStyle, { width: resolvedCardSize }]}>
       <View style={[styles.noteCardWrapper, { width: resolvedCardSize, height: resolvedCardSize }]}>
         <View style={styles.cardFill}>
@@ -380,21 +387,30 @@ export function NoteMemoryCard({
       </View>
 
       <View style={[styles.metaContainer, { width: resolvedCardSize }]}>
-        <MetadataContainer
-          accessibilityLabel={
-            onPress
-              ? t('home.openNoteDetailsA11y', {
-                  defaultValue: 'Open note details for {{location}}',
-                  location: locationLabel,
-                })
-              : undefined
-          }
-          onPress={onPress}
-        >
+        <MetadataContainer>
           {noteMetadata}
         </MetadataContainer>
       </View>
     </View>
+  );
+
+  const content = (
+    onPress ? (
+      <Pressable
+        accessibilityLabel={noteCardAccessibilityLabel}
+        accessibilityRole="button"
+        hitSlop={8}
+        onPress={onPress}
+        style={({ pressed }) => [
+          styles.noteCardPressable,
+          pressed ? styles.noteCardPressablePressed : null,
+        ]}
+      >
+        {noteCardBody}
+      </Pressable>
+    ) : (
+      noteCardBody
+    )
   );
   return content;
 }
@@ -452,53 +468,69 @@ export function SharedPostMemoryCard({
     </View>
   );
 
+  const sharedCardAccessibilityLabel = onPress
+    ? t('shared.openSharedDetailsA11y', {
+        defaultValue: 'Open shared post details for {{location}}',
+        location: placeLabel,
+      })
+    : undefined;
+
+  const sharedCardBody = (
+    <View style={[styles.sharedCardWrap, { width: resolvedCardSize }]}>
+      <View style={[styles.noteCardWrapper, { width: resolvedCardSize, height: resolvedCardSize }]}>
+        <View style={styles.cardFill}>
+          <SharedPostCardVisual
+            post={post}
+            fallbackText={t('shared.noteFallback', 'Shared note')}
+            isActive={isActive}
+            debugTiltOverride={debugTiltOverride}
+          />
+        </View>
+        {showSharedBadge ? (
+          <View
+            pointerEvents="none"
+            style={[
+              styles.sharedBadge,
+              {
+                backgroundColor: colors.card,
+                borderColor: colors.primarySoft ?? colors.border ?? colors.card,
+              },
+            ]}
+          >
+            <Ionicons name="paper-plane-outline" size={14} color={colors.primary} />
+            <Text style={[styles.sharedBadgeText, { color: colors.primary }]}>
+              {t('shared.cardBadge', 'Shared')}
+            </Text>
+          </View>
+        ) : null}
+      </View>
+
+      <View style={[styles.metaContainer, { width: resolvedCardSize }]}>
+        <MetadataContainer>
+          {sharedMetadata}
+        </MetadataContainer>
+      </View>
+    </View>
+  );
+
   const content = (
     <View style={[styles.cardRoot, containerStyle, { width: resolvedCardSize }]}>
-      <View style={[styles.sharedCardWrap, { width: resolvedCardSize }]}>
-        <View style={[styles.noteCardWrapper, { width: resolvedCardSize, height: resolvedCardSize }]}>
-          <View style={styles.cardFill}>
-            <SharedPostCardVisual
-              post={post}
-              fallbackText={t('shared.noteFallback', 'Shared note')}
-              isActive={isActive}
-              debugTiltOverride={debugTiltOverride}
-            />
-          </View>
-          {showSharedBadge ? (
-            <View
-              pointerEvents="none"
-              style={[
-                styles.sharedBadge,
-                {
-                  backgroundColor: colors.card,
-                  borderColor: colors.primarySoft ?? colors.border ?? colors.card,
-                },
-              ]}
-            >
-              <Ionicons name="paper-plane-outline" size={14} color={colors.primary} />
-              <Text style={[styles.sharedBadgeText, { color: colors.primary }]}>
-                {t('shared.cardBadge', 'Shared')}
-              </Text>
-            </View>
-          ) : null}
-        </View>
-
-        <View style={[styles.metaContainer, { width: resolvedCardSize }]}>
-          <MetadataContainer
-            accessibilityLabel={
-              onPress
-                ? t('shared.openSharedDetailsA11y', {
-                    defaultValue: 'Open shared post details for {{location}}',
-                    location: placeLabel,
-                  })
-                : undefined
-            }
-            onPress={onPress}
-          >
-            {sharedMetadata}
-          </MetadataContainer>
-        </View>
-      </View>
+      {onPress ? (
+        <Pressable
+          accessibilityLabel={sharedCardAccessibilityLabel}
+          accessibilityRole="button"
+          hitSlop={8}
+          onPress={onPress}
+          style={({ pressed }) => [
+            styles.sharedCardPressable,
+            pressed ? styles.sharedCardPressablePressed : null,
+          ]}
+        >
+          {sharedCardBody}
+        </Pressable>
+      ) : (
+        sharedCardBody
+      )}
     </View>
   );
   return content;
@@ -511,6 +543,13 @@ const styles = StyleSheet.create({
   },
   cardFill: {
     flex: 1,
+  },
+  noteCardPressable: {
+    alignSelf: 'center',
+  },
+  noteCardPressablePressed: {
+    opacity: 0.92,
+    transform: [{ scale: 0.992 }],
   },
   noteCardWrapper: {
     alignSelf: 'center',
@@ -589,6 +628,13 @@ const styles = StyleSheet.create({
   },
   sharedCardWrap: {
     alignSelf: 'center',
+  },
+  sharedCardPressable: {
+    alignSelf: 'center',
+  },
+  sharedCardPressablePressed: {
+    opacity: 0.92,
+    transform: [{ scale: 0.992 }],
   },
   sharedBadge: {
     position: 'absolute',

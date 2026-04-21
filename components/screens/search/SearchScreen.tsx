@@ -3,7 +3,7 @@ import { FlashList } from '@shopify/flash-list';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Href, Stack, useRouter } from 'expo-router';
-import { useCallback, useDeferredValue, useEffect, useMemo, useState, useTransition } from 'react';
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   ActivityIndicator,
@@ -49,12 +49,17 @@ export default function SearchScreen() {
   const router = useRouter();
   const [query, setQuery] = useState('');
   const [filteredNotes, setFilteredNotes] = useState<Note[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [resolvedQuery, setResolvedQuery] = useState('');
   const [searchFailed, setSearchFailed] = useState(false);
+  const activeSearchRequestRef = useRef(0);
   const [, startSearchTransition] = useTransition();
   const activeQuery = Platform.OS === 'android' ? androidTabSearchQuery : query;
   const deferredQuery = useDeferredValue(activeQuery);
-  const hasQuery = activeQuery.trim().length > 0;
-  const hasDeferredQuery = deferredQuery.trim().length > 0;
+  const trimmedActiveQuery = activeQuery.trim();
+  const trimmedDeferredQuery = deferredQuery.trim();
+  const hasQuery = trimmedActiveQuery.length > 0;
+  const hasDeferredQuery = trimmedDeferredQuery.length > 0;
   const discoveryNotes = useMemo(() => {
     const favoriteNotes = notes.filter((note) => note.isFavorite).sort(sortNotesByCreatedAt);
     const recentNotes = notes.filter((note) => !note.isFavorite).sort(sortNotesByCreatedAt);
@@ -65,35 +70,48 @@ export default function SearchScreen() {
   useEffect(() => {
     if (!hasQuery) {
       setFilteredNotes([]);
+      setResolvedQuery('');
+      activeSearchRequestRef.current += 1;
+      setIsSearching(false);
       setSearchFailed(false);
       return;
     }
 
-    setFilteredNotes([]);
+    activeSearchRequestRef.current += 1;
+    setIsSearching(true);
     setSearchFailed(false);
   }, [hasQuery, activeQuery]);
 
   useEffect(() => {
     if (!hasDeferredQuery) {
       setFilteredNotes([]);
+      setResolvedQuery('');
+      activeSearchRequestRef.current += 1;
+      setIsSearching(false);
       setSearchFailed(false);
       return;
     }
 
     let cancelled = false;
+    const requestId = activeSearchRequestRef.current;
     setSearchFailed(false);
+    setIsSearching(true);
 
-    void searchNotes(deferredQuery)
+    void searchNotes(trimmedDeferredQuery)
       .then((results) => {
-        if (!cancelled) {
+        if (!cancelled && activeSearchRequestRef.current === requestId) {
           setFilteredNotes(results);
+          setResolvedQuery(trimmedDeferredQuery);
+          setIsSearching(false);
           setSearchFailed(false);
         }
       })
       .catch((error) => {
-        if (!cancelled) {
+        if (!cancelled && activeSearchRequestRef.current === requestId) {
           console.warn('Search query failed:', error);
           setFilteredNotes([]);
+          setResolvedQuery(trimmedDeferredQuery);
+          setIsSearching(false);
           setSearchFailed(true);
         }
       });
@@ -101,10 +119,20 @@ export default function SearchScreen() {
     return () => {
       cancelled = true;
     };
-  }, [deferredQuery, hasDeferredQuery, searchNotes]);
+  }, [hasDeferredQuery, searchNotes, trimmedDeferredQuery]);
 
-  const visibleNotes = hasQuery ? filteredNotes : discoveryNotes;
-  const shouldShowEmptyState = !searchFailed && visibleNotes.length === 0;
+  const visibleNotes =
+    hasQuery
+      ? resolvedQuery === trimmedActiveQuery
+        ? filteredNotes
+        : []
+      : discoveryNotes;
+  const shouldShowSearchingState =
+    hasQuery &&
+    !searchFailed &&
+    (isSearching || resolvedQuery !== trimmedActiveQuery) &&
+    visibleNotes.length === 0;
+  const shouldShowEmptyState = !searchFailed && !shouldShowSearchingState && visibleNotes.length === 0;
 
   const openNote = useCallback(
     (noteId: string) => {
@@ -139,9 +167,18 @@ export default function SearchScreen() {
         noteColor: item.noteColor,
       });
       const createdAt = formatDate(item.createdAt, 'short');
+      const locationLabel = item.locationName ?? t('home.unknownLocation', 'Unknown location');
+      const noteTypeLabel = item.type === 'photo'
+        ? t('map.photoNote', 'Photo Note')
+        : t('map.filterText', 'Text');
 
       return (
         <Pressable
+          accessibilityLabel={t('home.openNoteDetailsA11y', {
+            defaultValue: 'Open note details for {{location}}',
+            location: locationLabel,
+          })}
+          accessibilityRole="button"
           style={styles.resultPress}
           onPress={() => openNote(item.id)}
         >
@@ -190,7 +227,7 @@ export default function SearchScreen() {
 
               <View style={styles.resultCopy}>
                 <Text style={[styles.locationText, { color: colors.text }]} numberOfLines={1}>
-                  {item.locationName ?? t('home.unknownLocation', 'Unknown location')}
+                  {locationLabel}
                 </Text>
                 <Text style={[styles.contentText, { color: colors.secondaryText }]} numberOfLines={3}>
                   {previewText}
@@ -208,7 +245,7 @@ export default function SearchScreen() {
                 color={colors.secondaryText}
               />
               <Text style={[styles.metaText, { color: colors.secondaryText }]}>
-                {item.type === 'photo' ? t('map.photoNote', 'Photo Note') : t('map.filterText', 'Text')}
+                {noteTypeLabel}
               </Text>
             </View>
           </View>
@@ -275,6 +312,34 @@ export default function SearchScreen() {
             </Text>
           </View>
         </Pressable>
+      ) : shouldShowSearchingState ? (
+        <View
+          style={[
+            styles.centerWrap,
+            styles.emptyScreen,
+            {
+              paddingTop: Platform.OS === 'android' ? insets.top + Layout.screenPadding : 10,
+              paddingBottom: insets.bottom + 20 + bottomTabOverlayInset,
+            },
+          ]}
+        >
+          <View
+            accessible
+            accessibilityLabel={t('common.loading', 'Loading')}
+            accessibilityState={{ busy: true }}
+            style={styles.emptyState}
+          >
+            <View style={styles.emptyIconWrap}>
+              <ActivityIndicator size={Platform.OS === 'ios' ? 'small' : 'large'} color={colors.primary} />
+            </View>
+            <Text style={[styles.emptyTitle, { color: colors.text }]}>
+              {t('common.loading', 'Loading')}
+            </Text>
+            <Text style={[styles.emptySubtitle, { color: colors.secondaryText }]}>
+              {t('home.searchPlaceholder', 'Search notes...')}
+            </Text>
+          </View>
+        </View>
       ) : shouldShowEmptyState ? (
         <Pressable
           onPress={dismissKeyboard}
@@ -314,6 +379,27 @@ export default function SearchScreen() {
           getItemType={(item) => item.type}
           drawDistance={440}
           renderItem={renderNote}
+          ListHeaderComponent={
+            hasQuery && isSearching ? (
+              <View
+                accessible
+                accessibilityLabel={t('common.loading', 'Loading')}
+                accessibilityState={{ busy: true }}
+                style={[
+                  styles.searchingBanner,
+                  {
+                    backgroundColor: colors.surface,
+                    borderColor: colors.border,
+                  },
+                ]}
+              >
+                <ActivityIndicator size="small" color={colors.primary} />
+                <Text style={[styles.searchingBannerText, { color: colors.secondaryText }]}>
+                  {t('common.loading', 'Loading')}
+                </Text>
+              </View>
+            ) : null
+          }
           ItemSeparatorComponent={renderSeparator}
           contentInsetAdjustmentBehavior="never"
           automaticallyAdjustContentInsets={false}
@@ -355,6 +441,22 @@ const styles = StyleSheet.create({
   },
   resultSeparator: {
     height: 14,
+  },
+  searchingBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    borderRadius: 14,
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: 14,
+  },
+  searchingBannerText: {
+    fontSize: 13,
+    lineHeight: 18,
+    fontFamily: 'Noto Sans',
+    fontWeight: '600',
   },
   resultTopRow: {
     flexDirection: 'row',

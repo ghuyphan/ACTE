@@ -52,6 +52,8 @@ export const CaptureToggleIconButton = memo(function CaptureToggleIconButton({
   activeTranslateY = -1.5,
   contentActiveScale = 1.06,
   contentActiveTranslateY = -0.5,
+  accessibilityRole = 'button',
+  accessibilityState,
   ...props
 }: CaptureToggleIconButtonProps) {
   const reduceMotionEnabled = useReducedMotion();
@@ -95,6 +97,12 @@ export const CaptureToggleIconButton = memo(function CaptureToggleIconButton({
       active={active}
       activeScale={activeScale}
       activeTranslateY={activeTranslateY}
+      accessibilityRole={accessibilityRole}
+      accessibilityState={{
+        ...accessibilityState,
+        disabled: props.disabled ?? accessibilityState?.disabled,
+        selected: active,
+      }}
       contentActiveScale={contentActiveScale}
       contentActiveTranslateY={contentActiveTranslateY}
       style={[style, animatedButtonStyle]}

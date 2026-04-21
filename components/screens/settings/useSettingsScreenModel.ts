@@ -330,10 +330,7 @@ export function useSettingsScreenModel() {
     showLanguage,
     showSocialPushEntry: Boolean(
       user &&
-      sharedFeedEnabled &&
-      (socialPushStatus === 'denied' ||
-        socialPushStatus === 'blocked' ||
-        socialPushStatus === 'granted')
+      sharedFeedEnabled
     ),
     showSyncEntry: Boolean(user),
     showSync,

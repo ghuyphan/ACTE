@@ -172,7 +172,12 @@ function SavedNotePolaroidReveal({
   }
 
   return (
-    <View pointerEvents="none" style={[styles.overlay, { paddingBottom: bottomPadding }]}>
+    <View
+      accessibilityElementsHidden
+      importantForAccessibility="no-hide-descendants"
+      pointerEvents="none"
+      style={[styles.overlay, { paddingBottom: bottomPadding }]}
+    >
       <Animated.View style={[styles.cardWrap, cardAnimatedStyle]}>
         <View style={styles.cardShadowWrap}>
           <NoteMemoryCard

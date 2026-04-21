@@ -11,14 +11,18 @@ import {
   VStack,
 } from '@expo/ui/swift-ui';
 import {
+  accessibilityLabel,
   backgroundOverlay,
   cornerRadius,
   font,
   foregroundStyle,
   frame,
+  layoutPriority,
+  lineLimit,
   multilineTextAlignment,
   padding,
   scrollContentBackground,
+  truncationMode,
 } from '@expo/ui/swift-ui/modifiers';
 import React from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
@@ -66,7 +70,7 @@ function KeyValueRow({
   row: ProfileRowModel;
 }) {
   const iconColor = row.destructive ? colors.danger : colors.primary;
-  const content = (
+  const rowContent = (
     <HStack>
       <HStack
         modifiers={[
@@ -86,48 +90,95 @@ function KeyValueRow({
           <SwiftUIImage systemName={getIOSSymbolName(row.icon)} color={iconColor} size={14} />
         )}
       </HStack>
-      <SwiftUIText modifiers={[foregroundStyle(row.destructive ? colors.danger : colors.text)]}>
-        {row.title}
-      </SwiftUIText>
+      <VStack
+        alignment="leading"
+        modifiers={[
+          padding({ trailing: 12 }),
+          frame({
+            maxWidth: row.trailingAction ? 176 : row.value ? 188 : 228,
+            alignment: 'leading',
+          }),
+          layoutPriority(1),
+        ]}
+      >
+        <SwiftUIText
+          modifiers={[
+            foregroundStyle(row.destructive ? colors.danger : colors.text),
+            lineLimit(2),
+            truncationMode('tail'),
+          ]}
+        >
+          {row.title}
+        </SwiftUIText>
+        {row.subtitle ? (
+          <SwiftUIText
+            modifiers={[
+              foregroundStyle(colors.secondaryText),
+              font({ size: 13 }),
+              padding({ top: 2 }),
+              lineLimit(2),
+              truncationMode('tail'),
+            ]}
+          >
+            {row.subtitle}
+          </SwiftUIText>
+        ) : null}
+      </VStack>
       <Spacer />
       {row.value ? (
-        <SwiftUIText modifiers={[foregroundStyle(colors.secondaryText), multilineTextAlignment('trailing')]}>
+        <SwiftUIText
+          modifiers={[
+            foregroundStyle(colors.secondaryText),
+            frame({ maxWidth: row.trailingAction ? 120 : 148, alignment: 'trailing' }),
+            lineLimit(1),
+            truncationMode('tail'),
+            multilineTextAlignment('trailing'),
+          ]}
+        >
           {row.value}
         </SwiftUIText>
-      ) : row.onPress ? (
+      ) : null}
+      {row.onPress && !row.loading ? (
         <SwiftUIImage
           systemName="chevron.right"
           color={row.destructive ? colors.danger : colors.secondaryText}
           size={14}
         />
       ) : null}
-      {row.trailingAction ? (
-        <Button onPress={row.trailingAction.onPress}>
-          <HStack
-            modifiers={[
-              frame({ width: 28, height: 28, alignment: 'center' }),
-              backgroundOverlay({
-                color: row.trailingAction.icon === 'check' ? `${colors.primary}18` : 'transparent',
-              }),
-              cornerRadius(8),
-            ]}
-          >
-            <SwiftUIImage
-              systemName={getIOSTrailingActionSymbolName(row.trailingAction.icon)}
-              color={row.trailingAction.icon === 'check' ? colors.primary : colors.secondaryText}
-              size={14}
-            />
-          </HStack>
-        </Button>
-      ) : null}
     </HStack>
   );
 
-  if (!row.onPress) {
-    return content;
+  const mainContent = row.onPress ? <Button onPress={row.onPress}>{rowContent}</Button> : rowContent;
+
+  if (!row.trailingAction) {
+    return mainContent;
   }
 
-  return <Button onPress={row.onPress}>{content}</Button>;
+  return (
+    <HStack>
+      {mainContent}
+      <Button
+        modifiers={[accessibilityLabel(row.trailingAction.accessibilityLabel)]}
+        onPress={row.trailingAction.onPress}
+      >
+        <HStack
+          modifiers={[
+            frame({ width: 36, height: 36, alignment: 'center' }),
+            backgroundOverlay({
+              color: row.trailingAction.icon === 'check' ? `${colors.primary}18` : 'transparent',
+            }),
+            cornerRadius(8),
+          ]}
+        >
+          <SwiftUIImage
+            systemName={getIOSTrailingActionSymbolName(row.trailingAction.icon)}
+            color={row.trailingAction.icon === 'check' ? colors.primary : colors.secondaryText}
+            size={14}
+          />
+        </HStack>
+      </Button>
+    </HStack>
+  );
 }
 
 function MembershipBadge({
