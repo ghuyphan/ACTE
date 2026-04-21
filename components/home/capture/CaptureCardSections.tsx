@@ -615,6 +615,7 @@ export function LiveCameraSurface({
   const handoffInsetIn = reduceMotionEnabled
     ? undefined
     : ZoomIn.springify().damping(18).stiffness(220).mass(0.9);
+  const handoffLiveInsetIn = reduceMotionEnabled ? undefined : FadeIn.duration(120);
   const dualCaptureGuideBackground =
     colors.captureGlassColorScheme === 'light'
       ? 'rgba(255,248,239,0.92)'
@@ -796,38 +797,41 @@ export function LiveCameraSurface({
         <GestureDetector gesture={cameraZoomGesture}>
           <Reanimated.View
             testID="capture-dual-live-inset"
-            entering={handoffInsetIn}
+            entering={handoffLiveInsetIn}
             exiting={handoffFadeOut}
-            style={styles.cameraDualLiveInset}
+            style={styles.cameraDualLiveInsetShell}
             collapsable={false}
           >
-            <Camera
-              key={cameraKey}
-              style={styles.cameraPreview}
-              device={cameraDevice!}
-              isActive={canShowLiveCameraPreview}
-              preview
-              photo
-              video
-              photoQualityBalance="speed"
-              isMirrored={facing === 'front'}
-              zoom={cameraPreviewZoom}
-              resizeMode="cover"
-              androidPreviewViewType="texture-view"
-              ref={cameraRef}
-              onInitialized={handleCameraInitialized}
-              onPreviewStarted={handleCameraPreviewStarted}
-              onError={(error) => {
-                handleCameraStartupFailure(error.message);
-              }}
-            />
-            <LiveCameraFilterOverlay
-              filterId={selectedPhotoFilterId}
-              width={DUAL_CAMERA_INSET_SIZE}
-              height={DUAL_CAMERA_INSET_SIZE}
-              style={styles.cameraPreview}
-            />
-            <View pointerEvents="none" style={styles.cameraDualLiveInsetFrost} />
+            <View style={styles.cameraDualLiveInsetClip}>
+              <Camera
+                key={cameraKey}
+                style={styles.cameraPreview}
+                device={cameraDevice!}
+                isActive={canShowLiveCameraPreview}
+                preview
+                photo
+                video
+                photoQualityBalance="speed"
+                isMirrored={facing === 'front'}
+                zoom={cameraPreviewZoom}
+                resizeMode="cover"
+                androidPreviewViewType="texture-view"
+                ref={cameraRef}
+                onInitialized={handleCameraInitialized}
+                onPreviewStarted={handleCameraPreviewStarted}
+                onError={(error) => {
+                  handleCameraStartupFailure(error.message);
+                }}
+              />
+              <LiveCameraFilterOverlay
+                filterId={selectedPhotoFilterId}
+                width={DUAL_CAMERA_INSET_SIZE}
+                height={DUAL_CAMERA_INSET_SIZE}
+                style={styles.cameraPreview}
+              />
+              <View pointerEvents="none" style={styles.cameraDualLiveInsetFrost} />
+            </View>
+            <View pointerEvents="none" style={styles.cameraDualLiveInsetBorder} />
           </Reanimated.View>
         </GestureDetector>
       ) : null}
