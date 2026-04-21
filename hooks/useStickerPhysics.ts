@@ -125,23 +125,6 @@ const SHAKE_WAKE_FULL = 0.95;
 const GRAVITY_DELTA_WAKE_THRESHOLD = 0.035;
 const GRAVITY_DELTA_WAKE_FULL = 0.22;
 const MOTION_ACTIVITY_DECAY = 0.924;
-const SHAKE_IMPULSE_THRESHOLD = 0.24;
-const SHAKE_IMPULSE_FULL = 1.18;
-const SHAKE_BURST_DECAY = 0.84;
-const SHAKE_BURST_EPSILON = 0.015;
-const SHAKE_BURST_COOLDOWN_MS = 110;
-const SHAKE_RETRIGGER_GAIN = 0.12;
-const SHAKE_DIRECTION_EPSILON = 0.0001;
-const SHAKE_TRANSLATION_ACCELERATION = 3120;
-const SHAKE_ANGULAR_ACCELERATION = 920;
-const SHAKE_STAMP_TRANSLATION_MULTIPLIER = 0.78;
-const SHAKE_STAMP_ANGULAR_MULTIPLIER = 0.24;
-const SHAKE_WATER_TRANSLATION_MULTIPLIER = 0.82;
-const SHAKE_WATER_ANGULAR_MULTIPLIER = 0.74;
-const SHAKE_DEPTH_TRANSLATION_MULTIPLIER = 0.42;
-const SHAKE_DEPTH_FALLBACK_SPREAD = 0.32;
-const SHAKE_POSITION_SPIN_FACTOR = 2.1;
-const SHAKE_DIRECTIONAL_SPIN_FACTOR = 0.18;
 const COLLISION_WAKE_THRESHOLD = 0.12;
 const REST_SNAP_ACTIVITY_THRESHOLD = 0.08;
 const REST_SNAP_DISTANCE = 0.85;
@@ -348,73 +331,6 @@ export function getStickerMotionActivity(
   const decayedActivity = currentActivity * Math.pow(MOTION_ACTIVITY_DECAY, dt * 60);
 
   return clamp(Math.max(wakeSignal, decayedActivity), 0, 1);
-}
-
-export function getShakeImpulseStrength(linearAccelerationMagnitude: number) {
-  'worklet';
-  return normalizeWakeSignal(
-    linearAccelerationMagnitude,
-    SHAKE_IMPULSE_THRESHOLD,
-    SHAKE_IMPULSE_FULL
-  );
-}
-
-export function decayShakeBurstEnergy(currentEnergy: number, dt: number) {
-  'worklet';
-  const decayedEnergy = currentEnergy * Math.pow(SHAKE_BURST_DECAY, dt * 60);
-  return decayedEnergy <= SHAKE_BURST_EPSILON ? 0 : decayedEnergy;
-}
-
-export function getShakeTranslationAcceleration(
-  collisionShape: StickerCollisionShape,
-  motionVariant: StickerMotionVariant
-) {
-  'worklet';
-  let nextAcceleration =
-    motionVariant === 'water'
-      ? SHAKE_TRANSLATION_ACCELERATION * SHAKE_WATER_TRANSLATION_MULTIPLIER
-      : SHAKE_TRANSLATION_ACCELERATION;
-
-  if (collisionShape === 'rect') {
-    nextAcceleration *= SHAKE_STAMP_TRANSLATION_MULTIPLIER;
-  }
-
-  return nextAcceleration;
-}
-
-export function getShakeAngularAcceleration(
-  collisionShape: StickerCollisionShape,
-  motionVariant: StickerMotionVariant
-) {
-  'worklet';
-  let nextAcceleration =
-    motionVariant === 'water'
-      ? SHAKE_ANGULAR_ACCELERATION * SHAKE_WATER_ANGULAR_MULTIPLIER
-      : SHAKE_ANGULAR_ACCELERATION;
-
-  if (collisionShape === 'rect') {
-    nextAcceleration *= SHAKE_STAMP_ANGULAR_MULTIPLIER;
-  }
-
-  return nextAcceleration;
-}
-
-function shouldTriggerShakeBurst(
-  nextStrength: number,
-  currentEnergy: number,
-  elapsedMilliseconds: number,
-  lastTriggerMilliseconds: number
-) {
-  'worklet';
-
-  if (nextStrength <= 0) {
-    return false;
-  }
-
-  return (
-    elapsedMilliseconds - lastTriggerMilliseconds >= SHAKE_BURST_COOLDOWN_MS ||
-    nextStrength >= currentEnergy + SHAKE_RETRIGGER_GAIN
-  );
 }
 
 function clampVelocity(sticker: StickerPhysicsState) {
@@ -649,13 +565,7 @@ export function useStickerPhysics({
     initialized: false,
     x: 0,
     y: 0,
-    z: 0,
   });
-  const shakeDirectionX = useSharedValue(0);
-  const shakeDirectionY = useSharedValue(0);
-  const shakeDepth = useSharedValue(0);
-  const shakeEnergy = useSharedValue(0);
-  const lastShakeTriggerMs = useSharedValue(-SHAKE_BURST_COOLDOWN_MS);
   const hasValidLayout = layout.width > 1 && layout.height > 1;
 
   const descriptors = useMemo<StickerPhysicsDescriptor[]>(
@@ -705,25 +615,9 @@ export function useStickerPhysics({
         initialized: false,
         x: 0,
         y: 0,
-        z: 0,
       };
-      shakeDirectionX.value = 0;
-      shakeDirectionY.value = 0;
-      shakeDepth.value = 0;
-      shakeEnergy.value = 0;
-      lastShakeTriggerMs.value = -SHAKE_BURST_COOLDOWN_MS;
     }
-  }, [
-    activeSharedValue,
-    isActive,
-    lastShakeTriggerMs,
-    motionActivity,
-    previousGravity,
-    shakeDepth,
-    shakeDirectionX,
-    shakeDirectionY,
-    shakeEnergy,
-  ]);
+  }, [activeSharedValue, isActive, motionActivity, previousGravity]);
 
   useEffect(() => {
     const previousStates = physicsState.value;
@@ -772,23 +666,9 @@ export function useStickerPhysics({
       -MAX_SENSOR_COMPONENT,
       MAX_SENSOR_COMPONENT
     );
-    const normalizedGravityZ = clamp(
-      sensorDriven ? sensor.z / 9.81 : 0,
-      -MAX_SENSOR_COMPONENT,
-      MAX_SENSOR_COMPONENT
-    );
     const tiltMagnitude = Math.sqrt(
       normalizedGravityX * normalizedGravityX + normalizedGravityY * normalizedGravityY
     );
-    const linearAccelerationX = sensorDriven ? (accelerometer.x - sensor.x) / 9.81 : 0;
-    const linearAccelerationY = sensorDriven ? -(accelerometer.y - sensor.y) / 9.81 : 0;
-    const linearAccelerationZ = sensorDriven ? (accelerometer.z - sensor.z) / 9.81 : 0;
-    const linearAccelerationMagnitude = Math.hypot(
-      linearAccelerationX,
-      linearAccelerationY,
-      linearAccelerationZ
-    );
-    const planarLinearAccelerationMagnitude = Math.hypot(linearAccelerationX, linearAccelerationY);
     const accelerometerMagnitude = Math.sqrt(
       Math.pow((sensorDriven ? accelerometer.x : 0) / 9.81, 2) +
         Math.pow((sensorDriven ? accelerometer.y : 0) / 9.81, 2) +
@@ -799,15 +679,13 @@ export function useStickerPhysics({
     const gravityDelta = sensorDriven && previousGravityValue.initialized
       ? Math.hypot(
           normalizedGravityX - previousGravityValue.x,
-          normalizedGravityY - previousGravityValue.y,
-          normalizedGravityZ - previousGravityValue.z
+          normalizedGravityY - previousGravityValue.y
         )
       : 0;
     previousGravity.value = {
       initialized: true,
       x: normalizedGravityX,
       y: normalizedGravityY,
-      z: normalizedGravityZ,
     };
     motionActivity.value = getStickerMotionActivity(
       tiltMagnitude,
@@ -817,54 +695,6 @@ export function useStickerPhysics({
       dt
     );
     const motionAmount = motionActivity.value;
-    shakeEnergy.value = decayShakeBurstEnergy(shakeEnergy.value, dt);
-    const elapsedMilliseconds = frameInfo.timeSinceFirstFrame ?? 0;
-    const shakeImpulseStrength = getShakeImpulseStrength(linearAccelerationMagnitude);
-
-    if (
-      sensorDriven &&
-      linearAccelerationMagnitude > SHAKE_DIRECTION_EPSILON &&
-      shouldTriggerShakeBurst(
-        shakeImpulseStrength,
-        shakeEnergy.value,
-        elapsedMilliseconds,
-        lastShakeTriggerMs.value
-      )
-    ) {
-      if (planarLinearAccelerationMagnitude > SHAKE_DIRECTION_EPSILON) {
-        shakeDirectionX.value = linearAccelerationX / planarLinearAccelerationMagnitude;
-        shakeDirectionY.value = linearAccelerationY / planarLinearAccelerationMagnitude;
-      } else {
-        shakeDirectionX.value = 0;
-        shakeDirectionY.value = 0;
-      }
-      shakeDepth.value = clamp(
-        linearAccelerationZ / Math.max(linearAccelerationMagnitude, SHAKE_DIRECTION_EPSILON),
-        -1,
-        1
-      );
-      shakeEnergy.value = Math.max(shakeEnergy.value, shakeImpulseStrength);
-      lastShakeTriggerMs.value = elapsedMilliseconds;
-    }
-
-    const burstEnergy = shakeEnergy.value;
-    const burstDirectionX = burstEnergy > 0 ? shakeDirectionX.value : 0;
-    const burstDirectionY = burstEnergy > 0 ? shakeDirectionY.value : 0;
-    const burstDepth = burstEnergy > 0 ? shakeDepth.value : 0;
-    const baseShakeTranslationAcceleration =
-      burstEnergy > 0
-        ? (motionVariant === 'water'
-            ? SHAKE_TRANSLATION_ACCELERATION * SHAKE_WATER_TRANSLATION_MULTIPLIER
-            : SHAKE_TRANSLATION_ACCELERATION) * burstEnergy
-        : 0;
-    const baseShakeDepthTranslationAcceleration =
-      baseShakeTranslationAcceleration * Math.abs(burstDepth) * SHAKE_DEPTH_TRANSLATION_MULTIPLIER;
-    const baseShakeAngularAcceleration =
-      burstEnergy > 0
-        ? (motionVariant === 'water'
-            ? SHAKE_ANGULAR_ACCELERATION * SHAKE_WATER_ANGULAR_MULTIPLIER
-            : SHAKE_ANGULAR_ACCELERATION) * burstEnergy
-        : 0;
     const flatRestoreFactor = clamp(1 - tiltMagnitude / FLAT_RESTORE_THRESHOLD, 0, 1);
     const settleBoost = 1 + (1 - motionAmount) * RESTORE_SETTLE_BOOST;
     const damping = Math.pow(profile.linearDamping, dt * 60) * (motionAmount < 0.1 ? 0.94 : 1);
@@ -941,37 +771,6 @@ export function useStickerPhysics({
         motionVariant === 'water'
           ? -submergedDepth * (profile.buoyancyStrength / Math.max(layout.height, 1)) * motionAmount
           : 0;
-      const shakeTranslationAcceleration = isStamp
-        ? baseShakeTranslationAcceleration * SHAKE_STAMP_TRANSLATION_MULTIPLIER
-        : baseShakeTranslationAcceleration;
-      const shakeDepthTranslationAcceleration = isStamp
-        ? baseShakeDepthTranslationAcceleration * SHAKE_STAMP_TRANSLATION_MULTIPLIER
-        : baseShakeDepthTranslationAcceleration;
-      const shakeAngularAcceleration = isStamp
-        ? baseShakeAngularAcceleration * SHAKE_STAMP_ANGULAR_MULTIPLIER
-        : baseShakeAngularAcceleration;
-      const centerOffsetX = (sticker.x - layout.width * 0.5) / Math.max(layout.width, 1);
-      const centerOffsetY = (sticker.y - layout.height * 0.5) / Math.max(layout.height, 1);
-      const radialMagnitude = Math.hypot(centerOffsetX, centerOffsetY);
-      const fallbackAngle = index * 1.73 + sticker.anchorX * 0.004 + sticker.anchorY * 0.003;
-      const radialX =
-        radialMagnitude > SHAKE_DIRECTION_EPSILON
-          ? centerOffsetX / radialMagnitude
-          : Math.cos(fallbackAngle) * SHAKE_DEPTH_FALLBACK_SPREAD;
-      const radialY =
-        radialMagnitude > SHAKE_DIRECTION_EPSILON
-          ? centerOffsetY / radialMagnitude
-          : Math.sin(fallbackAngle) * SHAKE_DEPTH_FALLBACK_SPREAD;
-      const depthTranslationX = radialX * shakeDepthTranslationAcceleration * Math.sign(burstDepth);
-      const depthTranslationY = radialY * shakeDepthTranslationAcceleration * Math.sign(burstDepth);
-      const shakeSpinDirection = clamp(
-        (burstDirectionX * centerOffsetY - burstDirectionY * centerOffsetX) *
-          SHAKE_POSITION_SPIN_FACTOR +
-          (burstDirectionX - burstDirectionY) * SHAKE_DIRECTIONAL_SPIN_FACTOR +
-          burstDepth * (centerOffsetX - centerOffsetY),
-        -1,
-        1
-      );
 
       sticker.vx +=
         (
@@ -979,9 +778,7 @@ export function useStickerPhysics({
           crossAxisX +
           orbitalX +
           restoreX +
-          waveX +
-          burstDirectionX * shakeTranslationAcceleration +
-          depthTranslationX
+          waveX
         ) *
         dt;
       sticker.vy +=
@@ -991,9 +788,7 @@ export function useStickerPhysics({
           orbitalY +
           restoreY +
           waveY +
-          buoyancyY +
-          burstDirectionY * shakeTranslationAcceleration +
-          depthTranslationY
+          buoyancyY
         ) * dt;
       sticker.vx *= damping;
       sticker.vy *= damping;
@@ -1013,7 +808,6 @@ export function useStickerPhysics({
         rotationRestoreMultiplier *
         dt;
       sticker.angularVelocity += (orbitalX - orbitalY) * 0.006 * dt * angularResponse;
-      sticker.angularVelocity += shakeSpinDirection * shakeAngularAcceleration * dt;
       sticker.angularVelocity *= stickerAngularDamping;
       clampVelocity(sticker);
       sticker.rotation += sticker.angularVelocity * dt;

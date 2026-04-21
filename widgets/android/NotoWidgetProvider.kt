@@ -38,6 +38,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.io.ByteArrayInputStream
 import java.io.File
+import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.math.cos
 import kotlin.math.floor
@@ -1266,6 +1267,7 @@ class NotoWidgetProvider : AppWidgetProvider() {
       val maxLinesUpperBound = 4
       val minLinesFloor = if (verticalSafeHeightPx > context.dpToPx(if (usesExpandedMetrics) 92f else 74f)) 3 else 2
       val lineExtraPx = context.dpToPx(if (usesExpandedMetrics) 5f else 3f).toFloat()
+      val trimmedLength = bodyText.trim().length
       val largeCanvasBoostSp = if (
         usesExpandedMetrics &&
         (geometry.contentWidthPx >= context.dpToPx(270f) || geometry.contentHeightPx >= context.dpToPx(210f))
@@ -1275,11 +1277,44 @@ class NotoWidgetProvider : AppWidgetProvider() {
         0f
       }
       val candidates = if (noteType == "text") {
-        listOf(
-          scaleWidgetSp(24f) to if (usesExpandedMetrics) 28f else 24f,
-          scaleWidgetSp(18f) to if (usesExpandedMetrics) 24f else 22f,
-          scaleWidgetSp(16f) to if (usesExpandedMetrics) 22f else 20f
-        )
+        if (usesExpandedMetrics) {
+          when {
+            trimmedLength <= 60 -> listOf(
+              scaleWidgetSp(27f + largeCanvasBoostSp) to 30f,
+              scaleWidgetSp(23f + largeCanvasBoostSp) to 30f,
+              scaleWidgetSp(21f + largeCanvasBoostSp) to 28f
+            )
+            trimmedLength <= 120 -> listOf(
+              scaleWidgetSp(23f + largeCanvasBoostSp) to 30f,
+              scaleWidgetSp(21f + largeCanvasBoostSp) to 28f,
+              scaleWidgetSp(19f + largeCanvasBoostSp) to 26f
+            )
+            else -> listOf(
+              scaleWidgetSp(21f + largeCanvasBoostSp) to 28f,
+              scaleWidgetSp(19f + largeCanvasBoostSp) to 26f,
+              scaleWidgetSp(18f + largeCanvasBoostSp) to 24f
+            )
+          }
+        } else {
+          // Keep Android small text-note sizing aligned with the compact iOS widget treatment.
+          when {
+            trimmedLength <= 28 -> listOf(
+              scaleWidgetSp(16.5f) to 14f,
+              scaleWidgetSp(15f) to 14f,
+              scaleWidgetSp(14f) to 12f
+            )
+            trimmedLength <= 64 -> listOf(
+              scaleWidgetSp(15f) to 14f,
+              scaleWidgetSp(14f) to 14f,
+              scaleWidgetSp(13f) to 12f
+            )
+            else -> listOf(
+              scaleWidgetSp(14f) to 14f,
+              scaleWidgetSp(13f) to 12f,
+              scaleWidgetSp(12.5f) to 12f
+            )
+          }
+        }
       } else if (usesExpandedMetrics) {
         listOf(
           scaleWidgetSp(24f + largeCanvasBoostSp) to 26f,
@@ -2470,6 +2505,31 @@ class NotoWidgetProvider : AppWidgetProvider() {
         .orEmpty()
     }
 
+    private fun resolveCurrentWidgetSizeDp(options: Bundle): SizeF? {
+      val sizes = resolveAvailableWidgetSizesDp(options)
+      if (sizes.isEmpty()) {
+        return null
+      }
+
+      val currentWidthDp = options.getInt(
+        AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH,
+        SMALL_WIDGET_TARGET_WIDTH_DP.toInt()
+      ).toFloat()
+      val currentHeightDp = options.getInt(
+        AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT,
+        SMALL_WIDGET_TARGET_HEIGHT_DP.toInt()
+      ).toFloat()
+      val currentAspectRatio = currentWidthDp / max(currentHeightDp, 1f)
+
+      return sizes.minWithOrNull(
+        compareBy<SizeF> { size ->
+          abs(size.width - currentWidthDp) + abs(size.height - currentHeightDp)
+        }.thenBy { size ->
+          abs((size.width / max(size.height, 1f)) - currentAspectRatio)
+        }
+      )
+    }
+
     private fun isMediumSize(width: Float, height: Float): Boolean {
       val aspectRatio = width / max(height, 1f)
       return width >= MEDIUM_WIDGET_MIN_WIDTH_DP &&
@@ -2482,18 +2542,6 @@ class NotoWidgetProvider : AppWidgetProvider() {
     }
 
     private fun resolveWidgetLayoutStage(options: Bundle): WidgetLayoutStage {
-      val exactSizes = resolveAvailableWidgetSizesDp(options)
-
-      if (exactSizes.isNotEmpty()) {
-        if (exactSizes.any { size -> isMediumSize(size.width, size.height) }) {
-          return WidgetLayoutStage.MEDIUM
-        }
-
-        if (exactSizes.any { size -> isLargeSize(size.width, size.height) }) {
-          return WidgetLayoutStage.LARGE
-        }
-      }
-
       val minWidthDp = options.getInt(
         AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH,
         SMALL_WIDGET_TARGET_WIDTH_DP.toInt()
@@ -2502,10 +2550,13 @@ class NotoWidgetProvider : AppWidgetProvider() {
         AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT,
         SMALL_WIDGET_TARGET_HEIGHT_DP.toInt()
       ).toFloat()
+      val currentSize = resolveCurrentWidgetSizeDp(options)
+      val widthDp = currentSize?.width ?: minWidthDp
+      val heightDp = currentSize?.height ?: minHeightDp
 
       return when {
-        isMediumSize(minWidthDp, minHeightDp) -> WidgetLayoutStage.MEDIUM
-        isLargeSize(minWidthDp, minHeightDp) -> WidgetLayoutStage.LARGE
+        isMediumSize(widthDp, heightDp) -> WidgetLayoutStage.MEDIUM
+        isLargeSize(widthDp, heightDp) -> WidgetLayoutStage.LARGE
         else -> WidgetLayoutStage.SMALL
       }
     }
