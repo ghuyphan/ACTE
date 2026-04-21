@@ -137,6 +137,18 @@ async function stageFileForWidgetContainer(options: {
   )}`;
 
   try {
+    if (
+      normalizedFileUri.startsWith(destinationDirectory) &&
+      normalizedFileUri.slice(destinationDirectory.length).startsWith(options.filenamePrefix)
+    ) {
+      await cleanupWidgetFilesWithPrefix(
+        destinationDirectory,
+        options.filenamePrefix,
+        normalizedFileUri
+      );
+      return normalizedFileUri;
+    }
+
     await FileSystem.makeDirectoryAsync(destinationDirectory, { intermediates: true });
 
     const existingInfo = await FileSystem.getInfoAsync(destinationPath);
@@ -231,6 +243,24 @@ async function findExistingWidgetFileInContainer(
   }
 }
 
+async function resolveExistingWidgetImageUri(
+  candidate: WidgetCandidate,
+  assetKind: string,
+  assetId?: string
+) {
+  const filenamePrefix = buildCandidateAssetPrefix(candidate, assetKind, assetId);
+  const existingWidgetUri = await findExistingWidgetFileInContainer(
+    WIDGET_IMAGE_DIRECTORY_NAME,
+    filenamePrefix
+  );
+
+  if (!existingWidgetUri) {
+    return undefined;
+  }
+
+  return getReadablePhotoUri(existingWidgetUri);
+}
+
 export async function getReadablePhotoUri(photoUri: string): Promise<string | undefined> {
   const normalizedPhotoUri = typeof photoUri === 'string' ? photoUri.trim() : '';
   if (!normalizedPhotoUri) {
@@ -268,6 +298,11 @@ async function resolveReadablePhotoUriForCandidate(candidate: WidgetCandidate) {
     }
   }
 
+  const stagedWidgetPhotoUri = await resolveExistingWidgetImageUri(candidate, 'photo');
+  if (stagedWidgetPhotoUri) {
+    return stagedWidgetPhotoUri;
+  }
+
   if (candidate.source !== 'shared' || !candidate.photoPath?.trim()) {
     return undefined;
   }
@@ -296,6 +331,15 @@ async function resolveReadableDualPhotoUriForCandidate(
     if (readableLocalUri) {
       return readableLocalUri;
     }
+  }
+
+  const stagedWidgetUri = await resolveExistingWidgetImageUri(
+    candidate,
+    slot === 'primary' ? 'photo' : 'photo-inset',
+    slot
+  );
+  if (stagedWidgetUri) {
+    return stagedWidgetUri;
   }
 
   const remotePath =

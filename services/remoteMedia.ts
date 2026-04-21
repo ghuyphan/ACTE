@@ -40,6 +40,7 @@ interface UploadStorageOptions {
 
 interface DownloadMediaOptions {
   preferCached?: boolean;
+  preferCachedOnly?: boolean;
 }
 
 type DownloadBuilder = (directory: string, normalizedPath: string, normalizedLocalId: string) => string;
@@ -335,20 +336,38 @@ async function downloadMediaFromStorage(
     }
 
     const destinationPath = buildDestinationPath(directory, normalizedPath, normalizedLocalId);
+    let cachedInfo:
+      | {
+          exists: boolean;
+          isDirectory: boolean;
+        }
+      | null = null;
     if (options.preferCached !== false) {
-      const cachedInfo = await FileSystem.getInfoAsync(destinationPath).catch(() => null);
+      cachedInfo = await FileSystem.getInfoAsync(destinationPath).catch(() => null);
       if (cachedInfo?.exists && !cachedInfo.isDirectory) {
         return destinationPath;
       }
     }
 
-    const signedUrl = await createSignedDownloadUrl(bucket, normalizedPath);
-    if (!signedUrl) {
+    if (options.preferCachedOnly) {
       return null;
     }
 
-    const result = await FileSystem.downloadAsync(signedUrl, destinationPath);
-    return result.uri ?? destinationPath;
+    try {
+      const signedUrl = await createSignedDownloadUrl(bucket, normalizedPath);
+      if (!signedUrl) {
+        return null;
+      }
+
+      const result = await FileSystem.downloadAsync(signedUrl, destinationPath);
+      return result.uri ?? destinationPath;
+    } catch (error) {
+      if (cachedInfo?.exists && !cachedInfo.isDirectory) {
+        return destinationPath;
+      }
+
+      throw error;
+    }
   })().finally(() => {
     inFlightDownloads.delete(cacheKey);
   });

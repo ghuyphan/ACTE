@@ -3,15 +3,20 @@ import { act, fireEvent, render } from '@testing-library/react-native';
 import FriendJoinScreen from '../app/friends/join';
 
 const mockReplace = jest.fn();
+const mockShowAppAlert = jest.fn();
 const mockAuthState = {
   user: null as { uid: string } | null,
   isAuthAvailable: true,
   isReady: true,
 };
+const mockConnectivityState = {
+  isOnline: true,
+};
 const mockUseLocalSearchParams = jest.fn(() => ({
   inviteId: 'invite-1',
   invite: 'token-1',
 }));
+const mockJoinInvite = jest.fn();
 
 jest.mock('expo-router', () => ({
   useRouter: () => ({
@@ -42,6 +47,10 @@ jest.mock('../hooks/useAuth', () => ({
   useAuth: () => mockAuthState,
 }));
 
+jest.mock('../hooks/useConnectivity', () => ({
+  useConnectivity: () => mockConnectivityState,
+}));
+
 jest.mock('../hooks/useSharedFeed', () => ({
   useSharedFeedStore: () => ({
     findFriendByUsername: jest.fn(),
@@ -52,7 +61,7 @@ jest.mock('../hooks/useSharedFeed', () => ({
 jest.mock('../hooks/useFriendInviteJoin', () => ({
   useFriendInviteJoin: () => ({
     joining: false,
-    joinInvite: jest.fn(),
+    joinInvite: (...args: unknown[]) => mockJoinInvite(...args),
   }),
 }));
 
@@ -68,6 +77,12 @@ jest.mock('../hooks/useTheme', () => ({
       border: '#E5E5EA',
     },
   }),
+}));
+
+jest.mock('../services/sharedFeedService', () => ({
+  getSharedFeedErrorMessage: (error: unknown) =>
+    error instanceof Error ? error.message : typeof error === 'string' ? error : 'unknown error',
+  normalizeFriendInviteInput: (value: string) => value.trim(),
 }));
 
 jest.mock('react-i18next', () => ({
@@ -95,16 +110,33 @@ jest.mock('../components/sheets/AppSheetScaffold', () => {
 jest.mock('../components/friends/FriendInviteJoinBody', () => {
   const React = require('react');
   const { Pressable, Text, View } = require('react-native');
-  return function MockFriendInviteJoinBody({ onGoToAuth }: { onGoToAuth: () => void }) {
+  return function MockFriendInviteJoinBody({
+    onGoToAuth,
+    onSearchByUsername,
+    isOnline,
+    user,
+  }: {
+    onGoToAuth: () => void;
+    onSearchByUsername?: () => void;
+    isOnline?: boolean;
+    user?: { uid: string } | null;
+  }) {
     return (
       <View>
         <Pressable testID="friend-sign-in" onPress={onGoToAuth}>
           <Text>Sign in</Text>
         </Pressable>
+        <Pressable testID="friend-search" onPress={onSearchByUsername}>
+          <Text>{user && isOnline === false ? 'offline' : 'search'}</Text>
+        </Pressable>
       </View>
     );
   };
 });
+
+jest.mock('../utils/alert', () => ({
+  showAppAlert: (...args: unknown[]) => mockShowAppAlert(...args),
+}));
 
 describe('FriendJoinScreen', () => {
   beforeEach(() => {
@@ -113,6 +145,7 @@ describe('FriendJoinScreen', () => {
     mockAuthState.user = null;
     mockAuthState.isAuthAvailable = true;
     mockAuthState.isReady = true;
+    mockConnectivityState.isOnline = true;
   });
 
   afterEach(() => {
@@ -148,5 +181,27 @@ describe('FriendJoinScreen', () => {
     });
 
     expect(mockReplace).not.toHaveBeenCalled();
+  });
+
+  it('does not auto-accept invite links while signed-in users are offline', () => {
+    mockAuthState.user = { uid: 'user-1' };
+    mockConnectivityState.isOnline = false;
+
+    const { getByText } = render(<FriendJoinScreen />);
+
+    expect(getByText('offline')).toBeTruthy();
+    expect(mockJoinInvite).not.toHaveBeenCalled();
+  });
+
+  it('shows an offline alert instead of running friend search while offline', () => {
+    mockAuthState.user = { uid: 'user-1' };
+    mockConnectivityState.isOnline = false;
+
+    const { getByTestId } = render(<FriendJoinScreen />);
+
+    fireEvent.press(getByTestId('friend-search'));
+
+    expect(mockShowAppAlert).toHaveBeenCalled();
+    expect(mockJoinInvite).not.toHaveBeenCalled();
   });
 });

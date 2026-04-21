@@ -24,6 +24,12 @@ const mockMarkOnboardingComplete = jest.fn(async () => undefined);
 const mockCompleteOnboardingAndEnterApp = jest.fn(async (complete: (route: string) => void) => {
   complete('/');
 });
+const mockConnectivityState = {
+  status: 'online',
+  isOnline: true,
+  isInternetReachable: true,
+  lastChangedAt: null as string | null,
+};
 
 const mockAuthState = {
   user: null,
@@ -173,10 +179,7 @@ jest.mock('../hooks/useTheme', () => ({
 
 jest.mock('../hooks/useConnectivity', () => ({
   useConnectivity: () => ({
-    status: 'online',
-    isOnline: true,
-    isInternetReachable: true,
-    lastChangedAt: null,
+    ...mockConnectivityState,
   }),
 }));
 
@@ -211,6 +214,10 @@ describe('LoginScreen', () => {
     mockAuthState.isReady = true;
     mockAuthState.isAuthAvailable = true;
     mockAuthState.isGoogleAvailable = true;
+    mockConnectivityState.status = 'online';
+    mockConnectivityState.isOnline = true;
+    mockConnectivityState.isInternetReachable = true;
+    mockConnectivityState.lastChangedAt = null;
   });
 
   afterEach(() => {
@@ -356,6 +363,25 @@ describe('LoginScreen', () => {
     fireEvent.press(getByTestId('auth-form-submit'));
 
     expect(await findByText('Enter a valid email address.')).toBeTruthy();
+    expect(mockSendPasswordReset).not.toHaveBeenCalled();
+  });
+
+  it('blocks keyboard submit when the auth form is offline', () => {
+    const { getByTestId, rerender } = render(<LoginScreen />);
+
+    fireEvent.press(getByTestId('auth-continue-email'));
+    fireEvent.changeText(getByTestId('auth-email-input'), 'user@example.com');
+    fireEvent.changeText(getByTestId('auth-password-input'), 'secret123');
+
+    mockConnectivityState.isOnline = false;
+    mockConnectivityState.isInternetReachable = false;
+    mockConnectivityState.status = 'offline';
+    rerender(<LoginScreen />);
+
+    fireEvent(getByTestId('auth-password-input'), 'submitEditing');
+
+    expect(mockSignInWithEmail).not.toHaveBeenCalled();
+    expect(mockRegisterWithEmail).not.toHaveBeenCalled();
     expect(mockSendPasswordReset).not.toHaveBeenCalled();
   });
 

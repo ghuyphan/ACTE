@@ -178,6 +178,7 @@ import {
   selectWidgetNote,
   updateWidgetData,
 } from '../services/widgetService';
+import { resolveWidgetPhotoProps } from '../services/widget/media';
 import i18n from '../constants/i18n';
 
 let warnSpy: jest.SpyInstance;
@@ -1081,6 +1082,40 @@ describe('widgetService', () => {
     );
     expect(String(entries[0]?.props.props.backgroundImageUrl ?? '')).toContain('shared-dual-photo');
     expect(String(entries[0]?.props.props.dualInsetImageUrl ?? '')).toContain('shared-dual-photo');
+  });
+
+  it('reuses an existing staged shared widget image before downloading remotely', async () => {
+    mockReadDirectoryAsync.mockResolvedValue([
+      'photo-shared-photo-1-abc123.jpg',
+    ]);
+    mockGetInfoAsync.mockImplementation(async (uri: string) => ({
+      exists: uri === 'file:///mock-group/widget-images/photo-shared-photo-1-abc123.jpg',
+      isDirectory: false,
+      uri,
+      size: 1024,
+      modificationTime: 0,
+    }));
+
+    const props = await resolveWidgetPhotoProps({
+      id: 'shared-photo-1',
+      candidateKey: 'shared-photo-1',
+      source: 'shared',
+      noteType: 'photo',
+      photoLocalUri: null,
+      photoPath: 'shared/photo.jpg',
+      isDualCapture: false,
+      createdAt: '2026-03-10T12:00:00.000Z',
+      updatedAt: '2026-03-10T12:00:00.000Z',
+    } as any);
+
+    expect(mockDownloadPhotoFromStorage).not.toHaveBeenCalled();
+    expect(mockCopyAsync).not.toHaveBeenCalled();
+    expect(props).toEqual(
+      expect.objectContaining({
+        backgroundImageUrl: 'file:///mock-group/widget-images/photo-shared-photo-1-abc123.jpg',
+        isDualCapture: false,
+      })
+    );
   });
 
   it('formats localized widget strings inside the payload', async () => {

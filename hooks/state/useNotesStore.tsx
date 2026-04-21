@@ -60,6 +60,7 @@ interface NotesStoreValue {
 
 const NotesStoreContext = createContext<NotesStoreValue | undefined>(undefined);
 const INITIAL_NOTES_BOOTSTRAP_LIMIT = 24;
+const INITIAL_NOTES_LOAD_RETRY_DELAY_MS = 900;
 
 function resolveNotesScope(userUid: string | null | undefined) {
   return typeof userUid === 'string' && userUid.trim() ? userUid.trim() : LOCAL_NOTES_SCOPE;
@@ -75,6 +76,8 @@ function useNotesStoreValue(): NotesStoreValue {
   const activeScopeRevisionRef = useRef(0);
   const refreshRequestIdRef = useRef(0);
   const loadedScopeRef = useRef<string | null>(null);
+  const initialLoadRetryCountRef = useRef(0);
+  const initialLoadRetryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     notesRef.current = notes;
@@ -83,6 +86,13 @@ function useNotesStoreValue(): NotesStoreValue {
   useEffect(() => {
     phaseRef.current = phase;
   }, [phase]);
+
+  const clearInitialLoadRetryTimer = useCallback(() => {
+    if (initialLoadRetryTimerRef.current) {
+      clearTimeout(initialLoadRetryTimerRef.current);
+      initialLoadRetryTimerRef.current = null;
+    }
+  }, []);
 
   const loading = phase === 'bootstrapping' || phase === 'hydrating';
   const initialLoadComplete = phase !== 'bootstrapping';
@@ -186,6 +196,8 @@ function useNotesStoreValue(): NotesStoreValue {
     ) => {
       const scope = options?.scope ?? activeScopeRef.current;
       const requestId = ++refreshRequestIdRef.current;
+      let didSucceed = false;
+      let shouldRetryInitialLoad = false;
 
       try {
         if (showLoading) {
@@ -220,15 +232,41 @@ function useNotesStoreValue(): NotesStoreValue {
         if (options?.syncGeofences) {
           syncGeofencesForNotes('note refresh', allNotes);
         }
+        didSucceed = true;
+        initialLoadRetryCountRef.current = 0;
       } catch (error) {
         console.error('Failed to load notes:', error);
+        if (showLoading) {
+          setPhase('bootstrapping');
+        }
+        if (
+          showLoading &&
+          initialLoadRetryCountRef.current < 1 &&
+          refreshRequestIdRef.current === requestId &&
+          activeScopeRef.current === scope
+        ) {
+          initialLoadRetryCountRef.current += 1;
+          shouldRetryInitialLoad = true;
+        }
       } finally {
-        if (refreshRequestIdRef.current === requestId) {
+        if (refreshRequestIdRef.current === requestId && (didSucceed || !showLoading)) {
           setPhase('ready');
         }
       }
+
+      if (shouldRetryInitialLoad) {
+        clearInitialLoadRetryTimer();
+        initialLoadRetryTimerRef.current = setTimeout(() => {
+          if (activeScopeRef.current !== scope) {
+            return;
+          }
+
+          initialLoadRetryTimerRef.current = null;
+          void refreshNotes(true, options);
+        }, INITIAL_NOTES_LOAD_RETRY_DELAY_MS);
+      }
     },
-    [scheduleWidgetUpdate, syncGeofencesForNotes]
+    [clearInitialLoadRetryTimer, scheduleWidgetUpdate, syncGeofencesForNotes]
   );
 
   useEffect(() => {
@@ -255,6 +293,8 @@ function useNotesStoreValue(): NotesStoreValue {
     }
 
     applyActiveScope(nextScope);
+    clearInitialLoadRetryTimer();
+    initialLoadRetryCountRef.current = 0;
     loadedScopeRef.current = nextScope;
 
     void (async () => {
@@ -286,12 +326,19 @@ function useNotesStoreValue(): NotesStoreValue {
 
     return () => {
       cancelled = true;
+      clearInitialLoadRetryTimer();
       cleanupIdleHandle?.cancel();
       if (cleanupTimeout) {
         clearTimeout(cleanupTimeout);
       }
     };
-  }, [applyActiveScope, authReady, refreshNotes, user?.uid]);
+  }, [applyActiveScope, authReady, clearInitialLoadRetryTimer, refreshNotes, user?.uid]);
+
+  useEffect(() => {
+    return () => {
+      clearInitialLoadRetryTimer();
+    };
+  }, [clearInitialLoadRetryTimer]);
 
   const createNote = useCallback(
     async (input: CreateNoteInput): Promise<Note> => {

@@ -257,20 +257,36 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
           const nextPhotoLocalUri =
             post.photoLocalUri ??
             (post.photoPath
-              ? await downloadPhotoFromStorage(
-                  SHARED_POST_MEDIA_BUCKET,
-                  post.photoPath,
-                  post.id
+              ? await (isOnline
+                  ? downloadPhotoFromStorage(
+                      SHARED_POST_MEDIA_BUCKET,
+                      post.photoPath,
+                      post.id
+                    )
+                  : downloadPhotoFromStorage(
+                      SHARED_POST_MEDIA_BUCKET,
+                      post.photoPath,
+                      post.id,
+                      { preferCachedOnly: true }
+                    )
                 ).catch(() => null)
               : null);
 
           const nextPairedVideoLocalUri =
             post.pairedVideoLocalUri ??
             (post.isLivePhoto && post.pairedVideoPath
-              ? await downloadPairedVideoFromStorage(
-                  SHARED_POST_MEDIA_BUCKET,
-                  post.pairedVideoPath,
-                  `${post.id}-motion`
+              ? await (isOnline
+                  ? downloadPairedVideoFromStorage(
+                      SHARED_POST_MEDIA_BUCKET,
+                      post.pairedVideoPath,
+                      `${post.id}-motion`
+                    )
+                  : downloadPairedVideoFromStorage(
+                      SHARED_POST_MEDIA_BUCKET,
+                      post.pairedVideoPath,
+                      `${post.id}-motion`,
+                      { preferCachedOnly: true }
+                    )
                 ).catch(() => null)
               : null);
 
@@ -805,7 +821,6 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
       activeInvite,
       refreshSharedFeed: refreshAll,
       createFriendInvite: async () => {
-        requireOnline();
         if (activeInviteRef.current) {
           return activeInviteRef.current;
         }
@@ -815,6 +830,7 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
         }
 
         const activeUser = requireUser();
+        requireOnline();
         const sessionId = sharedFeedSessionRef.current;
         const invitePromise = createInvite(activeUser)
           .then((invite) => {

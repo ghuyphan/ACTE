@@ -4,6 +4,14 @@ import { useProfileScreenModel } from '../components/screens/profile/useProfileS
 
 const mockRouterReplace = jest.fn();
 const mockClipboardSetStringAsync = jest.fn(async (_value: string) => undefined);
+const mockShowAppAlert = jest.fn();
+const mockPickCompressedProfileAvatarDataUri = jest.fn(async () => null);
+const mockConnectivityState = {
+  status: 'online',
+  isOnline: true,
+  isInternetReachable: true,
+  lastChangedAt: null as string | null,
+};
 const mockAuthState = {
   user: null as null | {
     id: string;
@@ -44,6 +52,10 @@ jest.mock('react-native-safe-area-context', () => ({
     left: 0,
     right: 0,
   }),
+}));
+
+jest.mock('../hooks/useConnectivity', () => ({
+  useConnectivity: () => mockConnectivityState,
 }));
 
 jest.mock('../hooks/useTheme', () => ({
@@ -93,7 +105,7 @@ jest.mock('../hooks/useHaptics', () => ({
 }));
 
 jest.mock('../services/profileAvatar', () => ({
-  pickCompressedProfileAvatarDataUri: jest.fn(async () => null),
+  pickCompressedProfileAvatarDataUri: () => mockPickCompressedProfileAvatarDataUri(),
 }));
 
 jest.mock('../services/publicProfileService', () => ({
@@ -102,7 +114,7 @@ jest.mock('../services/publicProfileService', () => ({
 }));
 
 jest.mock('../utils/alert', () => ({
-  showAppAlert: jest.fn(),
+  showAppAlert: (...args: unknown[]) => mockShowAppAlert(...args),
 }));
 
 jest.mock('../services/legalLinks', () => ({
@@ -119,6 +131,10 @@ describe('useProfileScreenModel', () => {
     jest.clearAllMocks();
     mockAuthState.user = null;
     mockAuthState.isAuthAvailable = true;
+    mockConnectivityState.status = 'online';
+    mockConnectivityState.isOnline = true;
+    mockConnectivityState.isInternetReachable = true;
+    mockConnectivityState.lastChangedAt = null;
   });
 
   afterEach(() => {
@@ -207,5 +223,91 @@ describe('useProfileScreenModel', () => {
     });
     expect(usernameRow?.onPress).toBe(result.current.openUsernameEditor);
     expect(emailRow?.value).toBe('huy@example.com');
+  });
+
+  it('shows an offline alert before saving a username change', async () => {
+    mockConnectivityState.isOnline = false;
+    mockConnectivityState.isInternetReachable = false;
+    mockConnectivityState.status = 'offline';
+    mockAuthState.user = {
+      id: 'user-1',
+      uid: 'user-1',
+      displayName: 'Huy',
+      username: null,
+      usernameSetAt: null,
+      email: 'huy@example.com',
+      photoURL: null,
+    };
+
+    const { result } = renderHook(() => useProfileScreenModel());
+
+    act(() => {
+      result.current.setUsernameDraft('huyphan');
+    });
+
+    await act(async () => {
+      await result.current.saveUsername();
+    });
+
+    expect(mockAuthState.updateUsername).not.toHaveBeenCalled();
+    expect(mockShowAppAlert).toHaveBeenCalledWith(
+      'You are offline',
+      'This action needs a connection. Please try again when you are back online.'
+    );
+  });
+
+  it('shows an offline alert before opening the avatar picker', async () => {
+    mockConnectivityState.isOnline = false;
+    mockConnectivityState.isInternetReachable = false;
+    mockConnectivityState.status = 'offline';
+    mockAuthState.user = {
+      id: 'user-1',
+      uid: 'user-1',
+      displayName: 'Huy',
+      username: 'huy',
+      usernameSetAt: null,
+      email: 'huy@example.com',
+      photoURL: null,
+    };
+
+    const { result } = renderHook(() => useProfileScreenModel());
+
+    await act(async () => {
+      await result.current.handleChangeAvatar();
+    });
+
+    expect(mockPickCompressedProfileAvatarDataUri).not.toHaveBeenCalled();
+    expect(mockAuthState.updateAvatar).not.toHaveBeenCalled();
+    expect(mockShowAppAlert).toHaveBeenCalledWith(
+      'You are offline',
+      'This action needs a connection. Please try again when you are back online.'
+    );
+  });
+
+  it('shows an offline alert before starting delete-account confirmation', () => {
+    mockConnectivityState.isOnline = false;
+    mockConnectivityState.isInternetReachable = false;
+    mockConnectivityState.status = 'offline';
+    mockAuthState.user = {
+      id: 'user-1',
+      uid: 'user-1',
+      displayName: 'Huy',
+      username: 'huy',
+      usernameSetAt: null,
+      email: 'huy@example.com',
+      photoURL: null,
+    };
+
+    const { result } = renderHook(() => useProfileScreenModel());
+
+    act(() => {
+      result.current.handleDeleteAccount();
+    });
+
+    expect(mockAuthState.deleteAccount).not.toHaveBeenCalled();
+    expect(mockShowAppAlert).toHaveBeenCalledWith(
+      'You are offline',
+      'This action needs a connection. Please try again when you are back online.'
+    );
   });
 });

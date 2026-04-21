@@ -255,6 +255,52 @@ describe('useNotesStore', () => {
     });
   });
 
+  it('retries the initial note hydration after a transient load failure instead of marking ready early', async () => {
+    jest.useFakeTimers();
+    const loadError = new Error('sqlite busy');
+    mockNotesDb = [
+      {
+        id: 'note-1',
+        type: 'text',
+        content: 'Recovered note',
+        locationName: 'District 1',
+        latitude: 10.7,
+        longitude: 106.6,
+        radius: 150,
+        isFavorite: false,
+        createdAt: '2026-04-01T00:00:00.000Z',
+        updatedAt: null,
+      },
+    ];
+    mockGetAllNotesForScope
+      .mockRejectedValueOnce(loadError)
+      .mockResolvedValueOnce([...mockNotesDb]);
+
+    const { result, unmount } = renderHook(() => useNotesStore(), { wrapper: TestWrapper });
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(result.current.loading).toBe(true);
+    expect(result.current.initialLoadComplete).toBe(false);
+
+    await act(async () => {
+      jest.advanceTimersByTime(900);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+      expect(result.current.notes).toHaveLength(1);
+    });
+
+    unmount();
+    jest.useRealTimers();
+  });
+
   it('does not fail note creation when the skip-enter flag is still pending', async () => {
     const deferred = createDeferred<void>();
     mockSkipImmediateReminderForNewNote.mockImplementation(() => deferred.promise);

@@ -1045,7 +1045,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             // Ignore Google sign-out failures after the account is already deleted.
           }
 
-          await supabase.auth.signOut().catch(() => undefined);
+          await supabase.auth.signOut({ scope: 'local' }).catch(() => undefined);
           await unregisterCurrentSocialPushToken().catch(() => undefined);
           await clearAuthenticatedUserState(user.uid, setUser, invalidateAuthRequests);
           await purgeAuthenticatedUserState(user.uid);
@@ -1067,7 +1067,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         try {
           if (supabase) {
-            const { error } = await supabase.auth.signOut();
+            const { error } = await supabase.auth.signOut({ scope: 'local' });
             if (error) {
               throw error;
             }

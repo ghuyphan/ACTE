@@ -153,7 +153,7 @@ const mockResetPasswordForEmail = jest.fn(async (_email?: string, _options?: unk
 
   return { error: null };
 });
-const mockSupabaseSignOut = jest.fn<Promise<{ error: Error | null }>, []>(
+const mockSupabaseSignOut = jest.fn<Promise<{ error: Error | null }>, [unknown?]>(
   async () => ({ error: null })
 );
 const mockInvokeFunction = jest.fn<
@@ -239,7 +239,7 @@ const mockSupabaseClient = {
     signUp: (input: { email: string; password: string; options?: { data?: Record<string, unknown> } }) =>
       mockSignUp(input),
     resetPasswordForEmail: (email: string, options: unknown) => mockResetPasswordForEmail(email, options),
-    signOut: () => mockSupabaseSignOut(),
+    signOut: (options?: unknown) => mockSupabaseSignOut(options),
   },
   functions: {
     invoke: (name: string, input: unknown) => mockInvokeFunction(name, input),
@@ -663,7 +663,7 @@ describe('useAuth', () => {
     });
 
     expect(mockUnregisterCurrentSocialPushToken).toHaveBeenCalled();
-    expect(mockSupabaseSignOut).toHaveBeenCalled();
+    expect(mockSupabaseSignOut).toHaveBeenCalledWith({ scope: 'local' });
     expect(mockPurgeLocalAccountScope).not.toHaveBeenCalled();
     expect(mockSetActiveNotesScope).toHaveBeenLastCalledWith('__local__');
     expect(hook.result.current.user).toBeNull();
@@ -775,11 +775,8 @@ describe('useAuth', () => {
     expect(mockSetActiveNotesScope).not.toHaveBeenCalledWith('user-42');
   });
 
-  it('keeps the current auth state intact when Supabase sign-out fails', async () => {
+  it('signs out locally without requiring a networked global logout', async () => {
     mockAuthState.initialSession = buildSession();
-    mockSupabaseSignOut.mockResolvedValueOnce({
-      error: new Error('network down'),
-    });
 
     const hook = renderHook(() => useAuth(), { wrapper });
 
@@ -788,21 +785,16 @@ describe('useAuth', () => {
       expect(hook.result.current.user?.uid).toBe('user-1');
     });
 
-    let caughtError: unknown = null;
     await act(async () => {
-      try {
-        await hook.result.current.signOut();
-      } catch (error) {
-        caughtError = error;
-      }
+      await hook.result.current.signOut();
     });
 
-    expect(caughtError).toEqual(expect.objectContaining({ message: 'network down' }));
-    expect(mockUnregisterCurrentSocialPushToken).not.toHaveBeenCalled();
-    expect(mockClearSharedFeedCache).not.toHaveBeenCalled();
+    expect(mockSupabaseSignOut).toHaveBeenCalledWith({ scope: 'local' });
+    expect(mockUnregisterCurrentSocialPushToken).toHaveBeenCalled();
+    expect(mockClearSharedFeedCache).toHaveBeenCalledWith('user-1');
     expect(mockPurgeLocalAccountScope).not.toHaveBeenCalled();
-    expect(mockSetActiveNotesScope).not.toHaveBeenLastCalledWith('__local__');
-    expect(hook.result.current.user?.uid).toBe('user-1');
+    expect(mockSetActiveNotesScope).toHaveBeenLastCalledWith('__local__');
+    expect(hook.result.current.user).toBeNull();
   });
 
   it('retries the initial session bootstrap once before falling back to signed-out mode', async () => {

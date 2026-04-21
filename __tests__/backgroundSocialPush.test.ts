@@ -4,6 +4,7 @@ const mockIsTaskRegisteredAsync = jest.fn();
 const mockRefreshSharedFeed = jest.fn();
 const mockUpdateWidgetData = jest.fn();
 const mockGetSupabaseUser = jest.fn();
+const mockGetCachedSharedFeedSnapshot = jest.fn();
 
 (globalThis as any).__mockSocialPushTaskHandler = null;
 
@@ -39,6 +40,10 @@ jest.mock('../services/sharedFeedService', () => ({
   refreshSharedFeed: (...args: unknown[]) => mockRefreshSharedFeed(...args),
 }));
 
+jest.mock('../services/sharedFeedCache', () => ({
+  getCachedSharedFeedSnapshot: (...args: unknown[]) => mockGetCachedSharedFeedSnapshot(...args),
+}));
+
 jest.mock('../services/widgetService', () => ({
   updateWidgetData: (...args: unknown[]) => mockUpdateWidgetData(...args),
 }));
@@ -57,6 +62,17 @@ beforeEach(() => {
   jest.clearAllMocks();
   mockIsTaskRegisteredAsync.mockResolvedValue(false);
   mockGetSupabaseUser.mockResolvedValue({ id: 'me', uid: 'me' });
+  mockGetCachedSharedFeedSnapshot.mockResolvedValue({
+    friends: [],
+    activeInvite: null,
+    sharedPosts: [
+      {
+        id: 'shared-1',
+        authorUid: 'friend-1',
+      },
+    ],
+    lastUpdatedAt: '2026-04-20T00:00:00.000Z',
+  });
   mockRefreshSharedFeed.mockResolvedValue({
     friends: [],
     activeInvite: null,
@@ -120,6 +136,31 @@ describe('backgroundSocialPush', () => {
     expect(mockRefreshSharedFeed).not.toHaveBeenCalled();
     expect(mockUpdateWidgetData).not.toHaveBeenCalled();
     expect(mockScheduleNotificationAsync).not.toHaveBeenCalled();
+  });
+
+  it('falls back to cached shared feed data when refresh is unavailable', async () => {
+    mockRefreshSharedFeed.mockRejectedValueOnce(new Error('offline'));
+
+    const result = await handleSocialPushNotificationTask({
+      notification: null,
+      data: {
+        notificationType: 'shared-post',
+        sharedPostId: 'shared-1',
+        route: '/shared/shared-1',
+        notificationTitle: 'Bao shared a memory with you',
+        notificationBody: 'Open Noto to read the note they shared with you.',
+      },
+    } as any);
+
+    expect(result).toBe(0);
+    expect(mockRefreshSharedFeed).toHaveBeenCalledWith({ id: 'me', uid: 'me' });
+    expect(mockGetCachedSharedFeedSnapshot).toHaveBeenCalledWith('me');
+    expect(mockUpdateWidgetData).toHaveBeenCalledWith({
+      includeLocationLookup: false,
+      includeSharedRefresh: false,
+      preferredNoteId: 'shared-1',
+    });
+    expect(mockScheduleNotificationAsync).toHaveBeenCalled();
   });
 
   it('registers the background task with expo-notifications', async () => {

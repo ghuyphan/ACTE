@@ -73,6 +73,7 @@ private const val STAMP_PAPER_BORDER_OPACITY = 0.10f
 private const val WIDGET_DUAL_INSET_SHELL_COLOR = "#131313"
 private const val WIDGET_DUAL_INSET_BORDER_OPACITY = 0.76f
 private const val WIDGET_DUAL_INSET_WASH_OPACITY = 0.04f
+private const val WIDGET_TEXT_SCALE = 0.9f
 private val STICKER_OUTLINE_OFFSETS = listOf(
   PointF(-1f, 0f),
   PointF(-0.92f, -0.38f),
@@ -231,6 +232,10 @@ private fun getContrastRatio(foreground: Int, background: Int): Double {
 
 private fun clampWidgetScalar(value: Float, minValue: Float, maxValue: Float): Float {
   return min(maxValue, max(minValue, value))
+}
+
+private fun scaleWidgetSp(value: Float): Float {
+  return value * WIDGET_TEXT_SCALE
 }
 
 private fun buildWidgetStampPerforationCenters(length: Float, radius: Float): List<Float> {
@@ -589,14 +594,14 @@ class NotoWidgetProvider : AppWidgetProvider() {
         when (layoutStage) {
           WidgetLayoutStage.SMALL -> {
             views.setInt(R.id.widget_photo_title, "setMaxLines", 1)
-            views.setTextViewTextSize(R.id.widget_photo_title, TypedValue.COMPLEX_UNIT_SP, 20f)
+            views.setTextViewTextSize(R.id.widget_photo_title, TypedValue.COMPLEX_UNIT_SP, scaleWidgetSp(20f))
           }
 
           WidgetLayoutStage.MEDIUM -> Unit
 
           WidgetLayoutStage.LARGE -> {
             views.setInt(R.id.widget_photo_title, "setMaxLines", 3)
-            views.setTextViewTextSize(R.id.widget_photo_title, TypedValue.COMPLEX_UNIT_SP, 28f)
+            views.setTextViewTextSize(R.id.widget_photo_title, TypedValue.COMPLEX_UNIT_SP, scaleWidgetSp(28f))
           }
         }
         val renderedPhotoTitleBitmap = renderPhotoTitleBitmap(
@@ -1247,7 +1252,7 @@ class NotoWidgetProvider : AppWidgetProvider() {
     ): WidgetBodyTypography {
       if (bodyText.isBlank()) {
         return WidgetBodyTypography(
-          textSizeSp = if (usesExpandedMetrics) 22f else 17f,
+          textSizeSp = scaleWidgetSp(if (usesExpandedMetrics) 22f else 17f),
           maxLines = 4,
           horizontalPaddingPx = context.dpToPx(if (usesExpandedMetrics) 28f else 20f)
         )
@@ -1271,25 +1276,25 @@ class NotoWidgetProvider : AppWidgetProvider() {
       }
       val candidates = if (noteType == "text") {
         listOf(
-          24f to if (usesExpandedMetrics) 28f else 24f,
-          18f to if (usesExpandedMetrics) 24f else 22f,
-          16f to if (usesExpandedMetrics) 22f else 20f
+          scaleWidgetSp(24f) to if (usesExpandedMetrics) 28f else 24f,
+          scaleWidgetSp(18f) to if (usesExpandedMetrics) 24f else 22f,
+          scaleWidgetSp(16f) to if (usesExpandedMetrics) 22f else 20f
         )
       } else if (usesExpandedMetrics) {
         listOf(
-          (24f + largeCanvasBoostSp) to 26f,
-          (23f + largeCanvasBoostSp) to 24f,
-          (22f + largeCanvasBoostSp) to 22f,
-          (21f + largeCanvasBoostSp) to 20f,
-          (20f + largeCanvasBoostSp) to 18f
+          scaleWidgetSp(24f + largeCanvasBoostSp) to 26f,
+          scaleWidgetSp(23f + largeCanvasBoostSp) to 24f,
+          scaleWidgetSp(22f + largeCanvasBoostSp) to 22f,
+          scaleWidgetSp(21f + largeCanvasBoostSp) to 20f,
+          scaleWidgetSp(20f + largeCanvasBoostSp) to 18f
         )
       } else {
         listOf(
-          17f to 20f,
-          16f to 18f,
-          15f to 16f,
-          14f to 14f,
-          13f to 14f
+          scaleWidgetSp(17f) to 20f,
+          scaleWidgetSp(16f) to 18f,
+          scaleWidgetSp(15f) to 16f,
+          scaleWidgetSp(14f) to 14f,
+          scaleWidgetSp(13f) to 14f
         )
       }
 
@@ -1329,7 +1334,7 @@ class NotoWidgetProvider : AppWidgetProvider() {
       }
 
       return fallback ?: WidgetBodyTypography(
-        textSizeSp = if (usesExpandedMetrics) 20f + largeCanvasBoostSp else 13f,
+        textSizeSp = scaleWidgetSp(if (usesExpandedMetrics) 20f + largeCanvasBoostSp else 13f),
         maxLines = if (usesExpandedMetrics) 3 else 2,
         horizontalPaddingPx = context.dpToPx(if (usesExpandedMetrics) 18f else 14f)
       )
@@ -1437,9 +1442,9 @@ class NotoWidgetProvider : AppWidgetProvider() {
 
       val typeface = ResourcesCompat.getFont(context, R.font.noto_sans_800extra_bold) ?: return null
       val textSizeSp = when (layoutStage) {
-        WidgetLayoutStage.SMALL -> 20f
-        WidgetLayoutStage.MEDIUM -> 30f
-        WidgetLayoutStage.LARGE -> 28f
+        WidgetLayoutStage.SMALL -> scaleWidgetSp(20f)
+        WidgetLayoutStage.MEDIUM -> scaleWidgetSp(30f)
+        WidgetLayoutStage.LARGE -> scaleWidgetSp(28f)
       }
       val maxLines = when (layoutStage) {
         WidgetLayoutStage.SMALL -> 1

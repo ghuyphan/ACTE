@@ -533,6 +533,56 @@ describe('useSyncStatus', () => {
     });
   });
 
+  it('keeps initial sync in preparing state while connectivity is still unknown', async () => {
+    mockAuthState.user = {
+      uid: 'user-1',
+      displayName: 'Huy',
+      email: 'huy@example.com',
+      photoURL: null,
+    };
+    mockConnectivityState.status = 'unknown';
+    mockConnectivityState.isOnline = false;
+    mockConnectivityState.isInternetReachable = null;
+
+    const { result } = renderHook(() => useSyncStatus(), { wrapper });
+    await flushSyncPref();
+
+    await waitFor(() => {
+      expect(result.current.bootstrapState).toBe('preparing');
+      expect(result.current.phase).toBe('bootstrapping');
+    });
+  });
+
+  it('retries an initial sync when connectivity comes back even without queued changes', async () => {
+    mockAuthState.user = {
+      uid: 'user-1',
+      displayName: 'Huy',
+      email: 'huy@example.com',
+      photoURL: null,
+    };
+    mockConnectivityState.status = 'offline';
+    mockConnectivityState.isOnline = false;
+    mockConnectivityState.isInternetReachable = false;
+
+    const { rerender } = renderHook(({ marker }: { marker: number }) => {
+      void marker;
+      return useSyncStatus();
+    }, { wrapper, initialProps: { marker: 0 } });
+    await flushSyncPref();
+
+    expect(mockSyncNotes).not.toHaveBeenCalled();
+
+    mockConnectivityState.status = 'online';
+    mockConnectivityState.isOnline = true;
+    mockConnectivityState.isInternetReachable = true;
+    rerender({ marker: 1 });
+
+    await waitFor(() => {
+      expect(mockSyncNotes).toHaveBeenCalledTimes(1);
+    });
+    expect(mockSyncNotes.mock.calls[0]?.[2]).toEqual({ mode: 'full' });
+  });
+
   it('classifies an initial sync as disabled-blocked when sync is turned off', async () => {
     mockAuthState.user = {
       uid: 'user-1',

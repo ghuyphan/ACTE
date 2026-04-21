@@ -8,6 +8,7 @@ import { normalizeUsernameInput, validateUsernameInput } from '../../../services
 import { showAppAlert } from '../../../utils/alert';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../../hooks/useAuth';
+import { useConnectivity } from '../../../hooks/useConnectivity';
 import { useSubscription } from '../../../hooks/useSubscription';
 import { useTheme } from '../../../hooks/useTheme';
 import { createLegalLinkActions, getLegalLinkAvailability } from '../shared/legalLinkActions';
@@ -16,6 +17,7 @@ export function useProfileScreenModel() {
   const { t } = useTranslation();
   const { colors, isDark } = useTheme();
   const { user, isAuthAvailable, deleteAccount, signOut, updateAvatar, updateUsername } = useAuth();
+  const { isOnline } = useConnectivity();
   const { tier } = useSubscription();
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -32,6 +34,12 @@ export function useProfileScreenModel() {
   const [transitionUser, setTransitionUser] = useState(user);
   const usernameCopiedResetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isTransitioningAccount = isSigningOut || isDeletingAccount;
+  const isProfileOffline = isAuthAvailable && !isOnline;
+  const offlineActionTitle = t('auth.offlineTitle', 'You are offline');
+  const offlineActionBody = t(
+    'profile.offlineActionBody',
+    'This action needs a connection. Please try again when you are back online.'
+  );
 
   useEffect(() => {
     return () => {
@@ -162,6 +170,12 @@ export function useProfileScreenModel() {
       return;
     }
 
+    if (isProfileOffline) {
+      setUsernameErrorMessage(null);
+      showAppAlert(offlineActionTitle, offlineActionBody);
+      return;
+    }
+
     setIsSavingUsername(true);
     setUsernameErrorMessage(null);
 
@@ -183,6 +197,11 @@ export function useProfileScreenModel() {
 
   const handleChangeAvatar = async () => {
     if (!displayUser || isTransitioningAccount || isUpdatingAvatar) {
+      return;
+    }
+
+    if (isProfileOffline) {
+      showAppAlert(offlineActionTitle, offlineActionBody);
       return;
     }
 
@@ -269,6 +288,11 @@ export function useProfileScreenModel() {
 
   const handleDeleteAccount = () => {
     if (!user || isDeletingAccount) {
+      return;
+    }
+
+    if (isProfileOffline) {
+      showAppAlert(offlineActionTitle, offlineActionBody);
       return;
     }
 

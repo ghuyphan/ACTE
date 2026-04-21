@@ -142,7 +142,7 @@
                     android:maxWidth="132dp"
                     android:paddingLeft="5dp"
                     android:textColor="#7A6A58"
-                    android:textSize="11sp" />
+                    android:textSize="10sp" />
             </LinearLayout>
 
             <LinearLayout
@@ -187,7 +187,7 @@
                         android:maxWidth="132dp"
                         android:paddingLeft="5dp"
                         android:textColor="#7A6A58"
-                        android:textSize="11sp" />
+                        android:textSize="10sp" />
                 </LinearLayout>
 
                 <TextView
@@ -205,7 +205,7 @@
                     android:paddingRight="11dp"
                     android:paddingBottom="6dp"
                     android:textColor="#7A6A58"
-                    android:textSize="10sp"
+                    android:textSize="9sp"
                     android:visibility="gone" />
             </LinearLayout>
 
@@ -228,7 +228,7 @@
                     android:paddingLeft="26dp"
                     android:paddingRight="26dp"
                     android:textColor="#FFF7E8"
-                    android:textSize="15sp"
+                    android:textSize="14sp"
                     android:textStyle="italic"
                     android:visibility="gone" />
 
@@ -251,7 +251,7 @@
                     android:shadowDy="1"
                     android:shadowRadius="4"
                     android:textColor="#2B2621"
-                    android:textSize="17sp"
+                    android:textSize="15sp"
                     android:visibility="gone" />
 
                 <ImageView
@@ -290,7 +290,7 @@
                     android:shadowDy="2"
                     android:shadowRadius="8"
                     android:textColor="#FFFFFF"
-                    android:textSize="26sp"
+                    android:textSize="23sp"
                     android:visibility="gone" />
 
                 <ImageView
@@ -336,7 +336,7 @@
                             android:gravity="center"
                             android:includeFontPadding="false"
                             android:textColor="#2B2621"
-                            android:textSize="9sp"
+                            android:textSize="8sp"
                             android:visibility="gone" />
                     </FrameLayout>
 
@@ -351,7 +351,7 @@
                         android:maxWidth="96dp"
                         android:paddingLeft="6dp"
                         android:textColor="#2B2621"
-                        android:textSize="10sp"
+                        android:textSize="9sp"
                         android:visibility="gone" />
                 </LinearLayout>
             </LinearLayout>

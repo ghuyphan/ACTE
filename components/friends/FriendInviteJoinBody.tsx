@@ -19,6 +19,7 @@ import { Typography } from '../../constants/theme';
 import { useAndroidKeyboardBlurOnHide } from '../../hooks/ui/useAndroidKeyboardBlurOnHide';
 import { useTheme } from '../../hooks/useTheme';
 import { FriendSearchResult } from '../../services/sharedFeedService';
+import OfflineNotice from '../ui/OfflineNotice';
 import PrimaryButton from '../ui/PrimaryButton';
 
 const SheetTextInput = Platform.OS === 'android' ? BottomSheetTextInput : TextInput;
@@ -35,6 +36,7 @@ type FriendInviteJoinBodyProps = {
   searching: boolean;
   addingFriend: boolean;
   searchResult: FriendSearchResult | null;
+  isOnline?: boolean;
   onChangeMode: (mode: FriendJoinMode) => void;
   onChangeInvite: (value: string) => void;
   onChangeUsername: (value: string) => void;
@@ -50,10 +52,12 @@ type FriendInviteJoinBodyProps = {
 function SearchResultCard({
   result,
   addingFriend,
+  disabled = false,
   onAddFriend,
 }: {
   result: FriendSearchResult;
   addingFriend: boolean;
+  disabled?: boolean;
   onAddFriend: () => void;
 }) {
   const { t } = useTranslation();
@@ -102,7 +106,7 @@ function SearchResultCard({
         label={buttonLabel}
         onPress={onAddFriend}
         loading={addingFriend}
-        disabled={result.isSelf || result.alreadyFriends}
+        disabled={disabled || result.isSelf || result.alreadyFriends}
         style={styles.resultAction}
         testID="friend-search-add-button"
       />
@@ -120,6 +124,7 @@ export default function FriendInviteJoinBody({
   searching,
   addingFriend,
   searchResult,
+  isOnline = true,
   onChangeMode,
   onChangeInvite,
   onChangeUsername,
@@ -142,10 +147,11 @@ export default function FriendInviteJoinBody({
       : t('shared.joinButton', 'Continue')
     : t('shared.signInButton', 'Sign in');
   const primaryLoading = user ? (isUsernameMode ? searching : joining) : false;
+  const isOfflineSignedIn = Boolean(user) && !isOnline;
   const primaryDisabled = user
     ? isUsernameMode
-      ? !usernameValue.trim()
-      : !inviteValue.trim()
+      ? !usernameValue.trim() || isOfflineSignedIn
+      : !inviteValue.trim() || isOfflineSignedIn
     : !isAuthAvailable;
 
   const dismissKeyboard = () => {
@@ -194,6 +200,16 @@ export default function FriendInviteJoinBody({
         })}
       </View>
 
+      {isOfflineSignedIn ? (
+        <OfflineNotice
+          title={t('auth.offlineTitle', 'You are offline')}
+          body={t(
+            'shared.offlineActionError',
+            'You are offline. Cached shared moments are still visible, but sharing actions need a connection.'
+          )}
+        />
+      ) : null}
+
       {user ? (
         isUsernameMode ? (
           <>
@@ -228,7 +244,8 @@ export default function FriendInviteJoinBody({
             {searchResult ? (
               <SearchResultCard
                 result={searchResult}
-                addingFriend={addingFriend}
+                addingFriend={addingFriend || isOfflineSignedIn}
+                disabled={isOfflineSignedIn}
                 onAddFriend={() => {
                   dismissKeyboard();
                   onAddFriend();

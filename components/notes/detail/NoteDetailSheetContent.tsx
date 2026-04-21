@@ -1,8 +1,9 @@
 import { BottomSheetScrollView, BottomSheetTextInput } from '@gorhom/bottom-sheet';
 import { Ionicons } from '@expo/vector-icons';
+import { BlurTargetView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { type TFunction } from 'i18next';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
     Dimensions,
     Platform,
@@ -336,6 +337,7 @@ export default function NoteDetailSheetContent({
     );
     const notePhotoUri = useMemo(() => (note ? getNotePhotoUri(note) : ''), [note]);
     const notePairedVideoUri = useMemo(() => (note ? getNotePairedVideoUri(note) : null), [note]);
+    const photoCaptionBlurTargetRef = useRef<View | null>(null);
 
     useEffect(() => {
         if (isEditing || isDeleting || loading || !note) {
@@ -369,7 +371,7 @@ export default function NoteDetailSheetContent({
     const cardContent = note.type === 'photo' ? (
         <View style={styles.photoContainer}>
             <View style={styles.photoCard}>
-                <View style={styles.photo}>
+                <BlurTargetView ref={photoCaptionBlurTargetRef} collapsable={false} style={styles.photo}>
                     <PhotoMediaView
                         imageUrl={notePhotoUri}
                         isLivePhoto={note.isLivePhoto}
@@ -379,7 +381,64 @@ export default function NoteDetailSheetContent({
                         imageStyle={styles.photo}
                         enablePlayback={!isEditing}
                     />
-                </View>
+                    {showRichDecorations && (displayedStickerPlacements.length > 0 || (isEditing && stickerModeEnabled)) ? (
+                        <View
+                            pointerEvents={isEditing && stickerModeEnabled ? 'box-none' : 'none'}
+                            style={styles.stickerOverlay}
+                        >
+                            {isEditing ? (
+                                <NoteStickerCanvas
+                                    placements={displayedStickerPlacements}
+                                    editable={stickerModeEnabled}
+                                    onChangePlacements={setEditStickerPlacements}
+                                    selectedPlacementId={selectedStickerId}
+                                    onChangeSelectedPlacementId={setSelectedStickerId}
+                                    onPressCanvas={onPressStickerCanvas}
+                                    entryAnimation={stickerEntryAnimation}
+                                    onEntryAnimationComplete={onStickerEntryAnimationComplete}
+                                    onToggleSelectedPlacementMotionLock={(placementId) => {
+                                        if (placementId === selectedStickerId) {
+                                            onToggleStickerMotionLock();
+                                        }
+                                    }}
+                                    onToggleSelectedPlacementOutline={(placementId) => {
+                                        if (placementId === selectedStickerId) {
+                                            onStickerAction('outline-toggle');
+                                        }
+                                    }}
+                                    onRemoveSelectedPlacement={(placementId) => {
+                                        if (placementId === selectedStickerId) {
+                                            onStickerAction('remove');
+                                        }
+                                    }}
+                                />
+                            ) : (
+                                <DynamicStickerCanvas
+                                    placements={displayedStickerPlacements}
+                                    motionVariant={textStickerMotionVariant}
+                                />
+                            )}
+                        </View>
+                    ) : null}
+                    {showRichDecorations && (displayedDoodleStrokes.length > 0 || isEditing) ? (
+                        <View
+                            pointerEvents={isEditing && doodleModeEnabled ? 'auto' : 'none'}
+                            style={[
+                                styles.doodleOverlay,
+                                styles.photoDoodleOverlay,
+                                isEditing ? styles.doodleOverlayEditing : null,
+                                isEditing && doodleModeEnabled ? styles.doodleOverlayActive : null,
+                            ]}
+                        >
+                            <NoteDoodleCanvas
+                                strokes={displayedDoodleStrokes}
+                                editable={isEditing && doodleModeEnabled}
+                                activeColor="#FFFFFF"
+                                onChangeStrokes={setEditDoodleStrokes}
+                            />
+                        </View>
+                    ) : null}
+                </BlurTargetView>
                 {isEditing && ENABLE_PHOTO_STICKERS ? (
                     <Pressable
                         testID="note-detail-card-paste-surface"
@@ -387,63 +446,6 @@ export default function NoteDetailSheetContent({
                         onLongPress={onShowCardPastePrompt}
                         delayLongPress={320}
                     />
-                ) : null}
-                {showRichDecorations && (displayedStickerPlacements.length > 0 || (isEditing && stickerModeEnabled)) ? (
-                    <View
-                        pointerEvents={isEditing && stickerModeEnabled ? 'box-none' : 'none'}
-                        style={styles.stickerOverlay}
-                    >
-                        {isEditing ? (
-                            <NoteStickerCanvas
-                                placements={displayedStickerPlacements}
-                                editable={stickerModeEnabled}
-                                onChangePlacements={setEditStickerPlacements}
-                                selectedPlacementId={selectedStickerId}
-                                onChangeSelectedPlacementId={setSelectedStickerId}
-                                onPressCanvas={onPressStickerCanvas}
-                                entryAnimation={stickerEntryAnimation}
-                                onEntryAnimationComplete={onStickerEntryAnimationComplete}
-                                onToggleSelectedPlacementMotionLock={(placementId) => {
-                                    if (placementId === selectedStickerId) {
-                                        onToggleStickerMotionLock();
-                                    }
-                                }}
-                                onToggleSelectedPlacementOutline={(placementId) => {
-                                    if (placementId === selectedStickerId) {
-                                        onStickerAction('outline-toggle');
-                                    }
-                                }}
-                                onRemoveSelectedPlacement={(placementId) => {
-                                    if (placementId === selectedStickerId) {
-                                        onStickerAction('remove');
-                                    }
-                                }}
-                            />
-                        ) : (
-                            <DynamicStickerCanvas
-                                placements={displayedStickerPlacements}
-                                motionVariant={textStickerMotionVariant}
-                            />
-                        )}
-                    </View>
-                ) : null}
-                {showRichDecorations && (displayedDoodleStrokes.length > 0 || isEditing) ? (
-                    <View
-                        pointerEvents={isEditing && doodleModeEnabled ? 'auto' : 'none'}
-                        style={[
-                            styles.doodleOverlay,
-                            styles.photoDoodleOverlay,
-                            isEditing ? styles.doodleOverlayEditing : null,
-                            isEditing && doodleModeEnabled ? styles.doodleOverlayActive : null,
-                        ]}
-                    >
-                        <NoteDoodleCanvas
-                            strokes={displayedDoodleStrokes}
-                            editable={isEditing && doodleModeEnabled}
-                            activeColor="#FFFFFF"
-                            onChangeStrokes={setEditDoodleStrokes}
-                        />
-                    </View>
                 ) : null}
                 <NoteDetailEditToolbar
                     colors={colors}
@@ -537,6 +539,7 @@ export default function NoteDetailSheetContent({
                                 caption={displayedPhotoCaption}
                                 color={colors.text}
                                 isDark={isDark}
+                                blurTargetRef={photoCaptionBlurTargetRef}
                                 numberOfLines={2}
                                 overlayStyle={styles.photoCaptionChipOverlay}
                             />

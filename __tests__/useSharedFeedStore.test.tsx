@@ -223,8 +223,8 @@ describe('useSharedFeedStore', () => {
     };
     mockGetCachedSharedFeedSnapshot.mockImplementation(async () => mockCachedSnapshot);
     mockRefreshSharedFeed.mockImplementation(async () => mockRefreshSnapshot);
-    mockDownloadPhotoFromStorage.mockResolvedValue(null);
-    mockDownloadPairedVideoFromStorage.mockResolvedValue(null);
+    mockDownloadPhotoFromStorage.mockResolvedValue('file:///shared/friend-photo-1.jpg');
+    mockDownloadPairedVideoFromStorage.mockResolvedValue('file:///shared/friend-photo-1.mov');
     latestSharedFeedSubscriptionHandlers = null;
     mockSubscribeToSharedFeed.mockImplementation((_user: unknown, handlers: any) => {
       latestSharedFeedSubscriptionHandlers = handlers;
@@ -306,6 +306,51 @@ describe('useSharedFeedStore', () => {
         })
       );
     });
+  });
+
+  it('reuses a cached active invite while offline without hitting the network', async () => {
+    mockConnectivityState.isOnline = false;
+    mockCachedSnapshot = {
+      friends: [],
+      sharedPosts: [],
+      activeInvite: {
+        id: 'invite-1',
+        inviterUid: 'me',
+        inviterDisplayNameSnapshot: 'Me',
+        inviterPhotoURLSnapshot: null,
+        token: 'token-1',
+        createdAt: '2026-03-23T00:00:00.000Z',
+        revokedAt: null,
+        acceptedByUid: null,
+        acceptedAt: null,
+        expiresAt: null,
+        url: 'noto://friends/join?inviteId=invite-1&invite=token-1',
+      },
+      lastUpdatedAt: '2026-03-23T00:00:00.000Z',
+    };
+
+    const { result } = renderHook(() => useSharedFeedStore(), { wrapper });
+
+    await waitFor(() => {
+      expect(result.current.ready).toBe(true);
+      expect(result.current.activeInvite).toEqual(
+        expect.objectContaining({
+          id: 'invite-1',
+        })
+      );
+    });
+
+    let invite: any;
+    await act(async () => {
+      invite = await result.current.createFriendInvite();
+    });
+
+    expect(invite).toEqual(
+      expect.objectContaining({
+        id: 'invite-1',
+      })
+    );
+    expect(mockCreateFriendInvite).not.toHaveBeenCalled();
   });
 
   it('persists live shared-feed snapshots from subscription updates', async () => {
@@ -451,6 +496,56 @@ describe('useSharedFeedStore', () => {
           }),
         ],
       })
+    );
+  });
+
+  it('hydrates cached shared photo media without remote downloads while offline', async () => {
+    mockConnectivityState.isOnline = false;
+    mockCachedSnapshot = {
+      friends: [],
+      sharedPosts: [
+        createSharedPost({
+          id: 'friend-photo-1',
+          authorUid: 'friend-1',
+          type: 'photo',
+          text: '',
+          photoPath: 'friend-1/friend-photo-1.jpg',
+          photoLocalUri: null,
+          isLivePhoto: true,
+          pairedVideoPath: 'friend-1/friend-photo-1.mov',
+          pairedVideoLocalUri: null,
+        }),
+      ],
+      activeInvite: null,
+      lastUpdatedAt: '2026-03-24T00:00:00.000Z',
+    };
+    mockDownloadPhotoFromStorage.mockResolvedValue(null);
+    mockDownloadPairedVideoFromStorage.mockResolvedValue(null);
+
+    const { result } = renderHook(() => useSharedFeedStore(), { wrapper });
+
+    await waitFor(() => {
+      expect(result.current.ready).toBe(true);
+      expect(result.current.sharedPosts).toEqual([
+        expect.objectContaining({
+          id: 'friend-photo-1',
+          photoLocalUri: null,
+          pairedVideoLocalUri: null,
+        }),
+      ]);
+    });
+
+    expect(mockDownloadPhotoFromStorage).toHaveBeenCalledWith(
+      'shared-post-media',
+      'friend-1/friend-photo-1.jpg',
+      'friend-photo-1',
+      { preferCachedOnly: true }
+    );
+    expect(mockDownloadPairedVideoFromStorage).toHaveBeenCalledWith(
+      'shared-post-media',
+      'friend-1/friend-photo-1.mov',
+      'friend-photo-1-motion',
+      { preferCachedOnly: true }
     );
   });
 

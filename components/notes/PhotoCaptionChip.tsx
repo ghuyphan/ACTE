@@ -1,4 +1,5 @@
-import React from 'react';
+import { BlurView } from 'expo-blur';
+import React, { type RefObject } from 'react';
 import { StyleProp, StyleSheet, Text, TextStyle, View, ViewStyle } from 'react-native';
 import { Typography } from '../../constants/theme';
 import { glassTokens } from '../ui/glassTokens';
@@ -7,6 +8,7 @@ type PhotoCaptionChipProps = {
   caption: string;
   color: string;
   isDark: boolean;
+  blurTargetRef?: RefObject<View | null>;
   numberOfLines?: number;
   overlayStyle?: StyleProp<ViewStyle>;
   fieldStyle?: StyleProp<ViewStyle>;
@@ -18,6 +20,7 @@ export default function PhotoCaptionChip({
   caption,
   color,
   isDark,
+  blurTargetRef,
   numberOfLines = 1,
   overlayStyle,
   fieldStyle,
@@ -36,12 +39,29 @@ export default function PhotoCaptionChip({
         style={[
           styles.field,
           {
-            backgroundColor: isDark ? 'rgba(20,20,20,0.5)' : 'rgba(255,255,255,0.72)',
             borderColor: isDark ? 'rgba(255,255,255,0.16)' : 'rgba(255,255,255,0.42)',
           },
           fieldStyle,
         ]}
       >
+        <BlurView
+          pointerEvents="none"
+          intensity={36}
+          tint={isDark ? 'dark' : 'light'}
+          blurMethod="dimezisBlurViewSdk31Plus"
+          blurReductionFactor={3}
+          blurTarget={blurTargetRef}
+          style={StyleSheet.absoluteFill}
+        />
+        <View
+          pointerEvents="none"
+          style={[
+            StyleSheet.absoluteFill,
+            {
+              backgroundColor: isDark ? 'rgba(22,22,24,0.42)' : 'rgba(255,255,255,0.36)',
+            },
+          ]}
+        />
         <Text
           testID={testID}
           style={[styles.text, { color }, textStyle]}
@@ -68,6 +88,7 @@ const styles = StyleSheet.create({
     borderRadius: glassTokens.compactControlRadius,
     borderWidth: StyleSheet.hairlineWidth,
     justifyContent: 'center',
+    overflow: 'hidden',
     paddingHorizontal: 14,
     paddingVertical: 0,
   },

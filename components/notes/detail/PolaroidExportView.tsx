@@ -1,5 +1,6 @@
+import { BlurTargetView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
-import React, { forwardRef, memo, useEffect, useMemo, useState } from 'react';
+import React, { forwardRef, memo, useEffect, useMemo, useRef, useState } from 'react';
 import {
   StyleSheet,
   Text,
@@ -94,6 +95,7 @@ function PolaroidExportViewInner(
     () => parseNoteStickerPlacements(note.stickerPlacementsJson),
     [note.stickerPlacementsJson]
   );
+  const photoCaptionBlurTargetRef = useRef<View | null>(null);
   const displayedText = useMemo(
     () => formatNoteTextWithEmoji(note.content, note.moodEmoji),
     [note.content, note.moodEmoji]
@@ -115,42 +117,49 @@ function PolaroidExportViewInner(
         <View style={styles.noteCardSlot}>
           {note.type === 'photo' ? (
             <View style={styles.photoCard}>
-              <PhotoMediaView
-                imageUrl={getNotePhotoUri(note)}
-                isLivePhoto={note.isLivePhoto}
-                pairedVideoUri={getNotePairedVideoUri(note)}
-                showLiveBadge={Boolean(note.isLivePhoto)}
-                enablePlayback={false}
-                onImageReady={() => setMediaReady(true)}
+              <BlurTargetView
+                ref={photoCaptionBlurTargetRef}
+                collapsable={false}
                 style={styles.photoMedia}
-                imageStyle={styles.photoMedia}
-              />
-              {stickerPlacements.length > 0 ? (
-                <View
-                  pointerEvents="none"
-                  testID="polaroid-export-sticker-overlay"
-                  style={styles.stickerOverlay}
-                >
-                  <NoteStickerCanvas
-                    placements={stickerPlacements}
-                    editable={false}
-                    stampShadowEnabled={false}
-                  />
-                </View>
-              ) : null}
-              {doodleStrokes.length > 0 ? (
-                <View
-                  pointerEvents="none"
-                  testID="polaroid-export-doodle-overlay"
-                  style={styles.doodleOverlay}
-                >
-                  <NoteDoodleCanvas strokes={doodleStrokes} strokeWidth={11} />
-                </View>
-              ) : null}
+              >
+                <PhotoMediaView
+                  imageUrl={getNotePhotoUri(note)}
+                  isLivePhoto={note.isLivePhoto}
+                  pairedVideoUri={getNotePairedVideoUri(note)}
+                  showLiveBadge={Boolean(note.isLivePhoto)}
+                  enablePlayback={false}
+                  onImageReady={() => setMediaReady(true)}
+                  style={styles.photoMedia}
+                  imageStyle={styles.photoMedia}
+                />
+                {stickerPlacements.length > 0 ? (
+                  <View
+                    pointerEvents="none"
+                    testID="polaroid-export-sticker-overlay"
+                    style={styles.stickerOverlay}
+                  >
+                    <NoteStickerCanvas
+                      placements={stickerPlacements}
+                      editable={false}
+                      stampShadowEnabled={false}
+                    />
+                  </View>
+                ) : null}
+                {doodleStrokes.length > 0 ? (
+                  <View
+                    pointerEvents="none"
+                    testID="polaroid-export-doodle-overlay"
+                    style={styles.doodleOverlay}
+                  >
+                    <NoteDoodleCanvas strokes={doodleStrokes} strokeWidth={11} />
+                  </View>
+                ) : null}
+              </BlurTargetView>
               <PhotoCaptionChip
                 caption={note.caption ?? ''}
                 color="#2C241E"
                 isDark={false}
+                blurTargetRef={photoCaptionBlurTargetRef}
                 numberOfLines={2}
                 overlayStyle={styles.photoCaptionOverlay}
                 fieldStyle={styles.exportCaptionField}

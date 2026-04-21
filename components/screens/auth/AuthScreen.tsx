@@ -191,6 +191,7 @@ export default function LoginScreen() {
   const returnToRoute = typeof returnTo === 'string' && returnTo.trim() ? returnTo.trim() : null;
   const canOpenPrivacyPolicy = hasPrivacyPolicyLink();
   const canOpenSupport = hasSupportLink();
+  const isAuthOffline = !isOnline && isAuthAvailable;
 
   const isFormVisible = screenMode !== 'landing';
   const showLandingToast = Platform.OS === 'android';
@@ -545,6 +546,10 @@ export default function LoginScreen() {
   };
 
   const submitForm = async () => {
+    if (isAuthOffline) {
+      return;
+    }
+
     if (screenMode === 'register') {
       await handleRegister();
       return;
@@ -782,7 +787,7 @@ export default function LoginScreen() {
       ) : null}
 
       <Animated.View layout={FORM_LAYOUT_TRANSITION}>
-        {!isOnline && isAuthAvailable ? (
+        {isAuthOffline ? (
           <View style={styles.formNoticeWrap}>
             <OfflineNotice
               title={t('auth.offlineTitle', 'You are offline')}
@@ -801,7 +806,7 @@ export default function LoginScreen() {
           }}
           loading={activeAction === 'signIn' || activeAction === 'register' || activeAction === 'reset'}
           variant="neutral"
-          disabled={!isOnline && isAuthAvailable}
+          disabled={isAuthOffline}
           testID="auth-form-submit"
         />
       </Animated.View>
@@ -949,7 +954,7 @@ export default function LoginScreen() {
           </View>
         ) : null}
 
-        {!isOnline && isAuthAvailable ? (
+        {isAuthOffline ? (
           <View style={styles.landingNoticeWrap}>
             <OfflineNotice
               title={t('auth.offlineTitle', 'You are offline')}

@@ -1,4 +1,4 @@
-import React, { memo, useMemo } from 'react';
+import React, { memo, useMemo, useRef } from 'react';
 import { Platform, StyleSheet, View } from 'react-native';
 import { STICKER_ARTBOARD_FRAME } from '../../constants/doodleLayout';
 import { Layout, Shadows } from '../../constants/theme';
@@ -9,6 +9,7 @@ import DynamicStickerCanvas from './DynamicStickerCanvas';
 import NoteDoodleCanvas from './NoteDoodleCanvas';
 import PhotoCaptionChip from './PhotoCaptionChip';
 import PhotoMediaView from './PhotoMediaView';
+import { BlurTargetView } from 'expo-blur';
 import type { DebugTiltState } from './StickerPhysicsDebugControls';
 import type { SharedValue } from 'react-native-reanimated';
 
@@ -42,6 +43,7 @@ function ImageMemoryCard({
   debugTiltOverride,
 }: ImageMemoryCardProps) {
   const { colors, isDark } = useTheme();
+  const mediaSurfaceRef = useRef<View | null>(null);
   const doodleStrokes = useMemo(
     () => parseNoteDoodleStrokes(doodleStrokesJson),
     [doodleStrokesJson]
@@ -55,38 +57,41 @@ function ImageMemoryCard({
   return (
     <View style={styles.cardShadow}>
       <View style={[styles.cardSurface, { backgroundColor: colors.card }]}>
-        <PhotoMediaView
-          imageUrl={imageUrl}
-          isLivePhoto={isLivePhoto}
-          pairedVideoUri={pairedVideoUri}
-          showLiveBadge={showLiveBadge}
-          style={styles.image}
-          imageStyle={styles.image}
-          enablePlayback={enablePlayback}
-          autoPreviewOnceOnEnable={autoPreviewOnceOnEnable}
-        />
-        {stickerPlacements.length > 0 ? (
-          <View
-            pointerEvents={__DEV__ && isActive ? 'box-none' : 'none'}
-            style={styles.stickerOverlay}
-          >
-            <DynamicStickerCanvas
-              placements={stickerPlacements}
-              remoteBucket={remoteBucket}
-              isActive={isActive}
-              debugTiltOverride={debugTiltOverride}
-            />
-          </View>
-        ) : null}
-        {doodleStrokes.length > 0 ? (
-          <View pointerEvents="none" style={styles.doodleOverlay}>
-            <NoteDoodleCanvas strokes={doodleStrokes} />
-          </View>
-        ) : null}
+        <BlurTargetView ref={mediaSurfaceRef} collapsable={false} style={styles.mediaSurface}>
+          <PhotoMediaView
+            imageUrl={imageUrl}
+            isLivePhoto={isLivePhoto}
+            pairedVideoUri={pairedVideoUri}
+            showLiveBadge={showLiveBadge}
+            style={styles.image}
+            imageStyle={styles.image}
+            enablePlayback={enablePlayback}
+            autoPreviewOnceOnEnable={autoPreviewOnceOnEnable}
+          />
+          {stickerPlacements.length > 0 ? (
+            <View
+              pointerEvents={__DEV__ && isActive ? 'box-none' : 'none'}
+              style={styles.stickerOverlay}
+            >
+              <DynamicStickerCanvas
+                placements={stickerPlacements}
+                remoteBucket={remoteBucket}
+                isActive={isActive}
+                debugTiltOverride={debugTiltOverride}
+              />
+            </View>
+          ) : null}
+          {doodleStrokes.length > 0 ? (
+            <View pointerEvents="none" style={styles.doodleOverlay}>
+              <NoteDoodleCanvas strokes={doodleStrokes} />
+            </View>
+          ) : null}
+        </BlurTargetView>
         <PhotoCaptionChip
           caption={normalizedCaption}
           color={colors.text}
           isDark={isDark}
+          blurTargetRef={mediaSurfaceRef}
         />
       </View>
     </View>
@@ -108,6 +113,9 @@ const styles = StyleSheet.create({
     borderRadius: Layout.cardRadius,
     borderCurve: 'continuous',
     overflow: 'hidden',
+  },
+  mediaSurface: {
+    ...StyleSheet.absoluteFillObject,
   },
   image: {
     width: '100%',

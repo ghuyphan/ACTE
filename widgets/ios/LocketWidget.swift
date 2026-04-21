@@ -3,6 +3,12 @@ import SwiftUI
 import UIKit
 import ImageIO
 
+private let widgetFontScale: CGFloat = 0.9
+
+private func scaledWidgetFontSize(_ size: CGFloat) -> CGFloat {
+    size * widgetFontScale
+}
+
 private func widgetLocalized(_ key: String, fallback: String) -> String {
     NSLocalizedString(key, tableName: nil, bundle: .main, value: fallback, comment: "")
 }
@@ -1571,21 +1577,21 @@ private struct LocketWidgetEntryView: View {
         ViewThatFits {
             HStack(spacing: 4) {
                 Image(systemName: accessorySymbolName)
-                    .font(.caption2.weight(.semibold))
+                    .font(.system(size: scaledWidgetFontSize(11), weight: .semibold))
                     .widgetAccentable()
 
                 Text(accessoryInlineText)
             }
             HStack(spacing: 4) {
                 Image(systemName: accessorySymbolName)
-                    .font(.caption2.weight(.semibold))
+                    .font(.system(size: scaledWidgetFontSize(11), weight: .semibold))
                     .widgetAccentable()
 
                 Text(accessoryInlineFallbackText)
             }
             Text(accessoryInlineFallbackText)
         }
-        .font(.caption.weight(.semibold))
+        .font(.system(size: scaledWidgetFontSize(12), weight: .semibold))
         .lineLimit(1)
         .minimumScaleFactor(0.85)
     }
@@ -1594,11 +1600,11 @@ private struct LocketWidgetEntryView: View {
         VStack(spacing: 1) {
             if payload.noteCount <= 0 {
                 Image(systemName: "plus")
-                    .font(.callout.weight(.bold))
+                    .font(.system(size: scaledWidgetFontSize(16), weight: .bold))
                     .widgetAccentable()
             } else {
                 Text(accessoryCircularValue)
-                    .font(.title3.weight(.bold))
+                    .font(.system(size: scaledWidgetFontSize(20), weight: .bold))
                     .monospacedDigit()
                     .lineLimit(1)
                     .minimumScaleFactor(0.75)
@@ -1606,7 +1612,7 @@ private struct LocketWidgetEntryView: View {
             }
 
             Text(accessoryCircularCaption)
-                .font(.caption2)
+                .font(.system(size: scaledWidgetFontSize(11)))
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
         }
@@ -1615,18 +1621,18 @@ private struct LocketWidgetEntryView: View {
     private var accessoryRectangularLayout: some View {
         HStack(alignment: .center, spacing: 8) {
             Image(systemName: accessorySymbolName)
-                .font(.caption.weight(.semibold))
+                .font(.system(size: scaledWidgetFontSize(12), weight: .semibold))
                 .widgetAccentable()
 
             VStack(alignment: .leading, spacing: 1) {
                 Text(accessoryTitle)
-                    .font(.headline)
+                    .font(.system(size: scaledWidgetFontSize(17), weight: .semibold))
                     .lineLimit(1)
                     .minimumScaleFactor(0.82)
                     .widgetAccentable()
 
                 Text(accessorySubtitle)
-                    .font(.caption)
+                    .font(.system(size: scaledWidgetFontSize(12)))
                     .lineLimit(2)
                     .minimumScaleFactor(0.85)
             }
@@ -1635,7 +1641,7 @@ private struct LocketWidgetEntryView: View {
 
             if let value = accessoryRectangularValue {
                 Text(value)
-                    .font(.headline.weight(.bold))
+                    .font(.system(size: scaledWidgetFontSize(17), weight: .bold))
                     .monospacedDigit()
                     .lineLimit(1)
                     .padding(.horizontal, 8)
@@ -1786,7 +1792,7 @@ private struct LocketWidgetEntryView: View {
         let metrics = floatingChromePillMetrics
 
         Text(countLabel)
-            .font(.custom("Noto Sans SemiBold", size: isLarge ? 11 : 10))
+            .font(.custom("Noto Sans SemiBold", size: scaledWidgetFontSize(isLarge ? 11 : 10)))
             .foregroundStyle(badgeForegroundColor)
             .padding(.horizontal, metrics.horizontalPadding)
             .padding(.vertical, metrics.verticalPadding)
@@ -1800,11 +1806,11 @@ private struct LocketWidgetEntryView: View {
 
         HStack(spacing: 5) {
             Image(systemName: "mappin.and.ellipse")
-                .font(.system(size: 10, weight: .semibold))
+                .font(.system(size: scaledWidgetFontSize(10), weight: .semibold))
                 .foregroundStyle(eyebrowTextColor)
 
             Text(compactLocationName)
-                .font(.custom("Noto Sans Medium", size: 10))
+                .font(.custom("Noto Sans Medium", size: scaledWidgetFontSize(10)))
                 .foregroundStyle(eyebrowTextColor)
                 .lineLimit(1)
                 .minimumScaleFactor(0.84)
@@ -1853,7 +1859,7 @@ private struct LocketWidgetEntryView: View {
                     .clipShape(Circle())
             } else if !payload.authorInitials.isEmpty {
                 Text(payload.authorInitials)
-                    .font(.custom("Noto Sans Bold", size: 9))
+                    .font(.custom("Noto Sans Bold", size: scaledWidgetFontSize(9)))
                     .foregroundStyle(authorChipForegroundColor)
                     .frame(width: 18, height: 18)
                     .background(authorChipForegroundColor.opacity(hasPhotoBackground ? 0.16 : 0.10))
@@ -1862,7 +1868,7 @@ private struct LocketWidgetEntryView: View {
 
             if !compactAuthorName.isEmpty {
                 Text(compactAuthorName)
-                    .font(.custom("Noto Sans Medium", size: 10))
+                    .font(.custom("Noto Sans Medium", size: scaledWidgetFontSize(10)))
                     .foregroundStyle(authorChipForegroundColor)
                     .lineLimit(1)
                     .minimumScaleFactor(0.84)
@@ -1881,12 +1887,12 @@ private struct LocketWidgetEntryView: View {
 
         HStack(spacing: 4) {
             Image(systemName: "livephoto")
-                .font(.system(size: 11, weight: .semibold))
+                .font(.system(size: scaledWidgetFontSize(11), weight: .semibold))
                 .foregroundStyle(authorChipForegroundColor)
 
             if isLarge || isMedium {
                 Text(payload.livePhotoBadgeText.isEmpty ? widgetLocalized("widget.livePhotoBadge", fallback: "Live") : payload.livePhotoBadgeText)
-                    .font(.custom("Noto Sans SemiBold", size: 10))
+                    .font(.custom("Noto Sans SemiBold", size: scaledWidgetFontSize(10)))
                     .foregroundStyle(authorChipForegroundColor)
                     .lineLimit(1)
                     .minimumScaleFactor(0.85)
@@ -1992,12 +1998,12 @@ private struct LocketWidgetEntryView: View {
 
     private var photoTitleFont: Font {
         if isLarge {
-            return .custom("Noto Sans Bold", size: 28)
+            return .custom("Noto Sans Bold", size: scaledWidgetFontSize(28))
         }
         if isMedium {
-            return .custom("Noto Sans Bold", size: 22)
+            return .custom("Noto Sans Bold", size: scaledWidgetFontSize(22))
         }
-        return .custom("Noto Sans Bold", size: compactPhotoCaptionText.count > 28 ? 16 : 17)
+        return .custom("Noto Sans Bold", size: scaledWidgetFontSize(compactPhotoCaptionText.count > 28 ? 16 : 17))
     }
 
     @ViewBuilder
@@ -2051,7 +2057,7 @@ private struct LocketWidgetEntryView: View {
                 baseSize = 24
             }
 
-            return .custom("Noto Sans Bold", size: baseSize)
+            return .custom("Noto Sans Bold", size: scaledWidgetFontSize(baseSize))
         }
 
         let baseSize: CGFloat
@@ -2070,7 +2076,7 @@ private struct LocketWidgetEntryView: View {
             baseSize = trimmedCount > 110 ? 16 : 18
         }
 
-        return .custom("Noto Sans Bold", size: baseSize)
+        return .custom("Noto Sans Bold", size: scaledWidgetFontSize(baseSize))
     }
 
     private var noteCardLineSpacing: CGFloat {
@@ -2091,7 +2097,7 @@ private struct LocketWidgetEntryView: View {
 
     private var noteCardIdleFont: Font {
         let baseSize: CGFloat = isLarge ? 20 : (isMedium ? 17 : 15)
-        return .custom("Noto Sans Medium", size: baseSize).italic()
+        return .custom("Noto Sans Medium", size: scaledWidgetFontSize(baseSize)).italic()
     }
 
     private var cardInnerBackground: AnyView {

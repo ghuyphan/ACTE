@@ -203,6 +203,27 @@ describe('remoteMedia uploads', () => {
     expect(mockDownloadAsync.mock.calls[0]?.[1]).not.toBe(mockDownloadAsync.mock.calls[1]?.[1]);
   });
 
+  it('skips remote media downloads when only cached files are allowed', async () => {
+    mockGetInfoAsync.mockResolvedValue({
+      exists: false,
+      isDirectory: false,
+      size: 0,
+      uri: 'file:///cache/shared-photo.jpg',
+    });
+
+    await expect(
+      downloadPhotoFromStorage(
+        'shared-post-media',
+        'friends/shared-photo.jpg',
+        'shared-photo-1',
+        { preferCachedOnly: true }
+      )
+    ).resolves.toBeNull();
+
+    expect(mockCreateSignedUrl).not.toHaveBeenCalled();
+    expect(mockDownloadAsync).not.toHaveBeenCalled();
+  });
+
   it('uploads photos using raw array buffers instead of base64 payloads', async () => {
     mockGetInfoAsync.mockImplementation(async (uri: string) => {
       if (uri === 'file:///cache/optimized-photo.jpg') {

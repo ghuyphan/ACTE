@@ -14,6 +14,7 @@ import AppSheet from '../../sheets/AppSheet';
 import AppSheetScaffold from '../../sheets/AppSheetScaffold';
 import FriendInviteJoinBody, { FriendJoinMode } from '../../friends/FriendInviteJoinBody';
 import { useAuth } from '../../../hooks/useAuth';
+import { useConnectivity } from '../../../hooks/useConnectivity';
 import { useFriendInviteJoin } from '../../../hooks/useFriendInviteJoin';
 import { useSharedFeedStore } from '../../../hooks/useSharedFeed';
 import { useTheme } from '../../../hooks/useTheme';
@@ -67,6 +68,7 @@ export default function FriendJoinScreen() {
   const { t } = useTranslation();
   const { colors } = useTheme();
   const { user, isAuthAvailable, isReady: authReady } = useAuth();
+  const { isOnline } = useConnectivity();
   const { findFriendByUsername, addFriendByUsername } = useSharedFeedStore();
   const router = useRouter();
   const [inviteValue, setInviteValue] = useState('');
@@ -209,13 +211,20 @@ export default function FriendJoinScreen() {
   });
 
   useEffect(() => {
-    if (!authReady || !user || autoAttemptedRef.current || !inviteValue.trim() || joinMode !== 'invite') {
+    if (
+      !authReady ||
+      !user ||
+      !isOnline ||
+      autoAttemptedRef.current ||
+      !inviteValue.trim() ||
+      joinMode !== 'invite'
+    ) {
       return;
     }
 
     autoAttemptedRef.current = true;
     void joinInvite(inviteValue);
-  }, [authReady, inviteValue, joinInvite, joinMode, user]);
+  }, [authReady, inviteValue, isOnline, joinInvite, joinMode, user]);
 
   const handleUsernameChange = useCallback((value: string) => {
     setUsernameValue(value);
@@ -248,6 +257,17 @@ export default function FriendJoinScreen() {
       return;
     }
 
+    if (!isOnline) {
+      showAppAlert(
+        t('auth.offlineTitle', 'You are offline'),
+        t(
+          'shared.offlineActionError',
+          'You are offline. Cached shared moments are still visible, but sharing actions need a connection.'
+        )
+      );
+      return;
+    }
+
     setSearching(true);
     setSearchResult(null);
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -264,7 +284,7 @@ export default function FriendJoinScreen() {
     } finally {
       setSearching(false);
     }
-  }, [authReady, dismissTo, findFriendByUsername, t, user, usernameValue]);
+  }, [authReady, dismissTo, findFriendByUsername, isOnline, t, user, usernameValue]);
 
   const handleAddFriend = useCallback(async () => {
     if (!searchResult) {
@@ -277,6 +297,17 @@ export default function FriendJoinScreen() {
 
     if (!user) {
       dismissTo('auth');
+      return;
+    }
+
+    if (!isOnline) {
+      showAppAlert(
+        t('auth.offlineTitle', 'You are offline'),
+        t(
+          'shared.offlineActionError',
+          'You are offline. Cached shared moments are still visible, but sharing actions need a connection.'
+        )
+      );
       return;
     }
 
@@ -308,7 +339,7 @@ export default function FriendJoinScreen() {
     } finally {
       setAddingFriend(false);
     }
-  }, [addFriendByUsername, authReady, dismissTo, router, searchResult, t, user]);
+  }, [addFriendByUsername, authReady, dismissTo, isOnline, router, searchResult, t, user]);
 
   return (
     <AppSheet
@@ -360,6 +391,7 @@ export default function FriendJoinScreen() {
             searching={searching}
             addingFriend={addingFriend}
             searchResult={searchResult}
+            isOnline={isOnline}
             bottomPadding={Platform.OS === 'ios' ? 0 : 4}
             onChangeMode={(nextMode) => {
               setJoinMode(nextMode);

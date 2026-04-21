@@ -2,6 +2,7 @@ import * as Notifications from 'expo-notifications';
 import * as TaskManager from 'expo-task-manager';
 import { Platform } from 'react-native';
 import { ANDROID_SOCIAL_CHANNEL_ID } from '../services/notificationService';
+import { getCachedSharedFeedSnapshot } from '../services/sharedFeedCache';
 import { refreshSharedFeed } from '../services/sharedFeedService';
 import { updateWidgetData } from '../services/widgetService';
 import { getSupabaseUser } from './supabase';
@@ -104,7 +105,21 @@ export async function handleSocialPushNotificationTask(
     return Notifications.BackgroundNotificationTaskResult.NoData;
   }
 
-  const snapshot = await refreshSharedFeed(currentUser);
+  let snapshot;
+  try {
+    snapshot = await refreshSharedFeed(currentUser);
+  } catch (error) {
+    console.warn('[social-push] Refresh failed, falling back to cached shared feed:', error);
+    snapshot = await getCachedSharedFeedSnapshot(currentUser.uid).catch((cacheError) => {
+      console.warn('[social-push] Cached shared feed lookup failed:', cacheError);
+      return null;
+    });
+  }
+
+  if (!snapshot) {
+    return Notifications.BackgroundNotificationTaskResult.NoData;
+  }
+
   const hasMatchingSharedPost = snapshot.sharedPosts.some(
     (post) => post.id === socialPayload.sharedPostId && post.authorUid !== currentUser.id
   );

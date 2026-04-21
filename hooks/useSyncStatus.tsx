@@ -84,6 +84,7 @@ export function SyncStatusProvider({ children }: { children: ReactNode }) {
   const syncRequestIdRef = useRef(0);
   const pendingRunModeRef = useRef<SyncMode | null>(null);
   const previousUserUidRef = useRef<string | null>(null);
+  const previousConnectivityStatusRef = useRef<string | null>(null);
   const deferredInitialSyncUserUidRef = useRef<string | null>(null);
   const skipNextNotesEffectRef = useRef(false);
   const suppressNextNotesEffectRef = useRef(false);
@@ -531,15 +532,25 @@ export function SyncStatusProvider({ children }: { children: ReactNode }) {
       'settings.offlineReadOnly',
       'You are offline right now. Cloud sync will resume when you reconnect.'
     );
+    const previousConnectivityStatus = previousConnectivityStatusRef.current;
+    const becameOnline =
+      previousConnectivityStatus !== null &&
+      previousConnectivityStatus !== 'online' &&
+      connectivityStatus === 'online';
+    previousConnectivityStatusRef.current = connectivityStatus;
 
-    if (connectivityStatus !== 'online') {
+    if (connectivityStatus === 'offline') {
       if (pendingCount > 0) {
         setLastMessage(offlinePendingMessage);
       }
       return;
     }
 
-    if ((pendingCount > 0 || failedCount > 0) && startupInteractive) {
+    if (
+      becameOnline &&
+      startupInteractive &&
+      (pendingCount > 0 || failedCount > 0 || initialSyncPendingRef.current)
+    ) {
       queueSync(true, 'incremental');
       return;
     }
@@ -572,7 +583,7 @@ export function SyncStatusProvider({ children }: { children: ReactNode }) {
       return 'disabled';
     }
 
-    if (!isOnline) {
+    if (connectivityStatus === 'offline') {
       return 'offline';
     }
 
@@ -589,7 +600,7 @@ export function SyncStatusProvider({ children }: { children: ReactNode }) {
     isAuthAvailable,
     isInitialSyncPending,
     isInitialSyncStateReady,
-    isOnline,
+    connectivityStatus,
     isSyncPrefReady,
     notesInitialLoadComplete,
     status,
