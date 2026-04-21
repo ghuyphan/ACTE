@@ -111,7 +111,7 @@ export function TextCaptureSurface({
 }: TextCaptureSurfaceProps) {
   const captureGradient = getCaptureNoteGradient({
     noteColor,
-    fallbackGradient: colors.gradient ?? null,
+    fallbackGradient: colors.captureGradient ?? colors.gradient ?? null,
   });
   const usesLightCaptureChrome = colors.captureGlassColorScheme === 'light';
 

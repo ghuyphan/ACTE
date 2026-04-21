@@ -9,7 +9,9 @@ const mockConnectivityState = {
 
 const mockThemeState = {
   theme: 'system' as 'system' | 'light' | 'dark',
+  appTheme: 'default' as const,
   setTheme: jest.fn(),
+  setAppTheme: jest.fn(),
   colors: {
     background: '#ffffff',
     text: '#111111',
@@ -20,6 +22,7 @@ const mockThemeState = {
     danger: '#ff3b30',
   },
   isDark: false,
+  themeReady: true,
 };
 
 const mockNotesState = {
@@ -442,6 +445,26 @@ describe('useSettingsScreenModel', () => {
     };
     mockSharedFeedState.enabled = true;
     mockSocialPushState.status = 'blocked';
+
+    const { result } = renderHook(() => useSettingsScreenModel());
+
+    await act(async () => {
+      await result.current.openSocialPushSettings();
+    });
+
+    expect(mockSocialPushState.openSystemSettings).toHaveBeenCalled();
+    expect(mockSocialPushState.enableFromPrompt).not.toHaveBeenCalled();
+  });
+
+  it('opens system settings when friend activity notifications are already enabled', async () => {
+    mockAuthState.user = {
+      id: 'user-1',
+      uid: 'user-1',
+      displayName: 'Huy',
+      email: 'huy@example.com',
+    };
+    mockSharedFeedState.enabled = true;
+    mockSocialPushState.status = 'granted';
 
     const { result } = renderHook(() => useSettingsScreenModel());
 

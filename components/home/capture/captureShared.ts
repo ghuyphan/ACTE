@@ -29,6 +29,7 @@ export type CaptureCardColors = Pick<
   | 'captureFlashOverlay'
 > & {
   gradient?: ThemeColors['gradient'];
+  captureGradient?: ThemeColors['captureGradient'];
 };
 
 export type CameraUiStage = 'text' | 'live' | 'capturing' | 'review';

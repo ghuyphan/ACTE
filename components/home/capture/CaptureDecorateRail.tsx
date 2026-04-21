@@ -82,7 +82,7 @@ function CaptureTextColorButton({
         <LinearGradient
           colors={getCaptureNoteGradient({
             noteColor,
-            fallbackGradient: colors.gradient ?? null,
+            fallbackGradient: colors.captureGradient ?? colors.gradient ?? null,
           })}
           start={{ x: 0.08, y: 0.06 }}
           end={{ x: 0.94, y: 0.94 }}

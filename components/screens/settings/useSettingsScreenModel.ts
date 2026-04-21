@@ -235,7 +235,7 @@ export function useSettingsScreenModel() {
   }, [socialPushStatus, t]);
 
   const openSocialPushSettings = useCallback(() => {
-    if (socialPushStatus === 'blocked') {
+    if (socialPushStatus === 'granted' || socialPushStatus === 'blocked') {
       void openSystemSettings();
       return;
     }

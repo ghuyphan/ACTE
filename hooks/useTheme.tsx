@@ -26,6 +26,7 @@ export interface ThemeColors {
     onDanger: string;
     success: string;
     gradient: [string, string];
+    captureGradient: [string, string];
     chromeSurface: string;
     chromeBorder: string;
     noticeSurface: string;
@@ -91,6 +92,7 @@ const pastelPalette: ThemePalette = {
         onDanger: '#FFFFFF',
         success: '#8CC9B3',
         gradient: ['#F8D7E2', '#D4C9FA'],
+        captureGradient: ['#F8D7E2', '#D4C9FA'],
         chromeSurface: 'rgba(132,111,130,0.08)',
         chromeBorder: 'rgba(132,111,130,0.14)',
         noticeSurface: 'rgba(255,255,255,0.82)',
@@ -142,6 +144,7 @@ const pastelPalette: ThemePalette = {
         onDanger: '#FFFFFF',
         success: '#93D2BB',
         gradient: ['#F1B7C9', '#C6BCFF'],
+        captureGradient: ['#F1B7C9', '#C6BCFF'],
         chromeSurface: 'rgba(255,244,247,0.08)',
         chromeBorder: 'rgba(255,244,247,0.14)',
         noticeSurface: 'rgba(255,244,247,0.07)',
@@ -196,6 +199,7 @@ const classicPalette: ThemePalette = {
         onDanger: '#FFFFFF',
         success: '#34C759',
         gradient: ['#F2DEC0', '#E0B15B'],
+        captureGradient: ['#F6D365', '#FDA085'],
         chromeSurface: 'rgba(0,0,0,0.04)',
         chromeBorder: 'rgba(43,38,33,0.12)',
         noticeSurface: 'rgba(255,255,255,0.76)',
@@ -247,6 +251,7 @@ const classicPalette: ThemePalette = {
         onDanger: '#FFFFFF',
         success: '#30D158',
         gradient: ['#FFC107', '#FF9F0A'],
+        captureGradient: ['#F6D365', '#FDA085'],
         chromeSurface: 'rgba(255,255,255,0.08)',
         chromeBorder: 'rgba(255,255,255,0.14)',
         noticeSurface: 'rgba(255,255,255,0.06)',
@@ -299,6 +304,7 @@ const peachPalette: ThemePalette = {
         dangerSoft: 'rgba(242,154,154,0.16)',
         success: '#9BC9B0',
         gradient: ['#FFD9C6', '#F6BCCB'],
+        captureGradient: ['#FFD9C6', '#F6BCCB'],
         chromeSurface: 'rgba(143,114,105,0.08)',
         chromeBorder: 'rgba(143,114,105,0.14)',
         noticeBorder: 'rgba(143,114,105,0.08)',
@@ -338,6 +344,7 @@ const peachPalette: ThemePalette = {
         dangerSoft: 'rgba(255,176,176,0.18)',
         success: '#9ED1B7',
         gradient: ['#F4C4A4', '#F0ADC2'],
+        captureGradient: ['#F4C4A4', '#F0ADC2'],
         chromeSurface: 'rgba(255,244,241,0.08)',
         chromeBorder: 'rgba(255,244,241,0.14)',
         noticeSurface: 'rgba(255,244,241,0.07)',
@@ -381,6 +388,7 @@ const matchaPalette: ThemePalette = {
         dangerSoft: 'rgba(238,160,160,0.16)',
         success: '#83BEA6',
         gradient: ['#D8E9C1', '#BEE7D7'],
+        captureGradient: ['#D8E9C1', '#BEE7D7'],
         chromeSurface: 'rgba(110,128,107,0.08)',
         chromeBorder: 'rgba(110,128,107,0.14)',
         noticeBorder: 'rgba(110,128,107,0.08)',
@@ -420,6 +428,7 @@ const matchaPalette: ThemePalette = {
         dangerSoft: 'rgba(242,176,176,0.18)',
         success: '#8DC8AF',
         gradient: ['#BFD8A6', '#A8D9C5'],
+        captureGradient: ['#BFD8A6', '#A8D9C5'],
         chromeSurface: 'rgba(244,250,240,0.08)',
         chromeBorder: 'rgba(244,250,240,0.14)',
         noticeSurface: 'rgba(244,250,240,0.07)',
@@ -463,6 +472,7 @@ const berryPalette: ThemePalette = {
         dangerSoft: 'rgba(241,160,182,0.16)',
         success: '#8FBCE6',
         gradient: ['#D9D3FF', '#F3CBE9'],
+        captureGradient: ['#D9D3FF', '#F3CBE9'],
         chromeSurface: 'rgba(118,112,148,0.08)',
         chromeBorder: 'rgba(118,112,148,0.14)',
         noticeBorder: 'rgba(118,112,148,0.08)',
@@ -502,6 +512,7 @@ const berryPalette: ThemePalette = {
         dangerSoft: 'rgba(255,176,197,0.18)',
         success: '#9BC8F0',
         gradient: ['#C9C2FF', '#F0C0E7'],
+        captureGradient: ['#C9C2FF', '#F0C0E7'],
         chromeSurface: 'rgba(247,244,255,0.08)',
         chromeBorder: 'rgba(247,244,255,0.14)',
         noticeSurface: 'rgba(247,244,255,0.07)',

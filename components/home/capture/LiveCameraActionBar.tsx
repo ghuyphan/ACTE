@@ -95,15 +95,6 @@ export function LiveCameraActionBar({
               style={styles.textBottomToolsButton}
             />
           ) : null}
-          {dualCaptureSupported ? (
-            <View
-              pointerEvents="none"
-              style={[
-                styles.liveCameraActionDivider,
-                { backgroundColor: colors.captureGlassBorder },
-              ]}
-            />
-          ) : null}
           <CaptureToggleIconButton
             testID="capture-filter-toggle"
             accessibilityLabel={
@@ -146,13 +137,6 @@ export function LiveCameraActionBar({
               />
             </View>
           ) : null}
-          <View
-            pointerEvents="none"
-            style={[
-              styles.liveCameraActionDivider,
-              { backgroundColor: colors.captureGlassBorder },
-            ]}
-          />
           <CaptureAnimatedPressable
             testID="capture-library-button"
             accessibilityLabel={
