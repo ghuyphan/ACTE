@@ -6,6 +6,9 @@ import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 import { Typography } from '../../../constants/theme';
 import { useTheme } from '../../../hooks/useTheme';
 import { GlassView } from '../../ui/GlassView';
+import {
+  RECAP_REVEAL_DURATION_MS,
+} from './recapMotion';
 
 interface RecapMonthPickerProps {
   label: string;
@@ -71,7 +74,7 @@ function RecapMonthPicker({
       <View style={styles.labelWrap}>
         <Animated.Text
           key={label}
-          entering={FadeInDown.duration(220)}
+          entering={FadeInDown.duration(RECAP_REVEAL_DURATION_MS)}
           style={[styles.label, { color: controlForegroundColor }]}
           numberOfLines={1}
         >
@@ -99,7 +102,7 @@ function RecapMonthPicker({
   );
 
   return isAndroid ? (
-    <Animated.View entering={FadeIn.duration(220)}>
+    <Animated.View entering={FadeIn.duration(RECAP_REVEAL_DURATION_MS)}>
       <GlassView
         style={[
           styles.row,
@@ -116,7 +119,7 @@ function RecapMonthPicker({
     </Animated.View>
   ) : (
     <Animated.View
-      entering={FadeIn.duration(220)}
+      entering={FadeIn.duration(RECAP_REVEAL_DURATION_MS)}
       style={[
         styles.row,
         {

@@ -12,8 +12,13 @@ import { GlassView } from '../../ui/GlassView';
 import RecapCalendarGrid from './RecapCalendarGrid';
 import RecapMonthPicker from './RecapMonthPicker';
 import RecapStickerPile from './RecapStickerPile';
-
-const RECAP_FIRST_REVEAL_PHYSICS_DELAY_MS = 280;
+import {
+  RECAP_CALENDAR_REVEAL_DELAY_MS,
+  RECAP_PHYSICS_ENABLE_DELAY_MS,
+  RECAP_REVEAL_DURATION_MS,
+  RECAP_SECTION_REVEAL_DURATION_MS,
+  RECAP_STICKER_PILE_REVEAL_DELAY_MS,
+} from './recapMotion';
 
 const NotesRecapView = memo(function NotesRecapView({
   notes,
@@ -68,7 +73,7 @@ const NotesRecapView = memo(function NotesRecapView({
       if (!cancelled) {
         setHasCompletedFirstReveal(true);
       }
-    }, RECAP_FIRST_REVEAL_PHYSICS_DELAY_MS);
+    }, RECAP_PHYSICS_ENABLE_DELAY_MS);
 
     return () => {
       cancelled = true;
@@ -117,7 +122,10 @@ const NotesRecapView = memo(function NotesRecapView({
         },
       ]}
     >
-      <Reanimated.View entering={FadeInUp.duration(220)} style={styles.recapPinnedHeader}>
+      <Reanimated.View
+        entering={FadeInUp.duration(RECAP_REVEAL_DURATION_MS)}
+        style={styles.recapPinnedHeader}
+      >
         {activeRecap && activeMonthLabel ? (
           <View style={styles.recapMonthHeader}>
             <RecapMonthPicker
@@ -180,10 +188,14 @@ const NotesRecapView = memo(function NotesRecapView({
           ) : (
             <Reanimated.View
               key={activeRecap.month.monthKey}
-              entering={FadeInDown.duration(240)}
+              entering={FadeInDown.duration(RECAP_SECTION_REVEAL_DURATION_MS)}
               style={styles.recapMonthSection}
             >
-              <Reanimated.View entering={FadeIn.delay(70).duration(220)}>
+              <Reanimated.View
+                entering={FadeIn.delay(RECAP_STICKER_PILE_REVEAL_DELAY_MS).duration(
+                  RECAP_REVEAL_DURATION_MS
+                )}
+              >
                 {isPileReady ? (
                   <RecapStickerPile
                     title={pileTitle}
@@ -228,7 +240,11 @@ const NotesRecapView = memo(function NotesRecapView({
                 )}
               </Reanimated.View>
 
-              <Reanimated.View entering={FadeInDown.delay(110).duration(220)}>
+              <Reanimated.View
+                entering={FadeInDown.delay(RECAP_CALENDAR_REVEAL_DELAY_MS).duration(
+                  RECAP_REVEAL_DURATION_MS
+                )}
+              >
                 {isAndroid ? (
                   <GlassView
                     style={[

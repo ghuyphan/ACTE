@@ -192,6 +192,7 @@ function PhysicsStickerSprite({
   width,
   height,
   outlineSize,
+  physicsIndex,
   physicsState,
   layout,
 }: {
@@ -199,12 +200,16 @@ function PhysicsStickerSprite({
   width: number;
   height: number;
   outlineSize: number;
+  physicsIndex: number;
   physicsState: SharedValue<StickerPhysicsState[]>;
   layout: StickerCanvasLayout;
 }) {
   const stickerState = useDerivedValue(
-    () => physicsState.value.find((candidate) => candidate.id === placement.id) ?? null,
-    [physicsState, placement.id]
+    () => {
+      const candidate = physicsState.value[physicsIndex];
+      return candidate?.id === placement.id ? candidate : null;
+    },
+    [physicsIndex, physicsState, placement.id]
   );
 
   const opacity = useDerivedValue(() => {
@@ -252,7 +257,7 @@ function StickerLayer({
 }: StickerLayerProps) {
   return (
     <>
-      {placements.map((placement) => {
+      {placements.map((placement, index) => {
         const dimensions = getStickerDimensions(placement, layout, sizeMultiplier, minimumBaseSize);
         const outlineSize = getStickerOutlineSize(dimensions.width, dimensions.height);
         const motionTransform = [
@@ -269,6 +274,7 @@ function StickerLayer({
             width={dimensions.width}
             height={dimensions.height}
             outlineSize={outlineSize}
+            physicsIndex={index}
             physicsState={physicsState}
             layout={layout}
           />

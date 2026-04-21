@@ -274,6 +274,7 @@ jest.mock('react-native-reanimated', () => {
   Reanimated.CurvedTransition.easingHeight = () => Reanimated.CurvedTransition;
   Reanimated.SensorType = {
     GRAVITY: 'GRAVITY',
+    ACCELEROMETER: 'ACCELEROMETER',
   };
   Reanimated.useAnimatedSensor = () => ({
     sensor: {

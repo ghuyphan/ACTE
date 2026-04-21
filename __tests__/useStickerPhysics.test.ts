@@ -1,4 +1,8 @@
 import {
+  decayShakeBurstEnergy,
+  getShakeAngularAcceleration,
+  getShakeImpulseStrength,
+  getShakeTranslationAcceleration,
   getStickerMotionActivity,
   getStickerRestAnchorY,
   resolveStickerCollisions,
@@ -74,6 +78,36 @@ describe('useStickerPhysics', () => {
 
   it('wakes up when the device tilts meaningfully', () => {
     expect(getStickerMotionActivity(0.32, 0.02, 0.01, 0, 1 / 60)).toBeGreaterThan(0.5);
+  });
+
+  it('does not turn a small linear shove into a shake burst', () => {
+    expect(getShakeImpulseStrength(0.12)).toBe(0);
+  });
+
+  it('creates a strong shake burst from a rapid device acceleration', () => {
+    expect(getShakeImpulseStrength(0.86)).toBeGreaterThan(0.6);
+  });
+
+  it('decays shake burst energy once the burst has fired', () => {
+    expect(decayShakeBurstEnergy(1, 1 / 60)).toBeLessThan(1);
+  });
+
+  it('keeps stamp shake response calmer than regular stickers', () => {
+    expect(getShakeTranslationAcceleration('rect', 'physics')).toBeLessThan(
+      getShakeTranslationAcceleration('ellipse', 'physics')
+    );
+    expect(getShakeAngularAcceleration('rect', 'physics')).toBeLessThan(
+      getShakeAngularAcceleration('ellipse', 'physics')
+    );
+  });
+
+  it('softens shake bursts in the water motion variant', () => {
+    expect(getShakeTranslationAcceleration('ellipse', 'water')).toBeLessThan(
+      getShakeTranslationAcceleration('ellipse', 'physics')
+    );
+    expect(getShakeAngularAcceleration('ellipse', 'water')).toBeLessThan(
+      getShakeAngularAcceleration('ellipse', 'physics')
+    );
   });
 
   it('decays motion activity once the device settles down', () => {

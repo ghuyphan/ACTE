@@ -7,6 +7,10 @@ import { Layout, Typography } from '../../../constants/theme';
 import { useTheme } from '../../../hooks/useTheme';
 import StickerIcon from '../../ui/StickerIcon';
 import { GlassView } from '../../ui/GlassView';
+import {
+  RECAP_INDICATOR_TIMING,
+  RECAP_SELECTION_SPRING,
+} from './recapMotion';
 
 export type RecapMode = 'all' | 'collection' | 'recap';
 const TRACK_PADDING = 4;
@@ -91,15 +95,11 @@ function RecapModeSwitch({
   );
   const indicatorStyle = useAnimatedStyle(
     () => ({
-      opacity: withTiming(segmentMetrics.width > 0 ? 1 : 0, { duration: 120 }),
-      width: withTiming(segmentMetrics.width, { duration: 120 }),
+      opacity: withTiming(segmentMetrics.width > 0 ? 1 : 0, RECAP_INDICATOR_TIMING),
+      width: withTiming(segmentMetrics.width, RECAP_INDICATOR_TIMING),
       transform: [
         {
-          translateX: withSpring(activeSegmentIndex * segmentMetrics.offset, {
-            damping: 20,
-            mass: 0.7,
-            stiffness: 220,
-          }),
+          translateX: withSpring(activeSegmentIndex * segmentMetrics.offset, RECAP_SELECTION_SPRING),
         },
       ],
     }),

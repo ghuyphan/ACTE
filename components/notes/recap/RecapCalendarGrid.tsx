@@ -5,6 +5,10 @@ import { Image } from 'expo-image';
 import Animated, { useAnimatedStyle, withSpring, withTiming } from 'react-native-reanimated';
 import { Typography } from '../../../constants/theme';
 import { useTheme } from '../../../hooks/useTheme';
+import {
+  RECAP_SELECTION_SPRING,
+  RECAP_SELECTION_TIMING,
+} from './recapMotion';
 
 export interface RecapCalendarDayMarker {
   key: string;
@@ -138,14 +142,10 @@ const RecapCalendarDayCell = memo(function RecapCalendarDayCell({
     ) : null;
   const haloAnimatedStyle = useAnimatedStyle(
     () => ({
-      opacity: withTiming(isSelected ? 1 : 0, { duration: 180 }),
+      opacity: withTiming(isSelected ? 1 : 0, RECAP_SELECTION_TIMING),
       transform: [
         {
-          scale: withSpring(isSelected ? 1 : 0.96, {
-            damping: 18,
-            mass: 0.7,
-            stiffness: 220,
-          }),
+          scale: withSpring(isSelected ? 1 : 0.96, RECAP_SELECTION_SPRING),
         },
       ],
     }),
@@ -155,14 +155,10 @@ const RecapCalendarDayCell = memo(function RecapCalendarDayCell({
     () => ({
       transform: [
         {
-          scale: withSpring(isSelected ? 1.04 : 1, {
-            damping: 18,
-            mass: 0.7,
-            stiffness: 220,
-          }),
+          scale: withSpring(isSelected ? 1.04 : 1, RECAP_SELECTION_SPRING),
         },
       ],
-      opacity: withTiming(day.count > 0 ? 1 : 0.86, { duration: 180 }),
+      opacity: withTiming(day.count > 0 ? 1 : 0.86, RECAP_SELECTION_TIMING),
     }),
     [day.count, isSelected]
   );
