@@ -495,6 +495,9 @@ function createCaptureCardProps(
     needsCameraPermission: false,
     cameraPermissionRequiresSettings: false,
     onRequestCameraPermission: () => undefined,
+    backCameraLens: 'wide' as const,
+    availableBackCameraLenses: ['wide'] as Array<'wide' | 'ultra-wide' | 'telephoto'>,
+    onChangeBackCameraLens: () => undefined,
     facing: 'back' as const,
     onToggleFacing: () => undefined,
     onOpenPhotoLibrary: () => undefined,
@@ -640,6 +643,41 @@ describe('CaptureCard doodle handle', () => {
 
     expect(queryByTestId('capture-restaurant-input')).toBeNull();
     expect(getByTestId('capture-library-button')).toBeTruthy();
+  });
+
+  it('renders direct-select back camera lens buttons only for supported lenses', () => {
+    const ref = React.createRef<CaptureCardHandle>();
+    const onChangeBackCameraLens = jest.fn();
+    const view = renderCaptureCard(ref, {
+      captureMode: 'camera',
+      availableBackCameraLenses: ['wide', 'telephoto'],
+      backCameraLens: 'wide',
+      onChangeBackCameraLens,
+    });
+
+    expect(view.getByTestId('capture-back-camera-lens-selector')).toBeTruthy();
+    expect(view.getByTestId('capture-back-camera-lens-button-wide')).toBeTruthy();
+    expect(view.getByTestId('capture-back-camera-lens-button-telephoto')).toBeTruthy();
+    expect(view.queryByTestId('capture-back-camera-lens-button-ultra-wide')).toBeNull();
+
+    fireEvent.press(view.getByTestId('capture-back-camera-lens-button-telephoto'));
+
+    expect(onChangeBackCameraLens).toHaveBeenCalledTimes(1);
+    expect(onChangeBackCameraLens).toHaveBeenCalledWith('telephoto');
+  });
+
+  it('hides the back camera lens selector when only one rear lens is supported', () => {
+    const ref = React.createRef<CaptureCardHandle>();
+    const view = renderCaptureCard(ref, {
+      captureMode: 'camera',
+      availableBackCameraLenses: ['wide'],
+      backCameraLens: 'wide',
+    });
+
+    expect(view.queryByTestId('capture-back-camera-lens-selector')).toBeNull();
+    expect(view.queryByTestId('capture-back-camera-lens-button-wide')).toBeNull();
+    expect(view.queryByTestId('capture-back-camera-lens-button-ultra-wide')).toBeNull();
+    expect(view.queryByTestId('capture-back-camera-lens-button-telephoto')).toBeNull();
   });
 
   it('tracks local doodle state through the imperative handle', () => {

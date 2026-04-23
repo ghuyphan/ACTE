@@ -154,6 +154,9 @@ interface CaptureCardProps {
   needsCameraPermission: boolean;
   cameraPermissionRequiresSettings?: boolean;
   onRequestCameraPermission: () => void;
+  backCameraLens?: 'wide' | 'ultra-wide' | 'telephoto';
+  availableBackCameraLenses?: Array<'wide' | 'ultra-wide' | 'telephoto'>;
+  onChangeBackCameraLens?: (nextLens: 'wide' | 'ultra-wide' | 'telephoto') => void;
   facing: 'back' | 'front';
   onToggleFacing: () => void;
   onChangeCameraSubmode?: (nextSubmode: 'single' | 'dual') => void;
@@ -225,6 +228,9 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   needsCameraPermission,
   cameraPermissionRequiresSettings = false,
   onRequestCameraPermission,
+  backCameraLens = 'wide',
+  availableBackCameraLenses = ['wide'],
+  onChangeBackCameraLens = () => undefined,
   facing,
   onToggleFacing,
   onChangeCameraSubmode = () => undefined,
@@ -1237,6 +1243,8 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
               {shouldRenderLiveCameraSurface ? (
                 <View style={styles.cameraSurfaceLayer}>
                   <LiveCameraSurface
+                    backCameraLens={backCameraLens}
+                    availableBackCameraLenses={facing === 'back' ? availableBackCameraLenses : []}
                     cameraDevice={cameraDevice}
                     cameraInstructionText={cameraInstructionText}
                     cameraFocusPoint={cameraFocusPoint}
@@ -1272,6 +1280,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                     livePhotoProgressPath={livePhotoProgressPath}
                     livePhotoRingProgress={livePhotoRingProgress}
                     needsCameraPermission={needsCameraPermission}
+                    onChangeBackCameraLens={onChangeBackCameraLens}
                     selectedPhotoFilterId={selectedPhotoFilterId}
                     shouldRenderCameraPreview={shouldRenderCameraPreview}
                     showCaptureCover={

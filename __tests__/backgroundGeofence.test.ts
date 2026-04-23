@@ -1,3 +1,5 @@
+import { waitFor } from '@testing-library/react-native';
+
 const mockStorage = new Map<string, string>();
 const mockScheduleNotificationAsync = jest.fn();
 const mockGetNoteByIdForScope = jest.fn();
@@ -86,7 +88,13 @@ jest.mock('../constants/i18n', () => ({
   },
 }));
 
-import { getGeofenceCooldownKey, getLocationCooldownId, getSkipNextEnterKey } from '../utils/geofenceKeys';
+import {
+  getGeofenceCooldownKey,
+  getLocationCooldownId,
+  getSkipNextEnterKey,
+  getSkipNextEnterPlaceKey,
+} from '../utils/geofenceKeys';
+import { getReminderPlaceKey } from '../services/reminderSelection';
 
 function buildNote(overrides: Partial<any> = {}) {
   return {
@@ -184,6 +192,28 @@ describe('backgroundGeofence', () => {
     expect(mockStorage.has(getSkipNextEnterKey('note-1'))).toBe(false);
   });
 
+  it('skips an immediate enter event when a new note shares a place with the monitored note', async () => {
+    const newNote = buildNote({
+      id: 'new-photo',
+      type: 'photo',
+      content: 'file:///photos/photo.jpg',
+      createdAt: '2026-03-10T12:00:00.000Z',
+    });
+    setMockNotes([
+      buildNote({
+        id: 'preference-note',
+        content: 'Order the iced tea',
+        createdAt: '2026-03-10T09:00:00.000Z',
+      }),
+      newNote,
+    ]);
+    mockStorage.set(getSkipNextEnterPlaceKey(getReminderPlaceKey(newNote)), '1');
+
+    await runEnterEvent('preference-note');
+
+    expect(mockScheduleNotificationAsync).not.toHaveBeenCalled();
+  });
+
   it('suppresses notifications while the selected reminder note is on cooldown', async () => {
     mockStorage.set(getGeofenceCooldownKey('note', 'note-1'), String(Date.now()));
 
@@ -208,11 +238,9 @@ describe('backgroundGeofence', () => {
     const taskPromise = runEnterEvent('note-1').then(() => {
       taskFinished = true;
     });
-    for (let attempt = 0; attempt < 10 && !widgetRefreshStarted; attempt += 1) {
-      await Promise.resolve();
-    }
-
-    expect(widgetRefreshStarted).toBe(true);
+    await waitFor(() => {
+      expect(widgetRefreshStarted).toBe(true);
+    });
     expect(taskFinished).toBe(false);
     expect(mockScheduleNotificationAsync).not.toHaveBeenCalled();
 
@@ -232,6 +260,24 @@ describe('backgroundGeofence', () => {
 
     expect(mockScheduleNotificationAsync).not.toHaveBeenCalled();
     expect(mockStorage.has(getGeofenceCooldownKey('note', 'note-1'))).toBe(true);
+  });
+
+  it('does not suppress different places that happen to share the same name', async () => {
+    mockStorage.set(
+      getGeofenceCooldownKey('location', getLocationCooldownId('District 1', 10.88, 106.8)),
+      String(Date.now())
+    );
+
+    await runEnterEvent('note-1');
+
+    expect(mockScheduleNotificationAsync).toHaveBeenCalledWith({
+      content: {
+        title: 'Này, District 1 quen không?',
+        body: 'Order the iced tea',
+        data: { noteId: 'note-1' },
+      },
+      trigger: null,
+    });
   });
 
   it('selects the best note for the place instead of the raw triggered note', async () => {

@@ -1,4 +1,5 @@
 import type { Note } from '../database';
+import { compareByReminderUtility, getPlaceGroups } from '../placeRanking';
 import { getNotePhotoUri } from '../photoStorage';
 import { getDistanceMeters } from '../reminderSelection';
 import type { SharedPost } from '../sharedFeedService';
@@ -89,6 +90,33 @@ function hasWidgetCandidateCoordinates(candidate: WidgetCandidate): candidate is
   longitude: number;
 } {
   return Number.isFinite(candidate.latitude) && Number.isFinite(candidate.longitude);
+}
+
+type NearbyWidgetCandidate = WidgetCandidate & {
+  type: 'text' | 'photo';
+  content: string;
+  latitude: number;
+  longitude: number;
+};
+
+type NearbyPersonalPlaceSelection = {
+  key: string;
+  selectedCandidate: WidgetCandidate;
+  noteIds: Set<string>;
+};
+
+function toNearbyWidgetCandidate(candidate: WidgetCandidate): NearbyWidgetCandidate | null {
+  if (!hasWidgetCandidateCoordinates(candidate)) {
+    return null;
+  }
+
+  return {
+    ...candidate,
+    type: candidate.noteType,
+    content: candidate.text,
+    latitude: candidate.latitude,
+    longitude: candidate.longitude,
+  };
 }
 
 function getPreferredWidgetCandidate(
@@ -245,42 +273,47 @@ function normalizeSharedCandidates(sharedPosts: Array<SharedPost | WidgetCandida
   return sharedPosts.map((post) => (isWidgetCandidate(post) ? post : createSharedWidgetCandidate(post)));
 }
 
-function buildNearbyPersonalCandidates(
+function buildNearbyPersonalPlaceSelections(
   personalCandidates: WidgetCandidate[],
   currentLocation: LocationCoords | null,
   nearbyRadiusMeters?: number
 ) {
   if (!currentLocation) {
-    return [] as WidgetCandidate[];
+    return [] as NearbyPersonalPlaceSelection[];
   }
 
-  return [...personalCandidates]
-    .filter(hasWidgetCandidateCoordinates)
-    .filter((candidate) => {
-      const allowedDistance = Math.max(1, nearbyRadiusMeters ?? candidate.radius ?? 1);
+  return getPlaceGroups(
+    personalCandidates
+      .map(toNearbyWidgetCandidate)
+      .filter((candidate): candidate is NearbyWidgetCandidate => Boolean(candidate))
+  )
+    .map((group) => ({
+      group,
+      distanceMeters: getDistanceMeters(currentLocation, {
+        latitude: group.latitude,
+        longitude: group.longitude,
+      }),
+    }))
+    .filter(({ group, distanceMeters }) => {
+      const allowedDistance = Math.max(1, nearbyRadiusMeters ?? group.radiusMeters ?? 1);
       return (
-        getDistanceMeters(currentLocation, {
-          latitude: candidate.latitude,
-          longitude: candidate.longitude,
-        }) <= allowedDistance
+        distanceMeters <= allowedDistance
       );
     })
     .sort((left, right) => {
-      const timestampDelta = compareCandidatesByNewest(left, right);
-      if (timestampDelta !== 0) {
-        return timestampDelta;
+      const distanceDelta = left.distanceMeters - right.distanceMeters;
+      if (distanceDelta !== 0) {
+        return distanceDelta;
       }
 
-      return (
-        getDistanceMeters(currentLocation, {
-          latitude: left.latitude,
-          longitude: left.longitude,
-        }) -
-        getDistanceMeters(currentLocation, {
-          latitude: right.latitude,
-          longitude: right.longitude,
-        })
-      );
+      return compareByReminderUtility(left.group.bestReminderNote, right.group.bestReminderNote);
+    })
+    .map(({ group }) => {
+      return {
+        key: group.key,
+        selectedCandidate: group.bestReminderNote,
+        noteIds: new Set(group.notes.map((note) => note.id)),
+      };
     });
 }
 
@@ -314,14 +347,15 @@ export function buildOrderedWidgetSelections(options: {
     preferredNoteId = null,
   } = options;
 
-  const nearbyCandidates = buildNearbyPersonalCandidates(
+  const nearbyPlaces = buildNearbyPersonalPlaceSelections(
     personalCandidates,
     currentLocation,
     nearbyRadiusMeters
   );
-  const nearbyPlacesCount = Math.max(0, nearbyCandidates.length - 1);
+  const nearbyPlacesCount = Math.max(0, nearbyPlaces.length - 1);
   const orderedSelections: WidgetSelectionResult[] = [];
   const seenCandidateKeys = new Set<string>();
+  const seenNearbyPlaceKeys = new Set<string>();
   const addCandidate = (
     candidate: WidgetCandidate | null,
     selectionMode: WidgetSelectionMode,
@@ -346,18 +380,26 @@ export function buildOrderedWidgetSelections(options: {
     preferredCandidate?.source === 'shared' ? preferredCandidate : null;
 
   if (preferredPersonalCandidate) {
-    const preferredIsNearby = nearbyCandidates.some(
-      (candidate) => candidate.candidateKey === preferredPersonalCandidate.candidateKey
+    const preferredNearbyPlace = nearbyPlaces.find(
+      (place) => place.noteIds.has(preferredPersonalCandidate.id)
     );
     addCandidate(
       preferredPersonalCandidate,
-      preferredIsNearby ? 'nearest_memory' : getSelectionModeForCandidate(preferredPersonalCandidate),
-      preferredIsNearby ? nearbyPlacesCount : 0
+      preferredNearbyPlace ? 'nearest_memory' : getSelectionModeForCandidate(preferredPersonalCandidate),
+      preferredNearbyPlace ? nearbyPlacesCount : 0
     );
+    if (preferredNearbyPlace) {
+      seenNearbyPlaceKeys.add(preferredNearbyPlace.key);
+    }
   }
 
-  for (const candidate of nearbyCandidates) {
-    addCandidate(candidate, 'nearest_memory', nearbyPlacesCount);
+  for (const nearbyPlace of nearbyPlaces) {
+    if (seenNearbyPlaceKeys.has(nearbyPlace.key)) {
+      continue;
+    }
+
+    seenNearbyPlaceKeys.add(nearbyPlace.key);
+    addCandidate(nearbyPlace.selectedCandidate, 'nearest_memory', nearbyPlacesCount);
   }
 
   if (preferredSharedCandidate) {

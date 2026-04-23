@@ -362,7 +362,7 @@ function useNotesStoreValue(): NotesStoreValue {
       const nextNotes = prependNote(notesRef.current, note);
       commitNotes(nextNotes, { preferredNoteId: note.id });
 
-      void skipImmediateReminderForNewNote(note.id).catch((error) => {
+      void skipImmediateReminderForNewNote(note).catch((error) => {
         console.warn('Failed to suppress immediate reminder for new note:', error);
       });
       syncGeofencesForNotes('note creation', nextNotes);

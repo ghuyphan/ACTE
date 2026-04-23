@@ -309,7 +309,7 @@ describe('widgetService', () => {
     expect(result.selectionMode).toBe('latest_memory');
   });
 
-  it('uses the newest nearby personal note before older nearby notes', () => {
+  it('uses the nearest nearby place before a newer place that is slightly farther away', () => {
     const result = selectWidgetNote({
       notes: [
         buildNote({
@@ -339,7 +339,44 @@ describe('widgetService', () => {
       currentLocation: { latitude: 10.0, longitude: 106.0 },
     });
 
-    expect(result.selectedNote?.id).toBe('newer-nearby');
+    expect(result.selectedNote?.id).toBe('older-nearby');
+    expect(result.selectionMode).toBe('nearest_memory');
+    expect(result.nearbyPlacesCount).toBe(1);
+  });
+
+  it('treats multiple nearby notes from the same place as one place and picks the best reminder note', () => {
+    const result = selectWidgetNote({
+      notes: [
+        buildNote({
+          id: 'nearby-photo',
+          type: 'photo',
+          content: 'file:///mock-documents/photos/nearby.jpg',
+          locationName: 'Cafe A',
+          latitude: 10.0,
+          longitude: 106.0,
+          createdAt: '2026-03-10T12:00:00.000Z',
+        }),
+        buildNote({
+          id: 'nearby-preference',
+          content: 'She likes the iced tea here',
+          locationName: 'Cafe A',
+          latitude: 10.0,
+          longitude: 106.0,
+          createdAt: '2026-03-09T10:00:00.000Z',
+        }),
+        buildNote({
+          id: 'second-place',
+          content: 'Another nearby place',
+          locationName: 'Cafe B',
+          latitude: 10.0003,
+          longitude: 106.0,
+          createdAt: '2026-03-10T11:00:00.000Z',
+        }),
+      ] as any,
+      currentLocation: { latitude: 10.0, longitude: 106.0 },
+    });
+
+    expect(result.selectedNote?.id).toBe('nearby-preference');
     expect(result.selectionMode).toBe('nearest_memory');
     expect(result.nearbyPlacesCount).toBe(1);
   });
@@ -468,6 +505,54 @@ describe('widgetService', () => {
         locationName: 'Cafe A',
         nearbyPlacesCount: 1,
         primaryActionUrl: 'noto:///widget/note/near-note',
+      })
+    );
+  });
+
+  it('uses the place-level best reminder note when a nearby place has multiple personal notes', async () => {
+    mockGetAllNotes.mockResolvedValue([
+      buildNote({
+        id: 'nearby-photo',
+        type: 'photo',
+        content: 'file:///mock-documents/photos/nearby.jpg',
+        locationName: 'Cafe A',
+        latitude: 10.0,
+        longitude: 106.0,
+        createdAt: '2026-03-10T12:00:00.000Z',
+      }),
+      buildNote({
+        id: 'nearby-preference',
+        content: 'She likes the iced tea here',
+        locationName: 'Cafe A',
+        latitude: 10.0,
+        longitude: 106.0,
+        createdAt: '2026-03-09T10:00:00.000Z',
+      }),
+      buildNote({
+        id: 'second-place',
+        content: 'Another nearby memory',
+        locationName: 'Cafe B',
+        latitude: 10.0002,
+        longitude: 106.0,
+        createdAt: '2026-03-10T10:00:00.000Z',
+      }),
+    ]);
+
+    await updateWidgetData({
+      currentLocation: { latitude: 10.0, longitude: 106.0 },
+      includeLocationLookup: false,
+      referenceDate: new Date('2026-03-10T00:00:00.000Z'),
+    });
+
+    const entries = getLastTimelineEntries();
+
+    expect(entries[0]?.props.props).toEqual(
+      expect.objectContaining({
+        noteType: 'text',
+        text: 'She likes the iced tea here',
+        locationName: 'Cafe A',
+        nearbyPlacesCount: 1,
+        primaryActionUrl: 'noto:///widget/note/nearby-preference',
       })
     );
   });

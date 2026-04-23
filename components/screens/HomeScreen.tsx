@@ -489,6 +489,9 @@ export default function HomeScreen() {
     setRadius,
     facing,
     setFacing,
+    backCameraLens,
+    setBackCameraLens,
+    availableBackCameraLenses,
     selectedPhotoFilterId,
     setSelectedPhotoFilterId,
     cameraDevice,
@@ -558,6 +561,13 @@ export default function HomeScreen() {
       setCameraSubmode(nextSubmode);
     },
     [clearDualCaptureState, dualCaptureUsesSequentialCapture, setCameraSubmode]
+  );
+
+  const handleChangeBackCameraLens = useCallback(
+    (nextLens: 'wide' | 'ultra-wide' | 'telephoto') => {
+      setBackCameraLens(nextLens);
+    },
+    [setBackCameraLens]
   );
 
   const cameraInstructionText = useMemo(() => {
@@ -2693,6 +2703,9 @@ export default function HomeScreen() {
           onRequestCameraPermission={() => {
             void handleRequestCameraPermission();
           }}
+          backCameraLens={backCameraLens}
+          availableBackCameraLenses={availableBackCameraLenses}
+          onChangeBackCameraLens={handleChangeBackCameraLens}
           facing={facing}
           onToggleFacing={handleToggleFacing}
           onChangeCameraSubmode={handleChangeCameraSubmode}

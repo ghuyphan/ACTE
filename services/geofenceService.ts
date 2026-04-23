@@ -7,6 +7,7 @@ import { getReminderPlaceGroups } from './reminderSelection';
 import { GEOFENCE_TASK_NAME } from '../utils/backgroundGeofence';
 import { getPersistentItem, removePersistentItem, setPersistentItem } from '../utils/appStorage';
 import { markSkipImmediateReminder } from '../utils/geofenceSkipEnter';
+import { getReminderPlaceKey } from './reminderSelection';
 
 export interface ReminderPermissionState {
   foregroundGranted: boolean;
@@ -206,7 +207,10 @@ export async function syncGeofenceRegions(options: { notes?: Note[] | null } = {
   return true;
 }
 
-export async function skipImmediateReminderForNewNote(noteId: string): Promise<void> {
+export async function skipImmediateReminderForNewNote(
+  note: Pick<Note, 'id' | 'locationName' | 'latitude' | 'longitude'> | string
+): Promise<void> {
+  const noteId = typeof note === 'string' ? note : note.id;
   if (!noteId) {
     return;
   }
@@ -220,7 +224,14 @@ export async function skipImmediateReminderForNewNote(noteId: string): Promise<v
     return;
   }
 
-  await markSkipImmediateReminder(noteId);
+  await markSkipImmediateReminder(
+    typeof note === 'string'
+      ? noteId
+      : {
+          noteId,
+          placeKey: getReminderPlaceKey(note),
+        }
+  );
 }
 
 export async function clearGeofenceRegions(): Promise<void> {

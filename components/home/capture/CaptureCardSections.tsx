@@ -31,7 +31,7 @@ import {
   DualCameraPreview,
   type DualCameraPreviewHandle,
 } from './DualCameraPreview';
-import { FilteredPhotoCanvas } from './CaptureControls';
+import { CaptureAnimatedPressable, FilteredPhotoCanvas } from './CaptureControls';
 import { LiveCameraFilterOverlay } from './LiveCameraFilterOverlay';
 import {
   CAMERA_FOCUS_RING_SIZE,
@@ -488,6 +488,8 @@ export function PhotoCaptureSurface({
 }
 
 interface LiveCameraSurfaceProps {
+  backCameraLens: 'wide' | 'ultra-wide' | 'telephoto';
+  availableBackCameraLenses: Array<'wide' | 'ultra-wide' | 'telephoto'>;
   cameraDevice?: CameraDevice;
   cameraInstructionText?: string | null;
   cameraFocusPoint: { x: number; y: number } | null;
@@ -521,6 +523,7 @@ interface LiveCameraSurfaceProps {
   livePhotoProgressPath: ComponentProps<typeof SkiaPath>['path'];
   livePhotoRingProgress: number;
   needsCameraPermission: boolean;
+  onChangeBackCameraLens: (nextLens: 'wide' | 'ultra-wide' | 'telephoto') => void;
   shouldRenderCameraPreview: boolean;
   showCaptureCover: boolean;
   showCameraUnavailableState: boolean;
@@ -530,6 +533,8 @@ interface LiveCameraSurfaceProps {
 }
 
 export function LiveCameraSurface({
+  backCameraLens,
+  availableBackCameraLenses,
   cameraDevice,
   cameraInstructionText = null,
   cameraFocusPoint,
@@ -563,6 +568,7 @@ export function LiveCameraSurface({
   livePhotoProgressPath,
   livePhotoRingProgress,
   needsCameraPermission,
+  onChangeBackCameraLens,
   shouldRenderCameraPreview,
   showCaptureCover,
   showCameraUnavailableState,
@@ -575,6 +581,38 @@ export function LiveCameraSurface({
     dualCaptureAwaitingSecondShot && Boolean(dualCaptureFirstShotUri);
   const shouldShowZoomBadge =
     !showDualCaptureReference && (showCameraZoomBadge || cameraPreviewZoom > 1.01);
+  const shouldShowBackCameraLensSelector =
+    facing === 'back' &&
+    availableBackCameraLenses.length > 1 &&
+    !dualModeEnabled &&
+    !showDualCaptureReference &&
+    !needsCameraPermission &&
+    !showCameraUnavailableState;
+  const backCameraLensOptions = availableBackCameraLenses.map((lens) => {
+    switch (lens) {
+      case 'ultra-wide':
+        return {
+          lens,
+          label: t('capture.backCameraUltraWide', '0.5x'),
+          accessibilityLabel: t('capture.backCameraUltraWideA11y', 'Use ultra-wide camera'),
+        };
+      case 'telephoto':
+        return {
+          lens,
+          label: t('capture.backCameraTelephoto', 'Tele'),
+          accessibilityLabel: t('capture.backCameraTelephotoA11y', 'Use telephoto camera'),
+        };
+      case 'wide':
+      default:
+        return {
+          lens,
+          label: t('capture.backCameraWide', '1x'),
+          accessibilityLabel: t('capture.backCameraWideA11y', 'Use wide camera'),
+        };
+    }
+  });
+  const activeBackCameraLensOption =
+    backCameraLensOptions.find((option) => option.lens === backCameraLens) ?? backCameraLensOptions[0];
   const showLivePhotoGuide =
     Boolean(cameraInstructionText) &&
     !dualModeEnabled &&
@@ -635,6 +673,24 @@ export function LiveCameraSurface({
     colors.captureGlassColorScheme === 'light'
       ? 'rgba(43,38,33,0.12)'
       : 'rgba(255,247,232,0.22)';
+  const cameraLensSelectorBackground =
+    colors.captureGlassColorScheme === 'light'
+      ? 'rgba(18,18,20,0.52)'
+      : 'rgba(12,12,14,0.68)';
+  const cameraLensSelectorBorder =
+    colors.captureGlassColorScheme === 'light'
+      ? 'rgba(255,255,255,0.18)'
+      : 'rgba(255,255,255,0.14)';
+  const cameraLensOptionInactiveBackground =
+    colors.captureGlassColorScheme === 'light'
+      ? 'rgba(255,255,255,0.06)'
+      : 'rgba(255,255,255,0.04)';
+  const cameraLensOptionActiveBackground =
+    colors.captureGlassColorScheme === 'light'
+      ? 'rgba(255,255,255,0.14)'
+      : 'rgba(0,0,0,0.22)';
+  const cameraLensOptionInactiveText = 'rgba(255,253,252,0.92)';
+  const cameraLensOptionActiveText = colors.primary;
 
   return (
     <View
@@ -697,6 +753,60 @@ export function LiveCameraSurface({
               height={CARD_SIZE}
               style={styles.cameraPreview}
             />
+            {shouldShowBackCameraLensSelector && activeBackCameraLensOption ? (
+              <View pointerEvents="box-none" style={styles.cameraLensSelector}>
+                <View
+                  testID="capture-back-camera-lens-selector"
+                  style={[
+                    styles.cameraLensSelectorPill,
+                    {
+                      backgroundColor: cameraLensSelectorBackground,
+                      borderColor: cameraLensSelectorBorder,
+                    },
+                  ]}
+                >
+                  {backCameraLensOptions.map((option) => {
+                    const selected = option.lens === activeBackCameraLensOption.lens;
+
+                    return (
+                      <CaptureAnimatedPressable
+                        key={option.lens}
+                        testID={`capture-back-camera-lens-button-${option.lens}`}
+                        accessibilityLabel={option.accessibilityLabel}
+                        accessibilityRole="button"
+                        accessibilityState={{ disabled: selected, selected }}
+                        onPress={() => onChangeBackCameraLens(option.lens)}
+                        disabled={selected}
+                        disabledOpacity={1}
+                        pressedScale={0.96}
+                        style={[
+                          styles.cameraLensOptionButton,
+                          {
+                            backgroundColor: selected
+                              ? cameraLensOptionActiveBackground
+                              : cameraLensOptionInactiveBackground,
+                            borderColor: selected ? colors.primary : 'transparent',
+                          },
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.cameraLensOptionText,
+                            {
+                              color: selected
+                                ? cameraLensOptionActiveText
+                                : cameraLensOptionInactiveText,
+                            },
+                          ]}
+                        >
+                          {option.label}
+                        </Text>
+                      </CaptureAnimatedPressable>
+                    );
+                  })}
+                </View>
+              </View>
+            ) : null}
             {shouldShowZoomBadge ? (
               <View pointerEvents="none" style={styles.cameraZoomBadge}>
                 <Text

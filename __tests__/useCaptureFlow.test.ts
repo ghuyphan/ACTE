@@ -55,11 +55,40 @@ jest.mock('expo-haptics', () => ({
 describe('useCaptureFlow', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    mockUseCameraDevice.mockReturnValue({
-      id: 'back-camera',
-      position: 'back',
-      neutralZoom: 1,
-      maxZoom: 4,
+    mockUseCameraDevice.mockImplementation((position: 'back' | 'front', filter?: { physicalDevices?: string[] }) => {
+      if (position === 'front') {
+        return {
+          id: 'front-camera',
+          position: 'front',
+          neutralZoom: 1,
+          maxZoom: 2,
+        };
+      }
+
+      if (filter?.physicalDevices?.includes('ultra-wide-angle-camera')) {
+        return {
+          id: 'back-ultra-wide-camera',
+          position: 'back',
+          neutralZoom: 1,
+          maxZoom: 2,
+        };
+      }
+
+      if (filter?.physicalDevices?.includes('telephoto-camera')) {
+        return {
+          id: 'back-telephoto-camera',
+          position: 'back',
+          neutralZoom: 1,
+          maxZoom: 6,
+        };
+      }
+
+      return {
+        id: 'back-camera',
+        position: 'back',
+        neutralZoom: 1,
+        maxZoom: 4,
+      };
     });
     mockTakePhoto.mockResolvedValue({ path: '/tmp/captured-photo.jpg' });
     mockStartRecording.mockImplementation(({ onRecordingFinished }: any) => {
@@ -73,12 +102,44 @@ describe('useCaptureFlow', () => {
     AppState.currentState = 'active';
   });
 
-  it('prefers the wide-angle back camera for capture mode', () => {
-    renderHook(() => useCaptureFlow());
+  it('prefers the wide-angle back camera by default and checks for ultra-wide support', () => {
+    const { result } = renderHook(() => useCaptureFlow());
 
     expect(mockUseCameraDevice).toHaveBeenCalledWith('back', {
       physicalDevices: ['wide-angle-camera'],
     });
+    expect(mockUseCameraDevice).toHaveBeenCalledWith('back', {
+      physicalDevices: ['ultra-wide-angle-camera'],
+    });
+    expect(mockUseCameraDevice).toHaveBeenCalledWith('back', {
+      physicalDevices: ['telephoto-camera'],
+    });
+    expect(result.current.cameraDevice?.id).toBe('back-camera');
+    expect(result.current.hasUltraWideBackCamera).toBe(true);
+    expect(result.current.hasTelephotoBackCamera).toBe(true);
+    expect(result.current.availableBackCameraLenses).toEqual(['ultra-wide', 'wide', 'telephoto']);
+  });
+
+  it('switches to the ultra-wide back camera when requested', () => {
+    const { result } = renderHook(() => useCaptureFlow());
+
+    act(() => {
+      result.current.setBackCameraLens('ultra-wide');
+    });
+
+    expect(result.current.backCameraLens).toBe('ultra-wide');
+    expect(result.current.cameraDevice?.id).toBe('back-ultra-wide-camera');
+  });
+
+  it('switches to the telephoto back camera when requested', () => {
+    const { result } = renderHook(() => useCaptureFlow());
+
+    act(() => {
+      result.current.setBackCameraLens('telephoto');
+    });
+
+    expect(result.current.backCameraLens).toBe('telephoto');
+    expect(result.current.cameraDevice?.id).toBe('back-telephoto-camera');
   });
 
   it('captures a photo and normalizes the saved file uri', async () => {

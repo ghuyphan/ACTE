@@ -22,7 +22,6 @@ import { LIVE_PHOTO_MAX_DURATION_SECONDS } from '../../services/livePhotoProcess
 
 const CAMERA_AUTO_RECOVERY_ATTEMPTS = 1;
 const CAMERA_START_TIMEOUT_MS = 2400;
-const CAMERA_ZOOM_PAN_RANGE = 0.9;
 const CAMERA_ZOOM_PINCH_RANGE = 0.45;
 const CAMERA_ZOOM_LABEL_VISIBLE_MS = 1100;
 const CAMERA_TRANSITION_FADE_IN_MS = 110;
@@ -111,11 +110,11 @@ export function useCaptureCardCameraController({
   const shutterLongPressTriggeredRef = useRef(false);
   const cameraAutoRecoveryCountRef = useRef(0);
   const cameraZoomRef = useRef(0);
-  const cameraPanZoomStartRef = useRef(0);
   const cameraPinchZoomStartRef = useRef(0);
   const cameraGestureLockCountRef = useRef(0);
   const cameraSwitchInFlightRef = useRef(false);
   const cameraZoomBadgeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const previousCameraDeviceIdRef = useRef(cameraDevice?.id);
   const cameraHintVisibility = useSharedValue(Boolean(cameraInstructionText) && !capturedPhoto ? 1 : 0);
   const cameraTransitionMaskOpacity = useSharedValue(0);
   const cameraFocusRingOpacity = useSharedValue(0);
@@ -507,6 +506,20 @@ export function useCaptureCardCameraController({
     }
   }, [captureMode, resetCameraZoom]);
 
+  useEffect(() => {
+    const previousCameraDeviceId = previousCameraDeviceIdRef.current;
+    const nextCameraDeviceId = cameraDevice?.id;
+    previousCameraDeviceIdRef.current = nextCameraDeviceId;
+
+    if (
+      previousCameraDeviceId != null &&
+      nextCameraDeviceId != null &&
+      previousCameraDeviceId !== nextCameraDeviceId
+    ) {
+      resetCameraZoom();
+    }
+  }, [cameraDevice?.id, resetCameraZoom]);
+
   useEffect(
     () => () => {
       cameraGestureLockCountRef.current = 0;
@@ -764,29 +777,6 @@ export function useCaptureCardCameraController({
 
       return Gesture.Simultaneous(
         tapGesture,
-        Gesture.Pan()
-          .enabled(cameraZoomGesturesEnabled)
-          .runOnJS(true)
-          .maxPointers(1)
-          .activeOffsetY([-10, 10])
-          .failOffsetX([-48, 48])
-          .shouldCancelWhenOutside(false)
-          .onBegin(() => {
-            beginCameraGestureLock();
-            cameraPanZoomStartRef.current = cameraZoomRef.current;
-          })
-          .onUpdate((event) => {
-            const nextZoom =
-              cameraPanZoomStartRef.current -
-              (event.translationY / Math.max(cardSize, 1)) * CAMERA_ZOOM_PAN_RANGE;
-            updateCameraZoom(nextZoom);
-          })
-          .onEnd(() => {
-            scheduleHideCameraZoomBadge();
-          })
-          .onFinalize(() => {
-            endCameraGestureLock();
-          }),
         Gesture.Pinch()
           .enabled(cameraZoomGesturesEnabled)
           .runOnJS(true)
@@ -812,7 +802,6 @@ export function useCaptureCardCameraController({
       beginCameraGestureLock,
       cameraFocusGesturesEnabled,
       cameraZoomGesturesEnabled,
-      cardSize,
       endCameraGestureLock,
       handleCameraFocusTap,
       scheduleHideCameraZoomBadge,

@@ -6,11 +6,11 @@ import {
   DUAL_CAMERA_INSET_FRAME_COLOR,
   DUAL_CAMERA_INSET_FROST_COLOR,
   DUAL_CAMERA_INSET_PREVIEW_SCRIM_COLOR,
-  DUAL_CAMERA_INSET_SHELL_BACKGROUND,
   DUAL_CAMERA_INSET_SHADOW_COLOR,
   DUAL_CAMERA_INSET_SHADOW_OFFSET,
   DUAL_CAMERA_INSET_SHADOW_OPACITY,
   DUAL_CAMERA_INSET_SHADOW_RADIUS,
+  DUAL_CAMERA_INSET_SHELL_BACKGROUND,
   getDualCameraInsetMetrics,
 } from './dualCameraLayout';
 
@@ -37,7 +37,7 @@ export const SHUTTER_OUTER_SIZE = 74;
 export const SHUTTER_INNER_SIZE = 58;
 export const SIDE_ACTION_SIZE = 46;
 export const DOODLE_COLOR_BUTTON_SIZE = 32;
-export const SHUTTER_SIDE_ACTION_GAP = 32;
+export const SHUTTER_SIDE_ACTION_GAP = 52;
 export const SHUTTER_SIDE_ACTION_OFFSET =
   SHUTTER_OUTER_SIZE / 2 + SHUTTER_SIDE_ACTION_GAP + SIDE_ACTION_SIZE;
 export const PHOTO_DOODLE_DEFAULT_COLOR = '#FFFFFF';
@@ -357,6 +357,43 @@ export const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.18)',
     zIndex: 10,
   },
+  cameraLensSelector: {
+    position: 'absolute',
+    bottom: 32,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    zIndex: 10,
+  },
+  cameraLensSelectorPill: {
+    minHeight: 40,
+    paddingHorizontal: 4,
+    paddingVertical: 4,
+    borderRadius: 999,
+    borderCurve: 'continuous',
+    borderWidth: StyleSheet.hairlineWidth,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+  },
+  cameraLensOptionButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cameraLensOptionText: {
+    fontSize: 9.5,
+    lineHeight: 11,
+    fontWeight: '800',
+    fontFamily: 'Noto Sans',
+    letterSpacing: -0.3,
+    includeFontPadding: false,
+    textAlign: 'center',
+  },
   cameraLivePhotoGuideOverlay: {
     position: 'absolute',
     top: CARD_CHROME_SAFE_TOP,
@@ -600,7 +637,25 @@ export const styles = StyleSheet.create({
     alignSelf: 'center',
     gap: 6,
   },
+  liveCameraLensButton: {
+    minWidth: 52,
+    height: 32,
+    paddingHorizontal: 10,
+    borderRadius: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  liveCameraLensButtonText: {
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: -0.2,
+    includeFontPadding: false,
+  },
   liveCameraFilterRail: {
+    width: 110,
+    overflow: 'hidden',
     flexGrow: 0,
     flexShrink: 0,
   },
@@ -922,7 +977,7 @@ export const styles = StyleSheet.create({
   },
   footerSlot: {
     width: '100%',
-    paddingTop: 2,
+    paddingTop: 20,
   },
   noteColorSheet: {
     gap: 12,

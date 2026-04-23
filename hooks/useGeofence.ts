@@ -410,12 +410,16 @@ export function useGeofence() {
             notificationStatus = await Notifications.requestPermissionsAsync();
         }
 
-        const enabled =
+        const requestedPermissionsEnabled =
             backgroundStatus.status === 'granted' && notificationStatus.status === 'granted';
+
+        let enabled = requestedPermissionsEnabled;
+        if (requestedPermissionsEnabled) {
+            enabled = await syncGeofenceRegions();
+        }
 
         setRemindersEnabled(enabled);
         if (enabled) {
-            await syncGeofenceRegions();
             void refreshLocation({
                 preferCached: true,
                 backgroundRefreshIfCached: true,

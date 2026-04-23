@@ -152,6 +152,14 @@ if (
                         : null;
                     const note = reminderGroup?.bestNote ?? triggeredNote;
 
+                    const shouldSkipForPlace = await consumeSkippedImmediateReminder({
+                        noteId: regionId,
+                        placeKey: reminderGroup?.key,
+                    });
+                    if (shouldSkipForPlace) {
+                        return;
+                    }
+
                     if (note) {
                         cooldownNoteId = note.id;
                         const widgetRefreshPromise = refreshWidgetForTriggeredNote(note, allNotes, region);

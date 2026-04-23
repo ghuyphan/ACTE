@@ -15,6 +15,7 @@ import {
   setActiveNotesScope,
 } from '../services/database';
 import { purgeLocalAccountScope } from '../services/accountCleanup';
+import { clearGeofenceRegions } from '../services/geofenceService';
 import { updateOwnUsername, updateOwnPhotoURL, upsertPublicUserProfile } from '../services/publicProfileService';
 import { clearSharedFeedCache } from '../services/sharedFeedCache';
 import { unregisterCurrentSocialPushToken } from '../services/socialPushService';
@@ -102,6 +103,9 @@ async function clearAuthenticatedUserState(
   invalidateAuthSyncRequests();
   setActiveNotesScope(LOCAL_NOTES_SCOPE);
   setUser(null);
+  await clearGeofenceRegions().catch((error) => {
+    console.warn('[auth] Failed to clear geofences during sign-out:', error);
+  });
   await clearSharedFeedCache(currentUserUid).catch(() => undefined);
 }
 

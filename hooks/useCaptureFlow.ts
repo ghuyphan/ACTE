@@ -16,6 +16,7 @@ import { LIVE_PHOTO_MAX_DURATION_SECONDS } from '../services/livePhotoProcessing
 
 export type CaptureMode = 'text' | 'camera';
 export type CameraSubmode = 'single' | 'dual';
+export type BackCameraLens = 'wide' | 'ultra-wide' | 'telephoto';
 export type CaptureDraftState = {
   captureMode: CaptureMode;
   cameraSubmode: CameraSubmode;
@@ -77,12 +78,25 @@ export function useCaptureFlow() {
   const [isLivePhotoSaveGuardActive, setIsLivePhotoSaveGuardActive] = useState(false);
   const [radius, setRadius] = useState(DEFAULT_NOTE_RADIUS);
   const [facing, setFacing] = useState<'back' | 'front'>('back');
+  const [backCameraLens, setBackCameraLens] = useState<BackCameraLens>('wide');
   const [selectedPhotoFilterId, setSelectedPhotoFilterId] = useState<PhotoFilterId>('original');
   const { hasPermission, requestPermission: requestCameraPermission } = useCameraPermission();
-  const backCameraDevice = useCameraDevice('back', {
+  const wideBackCameraDevice = useCameraDevice('back', {
     physicalDevices: ['wide-angle-camera'],
   });
+  const ultraWideBackCameraDevice = useCameraDevice('back', {
+    physicalDevices: ['ultra-wide-angle-camera'],
+  });
+  const telephotoBackCameraDevice = useCameraDevice('back', {
+    physicalDevices: ['telephoto-camera'],
+  });
   const frontCameraDevice = useCameraDevice('front');
+  const backCameraDevice =
+    backCameraLens === 'ultra-wide'
+      ? ultraWideBackCameraDevice ?? wideBackCameraDevice ?? telephotoBackCameraDevice
+      : backCameraLens === 'telephoto'
+        ? telephotoBackCameraDevice ?? wideBackCameraDevice ?? ultraWideBackCameraDevice
+        : wideBackCameraDevice ?? ultraWideBackCameraDevice ?? telephotoBackCameraDevice;
   const cameraDevice = facing === 'back' ? backCameraDevice : frontCameraDevice;
   const [cameraPermissionGranted, setCameraPermissionGranted] = useState(() => hasPermission);
   const [cameraPermissionStatus, setCameraPermissionStatus] = useState<CameraPermissionStatus>(() =>
@@ -141,9 +155,40 @@ export function useCaptureFlow() {
     };
   }, [captureMode]);
 
+  const availableBackCameraLenses = useMemo<BackCameraLens[]>(() => {
+    const availableLenses: BackCameraLens[] = [];
+
+    if (ultraWideBackCameraDevice) {
+      availableLenses.push('ultra-wide');
+    }
+
+    if (wideBackCameraDevice) {
+      availableLenses.push('wide');
+    }
+
+    if (telephotoBackCameraDevice) {
+      availableLenses.push('telephoto');
+    }
+
+    return availableLenses;
+  }, [telephotoBackCameraDevice, ultraWideBackCameraDevice, wideBackCameraDevice]);
+
   useEffect(() => {
     setSelectedPhotoFilterId('original');
   }, [capturedPhoto]);
+
+  useEffect(() => {
+    if (availableBackCameraLenses.length === 0 || availableBackCameraLenses.includes(backCameraLens)) {
+      return;
+    }
+
+    if (wideBackCameraDevice) {
+      setBackCameraLens('wide');
+      return;
+    }
+
+    setBackCameraLens(availableBackCameraLenses[0]!);
+  }, [availableBackCameraLenses, backCameraLens, wideBackCameraDevice]);
 
   const clearLivePhotoStopTimeout = useCallback(() => {
     if (livePhotoStopTimeoutRef.current) {
@@ -576,7 +621,14 @@ export function useCaptureFlow() {
     setIsLivePhotoSaveGuardActive(false);
     clearLivePhotoTapSuppression();
     setRadius(DEFAULT_NOTE_RADIUS);
-  }, [cancelLivePhotoCapture, clearDualCaptureState, clearLivePhotoTapSuppression]);
+    setBackCameraLens(wideBackCameraDevice ? 'wide' : (availableBackCameraLenses[0] ?? 'wide'));
+  }, [
+    availableBackCameraLenses,
+    cancelLivePhotoCapture,
+    clearDualCaptureState,
+    clearLivePhotoTapSuppression,
+    wideBackCameraDevice,
+  ]);
 
   const restoreCaptureState = useCallback((draft: CaptureDraftState) => {
     void cancelLivePhotoCapture();
@@ -633,10 +685,16 @@ export function useCaptureFlow() {
     setRadius,
     facing,
     setFacing,
+    backCameraLens,
+    setBackCameraLens,
+    availableBackCameraLenses,
+    hasUltraWideBackCamera: Boolean(ultraWideBackCameraDevice),
+    hasTelephotoBackCamera: Boolean(telephotoBackCameraDevice),
     selectedPhotoFilterId,
     setSelectedPhotoFilterId,
     cameraDevice,
-    backCameraDeviceId: backCameraDevice?.id ?? null,
+    backCameraDeviceId:
+      wideBackCameraDevice?.id ?? ultraWideBackCameraDevice?.id ?? telephotoBackCameraDevice?.id ?? null,
     frontCameraDeviceId: frontCameraDevice?.id ?? null,
     permission,
     requestPermission,

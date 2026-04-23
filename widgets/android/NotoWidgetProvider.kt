@@ -941,8 +941,8 @@ class NotoWidgetProvider : AppWidgetProvider() {
       bindCardSurfaceState(views, geometry, usesTextSurface, showIdle, textSurfaceGradient)
       bindTextBackgroundState(views, geometry, usesTextSurface, showIdle, textSurfaceGradient)
       bindPhotoState(context, views, snapshot, showIdle, geometry)
-      bindStickerState(context, views, snapshot, options, layoutStage, showIdle)
-      bindDoodleState(context, views, snapshot, options, layoutStage, usesTextSurface, showIdle)
+      bindStickerState(context, views, snapshot, options, layoutStage, geometry, showIdle)
+      bindDoodleState(context, views, snapshot, options, layoutStage, geometry, usesTextSurface, showIdle)
       val showAuthorChip = bindAuthorState(context, views, snapshot, showIdle, usesTextSurface, layoutStage, geometry)
       bindLivePhotoBadge(context, views, showLivePhotoBadge, layoutStage, geometry)
 
@@ -1462,6 +1462,7 @@ class NotoWidgetProvider : AppWidgetProvider() {
       snapshot: NotoWidgetSnapshot,
       options: Bundle,
       layoutStage: WidgetLayoutStage,
+      geometry: WidgetRenderGeometry,
       showIdle: Boolean
     ) {
       val shouldShowStickers =
@@ -1480,7 +1481,7 @@ class NotoWidgetProvider : AppWidgetProvider() {
         widthPx = resolveContentWidthPx(context, options, layoutStage),
         heightPx = resolveContentHeightPx(context, options, layoutStage),
         overlayOpacity = getStickerOverlayOpacity(snapshot),
-        renderSpec = getWidgetOverlayRenderSpec(layoutStage)
+        renderSpec = getWidgetOverlayRenderSpec(context, geometry, layoutStage)
       )
 
       if (stickerBitmap == null) {
@@ -1498,6 +1499,7 @@ class NotoWidgetProvider : AppWidgetProvider() {
       snapshot: NotoWidgetSnapshot,
       options: Bundle,
       layoutStage: WidgetLayoutStage,
+      geometry: WidgetRenderGeometry,
       usesTextSurface: Boolean,
       showIdle: Boolean
     ) {
@@ -1519,7 +1521,7 @@ class NotoWidgetProvider : AppWidgetProvider() {
         widthPx = resolveContentWidthPx(context, options, layoutStage),
         heightPx = resolveContentHeightPx(context, options, layoutStage),
         overlayOpacity = getWidgetOverlayOpacity(snapshot),
-        renderSpec = getWidgetOverlayRenderSpec(layoutStage)
+        renderSpec = getWidgetOverlayRenderSpec(context, geometry, layoutStage)
       )
 
       if (doodleBitmap == null) {
@@ -2932,27 +2934,54 @@ class NotoWidgetProvider : AppWidgetProvider() {
       return max(3f, min(8f, min(width, height) * 0.045f))
     }
 
-    private fun getWidgetOverlayRenderSpec(layoutStage: WidgetLayoutStage): WidgetOverlayRenderSpec {
+    private fun getWidgetOverlayRenderSpec(
+      context: Context,
+      geometry: WidgetRenderGeometry,
+      layoutStage: WidgetLayoutStage
+    ): WidgetOverlayRenderSpec {
+      val responsiveScale = resolveWidgetResponsiveScale(context, geometry, layoutStage)
+      val responsiveTextScale = resolveWidgetResponsiveTextScale(context, geometry, layoutStage)
+      val shortestEdgePx = min(geometry.contentWidthPx, geometry.contentHeightPx).toFloat().coerceAtLeast(1f)
+      val shortestEdgeDp = shortestEdgePx / context.resources.displayMetrics.density
+      val edgeScale = when (layoutStage) {
+        WidgetLayoutStage.SMALL -> clampWidgetScalar(shortestEdgeDp / 160f, 0.94f, 1.05f)
+        WidgetLayoutStage.MEDIUM -> clampWidgetScalar(shortestEdgeDp / 140f, 0.88f, 1.12f)
+        WidgetLayoutStage.LARGE -> clampWidgetScalar(shortestEdgeDp / 250f, 0.86f, 1.16f)
+      }
+      val combinedScale = clampWidgetScalar(
+        (responsiveScale * 0.6f) + (edgeScale * 0.4f),
+        when (layoutStage) {
+          WidgetLayoutStage.SMALL -> 0.94f
+          WidgetLayoutStage.MEDIUM -> 0.88f
+          WidgetLayoutStage.LARGE -> 0.86f
+        },
+        when (layoutStage) {
+          WidgetLayoutStage.SMALL -> 1.06f
+          WidgetLayoutStage.MEDIUM -> 1.14f
+          WidgetLayoutStage.LARGE -> 1.18f
+        }
+      )
+
       return when (layoutStage) {
         WidgetLayoutStage.SMALL -> WidgetOverlayRenderSpec(
-          doodleInsetDp = 6f,
-          stickerInsetDp = 6f,
-          stickerMinimumBaseSizeDp = 38f,
-          stickerBaseSizeRatio = 0.19f
+          doodleInsetDp = 6f * combinedScale,
+          stickerInsetDp = 6f * combinedScale,
+          stickerMinimumBaseSizeDp = 38f * combinedScale,
+          stickerBaseSizeRatio = 0.19f * clampWidgetScalar(combinedScale * responsiveTextScale, 0.94f, 1.06f)
         )
 
         WidgetLayoutStage.MEDIUM -> WidgetOverlayRenderSpec(
-          doodleInsetDp = 6f,
-          stickerInsetDp = 6f,
-          stickerMinimumBaseSizeDp = 68f,
-          stickerBaseSizeRatio = 0.30f
+          doodleInsetDp = 6f * combinedScale,
+          stickerInsetDp = 6f * combinedScale,
+          stickerMinimumBaseSizeDp = 64f * combinedScale,
+          stickerBaseSizeRatio = 0.28f * clampWidgetScalar(combinedScale * responsiveTextScale, 0.9f, 1.1f)
         )
 
         WidgetLayoutStage.LARGE -> WidgetOverlayRenderSpec(
-          doodleInsetDp = 8f,
-          stickerInsetDp = 10f,
-          stickerMinimumBaseSizeDp = 76f,
-          stickerBaseSizeRatio = 0.27f
+          doodleInsetDp = 8f * combinedScale,
+          stickerInsetDp = 9f * combinedScale,
+          stickerMinimumBaseSizeDp = 72f * combinedScale,
+          stickerBaseSizeRatio = 0.255f * clampWidgetScalar(combinedScale * responsiveTextScale, 0.88f, 1.12f)
         )
       }
     }

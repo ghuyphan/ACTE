@@ -75,6 +75,7 @@ const mockHasScopeOwnedData = jest.fn<Promise<boolean>, [string]>(async () => tr
 const mockMigrateLocalNotesScopeToUser = jest.fn<Promise<void>, [string]>(async () => undefined);
 const mockSetActiveNotesScope = jest.fn<void, [string | null | undefined]>();
 const mockGetPersistedActiveNotesScopeSync = jest.fn<string | null | undefined, []>(() => null);
+const mockClearGeofenceRegions = jest.fn<Promise<void>, []>(async () => undefined);
 let authStateChangeCallback: ((event: string, session: Session | null) => void) | null = null;
 let appStateListener: ((state: AppStateStatus) => void) | null = null;
 const mockGetSession = jest.fn(async () => ({
@@ -226,7 +227,7 @@ jest.mock('../services/database', () => ({
 }));
 
 jest.mock('../services/geofenceService', () => ({
-  clearGeofenceRegions: jest.fn(async () => undefined),
+  clearGeofenceRegions: () => mockClearGeofenceRegions(),
 }));
 
 const mockSupabaseClient = {
@@ -305,6 +306,7 @@ describe('useAuth', () => {
     mockMigrateLocalNotesScopeToUser.mockClear();
     mockGetPersistedActiveNotesScopeSync.mockReturnValue(null);
     mockSetActiveNotesScope.mockClear();
+    mockClearGeofenceRegions.mockClear();
     jest.spyOn(AppState, 'addEventListener').mockImplementation((_type, listener: (state: AppStateStatus) => void) => {
       appStateListener = listener;
       return {
@@ -666,6 +668,7 @@ describe('useAuth', () => {
     expect(mockSupabaseSignOut).toHaveBeenCalledWith({ scope: 'local' });
     expect(mockPurgeLocalAccountScope).not.toHaveBeenCalled();
     expect(mockSetActiveNotesScope).toHaveBeenLastCalledWith('__local__');
+    expect(mockClearGeofenceRegions).toHaveBeenCalled();
     expect(hook.result.current.user).toBeNull();
   });
 
@@ -794,6 +797,7 @@ describe('useAuth', () => {
     expect(mockClearSharedFeedCache).toHaveBeenCalledWith('user-1');
     expect(mockPurgeLocalAccountScope).not.toHaveBeenCalled();
     expect(mockSetActiveNotesScope).toHaveBeenLastCalledWith('__local__');
+    expect(mockClearGeofenceRegions).toHaveBeenCalled();
     expect(hook.result.current.user).toBeNull();
   });
 

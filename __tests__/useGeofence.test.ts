@@ -235,6 +235,30 @@ describe('useGeofence', () => {
     expect(mockSyncGeofenceRegions).toHaveBeenCalled();
   });
 
+  it('does not report reminders as enabled when geofence registration fails', async () => {
+    mockGetForegroundPermissionsAsync.mockResolvedValue({ status: 'granted', canAskAgain: true });
+    mockGetBackgroundPermissionsAsync.mockResolvedValue({ status: 'granted', canAskAgain: true });
+    mockNotificationsGetPermissionsAsync.mockResolvedValue({ status: 'granted', canAskAgain: true });
+    mockSyncGeofenceRegions.mockResolvedValue(false);
+    mockGetReminderPermissionState.mockResolvedValue({
+      foregroundGranted: true,
+      remindersEnabled: false,
+    });
+
+    const { result } = renderHook(() => useGeofence());
+
+    await act(async () => {
+      const permissionResult = await result.current.requestReminderPermissions();
+      expect(permissionResult).toEqual({
+        enabled: false,
+        requiresSettings: false,
+      });
+    });
+
+    expect(result.current.remindersEnabled).toBe(false);
+    expect(mockSyncSocialPushRegistration).not.toHaveBeenCalled();
+  });
+
   it('skips reminder flows entirely when place reminders are disabled in config', async () => {
     mockArePlaceRemindersEnabled.mockReturnValue(false);
 
