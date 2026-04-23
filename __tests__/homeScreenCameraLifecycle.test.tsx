@@ -251,7 +251,11 @@ jest.mock('../components/home/CaptureCard', () => {
         getStickerSnapshot: jest.fn(() => ({ enabled: false, placements: [] })),
         resetDoodle: jest.fn(),
         resetStickers: jest.fn(),
-        closeDecorateControls: jest.fn(() => props.onTextEntryFocusChange?.(false)),
+        closeDecorateControls: jest.fn(() => {
+          props.onTextEntryFocusChange?.(false);
+          props.onDoodleModeChange?.(false);
+          props.onGestureActiveChange?.(false);
+        }),
       };
       React.useImperativeHandle(ref, () => mockCaptureCardHandle, [props]);
       return <Text testID="camera-preview-state">{String(props.isCameraPreviewActive)}</Text>;
@@ -474,13 +478,13 @@ describe('HomeScreen camera lifecycle', () => {
     expect(mockCaptureCardProps?.isCameraPreviewActive).toBe(false);
   });
 
-  it('releases active capture gesture locks before switching modes', () => {
+  it('releases active capture locks before switching modes', () => {
     const { getByTestId } = render(<HomeScreen />);
 
     expect(getByTestId('capture-scroll-enabled')).toHaveTextContent('true');
 
     act(() => {
-      mockCaptureCardProps?.onTextEntryFocusChange?.(true);
+      mockCaptureCardProps?.onGestureActiveChange?.(true);
     });
     expect(getByTestId('capture-scroll-enabled')).toHaveTextContent('false');
 
@@ -512,6 +516,38 @@ describe('HomeScreen camera lifecycle', () => {
 
     act(() => {
       mockCaptureCardProps?.onTextEntryFocusChange?.(false);
+    });
+    expect(getByTestId('capture-scroll-enabled')).toHaveTextContent('true');
+  });
+
+  it('locks capture scrolling while decorate mode is open', () => {
+    const { getByTestId } = render(<HomeScreen />);
+
+    expect(getByTestId('capture-scroll-enabled')).toHaveTextContent('true');
+
+    act(() => {
+      mockCaptureCardProps?.onDoodleModeChange?.(true);
+    });
+    expect(getByTestId('capture-scroll-enabled')).toHaveTextContent('false');
+
+    act(() => {
+      mockCaptureCardProps?.onDoodleModeChange?.(false);
+    });
+    expect(getByTestId('capture-scroll-enabled')).toHaveTextContent('true');
+  });
+
+  it('locks capture scrolling while a capture gesture is active', () => {
+    const { getByTestId } = render(<HomeScreen />);
+
+    expect(getByTestId('capture-scroll-enabled')).toHaveTextContent('true');
+
+    act(() => {
+      mockCaptureCardProps?.onGestureActiveChange?.(true);
+    });
+    expect(getByTestId('capture-scroll-enabled')).toHaveTextContent('false');
+
+    act(() => {
+      mockCaptureCardProps?.onGestureActiveChange?.(false);
     });
     expect(getByTestId('capture-scroll-enabled')).toHaveTextContent('true');
   });

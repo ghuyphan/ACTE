@@ -7,6 +7,7 @@ jest.mock('expo-crypto', () => ({
 }));
 
 import {
+  appendStickerPlacement,
   bringStickerPlacementToFront,
   createStickerPlacement,
   duplicateStickerPlacement,
@@ -77,6 +78,27 @@ describe('noteStickers helpers', () => {
     expect(secondPlacement.x).not.toBe(firstPlacement.x);
     expect(secondPlacement.y).not.toBe(firstPlacement.y);
     expect(thirdPlacement.x).not.toBe(secondPlacement.x);
+  });
+
+  it('rebases appended stickers against the live placements array before inserting them', () => {
+    const firstPlacement = {
+      ...createStickerPlacement(baseAsset),
+      id: 'placement-1',
+    };
+    const staleSecondPlacement = {
+      ...createStickerPlacement({ ...baseAsset, id: 'sticker-2' }),
+      id: 'placement-2',
+    };
+    const insertion = appendStickerPlacement([firstPlacement], staleSecondPlacement);
+    const insertedPlacement = insertion.placements.find(
+      (placement) => placement.id === staleSecondPlacement.id
+    );
+
+    expect(insertedPlacement).toBeDefined();
+    expect(insertedPlacement?.zIndex).toBe(2);
+    expect(insertedPlacement?.x).not.toBe(firstPlacement.x);
+    expect(insertedPlacement?.y).not.toBe(firstPlacement.y);
+    expect(insertion.placement.id).toBe(staleSecondPlacement.id);
   });
 
   it('updates transforms and brings stickers to front', () => {

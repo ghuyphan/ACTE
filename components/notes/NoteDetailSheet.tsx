@@ -42,6 +42,7 @@ import {
 import { resolveAutoNoteEmoji } from '../../services/noteDecorations';
 import { clearNoteDoodle, parseNoteDoodleStrokes, saveNoteDoodle } from '../../services/noteDoodles';
 import {
+    appendStickerPlacement,
     bringStickerPlacementToFront,
     createStickerPlacement,
     duplicateStickerPlacement,
@@ -283,6 +284,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
     const infoTranslateY = useRef(infoTranslateYValue).current;
     const favoriteFillProgress = useRef(favoriteFillProgressValue).current;
     const editModeAnim = useRef(editModeAnimValue).current;
+    const editStickerPlacementsRef = useRef<NoteStickerPlacement[]>([]);
     const contentInputRef = useRef<any>(null);
     const locationInputRef = useRef<any>(null);
     const scrollContainerRef = useRef<any>(null);
@@ -346,6 +348,17 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
         setPolaroidAnimationSuccess(false);
         setShowPolaroidCapture(false);
         setPolaroidExporting(false);
+    }, []);
+
+    const handleChangeStickerPlacements = useCallback((
+        value: NoteStickerPlacement[] | ((current: NoteStickerPlacement[]) => NoteStickerPlacement[])
+    ) => {
+        const nextPlacements =
+            typeof value === 'function'
+                ? value(editStickerPlacementsRef.current)
+                : value;
+        editStickerPlacementsRef.current = nextPlacements;
+        setEditStickerPlacements(nextPlacements);
     }, []);
 
     const waitForPolaroidRenderReady = useCallback(() => {
@@ -648,7 +661,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
         setEditRadius(150);
         setEditNoteColor(null);
         setEditDoodleStrokes([]);
-        setEditStickerPlacements([]);
+        handleChangeStickerPlacements([]);
         setDoodleModeEnabled(false);
         setStickerModeEnabled(false);
         setSelectedStickerId(null);
@@ -682,7 +695,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                         lastFreeEditNoteColorRef.current = getEditableTextNoteColor(nextNote.noteColor);
                     }
                     setEditDoodleStrokes(parseNoteDoodleStrokes(nextNote.doodleStrokesJson));
-                    setEditStickerPlacements(parseNoteStickerPlacements(nextNote.stickerPlacementsJson));
+                    handleChangeStickerPlacements(parseNoteStickerPlacements(nextNote.stickerPlacementsJson));
                     setDoodleModeEnabled(false);
                     setStickerModeEnabled(false);
                     setSelectedStickerId(null);
@@ -723,6 +736,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
         editModeAnim,
         favoriteFillProgress,
         getNoteById,
+        handleChangeStickerPlacements,
         infoTranslateY,
         noteId,
         reduceMotionEnabled,
@@ -876,12 +890,17 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
         }
     }, [locationSelection]);
 
+    useEffect(() => {
+        editStickerPlacementsRef.current = editStickerPlacements;
+    }, [editStickerPlacements]);
+
     const applyImportedSticker = useCallback((nextPlacement: NoteStickerPlacement) => {
-        setEditStickerPlacements((current) => [...current, nextPlacement]);
-        setSelectedStickerId(nextPlacement.id);
+        const insertion = appendStickerPlacement(editStickerPlacementsRef.current, nextPlacement);
+        handleChangeStickerPlacements(insertion.placements);
+        setSelectedStickerId(insertion.placement.id);
         setStickerModeEnabled(true);
         setDoodleModeEnabled(false);
-    }, []);
+    }, [handleChangeStickerPlacements]);
 
     const handleCompleteStickerCreationPlacement = useCallback(
         ({
@@ -1109,10 +1128,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
             });
 
             const nextPlacement = createStickerPlacement(importedAsset, editStickerPlacements);
-            setEditStickerPlacements((current) => [...current, nextPlacement]);
-            setSelectedStickerId(nextPlacement.id);
-            setStickerModeEnabled(true);
-            setDoodleModeEnabled(false);
+            applyImportedSticker(nextPlacement);
         } catch (error) {
             if (!(error instanceof ClipboardStickerError && error.code === 'permission-denied')) {
                 console.warn('Sticker paste failed:', error);
@@ -1134,7 +1150,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
         } finally {
             setImportingSticker(false);
         }
-    }, [dismissEditorKeyboard, dismissPastePrompt, editStickerPlacements, importingSticker, isEditing, note, t]);
+    }, [applyImportedSticker, dismissEditorKeyboard, dismissPastePrompt, editStickerPlacements, importingSticker, isEditing, note, t]);
     const handleShowCardPastePrompt = useCallback(
         async (event: GestureResponderEvent) => {
             if (
@@ -1253,10 +1269,14 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
             return;
         }
 
-        setEditStickerPlacements((current) =>
-            setStickerPlacementMotionLocked(current, selectedStickerId, selectedPlacement.motionLocked !== true)
+        handleChangeStickerPlacements(
+            setStickerPlacementMotionLocked(
+                editStickerPlacements,
+                selectedStickerId,
+                selectedPlacement.motionLocked !== true
+            )
         );
-    }, [editStickerPlacements, selectedStickerId]);
+    }, [editStickerPlacements, handleChangeStickerPlacements, selectedStickerId]);
     const handleStickerAction = useCallback(
         (action: 'rotate-left' | 'rotate-right' | 'smaller' | 'larger' | 'duplicate' | 'front' | 'remove' | 'outline-toggle') => {
             if (!selectedStickerId) {
@@ -1307,9 +1327,9 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                 }
             }
 
-            setEditStickerPlacements(nextPlacements);
+            handleChangeStickerPlacements(nextPlacements);
         },
-        [editStickerPlacements, selectedStickerId]
+        [editStickerPlacements, handleChangeStickerPlacements, selectedStickerId]
     );
 
     useEffect(() => () => {
@@ -1581,7 +1601,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
             await refreshNotes(false);
             setNote(nextNote);
             setEditDoodleStrokes(parseNoteDoodleStrokes(nextDoodleStrokesJson));
-            setEditStickerPlacements(parseNoteStickerPlacements(nextStickerPlacementsJson));
+            handleChangeStickerPlacements(parseNoteStickerPlacements(nextStickerPlacementsJson));
             setEditContent(nextNote.type === 'photo' ? nextNote.caption ?? '' : nextNote.content);
             setEditLocation(nextNote.locationName || '');
             setEditRadius(nextNote.radius);
@@ -1718,7 +1738,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
             editDoodleStrokes={editDoodleStrokes}
             setEditDoodleStrokes={setEditDoodleStrokes}
             editStickerPlacements={editStickerPlacements}
-            setEditStickerPlacements={setEditStickerPlacements}
+            setEditStickerPlacements={handleChangeStickerPlacements}
             doodleModeEnabled={doodleModeEnabled}
             stickerModeEnabled={stickerModeEnabled}
             selectedStickerId={selectedStickerId}

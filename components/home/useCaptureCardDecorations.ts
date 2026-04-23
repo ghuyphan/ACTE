@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { DoodleStroke } from '../notes/NoteDoodleCanvas';
-import { type NoteStickerPlacement } from '../../services/noteStickers';
+import {
+  appendStickerPlacement,
+  type NoteStickerPlacement,
+} from '../../services/noteStickers';
 
 interface UseCaptureCardDecorationsOptions {
   captureMode: 'text' | 'camera';
@@ -36,6 +39,8 @@ export function useCaptureCardDecorations({
   const [textSelectedStickerId, setTextSelectedStickerId] = useState<string | null>(null);
   const [photoSelectedStickerId, setPhotoSelectedStickerId] = useState<string | null>(null);
   const previousTextDoodleDefaultColorRef = useRef(captureCardTextColor);
+  const textStickerPlacementsRef = useRef<NoteStickerPlacement[]>([]);
+  const photoStickerPlacementsRef = useRef<NoteStickerPlacement[]>([]);
 
   const isCameraCaptureSurface = captureMode === 'camera';
   const isPhotoDoodleSurface = isCameraCaptureSurface && Boolean(capturedPhoto);
@@ -61,6 +66,14 @@ export function useCaptureCardDecorations({
     previousTextDoodleDefaultColorRef.current = captureCardTextColor;
   }, [captureCardTextColor]);
 
+  useEffect(() => {
+    textStickerPlacementsRef.current = textStickerPlacements;
+  }, [textStickerPlacements]);
+
+  useEffect(() => {
+    photoStickerPlacementsRef.current = photoStickerPlacements;
+  }, [photoStickerPlacements]);
+
   const closeDecorateControls = useCallback(() => {
     setDoodleModeEnabled(false);
     setStickerModeEnabled(false);
@@ -82,6 +95,8 @@ export function useCaptureCardDecorations({
     if (stickerModeEnabled) {
       setStickerModeEnabled(false);
     }
+    textStickerPlacementsRef.current = [];
+    photoStickerPlacementsRef.current = [];
     setTextStickerPlacements([]);
     setPhotoStickerPlacements([]);
     setTextSelectedStickerId(null);
@@ -128,11 +143,15 @@ export function useCaptureCardDecorations({
 
   const applyImportedSticker = useCallback((nextPlacement: NoteStickerPlacement) => {
     if (isPhotoDoodleSurface) {
-      setPhotoStickerPlacements((current) => [...current, nextPlacement]);
-      setPhotoSelectedStickerId(nextPlacement.id);
+      const insertion = appendStickerPlacement(photoStickerPlacementsRef.current, nextPlacement);
+      photoStickerPlacementsRef.current = insertion.placements;
+      setPhotoStickerPlacements(insertion.placements);
+      setPhotoSelectedStickerId(insertion.placement.id);
     } else {
-      setTextStickerPlacements((current) => [...current, nextPlacement]);
-      setTextSelectedStickerId(nextPlacement.id);
+      const insertion = appendStickerPlacement(textStickerPlacementsRef.current, nextPlacement);
+      textStickerPlacementsRef.current = insertion.placements;
+      setTextStickerPlacements(insertion.placements);
+      setTextSelectedStickerId(insertion.placement.id);
     }
     setStickerModeEnabled(true);
     setDoodleModeEnabled(false);
@@ -162,10 +181,12 @@ export function useCaptureCardDecorations({
 
   const changeStickerPlacements = useCallback((nextPlacements: NoteStickerPlacement[]) => {
     if (isPhotoDoodleSurface) {
+      photoStickerPlacementsRef.current = nextPlacements;
       setPhotoStickerPlacements(nextPlacements);
       return;
     }
 
+    textStickerPlacementsRef.current = nextPlacements;
     setTextStickerPlacements(nextPlacements);
   }, [isPhotoDoodleSurface]);
 

@@ -359,7 +359,7 @@ export const styles = StyleSheet.create({
   },
   cameraLensSelector: {
     position: 'absolute',
-    bottom: 32,
+    bottom: 16,
     left: 0,
     right: 0,
     alignItems: 'center',
@@ -367,15 +367,15 @@ export const styles = StyleSheet.create({
   },
   cameraLensSelectorPill: {
     minHeight: 40,
-    paddingHorizontal: 4,
-    paddingVertical: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
     borderRadius: 999,
     borderCurve: 'continuous',
     borderWidth: StyleSheet.hairlineWidth,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 4,
+    gap: 8,
   },
   cameraLensOptionButton: {
     width: 32,

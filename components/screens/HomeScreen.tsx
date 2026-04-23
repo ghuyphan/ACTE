@@ -333,6 +333,8 @@ export default function HomeScreen() {
   const [importingPhoto, setImportingPhoto] = useState(false);
   const [appState, setAppState] = useState(AppState.currentState);
   const [isCaptureTextEntryFocused, setIsCaptureTextEntryFocused] = useState(false);
+  const [isCaptureDecorateModeActive, setIsCaptureDecorateModeActive] = useState(false);
+  const [isCaptureGestureActive, setIsCaptureGestureActive] = useState(false);
   const [lockedCaptureSnapHeight, setLockedCaptureSnapHeight] = useState<number | null>(null);
   const [isCaptureVisible, setIsCaptureVisible] = useState(true);
   const [isCaptureScrollSettled, setIsCaptureScrollSettled] = useState(true);
@@ -588,7 +590,9 @@ export default function HomeScreen() {
   ]);
 
   const liveSnapHeight = windowHeight;
-  const shouldLockCapturePage = Platform.OS === 'android' && isCaptureTextEntryFocused;
+  const shouldLockCaptureInteractions =
+    isCaptureTextEntryFocused || isCaptureDecorateModeActive || isCaptureGestureActive;
+  const shouldLockCapturePage = Platform.OS === 'android' && shouldLockCaptureInteractions;
   const snapHeight =
     shouldLockCapturePage && lockedCaptureSnapHeight != null ? lockedCaptureSnapHeight : liveSnapHeight;
 
@@ -2662,6 +2666,26 @@ export default function HomeScreen() {
     flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
   }, [liveSnapHeight]);
 
+  const handleCaptureDecorateModeChange = useCallback((active: boolean) => {
+    setIsCaptureDecorateModeActive(active);
+
+    if (!active) {
+      return;
+    }
+
+    flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
+  }, []);
+
+  const handleCaptureGestureActiveChange = useCallback((active: boolean) => {
+    setIsCaptureGestureActive(active);
+
+    if (!active) {
+      return;
+    }
+
+    flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
+  }, []);
+
   const captureHeader = useMemo(
     () => (
       <View style={styles.captureItemWrapper}>
@@ -2756,6 +2780,8 @@ export default function HomeScreen() {
           shareTarget={captureTarget}
           onChangeShareTarget={handleCaptureTargetChange}
           onResetDualCaptureSequence={handleResetDualCaptureSequence}
+          onDoodleModeChange={handleCaptureDecorateModeChange}
+          onGestureActiveChange={handleCaptureGestureActiveChange}
           onTextEntryFocusChange={handleCaptureTextEntryFocusChange}
           footerContent={captureFooterContent}
         />
@@ -2787,6 +2813,8 @@ export default function HomeScreen() {
       handleChangeCameraSubmode,
       handleChangePhotoFilter,
       handleResetDualCaptureSequence,
+      handleCaptureDecorateModeChange,
+      handleCaptureGestureActiveChange,
       handleTakeDualPicture,
       handleCaptureTextEntryFocusChange,
       handleImportMotionClip,
@@ -2851,7 +2879,7 @@ export default function HomeScreen() {
       onCaptureScrollSettledChange: setIsCaptureScrollSettled,
       onInitialContentDraw: markHomeFeedReady,
       scrollEnabled:
-        !isCaptureTextEntryFocused &&
+        !shouldLockCaptureInteractions &&
         !isLivePhotoCaptureInProgress,
       capturePageLocked: shouldLockCapturePage,
     }),
@@ -2864,13 +2892,13 @@ export default function HomeScreen() {
       handleSettledArchiveItemChange,
       homeFeedEmptyState,
       insets.top,
-      isCaptureTextEntryFocused,
       isLivePhotoCaptureInProgress,
       isScreenFocused,
       markHomeFeedReady,
       openNote,
       openSharedPost,
       ownedSharedNoteIds,
+      shouldLockCaptureInteractions,
       shouldLockCapturePage,
       snapHeight,
       t,

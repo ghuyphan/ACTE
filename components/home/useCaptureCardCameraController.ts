@@ -761,10 +761,11 @@ export function useCaptureCardCameraController({
         .enabled(cameraFocusGesturesEnabled)
         .runOnJS(true)
         .maxDuration(250)
+        .maxDistance(12)
         .onBegin(() => {
           beginCameraGestureLock();
         })
-        .onEnd((event, success) => {
+        .onEnd((event: { x: number; y: number }, success: boolean) => {
           if (success === false) {
             return;
           }
@@ -775,8 +776,7 @@ export function useCaptureCardCameraController({
           endCameraGestureLock();
         });
 
-      return Gesture.Simultaneous(
-        tapGesture,
+      return Gesture.Exclusive(
         Gesture.Pinch()
           .enabled(cameraZoomGesturesEnabled)
           .runOnJS(true)
@@ -795,7 +795,8 @@ export function useCaptureCardCameraController({
           })
           .onFinalize(() => {
             endCameraGestureLock();
-          })
+          }),
+        tapGesture
       );
     },
     [

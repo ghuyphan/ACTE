@@ -89,6 +89,11 @@ export interface CreateStickerPlacementOptions {
   stampStyle?: StickerStampStyle;
 }
 
+export interface AppendStickerPlacementResult {
+  placement: NoteStickerPlacement;
+  placements: NoteStickerPlacement[];
+}
+
 export class StickerImportError extends Error {
   code: StickerImportErrorCode;
 
@@ -354,6 +359,17 @@ function getNextStickerPlacementCoordinates(existingPlacements: NoteStickerPlace
   return {
     x: clamp01(0.5 + offset.x),
     y: clamp01(0.5 + offset.y),
+  };
+}
+
+function getNextStickerPlacementInsertState(existingPlacements: NoteStickerPlacement[]) {
+  return {
+    nextZIndex:
+      existingPlacements.reduce(
+        (maxValue, placement) => Math.max(maxValue, placement.zIndex),
+        0
+      ) + 1,
+    coordinates: getNextStickerPlacementCoordinates(existingPlacements),
   };
 }
 
@@ -921,8 +937,7 @@ export function createStickerPlacement(
   existingPlacements: NoteStickerPlacement[] = [],
   options: CreateStickerPlacementOptions = {}
 ): NoteStickerPlacement {
-  const nextZIndex = existingPlacements.reduce((maxValue, placement) => Math.max(maxValue, placement.zIndex), 0) + 1;
-  const coordinates = getNextStickerPlacementCoordinates(existingPlacements);
+  const { nextZIndex, coordinates } = getNextStickerPlacementInsertState(existingPlacements);
   const {
     suggestedRenderMode,
     ...placementAsset
@@ -945,6 +960,26 @@ export function createStickerPlacement(
     renderMode,
     stampStyle,
     asset: placementAsset,
+  };
+}
+
+export function appendStickerPlacement(
+  placements: NoteStickerPlacement[],
+  placement: NoteStickerPlacement
+): AppendStickerPlacementResult {
+  const { nextZIndex, coordinates } = getNextStickerPlacementInsertState(placements);
+  const insertedPlacement: NoteStickerPlacement = {
+    ...placement,
+    x: coordinates.x,
+    y: coordinates.y,
+    zIndex: nextZIndex,
+  };
+  const nextPlacements = normalizeStickerPlacements([...placements, insertedPlacement]);
+
+  return {
+    placement:
+      nextPlacements.find((candidate) => candidate.id === insertedPlacement.id) ?? insertedPlacement,
+    placements: nextPlacements,
   };
 }
 
@@ -1683,8 +1718,10 @@ export async function saveNoteStickerPlacementsWithAssets(
     return;
   }
 
+  const normalizedPlacements = normalizeStickerPlacements(placements);
+
   await withDatabaseTransaction(async (txn) => {
-    await syncStickerAssetsFromPlacements(placements, txn);
+    await syncStickerAssetsFromPlacements(normalizedPlacements, txn);
     await txn.runAsync(
       `INSERT INTO note_stickers (note_id, placements_json, updated_at)
        VALUES (?, ?, ?)
@@ -1692,7 +1729,7 @@ export async function saveNoteStickerPlacementsWithAssets(
          placements_json = excluded.placements_json,
          updated_at = excluded.updated_at`,
       noteId,
-      JSON.stringify(placements),
+      JSON.stringify(normalizedPlacements),
       new Date().toISOString()
     );
   });

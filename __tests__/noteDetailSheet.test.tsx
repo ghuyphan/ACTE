@@ -273,6 +273,19 @@ jest.mock('../services/noteDoodles', () => ({
 }));
 
 jest.mock('../services/noteStickers', () => ({
+  appendStickerPlacement: jest.fn((placements: any[], placement: any) => {
+    const nextIndex = placements.length + 1;
+    const nextPlacement = {
+      ...placement,
+      x: 0.5 + (nextIndex - 1) * 0.05,
+      y: 0.5 + (nextIndex - 1) * 0.03,
+      zIndex: nextIndex,
+    };
+    return {
+      placement: nextPlacement,
+      placements: [...placements, nextPlacement],
+    };
+  }),
   bringStickerPlacementToFront: jest.fn((placements: any[]) => placements),
   createStickerPlacement: jest.fn((asset: any, existingPlacements: any[] = []) => ({
     id: `detail-placement-${existingPlacements.length + 1}`,
@@ -431,6 +444,7 @@ jest.mock('../components/notes/NoteStickerCanvas', () => {
           <Text testID="mock-note-sticker-count">{String(props.placements?.length ?? 0)}</Text>
           <Text testID="mock-note-sticker-editable">{String(props.editable)}</Text>
           <Text testID="mock-note-sticker-selected">{String(props.selectedPlacementId ?? 'null')}</Text>
+          <Text testID="mock-note-sticker-placements-json">{JSON.stringify(props.placements ?? [])}</Text>
           <Pressable
             testID="mock-note-sticker-select-first"
             onPress={() => props.onChangeSelectedPlacementId?.(props.placements?.[0]?.id ?? null)}
@@ -1325,6 +1339,12 @@ describe('NoteDetailSheet', () => {
     await waitFor(() => {
       expect(getByTestId('mock-note-sticker-count')).toHaveTextContent('2');
     });
+
+    const placements = JSON.parse(getByTestId('mock-note-sticker-placements-json').props.children);
+    expect(placements[0]?.zIndex).toBe(1);
+    expect(placements[1]?.zIndex).toBe(2);
+    expect(placements[1]?.x).not.toBe(placements[0]?.x);
+    expect(placements[1]?.y).not.toBe(placements[0]?.y);
   });
 
   it('anchors the photo location cursor at the start when edit mode opens', async () => {

@@ -195,6 +195,7 @@ interface CaptureCardProps {
   onChangeShareTarget: (nextTarget: 'private' | 'shared') => void;
   onResetDualCaptureSequence?: () => void;
   onDoodleModeChange?: (enabled: boolean) => void;
+  onGestureActiveChange?: (active: boolean) => void;
   onTextEntryFocusChange?: (focused: boolean) => void;
   footerContent?: ReactNode;
 }
@@ -269,6 +270,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   onChangeShareTarget,
   onResetDualCaptureSequence = () => undefined,
   onDoodleModeChange,
+  onGestureActiveChange,
   onTextEntryFocusChange,
   footerContent,
 }, ref) {
@@ -302,6 +304,8 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   const previousTextDraftEmptyRef = useRef(noteText.length === 0);
   const previousCaptureModeRef = useRef(captureMode);
   const noteInputRef = useRef<TextInput | null>(null);
+  const canvasGestureActiveRef = useRef(false);
+  const cameraGestureActiveRef = useRef(false);
   const latestIosKeyboardScreenYRef = useRef(0);
   const pendingIosKeyboardLiftTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const placeholderVariants = useMemo(() => getCaptureTextPlaceholderVariants(t), [t]);
@@ -388,7 +392,27 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
 
   const isCaptureTextEntryFocused = isTextEntryFocused || isPhotoCaptionFocused;
   const pageBottomInset = topInset + HOME_PAGE_VISUAL_BOTTOM_INSET;
-  const handleCanvasGestureActiveChange = useCallback((_active: boolean) => {}, []);
+  const notifyCaptureGestureActivity = useCallback(() => {
+    onGestureActiveChange?.(
+      canvasGestureActiveRef.current || cameraGestureActiveRef.current
+    );
+  }, [onGestureActiveChange]);
+  const handleCanvasGestureActiveChange = useCallback((active: boolean) => {
+    if (canvasGestureActiveRef.current === active) {
+      return;
+    }
+
+    canvasGestureActiveRef.current = active;
+    notifyCaptureGestureActivity();
+  }, [notifyCaptureGestureActivity]);
+  const handleCameraGestureActiveChange = useCallback((active: boolean) => {
+    if (cameraGestureActiveRef.current === active) {
+      return;
+    }
+
+    cameraGestureActiveRef.current = active;
+    notifyCaptureGestureActivity();
+  }, [notifyCaptureGestureActivity]);
   const animateIosKeyboardLift = useCallback(
     (nextLift: number, duration?: number) => {
       const nextDuration = reduceMotionEnabled ? 0 : Math.max(120, Math.round(duration ?? 240));
@@ -665,6 +689,31 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   }, [captureMode, capturedPhoto]);
 
   useEffect(() => {
+    const canvasGesturesAvailable =
+      (captureMode === 'text' || Boolean(capturedPhoto)) &&
+      (doodleModeEnabled || stickerModeEnabled);
+
+    if (!canvasGesturesAvailable) {
+      handleCanvasGestureActiveChange(false);
+    }
+  }, [
+    captureMode,
+    capturedPhoto,
+    doodleModeEnabled,
+    handleCanvasGestureActiveChange,
+    stickerModeEnabled,
+  ]);
+
+  useEffect(
+    () => () => {
+      canvasGestureActiveRef.current = false;
+      cameraGestureActiveRef.current = false;
+      onGestureActiveChange?.(false);
+    },
+    [onGestureActiveChange]
+  );
+
+  useEffect(() => {
     if (doodleModeEnabled || stickerModeEnabled) {
       setLiveCameraFilterModeEnabled(false);
     }
@@ -765,6 +814,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
     t,
     cardSize: CARD_SIZE,
     livePhotoRingStrokeWidth: LIVE_PHOTO_RING_STROKE_WIDTH,
+    onCameraGestureActiveChange: handleCameraGestureActiveChange,
     onToggleFacing,
     onTakePicture,
     onShutterPressOut,

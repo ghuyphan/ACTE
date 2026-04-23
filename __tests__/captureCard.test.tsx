@@ -370,6 +370,19 @@ jest.mock('../components/notes/NoteStickerCanvas', () => {
 });
 
 jest.mock('../services/noteStickers', () => ({
+  appendStickerPlacement: jest.fn((placements: any[], placement: any) => {
+    const nextIndex = placements.length + 1;
+    const nextPlacement = {
+      ...placement,
+      x: 0.5 + (nextIndex - 1) * 0.05,
+      y: 0.5 + (nextIndex - 1) * 0.03,
+      zIndex: nextIndex,
+    };
+    return {
+      placement: nextPlacement,
+      placements: [...placements, nextPlacement],
+    };
+  }),
   bringStickerPlacementToFront: jest.fn((placements: any[]) => placements),
   createStickerPlacement: jest.fn((asset: any, existingPlacements: any[] = [], options?: any) => ({
     id: `placement-${existingPlacements.length + 1}`,
@@ -723,6 +736,30 @@ describe('CaptureCard doodle handle', () => {
 
     expect(ref.current?.getDoodleSnapshot()).toEqual({ enabled: false, strokes: [] });
     expect(queryByTestId('mock-doodle-editable')).toBeNull();
+  });
+
+  it('relays canvas gesture activity to the home screen lock callback', () => {
+    const ref = React.createRef<CaptureCardHandle>();
+    const onGestureActiveChange = jest.fn();
+    const { getByTestId } = renderCaptureCard(ref, {
+      noteText: '',
+      onGestureActiveChange,
+    });
+
+    act(() => {
+      fireEvent.press(getByTestId('capture-doodle-toggle'));
+    });
+
+    act(() => {
+      fireEvent.press(getByTestId('mock-doodle-gesture-start'));
+    });
+
+    act(() => {
+      fireEvent.press(getByTestId('mock-doodle-gesture-end'));
+    });
+
+    expect(onGestureActiveChange).toHaveBeenNthCalledWith(1, true);
+    expect(onGestureActiveChange).toHaveBeenLastCalledWith(false);
   });
 
   it('keeps the raw draft value so typing spaces is not rewritten away', () => {

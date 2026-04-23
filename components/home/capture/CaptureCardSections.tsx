@@ -725,113 +725,115 @@ export function LiveCameraSurface({
           />
         </View>
       ) : shouldRenderSingleCameraPreview ? (
-        <GestureDetector gesture={cameraZoomGesture}>
-          <View style={styles.cameraGestureLayer} collapsable={false}>
-            <Camera
-              key={cameraKey}
-              style={styles.cameraPreview}
-              device={cameraDevice!}
-              isActive={canShowLiveCameraPreview}
-              preview
-              photo
-              video
-              photoQualityBalance="speed"
-              isMirrored={facing === 'front'}
-              zoom={cameraPreviewZoom}
-              resizeMode="cover"
-              androidPreviewViewType="texture-view"
-              ref={cameraRef}
-              onInitialized={handleCameraInitialized}
-              onPreviewStarted={handleCameraPreviewStarted}
-              onError={(error) => {
-                handleCameraStartupFailure(error.message);
-              }}
-            />
-            <LiveCameraFilterOverlay
-              filterId={selectedPhotoFilterId}
-              width={CARD_SIZE}
-              height={CARD_SIZE}
-              style={styles.cameraPreview}
-            />
-            {shouldShowBackCameraLensSelector && activeBackCameraLensOption ? (
-              <View pointerEvents="box-none" style={styles.cameraLensSelector}>
-                <View
-                  testID="capture-back-camera-lens-selector"
+        <>
+          <GestureDetector gesture={cameraZoomGesture}>
+            <View style={styles.cameraGestureLayer} collapsable={false}>
+              <Camera
+                key={cameraKey}
+                style={styles.cameraPreview}
+                device={cameraDevice!}
+                isActive={canShowLiveCameraPreview}
+                preview
+                photo
+                video
+                photoQualityBalance="speed"
+                isMirrored={facing === 'front'}
+                zoom={cameraPreviewZoom}
+                resizeMode="cover"
+                androidPreviewViewType="texture-view"
+                ref={cameraRef}
+                onInitialized={handleCameraInitialized}
+                onPreviewStarted={handleCameraPreviewStarted}
+                onError={(error) => {
+                  handleCameraStartupFailure(error.message);
+                }}
+              />
+              <LiveCameraFilterOverlay
+                filterId={selectedPhotoFilterId}
+                width={CARD_SIZE}
+                height={CARD_SIZE}
+                style={styles.cameraPreview}
+              />
+              {shouldShowZoomBadge ? (
+                <View pointerEvents="none" style={styles.cameraZoomBadge}>
+                  <Text
+                    style={[styles.cameraZoomBadgeText, { color: colors.captureCameraOverlayText }]}
+                  >
+                    {cameraZoomLabel}
+                  </Text>
+                </View>
+              ) : null}
+              {cameraFocusPoint ? (
+                <Reanimated.View
+                  pointerEvents="none"
                   style={[
-                    styles.cameraLensSelectorPill,
+                    styles.cameraFocusRing,
                     {
-                      backgroundColor: cameraLensSelectorBackground,
-                      borderColor: cameraLensSelectorBorder,
+                      borderColor: colors.primary,
+                      left: cameraFocusPoint.x - CAMERA_FOCUS_RING_SIZE / 2,
+                      top: cameraFocusPoint.y - CAMERA_FOCUS_RING_SIZE / 2,
                     },
+                    cameraFocusRingAnimatedStyle,
                   ]}
-                >
-                  {backCameraLensOptions.map((option) => {
-                    const selected = option.lens === activeBackCameraLensOption.lens;
+                />
+              ) : null}
+            </View>
+          </GestureDetector>
+          {shouldShowBackCameraLensSelector && activeBackCameraLensOption ? (
+            <View pointerEvents="box-none" style={styles.cameraLensSelector}>
+              <View
+                testID="capture-back-camera-lens-selector"
+                style={[
+                  styles.cameraLensSelectorPill,
+                  {
+                    backgroundColor: cameraLensSelectorBackground,
+                    borderColor: cameraLensSelectorBorder,
+                  },
+                ]}
+              >
+                {backCameraLensOptions.map((option) => {
+                  const selected = option.lens === activeBackCameraLensOption.lens;
 
-                    return (
-                      <CaptureAnimatedPressable
-                        key={option.lens}
-                        testID={`capture-back-camera-lens-button-${option.lens}`}
-                        accessibilityLabel={option.accessibilityLabel}
-                        accessibilityRole="button"
-                        accessibilityState={{ disabled: selected, selected }}
-                        onPress={() => onChangeBackCameraLens(option.lens)}
-                        disabled={selected}
-                        disabledOpacity={1}
-                        pressedScale={0.96}
+                  return (
+                    <CaptureAnimatedPressable
+                      key={option.lens}
+                      testID={`capture-back-camera-lens-button-${option.lens}`}
+                      accessibilityLabel={option.accessibilityLabel}
+                      accessibilityRole="button"
+                      accessibilityState={{ disabled: selected, selected }}
+                      onPress={() => onChangeBackCameraLens(option.lens)}
+                      disabled={selected}
+                      disabledOpacity={1}
+                      pressedScale={0.96}
+                      style={[
+                        styles.cameraLensOptionButton,
+                        {
+                          backgroundColor: selected
+                            ? cameraLensOptionActiveBackground
+                            : cameraLensOptionInactiveBackground,
+                          borderColor: selected ? colors.primary : 'transparent',
+                        },
+                      ]}
+                    >
+                      <Text
                         style={[
-                          styles.cameraLensOptionButton,
+                          styles.cameraLensOptionText,
                           {
-                            backgroundColor: selected
-                              ? cameraLensOptionActiveBackground
-                              : cameraLensOptionInactiveBackground,
-                            borderColor: selected ? colors.primary : 'transparent',
+                            color: selected
+                              ? cameraLensOptionActiveText
+                              : cameraLensOptionInactiveText,
                           },
                         ]}
                       >
-                        <Text
-                          style={[
-                            styles.cameraLensOptionText,
-                            {
-                              color: selected
-                                ? cameraLensOptionActiveText
-                                : cameraLensOptionInactiveText,
-                            },
-                          ]}
-                        >
-                          {option.label}
-                        </Text>
-                      </CaptureAnimatedPressable>
-                    );
-                  })}
-                </View>
+                        {option.label}
+                      </Text>
+                    </CaptureAnimatedPressable>
+                  );
+                })}
               </View>
-            ) : null}
-            {shouldShowZoomBadge ? (
-              <View pointerEvents="none" style={styles.cameraZoomBadge}>
-                <Text
-                  style={[styles.cameraZoomBadgeText, { color: colors.captureCameraOverlayText }]}
-                >
-                  {cameraZoomLabel}
-                </Text>
-              </View>
-            ) : null}
-            {cameraFocusPoint ? (
-              <Reanimated.View
-                pointerEvents="none"
-                style={[
-                  styles.cameraFocusRing,
-                  {
-                    borderColor: colors.primary,
-                    left: cameraFocusPoint.x - CAMERA_FOCUS_RING_SIZE / 2,
-                    top: cameraFocusPoint.y - CAMERA_FOCUS_RING_SIZE / 2,
-                  },
-                  cameraFocusRingAnimatedStyle,
-                ]}
-              />
-            ) : null}
-          </View>
-        </GestureDetector>
+            </View>
+          ) : null}
+        </>
       ) : null}
       {showDualCaptureGuide ? (
         <View
