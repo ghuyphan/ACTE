@@ -509,6 +509,25 @@ describe('database migrations', () => {
     expect(mockExecAsync.mock.calls.map(([sql]) => sql)).toEqual(['BEGIN IMMEDIATE', 'ROLLBACK']);
   });
 
+  it('keeps empty scoped searches inside the requested owner scope', async () => {
+    let getDB!: () => Promise<unknown>;
+    let searchNotes!: (query: string, scopeOverride?: string) => Promise<unknown[]>;
+
+    jest.isolateModules(() => {
+      ({ getDB, searchNotes } = require('../services/database'));
+    });
+
+    await getDB();
+    mockGetAllAsync.mockClear();
+
+    await searchNotes('   ', 'user-42');
+
+    expect(mockGetAllAsync).toHaveBeenCalledWith(
+      expect.stringContaining('WHERE owner_uid = ?'),
+      'user-42'
+    );
+  });
+
   it('does not migrate local sync metadata into an authenticated account scope', async () => {
     let getDB!: () => Promise<unknown>;
     let migrateNotesScope!: (sourceScope: string, targetScope: string) => Promise<void>;

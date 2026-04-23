@@ -28,4 +28,13 @@ describe('widget payload contract parity', () => {
       expect(androidWidgetProviderSource).toContain(`"${fieldName}"`);
     }
   });
+
+  it('does not let the Android snapshot model drift beyond the shared payload contract', () => {
+    const androidSnapshotFieldNames = Array.from(
+      androidWidgetModuleSource.matchAll(/val\s+([A-Za-z0-9_]+):/g),
+      (match) => match[1]
+    );
+
+    expect(androidSnapshotFieldNames).toEqual([...WIDGET_PAYLOAD_FIELD_NAMES]);
+  });
 });

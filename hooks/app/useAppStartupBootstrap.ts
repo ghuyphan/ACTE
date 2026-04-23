@@ -63,14 +63,6 @@ export function useAppStartupBootstrap() {
   }, [isStartupRouteReady]);
 
   useEffect(() => {
-    let cancelled = false;
-    let startupIdleHandle: ReturnType<typeof scheduleOnIdle> | null = null;
-    let startupTimeout: ReturnType<typeof setTimeout> | null = null;
-
-    if (databaseAttempt > 0) {
-      setIsRecovering(true);
-    }
-
     configureForegroundNotificationPresentation();
     void registerSocialPushBackgroundTaskAsync().catch((error) => {
       console.warn('Background social push registration failed:', error);
@@ -80,6 +72,16 @@ export function useAppStartupBootstrap() {
       .catch((error) => {
         console.error('Notification channel setup failed:', error);
       });
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    let startupIdleHandle: ReturnType<typeof scheduleOnIdle> | null = null;
+    let startupTimeout: ReturnType<typeof setTimeout> | null = null;
+
+    if (databaseAttempt > 0) {
+      setIsRecovering(true);
+    }
 
     getDB()
       .then(() => {

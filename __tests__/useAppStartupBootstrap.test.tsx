@@ -189,6 +189,36 @@ describe('useAppStartupBootstrap', () => {
     consoleErrorSpy.mockRestore();
   });
 
+  it('does not rerun one-time startup service setup during a database retry', async () => {
+    mockGetDB.mockRejectedValueOnce(new Error('db failed'));
+    const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+
+    const { result } = renderHook(() => useAppStartupBootstrap(), { wrapper });
+
+    await waitFor(() => {
+      expect(result.current.startupError).toBe('database-init-failed');
+    });
+
+    expect(mockConfigureForegroundNotificationPresentation).toHaveBeenCalledTimes(1);
+    expect(mockRegisterSocialPushBackgroundTaskAsync).toHaveBeenCalledTimes(1);
+    expect(mockConfigureNotificationChannels).toHaveBeenCalledTimes(1);
+
+    mockGetDB.mockResolvedValueOnce({});
+
+    await act(async () => {
+      result.current.retryStartup();
+    });
+
+    await waitFor(() => {
+      expect(result.current.isDatabaseReady).toBe(true);
+    });
+
+    expect(mockConfigureForegroundNotificationPresentation).toHaveBeenCalledTimes(1);
+    expect(mockRegisterSocialPushBackgroundTaskAsync).toHaveBeenCalledTimes(1);
+    expect(mockConfigureNotificationChannels).toHaveBeenCalledTimes(1);
+    consoleErrorSpy.mockRestore();
+  });
+
   it('resets local data before retrying startup', async () => {
     mockGetDB.mockRejectedValueOnce(new Error('db failed'));
     const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});

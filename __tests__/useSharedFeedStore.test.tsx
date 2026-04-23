@@ -1151,6 +1151,47 @@ describe('useSharedFeedStore', () => {
     });
   });
 
+  it('skips a foreground refresh when the live shared-feed snapshot is still fresh', async () => {
+    const { result } = renderHook(() => useSharedFeedStore(), { wrapper });
+
+    await waitFor(() => {
+      expect(result.current.ready).toBe(true);
+    });
+
+    await act(async () => {
+      latestSharedFeedSubscriptionHandlers?.onSnapshot({
+        friends: [],
+        sharedPosts: [createSharedPost({ id: 'live-post-1' })],
+        activeInvite: null,
+      });
+    });
+
+    await waitFor(() => {
+      expect(result.current.dataSource).toBe('live');
+      expect(result.current.sharedPosts).toEqual([
+        expect.objectContaining({ id: 'live-post-1' }),
+      ]);
+    });
+
+    mockRefreshSharedFeed.mockClear();
+
+    await act(async () => {
+      appStateListener?.('background');
+    });
+
+    await act(async () => {
+      appStateListener?.('active');
+    });
+
+    await waitFor(() => {
+      expect(result.current.sharedPosts).toEqual([
+        expect.objectContaining({ id: 'live-post-1' }),
+      ]);
+    });
+
+    expect(mockRefreshSharedFeed).not.toHaveBeenCalled();
+  });
+
   it('reruns a forced refresh after an in-flight refresh instead of letting stale data win', async () => {
     const firstRefresh = createDeferred<{
       friends: any[];

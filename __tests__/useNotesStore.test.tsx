@@ -522,6 +522,7 @@ describe('useNotesStore', () => {
 
     const { result } = renderHook(() => useNotesStore(), { wrapper: TestWrapper });
     await waitFor(() => expect(result.current.loading).toBe(false));
+    mockSyncGeofenceRegions.mockClear();
 
     await act(async () => {
       await result.current.updateNote('note-42', {
@@ -532,6 +533,7 @@ describe('useNotesStore', () => {
 
     expect(result.current.notes[0].content).toBe('Updated note');
     expect(result.current.notes[0].locationName).toBe('New place');
+    expect(mockSyncGeofenceRegions).toHaveBeenCalledTimes(1);
 
     await act(async () => {
       await result.current.updateNote('note-42', {
@@ -545,6 +547,7 @@ describe('useNotesStore', () => {
     expect(result.current.notes[0].doodleStrokesJson).toBe(
       JSON.stringify([{ color: '#FFFFFF', points: [0.1, 0.1, 0.2, 0.2] }])
     );
+    expect(mockSyncGeofenceRegions).toHaveBeenCalledTimes(1);
 
     await act(async () => {
       const nextFavorite = await result.current.toggleFavorite('note-42');
@@ -552,7 +555,7 @@ describe('useNotesStore', () => {
     });
 
     expect(result.current.notes[0].isFavorite).toBe(true);
-    expect(mockSyncGeofenceRegions).toHaveBeenCalled();
+    expect(mockSyncGeofenceRegions).toHaveBeenCalledTimes(2);
   });
 
   it('falls back to in-memory caption matching when photo captions are missing from db search results', async () => {

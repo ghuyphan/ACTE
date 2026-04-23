@@ -114,20 +114,20 @@
                 android:layout_height="wrap_content"
                 android:layout_alignParentTop="true"
                 android:layout_centerHorizontal="true"
-                android:layout_marginTop="12dp"
+                android:layout_marginTop="10dp"
                 android:background="@drawable/noto_widget_badge_light"
                 android:gravity="center_vertical"
                 android:orientation="horizontal"
-                android:paddingLeft="13dp"
-                android:paddingTop="7dp"
-                android:paddingRight="14dp"
-                android:paddingBottom="7dp"
+                android:paddingLeft="8dp"
+                android:paddingTop="4dp"
+                android:paddingRight="9dp"
+                android:paddingBottom="4dp"
                 android:visibility="gone">
 
                 <ImageView
                     android:id="@+id/widget_location_icon_centered"
-                    android:layout_width="11dp"
-                    android:layout_height="11dp"
+                    android:layout_width="9dp"
+                    android:layout_height="9dp"
                     android:contentDescription="@null"
                     android:src="@drawable/noto_widget_pin_icon" />
 
@@ -139,10 +139,10 @@
                     android:fontFamily="@font/noto_sans_600semi_bold"
                     android:includeFontPadding="false"
                     android:maxLines="1"
-                    android:maxWidth="132dp"
-                    android:paddingLeft="5dp"
+                    android:maxWidth="104dp"
+                    android:paddingLeft="3dp"
                     android:textColor="#7A6A58"
-                    android:textSize="10sp" />
+                    android:textSize="8sp" />
             </LinearLayout>
 
             <LinearLayout
@@ -163,16 +163,16 @@
                     android:background="@drawable/noto_widget_badge_light"
                     android:gravity="center_vertical"
                     android:orientation="horizontal"
-                    android:paddingLeft="13dp"
-                    android:paddingTop="7dp"
-                    android:paddingRight="14dp"
-                    android:paddingBottom="7dp"
+                    android:paddingLeft="8dp"
+                    android:paddingTop="4dp"
+                    android:paddingRight="9dp"
+                    android:paddingBottom="4dp"
                     android:visibility="gone">
 
                     <ImageView
                         android:id="@+id/widget_location_icon"
-                        android:layout_width="11dp"
-                        android:layout_height="11dp"
+                        android:layout_width="9dp"
+                        android:layout_height="9dp"
                         android:contentDescription="@null"
                         android:src="@drawable/noto_widget_pin_icon" />
 
@@ -184,10 +184,10 @@
                         android:fontFamily="@font/noto_sans_600semi_bold"
                         android:includeFontPadding="false"
                         android:maxLines="1"
-                        android:maxWidth="132dp"
-                        android:paddingLeft="5dp"
+                        android:maxWidth="104dp"
+                        android:paddingLeft="3dp"
                         android:textColor="#7A6A58"
-                        android:textSize="10sp" />
+                        android:textSize="8sp" />
                 </LinearLayout>
 
                 <TextView
@@ -200,12 +200,12 @@
                     android:gravity="center"
                     android:includeFontPadding="false"
                     android:maxLines="1"
-                    android:paddingLeft="11dp"
-                    android:paddingTop="6dp"
-                    android:paddingRight="11dp"
-                    android:paddingBottom="6dp"
+                    android:paddingLeft="7dp"
+                    android:paddingTop="3dp"
+                    android:paddingRight="7dp"
+                    android:paddingBottom="3dp"
                     android:textColor="#7A6A58"
-                    android:textSize="9sp"
+                    android:textSize="7sp"
                     android:visibility="gone" />
             </LinearLayout>
 
@@ -238,20 +238,20 @@
                     android:layout_height="wrap_content"
                     android:layout_gravity="center"
                     android:ellipsize="end"
-                    android:fontFamily="@font/noto_sans_700bold"
+                    android:fontFamily="@font/noto_sans_600semi_bold"
                     android:gravity="center"
                     android:includeFontPadding="false"
                     android:letterSpacing="0"
-                    android:lineSpacingExtra="3dp"
+                    android:lineSpacingExtra="2dp"
                     android:maxLines="4"
-                    android:paddingLeft="20dp"
-                    android:paddingRight="20dp"
+                    android:paddingLeft="18dp"
+                    android:paddingRight="18dp"
                     android:shadowColor="#14000000"
                     android:shadowDx="0"
                     android:shadowDy="1"
                     android:shadowRadius="4"
                     android:textColor="#2B2621"
-                    android:textSize="15sp"
+                    android:textSize="13sp"
                     android:visibility="gone" />
 
                 <ImageView

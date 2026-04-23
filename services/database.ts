@@ -2062,7 +2062,7 @@ export async function searchNotes(query: string, scopeOverride?: string): Promis
     const matchExpression = buildFtsMatchExpression(query);
 
     if (!matchExpression) {
-        return getAllNotes();
+        return getAllNotesForScope(scope);
     }
 
     const rows = await database.getAllAsync<NoteRow>(

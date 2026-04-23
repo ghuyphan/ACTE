@@ -3,7 +3,7 @@ import SwiftUI
 import UIKit
 import ImageIO
 
-private let widgetFontScale: CGFloat = 0.9
+private let widgetFontScale: CGFloat = 0.92
 
 private func scaledWidgetFontSize(_ size: CGFloat) -> CGFloat {
     size * widgetFontScale
@@ -1051,6 +1051,12 @@ private struct WidgetChromePillMetrics {
     let shadowOpacity: Double
 }
 
+private struct WidgetCardMetrics {
+    let widgetPadding: CGFloat
+    let contentPadding: CGFloat
+    let cornerRadius: CGFloat
+}
+
 private struct LocketWidgetEntry: TimelineEntry {
     let date: Date
     let payload: LocketWidgetPayload
@@ -1258,17 +1264,17 @@ private struct LocketWidgetEntryView: View {
     private var dualCaptureInsetMetrics: DualWidgetInsetMetrics {
         if isLarge {
             return DualWidgetInsetMetrics(
-                insetSize: 48,
-                insetMargin: 14,
-                insetRadius: 14,
+                insetSize: 52,
+                insetMargin: 16,
+                insetRadius: 15,
                 insetBorderWidth: 1.25
             )
         }
 
         if isMedium {
             return DualWidgetInsetMetrics(
-                insetSize: 42,
-                insetMargin: 12,
+                insetSize: 44,
+                insetMargin: 13,
                 insetRadius: 13,
                 insetBorderWidth: 1.25
             )
@@ -1337,6 +1343,30 @@ private struct LocketWidgetEntryView: View {
         payload.noteType == "text" &&
         payload.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
         (shouldShowStickerOverlay || shouldShowDoodleOverlay)
+    }
+
+    private var cardMetrics: WidgetCardMetrics {
+        if isLarge {
+            return WidgetCardMetrics(
+                widgetPadding: 3,
+                contentPadding: 24,
+                cornerRadius: 32
+            )
+        }
+
+        if isMedium {
+            return WidgetCardMetrics(
+                widgetPadding: 2,
+                contentPadding: 18,
+                cornerRadius: 29
+            )
+        }
+
+        return WidgetCardMetrics(
+            widgetPadding: 1,
+            contentPadding: 14,
+            cornerRadius: 25
+        )
     }
 
     private var nearbyPlacesLabel: String {
@@ -1653,49 +1683,15 @@ private struct LocketWidgetEntryView: View {
     }
 
     private var smallLayout: some View {
-        framedMemoryCard(
-            widgetPadding: 0,
-            contentPadding: 12,
-            isExpanded: false
-        )
+        framedMemoryCard()
     }
 
     private var mediumLayout: some View {
-        framedMemoryCard(
-            widgetPadding: 0,
-            contentPadding: 18,
-            isExpanded: true
-        )
+        framedMemoryCard()
     }
 
     private var largeLayout: some View {
-        framedMemoryCard(
-            widgetPadding: 0,
-            contentPadding: 22,
-            isExpanded: true
-        )
-    }
-
-    private var fontSize: CGFloat {
-        let count = contentDisplayText.trimmingCharacters(in: .whitespacesAndNewlines).count
-
-        if isLarge {
-            if count <= 60 { return 26 }
-            if count <= 120 { return 22 }
-            return 20
-        }
-
-        if count <= 28 { return 17 }
-        if count <= 64 { return 15.5 }
-        return 14.5
-    }
-
-    private var mediumFontSize: CGFloat {
-        let count = contentDisplayText.trimmingCharacters(in: .whitespacesAndNewlines).count
-
-        if count <= 60 { return 21 }
-        if count <= 120 { return 18.5 }
-        return 16.5
+        framedMemoryCard()
     }
 
     private var shouldShowCountBadge: Bool {
@@ -1792,7 +1788,7 @@ private struct LocketWidgetEntryView: View {
         let metrics = floatingChromePillMetrics
 
         Text(countLabel)
-            .font(.custom("Noto Sans SemiBold", size: scaledWidgetFontSize(isLarge ? 11 : 10)))
+            .font(.custom("Noto Sans SemiBold", size: scaledWidgetFontSize(isLarge ? 11.5 : (isMedium ? 10.5 : 9.25))))
             .foregroundStyle(badgeForegroundColor)
             .padding(.horizontal, metrics.horizontalPadding)
             .padding(.vertical, metrics.verticalPadding)
@@ -1806,15 +1802,15 @@ private struct LocketWidgetEntryView: View {
 
         HStack(spacing: 5) {
             Image(systemName: "mappin.and.ellipse")
-                .font(.system(size: scaledWidgetFontSize(10), weight: .semibold))
+                .font(.system(size: scaledWidgetFontSize(isLarge ? 10.5 : (isMedium ? 10 : 9.25)), weight: .semibold))
                 .foregroundStyle(eyebrowTextColor)
 
             Text(compactLocationName)
-                .font(.custom("Noto Sans Medium", size: scaledWidgetFontSize(10)))
+                .font(.custom("Noto Sans Medium", size: scaledWidgetFontSize(isLarge ? 10.8 : (isMedium ? 10.2 : 9.0))))
                 .foregroundStyle(eyebrowTextColor)
                 .lineLimit(1)
                 .minimumScaleFactor(0.84)
-                .frame(maxWidth: isLarge ? 170 : (isMedium ? 144 : 124), alignment: .leading)
+                .frame(maxWidth: isLarge ? 176 : (isMedium ? 148 : 116), alignment: .leading)
         }
         .padding(.horizontal, metrics.horizontalPadding)
         .padding(.vertical, metrics.verticalPadding)
@@ -1831,14 +1827,26 @@ private struct LocketWidgetEntryView: View {
 
     private var floatingChromePillMetrics: WidgetChromePillMetrics {
         if isLarge {
-            return WidgetChromePillMetrics(horizontalPadding: 12, verticalPadding: 7, shadowOpacity: hasPhotoBackground ? 0.16 : 0.08)
+            return WidgetChromePillMetrics(horizontalPadding: 12.5, verticalPadding: 7.5, shadowOpacity: hasPhotoBackground ? 0.16 : 0.08)
         }
 
-        return WidgetChromePillMetrics(horizontalPadding: 11, verticalPadding: 6, shadowOpacity: hasPhotoBackground ? 0.16 : 0.08)
+        if isMedium {
+            return WidgetChromePillMetrics(horizontalPadding: 11, verticalPadding: 6.5, shadowOpacity: hasPhotoBackground ? 0.16 : 0.08)
+        }
+
+        return WidgetChromePillMetrics(horizontalPadding: 8.5, verticalPadding: 4.5, shadowOpacity: hasPhotoBackground ? 0.16 : 0.08)
     }
 
     private var compactChromePillMetrics: WidgetChromePillMetrics {
-        WidgetChromePillMetrics(horizontalPadding: 8, verticalPadding: 5, shadowOpacity: hasPhotoBackground ? 0.16 : 0.08)
+        if isLarge {
+            return WidgetChromePillMetrics(horizontalPadding: 10, verticalPadding: 6, shadowOpacity: hasPhotoBackground ? 0.16 : 0.08)
+        }
+
+        if isMedium {
+            return WidgetChromePillMetrics(horizontalPadding: 9, verticalPadding: 5.5, shadowOpacity: hasPhotoBackground ? 0.16 : 0.08)
+        }
+
+        return WidgetChromePillMetrics(horizontalPadding: 8, verticalPadding: 5, shadowOpacity: hasPhotoBackground ? 0.16 : 0.08)
     }
 
     private var authorChipForegroundColor: Color {
@@ -1855,24 +1863,24 @@ private struct LocketWidgetEntryView: View {
                 Image(uiImage: authorAvatar)
                     .resizable()
                     .scaledToFill()
-                    .frame(width: 18, height: 18)
+                    .frame(width: isLarge ? 20 : 18, height: isLarge ? 20 : 18)
                     .clipShape(Circle())
             } else if !payload.authorInitials.isEmpty {
                 Text(payload.authorInitials)
-                    .font(.custom("Noto Sans Bold", size: scaledWidgetFontSize(9)))
+                    .font(.custom("Noto Sans Bold", size: scaledWidgetFontSize(isLarge ? 9.5 : 9)))
                     .foregroundStyle(authorChipForegroundColor)
-                    .frame(width: 18, height: 18)
+                    .frame(width: isLarge ? 20 : 18, height: isLarge ? 20 : 18)
                     .background(authorChipForegroundColor.opacity(hasPhotoBackground ? 0.16 : 0.10))
                     .clipShape(Circle())
             }
 
             if !compactAuthorName.isEmpty {
                 Text(compactAuthorName)
-                    .font(.custom("Noto Sans Medium", size: scaledWidgetFontSize(10)))
+                    .font(.custom("Noto Sans Medium", size: scaledWidgetFontSize(isLarge ? 10.5 : 10)))
                     .foregroundStyle(authorChipForegroundColor)
                     .lineLimit(1)
                     .minimumScaleFactor(0.84)
-                    .frame(maxWidth: isLarge ? 112 : 90, alignment: .leading)
+                    .frame(maxWidth: isLarge ? 118 : 92, alignment: .leading)
             }
         }
         .padding(.horizontal, metrics.horizontalPadding)
@@ -1887,12 +1895,12 @@ private struct LocketWidgetEntryView: View {
 
         HStack(spacing: 4) {
             Image(systemName: "livephoto")
-                .font(.system(size: scaledWidgetFontSize(11), weight: .semibold))
+                .font(.system(size: scaledWidgetFontSize(isLarge ? 11.5 : 11), weight: .semibold))
                 .foregroundStyle(authorChipForegroundColor)
 
             if isLarge || isMedium {
                 Text(payload.livePhotoBadgeText.isEmpty ? widgetLocalized("widget.livePhotoBadge", fallback: "Live") : payload.livePhotoBadgeText)
-                    .font(.custom("Noto Sans SemiBold", size: scaledWidgetFontSize(10)))
+                    .font(.custom("Noto Sans SemiBold", size: scaledWidgetFontSize(isLarge ? 10.5 : 10)))
                     .foregroundStyle(authorChipForegroundColor)
                     .lineLimit(1)
                     .minimumScaleFactor(0.85)
@@ -1967,10 +1975,10 @@ private struct LocketWidgetEntryView: View {
         }
 
         if shouldShowTopLocationChip {
-            return isLarge ? 4 : 3
+            return isLarge ? 4 : (isMedium ? 4 : 3)
         }
 
-        return isLarge ? 5 : 4
+        return isLarge ? 5 : (isMedium ? 4 : 4)
     }
 
     private var textHeaderClearance: CGFloat {
@@ -1979,14 +1987,14 @@ private struct LocketWidgetEntryView: View {
         }
 
         if shouldCenterTopLocationChip {
-            return isLarge ? 22 : (isMedium ? 18 : 14)
+            return isLarge ? 24 : (isMedium ? 19 : 14)
         }
 
         if isLarge {
-            return 24
+            return 26
         }
 
-        return isMedium ? 18 : 14
+        return isMedium ? 20 : 14
     }
 
     @ViewBuilder
@@ -1998,12 +2006,12 @@ private struct LocketWidgetEntryView: View {
 
     private var photoTitleFont: Font {
         if isLarge {
-            return .custom("Noto Sans Bold", size: scaledWidgetFontSize(28))
+            return .custom("Noto Sans Bold", size: scaledWidgetFontSize(30))
         }
         if isMedium {
-            return .custom("Noto Sans Bold", size: scaledWidgetFontSize(22))
+            return .custom("Noto Sans Bold", size: scaledWidgetFontSize(24))
         }
-        return .custom("Noto Sans Bold", size: scaledWidgetFontSize(compactPhotoCaptionText.count > 28 ? 16 : 17))
+        return .custom("Noto Sans Bold", size: scaledWidgetFontSize(compactPhotoCaptionText.count > 28 ? 16 : 17.5))
     }
 
     @ViewBuilder
@@ -2049,12 +2057,30 @@ private struct LocketWidgetEntryView: View {
 
         if usesTextNoteCardStyle {
             let baseSize: CGFloat
-            if trimmedCount > 200 {
-                baseSize = 16
-            } else if trimmedCount > 100 {
-                baseSize = 18
+            if isLarge {
+                if trimmedCount > 190 {
+                    baseSize = 21
+                } else if trimmedCount > 100 {
+                    baseSize = 24
+                } else {
+                    baseSize = 28
+                }
+            } else if isMedium {
+                if trimmedCount > 140 {
+                    baseSize = 18
+                } else if trimmedCount > 72 {
+                    baseSize = 20
+                } else {
+                    baseSize = 23
+                }
             } else {
-                baseSize = 24
+                if trimmedCount > 96 {
+                    baseSize = 12.8
+                } else if trimmedCount > 48 {
+                    baseSize = 13.9
+                } else {
+                    baseSize = 15.1
+                }
             }
 
             return .custom("Noto Sans Bold", size: scaledWidgetFontSize(baseSize))
@@ -2064,16 +2090,16 @@ private struct LocketWidgetEntryView: View {
 
         if isLarge {
             if trimmedCount > 160 {
-                baseSize = 21
+                baseSize = 22
             } else if trimmedCount > 96 {
-                baseSize = 24
+                baseSize = 25
             } else {
-                baseSize = 28
+                baseSize = 29
             }
         } else if isMedium {
-            baseSize = trimmedCount > 110 ? 19 : 21
+            baseSize = trimmedCount > 110 ? 19.5 : 22
         } else {
-            baseSize = trimmedCount > 110 ? 16 : 18
+            baseSize = trimmedCount > 110 ? 15.5 : 18
         }
 
         return .custom("Noto Sans Bold", size: scaledWidgetFontSize(baseSize))
@@ -2081,10 +2107,14 @@ private struct LocketWidgetEntryView: View {
 
     private var noteCardLineSpacing: CGFloat {
         if isLarge {
-            return 2
+            return 2.4
         }
 
-        return 1
+        if isMedium {
+            return 1.5
+        }
+
+        return 0.8
     }
 
     private var noteCardTracking: CGFloat {
@@ -2096,7 +2126,7 @@ private struct LocketWidgetEntryView: View {
     }
 
     private var noteCardIdleFont: Font {
-        let baseSize: CGFloat = isLarge ? 20 : (isMedium ? 17 : 15)
+        let baseSize: CGFloat = isLarge ? 22 : (isMedium ? 18 : 15)
         return .custom("Noto Sans Medium", size: scaledWidgetFontSize(baseSize)).italic()
     }
 
@@ -2206,13 +2236,9 @@ private struct LocketWidgetEntryView: View {
         }
     }
 
-    private func framedMemoryCard(
-        widgetPadding: CGFloat,
-        contentPadding: CGFloat,
-        isExpanded: Bool
-    ) -> some View {
-        let cornerRadius: CGFloat = isExpanded ? 30 : 26
-        let cardShape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+    private func framedMemoryCard() -> some View {
+        let metrics = cardMetrics
+        let cardShape = RoundedRectangle(cornerRadius: metrics.cornerRadius, style: .continuous)
 
         return ZStack(alignment: .bottomLeading) {
             cardInnerBackground
@@ -2237,7 +2263,7 @@ private struct LocketWidgetEntryView: View {
             if shouldShowDoodleOverlay {
                 LocketWidgetDoodleOverlay(
                     strokes: doodleStrokes,
-                    isLarge: isExpanded,
+                    isLarge: isMedium || isLarge,
                     overlayOpacity: noteOverlayOpacity,
                     contentInset: isSmall
                         ? locketWidgetDecorationInsetSmall
@@ -2292,10 +2318,10 @@ private struct LocketWidgetEntryView: View {
                     Spacer(minLength: 0)
                 }
             }
-            .padding(contentPadding)
+            .padding(metrics.contentPadding)
         }
         .clipShape(cardShape)
-        .padding(widgetPadding)
+        .padding(metrics.widgetPadding)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 

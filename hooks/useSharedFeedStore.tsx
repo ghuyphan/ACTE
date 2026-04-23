@@ -40,6 +40,10 @@ import {
   downloadPhotoFromStorage,
   SHARED_POST_MEDIA_BUCKET,
 } from '../services/remoteMedia';
+import {
+  shouldForceSharedFeedForegroundRefresh,
+  shouldRefreshSharedFeedOnForeground,
+} from '../services/sharedFeedRefreshPolicy';
 import { scheduleWidgetDataUpdate } from '../services/widgetService';
 import { useStartupInteraction } from './app/useHomeStartupReady';
 import { useAuth } from './useAuth';
@@ -127,8 +131,10 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
   const refreshRequestIdRef = useRef(0);
   const refreshInFlightRef = useRef<Promise<void> | null>(null);
   const pendingForcedRefreshRef = useRef(false);
+  const sharedFeedSubscriptionHealthyRef = useRef(true);
   const sharedMediaHydrationKeyRef = useRef<string | null>(null);
   const sharedMediaHydrationPromiseRef = useRef<Promise<void> | null>(null);
+  const lastForegroundRefreshAtRef = useRef<number | null>(null);
 
   const isCurrentSharedFeedSession = useCallback(
     (sessionId: number, userUid: string) =>
@@ -652,6 +658,8 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
       refreshInFlightRef.current = null;
       sharedMediaHydrationKeyRef.current = null;
       sharedMediaHydrationPromiseRef.current = null;
+      sharedFeedSubscriptionHealthyRef.current = true;
+      lastForegroundRefreshAtRef.current = null;
       if (previousUserUidRef.current) {
         void clearSharedFeedCache(previousUserUidRef.current);
         invalidateSharedFeedRefresh(previousUserUidRef.current);
@@ -668,6 +676,8 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
     previousUserUidRef.current = user.uid;
     sharedMediaHydrationKeyRef.current = null;
     sharedMediaHydrationPromiseRef.current = null;
+    sharedFeedSubscriptionHealthyRef.current = true;
+    lastForegroundRefreshAtRef.current = null;
     commitSnapshot(
       {
         friends: [],
@@ -702,6 +712,7 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
         if (sharedFeedSessionRef.current !== sessionId || previousUserUidRef.current !== user.uid) {
           return;
         }
+        sharedFeedSubscriptionHealthyRef.current = true;
         const updatedAt = new Date().toISOString();
         commitSnapshotAndPersist(user.uid, snapshot, updatedAt);
         logStartupEvent('shared-feed.subscription-snapshot', {
@@ -723,6 +734,7 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
         if (sharedFeedSessionRef.current !== sessionId || previousUserUidRef.current !== user.uid) {
           return;
         }
+        sharedFeedSubscriptionHealthyRef.current = false;
         console.warn('Shared feed subscription failed:', getSharedFeedErrorMessage(error));
         setLoading(false);
         setReady(true);
@@ -762,17 +774,34 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
     }
 
     const subscription = AppState.addEventListener('change', (nextState) => {
-      if (nextState !== 'active' || !isOnline) {
+      if (nextState !== 'active') {
         return;
       }
 
-      void refreshAll({ force: true }).catch(() => undefined);
+      const now = Date.now();
+      const refreshContext = {
+        dataSource,
+        isOnline,
+        lastForegroundRefreshAt: lastForegroundRefreshAtRef.current,
+        lastUpdatedAt,
+        ready,
+        subscriptionHealthy: sharedFeedSubscriptionHealthyRef.current,
+      };
+
+      if (!shouldRefreshSharedFeedOnForeground(refreshContext, now)) {
+        return;
+      }
+
+      lastForegroundRefreshAtRef.current = now;
+      const shouldForceRefresh = shouldForceSharedFeedForegroundRefresh(refreshContext);
+
+      void refreshAll(shouldForceRefresh ? { force: true } : undefined).catch(() => undefined);
     });
 
     return () => {
       subscription.remove();
     };
-  }, [enabled, isOnline, isReady, refreshAll, user]);
+  }, [dataSource, enabled, isOnline, isReady, lastUpdatedAt, loading, ready, refreshAll, user]);
 
   useEffect(() => {
     if (!enabled || !user) {

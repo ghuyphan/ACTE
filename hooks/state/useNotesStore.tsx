@@ -31,6 +31,7 @@ import {
 } from '../../services/geofenceService';
 import { cleanupOrphanMediaFiles } from '../../services/mediaIntegrity';
 import { emitDeletedNotesEvent } from '../../services/noteMutationEvents';
+import { doesNoteUpdateAffectReminderSelection } from '../../services/noteMutationSideEffects';
 import { getNotePhotoUri } from '../../services/photoStorage';
 import { getNotePairedVideoUri } from '../../services/livePhotoStorage';
 import { scheduleWidgetDataUpdate } from '../../services/widgetService';
@@ -391,7 +392,9 @@ function useNotesStoreValue(): NotesStoreValue {
 
       const nextNotes = updateNoteInCollection(notesRef.current, id, updates);
       commitNotes(nextNotes);
-      syncGeofencesForNotes('note update', nextNotes);
+      if (doesNoteUpdateAffectReminderSelection(updates)) {
+        syncGeofencesForNotes('note update', nextNotes);
+      }
     },
     [commitNotes, isCurrentScope, syncGeofencesForNotes]
   );

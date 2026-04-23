@@ -176,6 +176,32 @@ function buildWidgetRequestKey(options: UpdateWidgetDataOptions) {
     });
 }
 
+type WidgetUpdateRequestSource =
+    | 'explicit_notes'
+    | 'source_reload'
+    | 'source_reload_with_location'
+    | 'shared_reload';
+
+function getWidgetUpdateRequestSource(options: UpdateWidgetDataOptions): WidgetUpdateRequestSource {
+    if (Array.isArray(options.notes)) {
+        return 'explicit_notes';
+    }
+
+    if (options.includeSharedRefresh === true) {
+        return 'shared_reload';
+    }
+
+    if (options.currentLocation !== undefined) {
+        return 'source_reload_with_location';
+    }
+
+    return 'source_reload';
+}
+
+function canDedupeWidgetRequest(source: WidgetUpdateRequestSource) {
+    return source === 'explicit_notes';
+}
+
 function mergeWidgetUpdateOptions(
     current: UpdateWidgetDataOptions | null,
     incoming: UpdateWidgetDataOptions
@@ -184,10 +210,17 @@ function mergeWidgetUpdateOptions(
         return { ...incoming };
     }
 
+    const incomingSource = getWidgetUpdateRequestSource(incoming);
+
     return {
         ...current,
         ...incoming,
-        notes: incoming.notes ?? current.notes,
+        notes:
+            incomingSource === 'explicit_notes'
+                ? incoming.notes
+                : incomingSource === 'source_reload_with_location'
+                    ? current.notes
+                    : undefined,
         includeLocationLookup:
             current.includeLocationLookup === true || incoming.includeLocationLookup === true
                 ? true
@@ -789,8 +822,10 @@ async function runWidgetUpdate(options: UpdateWidgetDataOptions = {}): Promise<W
 export async function updateWidgetData(
   options: UpdateWidgetDataOptions = {}
 ): Promise<WidgetUpdateResult> {
-    const requestKey = buildWidgetRequestKey(options);
+    const requestSource = getWidgetUpdateRequestSource(options);
+    const requestKey = canDedupeWidgetRequest(requestSource) ? buildWidgetRequestKey(options) : null;
     if (
+        requestKey &&
         !options.referenceDate &&
         requestKey === lastWidgetRequestKey &&
         Date.now() - lastWidgetRequestAt < WIDGET_REQUEST_DEDUPE_WINDOW_MS
@@ -811,7 +846,7 @@ export async function updateWidgetData(
     }
 
     lastWidgetRequestKey = requestKey;
-    lastWidgetRequestAt = Date.now();
+    lastWidgetRequestAt = requestKey ? Date.now() : 0;
 
     widgetUpdateInFlight = runWidgetUpdate(options)
         .finally(async () => {

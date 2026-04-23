@@ -30,8 +30,82 @@ interface WidgetTextLayout {
     alignment: 'center' | 'leading';
 }
 
-function getTextLayout(isLarge: boolean, trimmedLength: number): WidgetTextLayout {
-    if (isLarge) {
+type WidgetSizeName = 'small' | 'medium' | 'large';
+
+interface WidgetFrameMetrics {
+    compactPad: number;
+    countBadgeHorizontal: number;
+    countBadgeVertical: number;
+    countBadgeFontSize: number;
+    locationChipHorizontal: number;
+    locationChipVertical: number;
+    locationChipFontSize: number;
+    locationIconSize: number;
+    footerHorizontal: number;
+    footerVertical: number;
+    headerBottomPadding: number;
+    authorChipHorizontal: number;
+    authorChipVertical: number;
+    authorChipFontSize: number;
+    authorChipSpacing: number;
+}
+
+const WIDGET_FRAME_METRICS: Record<WidgetSizeName, WidgetFrameMetrics> = {
+    small: {
+        compactPad: 13,
+        countBadgeHorizontal: 10,
+        countBadgeVertical: 5,
+        countBadgeFontSize: 10,
+        locationChipHorizontal: 9,
+        locationChipVertical: 4.5,
+        locationChipFontSize: 9,
+        locationIconSize: 9.5,
+        footerHorizontal: 16,
+        footerVertical: 10,
+        headerBottomPadding: 4,
+        authorChipHorizontal: 8,
+        authorChipVertical: 5,
+        authorChipFontSize: 10,
+        authorChipSpacing: 5,
+    },
+    medium: {
+        compactPad: 16,
+        countBadgeHorizontal: 11,
+        countBadgeVertical: 5.5,
+        countBadgeFontSize: 10.5,
+        locationChipHorizontal: 11,
+        locationChipVertical: 6,
+        locationChipFontSize: 10.2,
+        locationIconSize: 10,
+        footerHorizontal: 18,
+        footerVertical: 11,
+        headerBottomPadding: 6,
+        authorChipHorizontal: 9,
+        authorChipVertical: 5.5,
+        authorChipFontSize: 10,
+        authorChipSpacing: 5,
+    },
+    large: {
+        compactPad: 20,
+        countBadgeHorizontal: 12,
+        countBadgeVertical: 6,
+        countBadgeFontSize: 11,
+        locationChipHorizontal: 12.5,
+        locationChipVertical: 7,
+        locationChipFontSize: 10.8,
+        locationIconSize: 10.5,
+        footerHorizontal: 20,
+        footerVertical: 12,
+        headerBottomPadding: 8,
+        authorChipHorizontal: 10,
+        authorChipVertical: 6,
+        authorChipFontSize: 10.5,
+        authorChipSpacing: 6,
+    },
+};
+
+function getTextLayout(size: WidgetSizeName, trimmedLength: number): WidgetTextLayout {
+    if (size === 'large') {
         if (trimmedLength <= 60) {
             return { fontSize: 27, lineLimit: 3, lineSpacing: 2.8, horizontalPadding: 30, bottomOffset: 0, topPadding: 28, alignment: 'leading' };
         }
@@ -41,13 +115,23 @@ function getTextLayout(isLarge: boolean, trimmedLength: number): WidgetTextLayou
         return { fontSize: 21, lineLimit: 4, lineSpacing: 1.8, horizontalPadding: 28, bottomOffset: 0, topPadding: 26, alignment: 'leading' };
     }
 
+    if (size === 'medium') {
+        if (trimmedLength <= 42) {
+            return { fontSize: 21, lineLimit: 3, lineSpacing: 2.0, horizontalPadding: 20, bottomOffset: 6, topPadding: 10, alignment: 'leading' };
+        }
+        if (trimmedLength <= 96) {
+            return { fontSize: 18.5, lineLimit: 4, lineSpacing: 1.8, horizontalPadding: 18, bottomOffset: 6, topPadding: 8, alignment: 'leading' };
+        }
+        return { fontSize: 16.5, lineLimit: 4, lineSpacing: 1.5, horizontalPadding: 17, bottomOffset: 6, topPadding: 8, alignment: 'leading' };
+    }
+
     if (trimmedLength <= 28) {
-        return { fontSize: 16.5, lineLimit: 4, lineSpacing: 1.8, horizontalPadding: 14, bottomOffset: 8, topPadding: 0, alignment: 'center' };
+        return { fontSize: 14.1, lineLimit: 4, lineSpacing: 1.15, horizontalPadding: 14, bottomOffset: 8, topPadding: 0, alignment: 'center' };
     }
     if (trimmedLength <= 64) {
-        return { fontSize: 15, lineLimit: 4, lineSpacing: 1.3, horizontalPadding: 14, bottomOffset: 8, topPadding: 0, alignment: 'center' };
+        return { fontSize: 13.4, lineLimit: 4, lineSpacing: 1.0, horizontalPadding: 14, bottomOffset: 8, topPadding: 0, alignment: 'center' };
     }
-    return { fontSize: 14, lineLimit: 4, lineSpacing: 1.1, horizontalPadding: 14, bottomOffset: 8, topPadding: 0, alignment: 'center' };
+    return { fontSize: 12.9, lineLimit: 4, lineSpacing: 0.9, horizontalPadding: 14, bottomOffset: 8, topPadding: 0, alignment: 'center' };
 }
 
 function getFallbackCountLabel(noteCount: number): string {
@@ -94,11 +178,13 @@ const LocketWidget = (props: { props: WidgetViewProps }) => {
     } = props.props ?? {};
 
     const familyName = asString(family);
-    const isLarge = familyName === 'systemLarge' || familyName === 'systemMedium';
+    const size: WidgetSizeName = familyName === 'systemLarge' ? 'large' : familyName === 'systemMedium' ? 'medium' : 'small';
+    const isLarge = size === 'large';
+    const isMedium = size === 'medium';
     const isAccessoryInline = familyName === 'accessoryInline';
     const isAccessoryCircular = familyName === 'accessoryCircular';
     const isAccessoryRectangular = familyName === 'accessoryRectangular';
-    const safeText = truncate(asString(text), isLarge ? 140 : 72);
+    const safeText = truncate(asString(text), isLarge ? 140 : isMedium ? 108 : 72);
     const safeNoteCount = typeof noteCount === 'number' ? noteCount : 0;
     const safeNearbyPlacesCount = typeof nearbyPlacesCount === 'number' ? nearbyPlacesCount : 0;
     const countLabel = asString(savedCountText) || getFallbackCountLabel(safeNoteCount);
@@ -119,9 +205,10 @@ const LocketWidget = (props: { props: WidgetViewProps }) => {
         ]
         : ['#5A4D42', '#2F2926'];
     const usesTextSurface = isTextNote || showIdle || !hasImage;
-    const compactPad = isLarge ? 18 : usesTextSurface ? 12 : 14;
+    const frameMetrics = WIDGET_FRAME_METRICS[size];
+    const compactPad = usesTextSurface ? frameMetrics.compactPad : frameMetrics.compactPad + (isLarge ? 1 : 0);
     const showCountBadge = showIdle && safeNoteCount > 0;
-    const textLayout = getTextLayout(isLarge, bodyText.trim().length);
+    const textLayout = getTextLayout(size, bodyText.trim().length);
     const footerIconName = usesTextSurface ? 'doc.text' : 'photo';
     const eyebrowColor = usesTextSurface ? '#6E5E4F' : '#FFF8F0';
     const nearbyLabelCount = Math.max(safeNearbyPlacesCount, showIdle ? 0 : 1);
@@ -159,7 +246,7 @@ const LocketWidget = (props: { props: WidgetViewProps }) => {
     const safeAuthorName = asString(authorDisplayName);
     const safeAuthorInitials = asString(authorInitials);
     const compactAuthorName = safeAuthorName.split(/\s+/)[0]?.trim() ?? safeAuthorName;
-    const showAuthorChip = Boolean(isSharedContent && (safeAuthorInitials || compactAuthorName));
+    const showAuthorChip = Boolean(!showIdle && size !== 'small' && isSharedContent && (safeAuthorInitials || compactAuthorName));
     const authorChipBackground = hasImage ? 'rgba(16,12,10,0.32)' : 'rgba(255,249,243,0.82)';
     const authorChipForeground = hasImage ? '#FFF8F0' : '#2A1A11';
     const livePhotoText = asString(livePhotoBadgeText) || i18n.t('widget.livePhotoBadge', 'Live');
@@ -275,12 +362,12 @@ const LocketWidget = (props: { props: WidgetViewProps }) => {
             modifiers={[
                 backgroundOverlay({ color: onDarkSurface ? 'rgba(255,248,240,0.18)' : 'rgba(255,249,243,0.84)' }),
                 cornerRadius(999),
-                padding({ horizontal: isLarge ? 12 : 10, vertical: isLarge ? 6 : 5 }),
+                padding({ horizontal: frameMetrics.countBadgeHorizontal, vertical: frameMetrics.countBadgeVertical }),
             ]}
         >
             <Text
                 modifiers={[
-                    font({ weight: 'medium', size: isLarge ? 11 : 10, design: 'default' }),
+                    font({ weight: 'medium', size: frameMetrics.countBadgeFontSize, design: 'default' }),
                     foregroundStyle(onDarkSurface ? '#FFF8F0' : '#6E5E4F'),
                 ]}
             >
@@ -294,7 +381,7 @@ const LocketWidget = (props: { props: WidgetViewProps }) => {
             modifiers={[
                 frame({ maxWidth: 9999 }),
                 backgroundOverlay({ color: onDarkSurface ? 'rgba(16,12,10,0.28)' : 'rgba(255,249,243,0.30)' }),
-                padding({ horizontal: 18, vertical: onDarkSurface ? 12 : 10 }),
+                padding({ horizontal: frameMetrics.footerHorizontal, vertical: onDarkSurface ? frameMetrics.footerVertical : Math.max(10, frameMetrics.footerVertical - 1) }),
             ]}
         >
             {renderCountBadge(onDarkSurface)}
@@ -336,7 +423,7 @@ const LocketWidget = (props: { props: WidgetViewProps }) => {
                     <HStack
                         modifiers={[
                             frame({ maxWidth: 9999 }),
-                            padding({ bottom: isLarge ? 8 : 4 }),
+                            padding({ bottom: frameMetrics.headerBottomPadding }),
                         ]}
                     >
                         {showAuthorChip ? (
@@ -344,12 +431,12 @@ const LocketWidget = (props: { props: WidgetViewProps }) => {
                                 modifiers={[
                                     backgroundOverlay({ color: authorChipBackground }),
                                     cornerRadius(999),
-                                    padding({ horizontal: 8, vertical: 5 }),
+                                    padding({ horizontal: frameMetrics.authorChipHorizontal, vertical: frameMetrics.authorChipVertical }),
                                 ]}
                             >
                                 <Text
                                     modifiers={[
-                                        font({ weight: 'bold', size: 10, design: 'rounded' }),
+                                        font({ weight: 'bold', size: frameMetrics.authorChipFontSize, design: 'rounded' }),
                                         foregroundStyle(authorChipForeground),
                                         lineLimit(1),
                                     ]}
@@ -359,10 +446,10 @@ const LocketWidget = (props: { props: WidgetViewProps }) => {
                                 {compactAuthorName ? (
                                     <Text
                                         modifiers={[
-                                            font({ weight: 'medium', size: 10, design: 'default' }),
+                                            font({ weight: 'medium', size: frameMetrics.authorChipFontSize, design: 'default' }),
                                             foregroundStyle(authorChipForeground),
                                             lineLimit(1),
-                                            padding({ leading: 5 }),
+                                            padding({ leading: frameMetrics.authorChipSpacing }),
                                         ]}
                                     >
                                         {compactAuthorName}
@@ -376,16 +463,16 @@ const LocketWidget = (props: { props: WidgetViewProps }) => {
                                 modifiers={[
                                     backgroundOverlay({ color: authorChipBackground }),
                                     cornerRadius(999),
-                                    padding({ horizontal: 8, vertical: 5 }),
+                                    padding({ horizontal: frameMetrics.authorChipHorizontal, vertical: frameMetrics.authorChipVertical }),
                                 ]}
                             >
                                 <SwiftUIImage systemName="livephoto" color={authorChipForeground} size={11} />
                                 <Text
                                     modifiers={[
-                                        font({ weight: 'medium', size: 10, design: 'default' }),
+                                        font({ weight: 'medium', size: frameMetrics.authorChipFontSize, design: 'default' }),
                                         foregroundStyle(authorChipForeground),
                                         lineLimit(1),
-                                        padding({ leading: 5 }),
+                                        padding({ leading: frameMetrics.authorChipSpacing }),
                                     ]}
                                 >
                                     {livePhotoText}
@@ -429,6 +516,47 @@ const LocketWidget = (props: { props: WidgetViewProps }) => {
                                         lineLimit(textLayout.lineLimit),
                                         lineSpacing(textLayout.lineSpacing),
                                         multilineTextAlignment(textLayout.alignment),
+                                    ]}
+                                >
+                                    {bodyText}
+                                </Text>
+                                <Spacer />
+                            </VStack>
+                            {showCountBadge ? renderFooter(false) : null}
+                        </VStack>
+                    ) : isMedium ? (
+                        <VStack modifiers={[frame({ maxWidth: 9999, maxHeight: 9999 })]}>
+                            <VStack
+                                modifiers={[
+                                    frame({ maxWidth: 9999, maxHeight: 9999 }),
+                                    padding({
+                                        top: textLayout.topPadding,
+                                        horizontal: textLayout.horizontalPadding,
+                                        bottom: showCountBadge ? 10 : 6,
+                                    }),
+                                ]}
+                            >
+                                {eyebrowText ? (
+                                    <Text
+                                        modifiers={[
+                                            font({ weight: 'medium', size: 10.5, design: 'default' }),
+                                            foregroundStyle(eyebrowColor),
+                                            frame({ maxWidth: 9999, alignment: 'leading' }),
+                                            lineLimit(1),
+                                            padding({ bottom: 10 }),
+                                        ]}
+                                    >
+                                        {eyebrowText}
+                                    </Text>
+                                ) : null}
+                                <Text
+                                    modifiers={[
+                                        font({ weight: 'bold', size: textLayout.fontSize, design: 'default' }),
+                                        foregroundStyle('#2A1A11'),
+                                        frame({ maxWidth: 9999, alignment: 'leading' }),
+                                        lineLimit(textLayout.lineLimit),
+                                        lineSpacing(textLayout.lineSpacing),
+                                        multilineTextAlignment('leading'),
                                     ]}
                                 >
                                     {bodyText}

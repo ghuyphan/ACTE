@@ -527,6 +527,63 @@ describe('widgetService', () => {
     expect(mockGetAllNotesForScope).toHaveBeenCalledWith('user-1');
   });
 
+  it('does not dedupe source-backed reloads without explicit notes', async () => {
+    mockGetAllNotes.mockResolvedValueOnce([
+      buildNote({
+        id: 'source-note-1',
+        content: 'Source-backed note one',
+        locationName: 'Cafe One',
+      }),
+    ]);
+    mockGetAllNotes.mockResolvedValueOnce([
+      buildNote({
+        id: 'source-note-2',
+        content: 'Source-backed note two',
+        locationName: 'Cafe Two',
+      }),
+    ]);
+
+    const firstResult = await updateWidgetData({
+      includeLocationLookup: false,
+    });
+    const secondResult = await updateWidgetData({
+      includeLocationLookup: false,
+    });
+
+    expect(firstResult.status).toBe('updated');
+    expect(secondResult.status).toBe('updated');
+    expect(mockUpdateTimeline).toHaveBeenCalledTimes(2);
+    expect(getLastTimelineEntries()[0]?.props.props).toEqual(
+      expect.objectContaining({
+        text: 'Source-backed note two',
+        primaryActionUrl: 'noto:///widget/note/source-note-2',
+      })
+    );
+  });
+
+  it('still dedupes repeated explicit widget payloads inside the request window', async () => {
+    const explicitNotes = [
+      buildNote({
+        id: 'explicit-note',
+        content: 'Explicit widget payload',
+        locationName: 'Explicit Place',
+      }),
+    ];
+
+    const firstResult = await updateWidgetData({
+      notes: explicitNotes,
+      includeLocationLookup: false,
+    });
+    const secondResult = await updateWidgetData({
+      notes: explicitNotes,
+      includeLocationLookup: false,
+    });
+
+    expect(firstResult.status).toBe('updated');
+    expect(secondResult.status).toBe('skipped_duplicate_request');
+    expect(mockUpdateTimeline).toHaveBeenCalledTimes(1);
+  });
+
   it('refreshes shared widget content from the network when asked', async () => {
     mockCurrentUser = { id: 'me', uid: 'me' };
     mockGetAllNotes.mockResolvedValue([]);
@@ -620,6 +677,58 @@ describe('widgetService', () => {
       expect.objectContaining({
         text: 'Newest note wins',
         primaryActionUrl: 'noto:///widget/note/newest-note',
+      })
+    );
+  });
+
+  it('drops stale explicit notes when a later scheduled refresh intends to reload from sources', async () => {
+    jest.useFakeTimers();
+
+    mockGetAllNotes.mockResolvedValue([
+      buildNote({
+        id: 'db-note',
+        content: 'Fresh database note',
+        locationName: 'Database Cafe',
+      }),
+    ]);
+
+    scheduleWidgetDataUpdate(
+      {
+        notes: [
+          buildNote({
+            id: 'stale-note',
+            content: 'Stale explicit note',
+            locationName: 'Old Cafe',
+          }),
+        ],
+        includeLocationLookup: false,
+      },
+      {
+        debounceMs: 120,
+      }
+    );
+    scheduleWidgetDataUpdate(
+      {
+        includeLocationLookup: false,
+      },
+      {
+        debounceMs: 120,
+      }
+    );
+
+    await act(async () => {
+      jest.advanceTimersByTime(120);
+    });
+
+    await waitFor(() => {
+      expect(mockUpdateTimeline).toHaveBeenCalledTimes(1);
+    });
+
+    expect(mockGetAllNotesForScope).toHaveBeenCalledWith('user-1');
+    expect(getLastTimelineEntries()[0]?.props.props).toEqual(
+      expect.objectContaining({
+        text: 'Fresh database note',
+        primaryActionUrl: 'noto:///widget/note/db-note',
       })
     );
   });
