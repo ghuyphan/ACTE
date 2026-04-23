@@ -37,6 +37,7 @@ const CAMERA_FOCUS_RING_FADE_IN_MS = 170;
 const CAMERA_FOCUS_RING_SETTLE_MS = 110;
 const CAMERA_FOCUS_RING_FADE_OUT_MS = 300;
 const SHUTTER_CORE_SIZE = 58;
+const CAMERA_ZOOM_LENS_SWITCH_THRESHOLD = 0.16;
 
 function clamp(value: number, minValue: number, maxValue: number) {
   return Math.min(maxValue, Math.max(minValue, value));
@@ -51,6 +52,8 @@ interface UseCaptureCardCameraControllerOptions {
   permissionGranted: boolean;
   isCameraPreviewActive: boolean;
   isCameraRevealAllowed: boolean;
+  backCameraLens: 'wide' | 'ultra-wide' | 'telephoto';
+  availableBackCameraLenses: Array<'wide' | 'ultra-wide' | 'telephoto'>;
   facing: 'back' | 'front';
   cameraInstructionText?: string | null;
   isLivePhotoCaptureInProgress: boolean;
@@ -63,10 +66,33 @@ interface UseCaptureCardCameraControllerOptions {
   cardSize: number;
   livePhotoRingStrokeWidth: number;
   onCameraGestureActiveChange?: (active: boolean) => void;
+  onChangeBackCameraLens?: (nextLens: 'wide' | 'ultra-wide' | 'telephoto') => void;
   onToggleFacing: () => void;
   onTakePicture: () => void;
   onShutterPressOut: () => void;
   onStartLivePhotoCapture: () => void;
+}
+
+const BACK_CAMERA_LENS_ORDER: Array<'ultra-wide' | 'wide' | 'telephoto'> = [
+  'ultra-wide',
+  'wide',
+  'telephoto',
+];
+
+function getAdjacentBackCameraLens(
+  currentLens: 'wide' | 'ultra-wide' | 'telephoto',
+  availableLenses: Array<'wide' | 'ultra-wide' | 'telephoto'>,
+  direction: -1 | 1
+) {
+  const orderedAvailableLenses = BACK_CAMERA_LENS_ORDER.filter((lens) =>
+    availableLenses.includes(lens)
+  );
+  const currentIndex = orderedAvailableLenses.indexOf(currentLens);
+  if (currentIndex < 0) {
+    return null;
+  }
+
+  return orderedAvailableLenses[currentIndex + direction] ?? null;
 }
 
 export function useCaptureCardCameraController({
@@ -78,6 +104,8 @@ export function useCaptureCardCameraController({
   permissionGranted,
   isCameraPreviewActive,
   isCameraRevealAllowed,
+  backCameraLens,
+  availableBackCameraLenses,
   facing,
   cameraInstructionText = null,
   isLivePhotoCaptureInProgress,
@@ -90,6 +118,7 @@ export function useCaptureCardCameraController({
   cardSize,
   livePhotoRingStrokeWidth,
   onCameraGestureActiveChange,
+  onChangeBackCameraLens,
   onToggleFacing,
   onTakePicture,
   onShutterPressOut,
@@ -111,6 +140,7 @@ export function useCaptureCardCameraController({
   const cameraAutoRecoveryCountRef = useRef(0);
   const cameraZoomRef = useRef(0);
   const cameraPinchZoomStartRef = useRef(0);
+  const cameraPinchScaleStartRef = useRef(1);
   const cameraGestureLockCountRef = useRef(0);
   const cameraSwitchInFlightRef = useRef(false);
   const cameraZoomBadgeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -762,18 +792,12 @@ export function useCaptureCardCameraController({
         .runOnJS(true)
         .maxDuration(250)
         .maxDistance(12)
-        .onBegin(() => {
-          beginCameraGestureLock();
-        })
         .onEnd((event: { x: number; y: number }, success: boolean) => {
           if (success === false) {
             return;
           }
 
           void handleCameraFocusTap(event.x, event.y);
-        })
-        .onFinalize(() => {
-          endCameraGestureLock();
         });
 
       return Gesture.Exclusive(
@@ -784,10 +808,42 @@ export function useCaptureCardCameraController({
           .onBegin(() => {
             beginCameraGestureLock();
             cameraPinchZoomStartRef.current = cameraZoomRef.current;
+            cameraPinchScaleStartRef.current = 1;
           })
           .onUpdate((event) => {
+            const relativeScale = event.scale / cameraPinchScaleStartRef.current;
             const nextZoom =
-              cameraPinchZoomStartRef.current + (event.scale - 1) * CAMERA_ZOOM_PINCH_RANGE;
+              cameraPinchZoomStartRef.current + (relativeScale - 1) * CAMERA_ZOOM_PINCH_RANGE;
+
+            if (facing === 'back' && availableBackCameraLenses.length > 1 && onChangeBackCameraLens) {
+              const previousLens = getAdjacentBackCameraLens(
+                backCameraLens,
+                availableBackCameraLenses,
+                -1
+              );
+              const nextLens = getAdjacentBackCameraLens(
+                backCameraLens,
+                availableBackCameraLenses,
+                1
+              );
+
+              if (nextZoom <= -CAMERA_ZOOM_LENS_SWITCH_THRESHOLD && previousLens) {
+                cameraPinchZoomStartRef.current = 0;
+                cameraPinchScaleStartRef.current = event.scale;
+                updateCameraZoom(0);
+                onChangeBackCameraLens(previousLens);
+                return;
+              }
+
+              if (nextZoom >= 1 + CAMERA_ZOOM_LENS_SWITCH_THRESHOLD && nextLens) {
+                cameraPinchZoomStartRef.current = 0;
+                cameraPinchScaleStartRef.current = event.scale;
+                updateCameraZoom(0);
+                onChangeBackCameraLens(nextLens);
+                return;
+              }
+            }
+
             updateCameraZoom(nextZoom);
           })
           .onEnd(() => {
@@ -801,10 +857,14 @@ export function useCaptureCardCameraController({
     },
     [
       beginCameraGestureLock,
+      backCameraLens,
       cameraFocusGesturesEnabled,
       cameraZoomGesturesEnabled,
       endCameraGestureLock,
+      facing,
       handleCameraFocusTap,
+      availableBackCameraLenses,
+      onChangeBackCameraLens,
       scheduleHideCameraZoomBadge,
       updateCameraZoom,
     ]
