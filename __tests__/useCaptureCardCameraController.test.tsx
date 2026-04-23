@@ -101,6 +101,7 @@ describe('useCaptureCardCameraController', () => {
 
     expect(onChangeBackCameraLens).not.toHaveBeenCalled();
     expect(result.current.cameraZoomLabel).toBe('2.5x');
+    expect(result.current.cameraZoomSelectorLabel).toBe('2.5x');
     expect(result.current.cameraPreviewZoom).toBeCloseTo(2.54, 2);
 
     act(() => {
@@ -131,10 +132,55 @@ describe('useCaptureCardCameraController', () => {
 
     expect(onChangeBackCameraLens).not.toHaveBeenCalled();
     expect(result.current.cameraZoomLabel).toBe('1.0x');
+    expect(result.current.cameraZoomSelectorLabel).toBe('1x');
     expect(result.current.cameraPreviewZoom).toBe(1);
 
     act(() => {
       pinchGesture.handlers.onFinalize?.();
     });
+  });
+
+  it('waits for the new rear lens to become active before applying its anchor zoom', () => {
+    const onChangeBackCameraLens = jest.fn();
+    const { result, rerender } = renderHook(
+      (options: Parameters<typeof useCaptureCardCameraController>[0]) =>
+        useCaptureCardCameraController(options),
+      {
+        initialProps: createControllerOptions({
+          onChangeBackCameraLens,
+        }),
+      }
+    );
+
+    act(() => {
+      result.current.handleBackCameraLensPress('telephoto');
+    });
+
+    expect(onChangeBackCameraLens).toHaveBeenCalledWith('telephoto');
+    expect(result.current.cameraZoomLabel).toBe('1.0x');
+    expect(result.current.cameraZoomSelectorLabel).toBe('1x');
+    expect(result.current.cameraPreviewZoom).toBe(1);
+
+    act(() => {
+      rerender(
+        createControllerOptions({
+          onChangeBackCameraLens,
+          backCameraLens: 'telephoto',
+          cameraDevice: {
+            id: 'back-telephoto-camera',
+            position: 'back',
+            neutralZoom: 1,
+            minZoom: 1,
+            maxZoom: 4,
+            supportsFocus: true,
+          } as any,
+        })
+      );
+    });
+
+    expect(result.current.cameraZoomLabel).toBe('2.0x');
+    expect(result.current.cameraZoomSelectorLabel).toBe('2x');
+    expect(result.current.cameraPreviewZoom).toBe(1);
+    expect(result.current.showCameraZoomBadge).toBe(true);
   });
 });

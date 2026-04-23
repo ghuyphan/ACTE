@@ -46,6 +46,9 @@ export const LIVE_PHOTO_RING_STROKE_WIDTH = 4;
 export const CAMERA_FOCUS_RING_SIZE = 64;
 export const DOCKED_HEADER_CONTENT_OVERLAP = 8;
 export const CAMERA_ZOOM_BADGE_BACKGROUND = 'rgba(28,28,30,0.52)';
+export const BELOW_CARD_SECTION_HEIGHT = 162;
+export const COMPACT_CAPTURE_FOOTER_TOP_PADDING = 12;
+export const DEFAULT_CAPTURE_FOOTER_TOP_PADDING = 20;
 const SHEET_HORIZONTAL_PADDING =
   Platform.OS === 'ios' ? Sheet.ios.horizontalPadding : Sheet.android.horizontalPadding;
 
@@ -577,7 +580,7 @@ export const styles = StyleSheet.create({
     paddingTop: 14,
     alignItems: 'center',
     justifyContent: 'flex-start',
-    height: 162,
+    height: BELOW_CARD_SECTION_HEIGHT,
     gap: 10,
   },
   belowCardMetaRow: {
@@ -977,7 +980,7 @@ export const styles = StyleSheet.create({
   },
   footerSlot: {
     width: '100%',
-    paddingTop: 20,
+    paddingTop: DEFAULT_CAPTURE_FOOTER_TOP_PADDING,
   },
   noteColorSheet: {
     gap: 12,

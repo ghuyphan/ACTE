@@ -1,6 +1,14 @@
 import { Skia } from '@shopify/react-native-skia';
 import type { TFunction } from 'i18next';
-import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type RefObject,
+} from 'react';
 import { Gesture } from 'react-native-gesture-handler';
 import {
   cancelAnimation,
@@ -17,8 +25,14 @@ import {
 } from 'react-native-reanimated';
 import type { Camera, CameraDevice } from 'react-native-vision-camera';
 import { Layout } from '../../constants/theme';
-import type { BackCameraLensZoomConfig } from '../../hooks/useCaptureFlow';
 import type { ThemeColors } from '../../hooks/useTheme';
+import {
+  formatCameraZoomFactor,
+  getBackCameraLensZoomSpec,
+  resolveCameraZoomState,
+  type BackCameraLens,
+  type BackCameraLensZoomConfig,
+} from '../../services/cameraZoom';
 import { LIVE_PHOTO_MAX_DURATION_SECONDS } from '../../services/livePhotoProcessing';
 
 const CAMERA_AUTO_RECOVERY_ATTEMPTS = 1;
@@ -38,13 +52,6 @@ const CAMERA_FOCUS_RING_FADE_IN_MS = 170;
 const CAMERA_FOCUS_RING_SETTLE_MS = 110;
 const CAMERA_FOCUS_RING_FADE_OUT_MS = 300;
 const SHUTTER_CORE_SIZE = 58;
-const DEFAULT_BACK_CAMERA_LENS_ZOOM_CONFIG: BackCameraLensZoomConfig = {
-  'ultra-wide': { anchor: 0.5, min: 0.5, max: 1 },
-  wide: { anchor: 1, min: 1, max: 8 },
-  telephoto: { anchor: 2, min: 2, max: 16 },
-};
-
-type BackCameraLens = 'wide' | 'ultra-wide' | 'telephoto';
 
 function clamp(value: number, minValue: number, maxValue: number) {
   return Math.min(maxValue, Math.max(minValue, value));
@@ -78,47 +85,6 @@ interface UseCaptureCardCameraControllerOptions {
   onTakePicture: () => void;
   onShutterPressOut: () => void;
   onStartLivePhotoCapture: () => void;
-}
-
-function getBackCameraLensZoomSpec(
-  zoomConfig: BackCameraLensZoomConfig | undefined,
-  lens: BackCameraLens
-) {
-  return zoomConfig?.[lens] ?? DEFAULT_BACK_CAMERA_LENS_ZOOM_CONFIG[lens];
-}
-
-function getLogicalZoomBoundsForCameraDevice(
-  cameraDevice: CameraDevice | undefined,
-  lensAnchor: number
-) {
-  if (!cameraDevice) {
-    return {
-      min: lensAnchor,
-      max: lensAnchor,
-      neutral: 1,
-      deviceMin: 1,
-      deviceMax: 1,
-    };
-  }
-
-  const neutralZoom =
-    Number.isFinite(cameraDevice.neutralZoom) && cameraDevice.neutralZoom > 0
-      ? cameraDevice.neutralZoom
-      : 1;
-  const minZoom =
-    Number.isFinite(cameraDevice.minZoom) && cameraDevice.minZoom > 0 ? cameraDevice.minZoom : 1;
-  const maxZoom =
-    Number.isFinite(cameraDevice.maxZoom) && cameraDevice.maxZoom > 0
-      ? Math.max(neutralZoom, Math.min(cameraDevice.maxZoom, 8))
-      : neutralZoom;
-
-  return {
-    min: (lensAnchor * minZoom) / neutralZoom,
-    max: (lensAnchor * maxZoom) / neutralZoom,
-    neutral: neutralZoom,
-    deviceMin: minZoom,
-    deviceMax: maxZoom,
-  };
 }
 
 
@@ -267,29 +233,44 @@ export function useCaptureCardCameraController({
     }, CAMERA_ZOOM_LABEL_VISIBLE_MS);
   }, [clearCameraZoomBadgeTimeout]);
 
-  const updateCameraZoomFactor = useCallback(
-    (nextZoomFactor: number) => {
-      const clampedZoomFactor = Number.isFinite(nextZoomFactor) && nextZoomFactor > 0
-        ? nextZoomFactor
-        : 1;
-      cameraZoomFactorRef.current = clampedZoomFactor;
+  const setCameraZoomState = useCallback(
+    (nextZoomFactor: number, { showBadge = false }: { showBadge?: boolean } = {}) => {
+      const normalizedZoomFactor =
+        Number.isFinite(nextZoomFactor) && nextZoomFactor > 0 ? nextZoomFactor : 1;
+      cameraZoomFactorRef.current = normalizedZoomFactor;
       setCameraZoomFactor((current) =>
-        Math.abs(current - clampedZoomFactor) < 0.001 ? current : clampedZoomFactor
+        Math.abs(current - normalizedZoomFactor) < 0.001 ? current : normalizedZoomFactor
       );
-      setShowCameraZoomBadge(true);
-      scheduleHideCameraZoomBadge();
+
+      if (showBadge) {
+        setShowCameraZoomBadge(true);
+        scheduleHideCameraZoomBadge();
+        return;
+      }
+
+      clearCameraZoomBadgeTimeout();
+      setShowCameraZoomBadge(false);
     },
-    [scheduleHideCameraZoomBadge]
+    [clearCameraZoomBadgeTimeout, scheduleHideCameraZoomBadge]
   );
 
-  const resetCameraZoom = useCallback(() => {
-    clearCameraZoomBadgeTimeout();
-    const defaultZoomFactor =
-      facing === 'back' ? getBackCameraLensZoomSpec(backCameraLensZoomConfig, backCameraLens).anchor : 1;
-    cameraZoomFactorRef.current = defaultZoomFactor;
-    setCameraZoomFactor(defaultZoomFactor);
-    setShowCameraZoomBadge(false);
-  }, [backCameraLens, backCameraLensZoomConfig, clearCameraZoomBadgeTimeout, facing]);
+  const updateCameraZoomFactor = useCallback(
+    (nextZoomFactor: number) => {
+      setCameraZoomState(nextZoomFactor, { showBadge: true });
+    },
+    [setCameraZoomState]
+  );
+
+  const resetCameraZoom = useCallback(
+    ({ showBadge = false }: { showBadge?: boolean } = {}) => {
+      const defaultZoomFactor =
+        facing === 'back'
+          ? getBackCameraLensZoomSpec(backCameraLensZoomConfig, backCameraLens).anchor
+          : 1;
+      setCameraZoomState(defaultZoomFactor, { showBadge });
+    },
+    [backCameraLens, backCameraLensZoomConfig, facing, setCameraZoomState]
+  );
 
   const showCameraFocusRing = useCallback(
     (x: number, y: number) => {
@@ -569,13 +550,14 @@ export function useCaptureCardCameraController({
     cameraAutoRecoveryCountRef.current = 0;
   }, [cameraSessionKey, captureMode, facing, permissionGranted, isCameraPreviewActive, capturedPhoto]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (captureMode !== 'camera') {
+      pendingBackCameraLensChangeRef.current = null;
       resetCameraZoom();
     }
   }, [captureMode, resetCameraZoom]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const previousFacing = previousFacingRef.current;
     previousFacingRef.current = facing;
 
@@ -585,17 +567,14 @@ export function useCaptureCardCameraController({
     }
   }, [facing, resetCameraZoom]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const previousBackCameraLens = previousBackCameraLensRef.current;
     previousBackCameraLensRef.current = backCameraLens;
 
-    if (pendingBackCameraLensChangeRef.current === backCameraLens) {
-      pendingBackCameraLensChangeRef.current = null;
-      return;
-    }
-
     if (previousBackCameraLens !== backCameraLens && facing === 'back') {
-      resetCameraZoom();
+      const shouldShowBadge = pendingBackCameraLensChangeRef.current === backCameraLens;
+      pendingBackCameraLensChangeRef.current = null;
+      resetCameraZoom({ showBadge: shouldShowBadge });
     }
   }, [backCameraLens, facing, resetCameraZoom]);
 
@@ -821,48 +800,33 @@ export function useCaptureCardCameraController({
     [backCameraLens, backCameraLensZoomConfig]
   );
   const currentLensAnchor = facing === 'back' ? currentBackCameraLensZoomSpec.anchor : 1;
-  const currentCameraZoomBounds = useMemo(
-    () => getLogicalZoomBoundsForCameraDevice(cameraDevice, currentLensAnchor),
-    [cameraDevice, currentLensAnchor]
+  const resolvedCameraZoomState = useMemo(
+    () => resolveCameraZoomState(cameraDevice, currentLensAnchor, cameraZoomFactor),
+    [cameraDevice, currentLensAnchor, cameraZoomFactor]
   );
-  const minimumLogicalZoomFactor = currentCameraZoomBounds.min;
-  const maximumLogicalZoomFactor = currentCameraZoomBounds.max;
-
-  const cameraPreviewZoom = useMemo(() => {
-    if (!cameraDevice) {
-      return 1;
-    }
-
-    const effectiveLogicalZoomFactor = clamp(
-      cameraZoomFactor,
-      currentCameraZoomBounds.min,
-      currentCameraZoomBounds.max
-    );
-    const derivedPreviewZoom =
-      (currentCameraZoomBounds.neutral * effectiveLogicalZoomFactor) / currentLensAnchor;
-
-    return clamp(
-      derivedPreviewZoom,
-      currentCameraZoomBounds.deviceMin,
-      currentCameraZoomBounds.deviceMax
-    );
-  }, [cameraDevice, cameraZoomFactor, currentCameraZoomBounds, currentLensAnchor]);
-
-  const cameraZoomLabel = `${cameraZoomFactor.toFixed(1)}x`;
+  const minimumLogicalZoomFactor = resolvedCameraZoomState.bounds.min;
+  const maximumLogicalZoomFactor = resolvedCameraZoomState.bounds.max;
+  const displayedCameraZoomFactor = resolvedCameraZoomState.logicalZoomFactor;
+  const cameraPreviewZoom = resolvedCameraZoomState.previewZoom;
+  const cameraZoomLabel = formatCameraZoomFactor(displayedCameraZoomFactor, 'badge');
+  const cameraZoomSelectorLabel = formatCameraZoomFactor(displayedCameraZoomFactor, 'selector');
   const shouldShowPersistentCameraZoomBadge =
-    cameraZoomFactor > 1.01 || cameraZoomFactor < 0.99;
+    displayedCameraZoomFactor > 1.01 || displayedCameraZoomFactor < 0.99;
+
+  useLayoutEffect(() => {
+    cameraZoomFactorRef.current = displayedCameraZoomFactor;
+  }, [displayedCameraZoomFactor]);
+
   const handleBackCameraLensPress = useCallback(
     (nextLens: BackCameraLens) => {
       if (nextLens === backCameraLens) {
         return;
       }
 
-      const nextLensZoomSpec = getBackCameraLensZoomSpec(backCameraLensZoomConfig, nextLens);
       pendingBackCameraLensChangeRef.current = nextLens;
-      updateCameraZoomFactor(nextLensZoomSpec.anchor);
       onChangeBackCameraLens?.(nextLens);
     },
-    [backCameraLens, backCameraLensZoomConfig, onChangeBackCameraLens, updateCameraZoomFactor]
+    [backCameraLens, onChangeBackCameraLens]
   );
 
   const cameraZoomGesture = useMemo(
@@ -939,6 +903,7 @@ export function useCaptureCardCameraController({
       cameraUnavailableDetail,
       cameraZoomGesture,
       cameraZoomLabel,
+      cameraZoomSelectorLabel,
       canShowLiveCameraPreview,
       handleCameraInitialized,
       handleBackCameraLensPress,
@@ -972,6 +937,7 @@ export function useCaptureCardCameraController({
       cameraUnavailableDetail,
       cameraZoomGesture,
       cameraZoomLabel,
+      cameraZoomSelectorLabel,
       canShowLiveCameraPreview,
       handleCameraInitialized,
       handleBackCameraLensPress,

@@ -33,7 +33,7 @@ import Reanimated, {
 import { ENABLE_PHOTO_STICKERS } from '../../constants/experiments';
 import { formatRadiusLabel, NOTE_RADIUS_OPTIONS } from '../../constants/noteRadius';
 import { Layout } from '../../constants/theme';
-import type { BackCameraLensZoomConfig } from '../../hooks/useCaptureFlow';
+import type { BackCameraLens, BackCameraLensZoomConfig } from '../../services/cameraZoom';
 import { useReducedMotion } from '../../hooks/useReducedMotion';
 import { type NoteStickerPlacement } from '../../services/noteStickers';
 import type { PhotoFilterId } from '../../services/photoFilters';
@@ -63,11 +63,15 @@ import StickerCutoutPreviewEditor from './capture/StickerCutoutPreviewEditor';
 import type { WindowRect } from './capture/stickerCreationTypes';
 import {
   CARD_SIZE,
-  DOCKED_HEADER_CONTENT_OVERLAP,
   LIVE_PHOTO_RING_STROKE_WIDTH,
   PHOTO_DOODLE_DEFAULT_COLOR,
   styles,
 } from './capture/captureCardStyles';
+import {
+  getCaptureCardBottomPadding,
+  getCaptureCardTopPadding,
+  getCaptureFooterTopPadding,
+} from './capture/captureCardLayout';
 import {
   CAPTURE_BUTTON_PRESS_IN,
   CAPTURE_BUTTON_PRESS_OUT,
@@ -104,8 +108,6 @@ const DEFAULT_CAPTURE_TEXT_PLACEHOLDERS = [
   'Anything here worth saving for later?',
   'Drop a small memory here...',
 ];
-const HOME_PAGE_VISUAL_BOTTOM_INSET = 90;
-
 function getCaptureTextPlaceholderVariants(t: TFunction) {
   const translated = t('capture.textPlaceholderVariants', {
     returnObjects: true,
@@ -155,10 +157,10 @@ interface CaptureCardProps {
   needsCameraPermission: boolean;
   cameraPermissionRequiresSettings?: boolean;
   onRequestCameraPermission: () => void;
-  backCameraLens?: 'wide' | 'ultra-wide' | 'telephoto';
-  availableBackCameraLenses?: ('wide' | 'ultra-wide' | 'telephoto')[];
+  backCameraLens?: BackCameraLens;
+  availableBackCameraLenses?: BackCameraLens[];
   backCameraLensZoomConfig?: BackCameraLensZoomConfig;
-  onChangeBackCameraLens?: (nextLens: 'wide' | 'ultra-wide' | 'telephoto') => void;
+  onChangeBackCameraLens?: (nextLens: BackCameraLens) => void;
   facing: 'back' | 'front';
   onToggleFacing: () => void;
   onChangeCameraSubmode?: (nextSubmode: 'single' | 'dual') => void;
@@ -394,7 +396,6 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   });
 
   const isCaptureTextEntryFocused = isTextEntryFocused || isPhotoCaptionFocused;
-  const pageBottomInset = topInset + HOME_PAGE_VISUAL_BOTTOM_INSET;
   const notifyCaptureGestureActivity = useCallback(() => {
     onGestureActiveChange?.(
       canvasGestureActiveRef.current || cameraGestureActiveRef.current
@@ -772,6 +773,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
     cameraKey,
     cameraPreviewZoom,
     cameraZoomLabel,
+    cameraZoomSelectorLabel,
     cameraTransitionMaskAnimatedStyle,
     cameraUnavailableDetail,
     cameraZoomGesture,
@@ -865,6 +867,21 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   const androidTextEntryBottomInset =
     Platform.OS === 'android' && isCaptureTextEntryFocused ? 96 : 0;
   const captureKeyboardVerticalOffset = topInset + 76;
+  const captureTopPadding = getCaptureCardTopPadding(topInset);
+  const captureBottomPadding = getCaptureCardBottomPadding({
+    topInset,
+    extraBottomInset: androidTextEntryBottomInset,
+  });
+  const footerSlotStyle = useMemo(
+    () => ({
+      paddingTop: getCaptureFooterTopPadding({
+        snapHeight,
+        topInset,
+        extraBottomInset: androidTextEntryBottomInset,
+      }),
+    }),
+    [androidTextEntryBottomInset, snapHeight, topInset]
+  );
 
   useEffect(() => {
     saveBusyProgress.value = withTiming(
@@ -1246,8 +1263,8 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
           styles.snapItem,
           {
             height: snapHeight,
-            paddingTop: topInset + Layout.headerHeight - DOCKED_HEADER_CONTENT_OVERLAP,
-            paddingBottom: pageBottomInset + androidTextEntryBottomInset,
+            paddingTop: captureTopPadding,
+            paddingBottom: captureBottomPadding,
           },
         ]}
       >
@@ -1300,6 +1317,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                   <LiveCameraSurface
                     backCameraLens={backCameraLens}
                     availableBackCameraLenses={facing === 'back' ? availableBackCameraLenses : []}
+                    backCameraLensZoomConfig={backCameraLensZoomConfig}
                     cameraDevice={cameraDevice}
                     cameraInstructionText={cameraInstructionText}
                     cameraFocusPoint={cameraFocusPoint}
@@ -1308,6 +1326,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                     cameraPermissionRequiresSettings={cameraPermissionRequiresSettings}
                     cameraPreviewZoom={cameraPreviewZoom}
                     cameraRef={cameraRef}
+                    cameraZoomSelectorLabel={cameraZoomSelectorLabel}
                     dualCameraPreviewRef={dualCameraPreviewRef}
                     dualCaptureAwaitingSecondShot={dualCaptureAwaitingSecondShot}
                     dualCaptureFacingText={dualCaptureFacingText}
@@ -1520,7 +1539,11 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
               shutterOuterAnimatedStyle={shutterOuterAnimatedStyle}
               t={t}
             />
-            {footerContent ? <View style={styles.footerSlot}>{footerContent}</View> : null}
+            {footerContent ? (
+              <View testID="capture-footer-slot" style={[styles.footerSlot, footerSlotStyle]}>
+                {footerContent}
+              </View>
+            ) : null}
           </Reanimated.View>
         </KeyboardAvoidingView>
       </View>

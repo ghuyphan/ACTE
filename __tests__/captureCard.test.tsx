@@ -5,6 +5,11 @@ import { getImageAsync, hasImageAsync } from 'expo-clipboard';
 import { deleteAsync, writeAsStringAsync } from '../utils/fileSystem';
 import { importStickerAsset } from '../services/noteStickers';
 import CaptureCard, { type CaptureCardHandle } from '../components/home/CaptureCard';
+import { getCaptureFooterCompactSnapHeightThreshold } from '../components/home/capture/captureCardLayout';
+import {
+  COMPACT_CAPTURE_FOOTER_TOP_PADDING,
+  DEFAULT_CAPTURE_FOOTER_TOP_PADDING,
+} from '../components/home/capture/captureCardStyles';
 
 const transparentPngBase64 =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFAAH/e+m+7wAAAABJRU5ErkJggg==';
@@ -679,6 +684,75 @@ describe('CaptureCard doodle handle', () => {
     expect(onChangeBackCameraLens).toHaveBeenCalledWith('telephoto');
   });
 
+  it('renders rear lens labels from the shared zoom config', () => {
+    const ref = React.createRef<CaptureCardHandle>();
+    const view = renderCaptureCard(ref, {
+      captureMode: 'camera',
+      availableBackCameraLenses: ['ultra-wide', 'wide', 'telephoto'],
+      backCameraLensZoomConfig: {
+        'ultra-wide': { anchor: 0.6, min: 0.6, max: 1 },
+        wide: { anchor: 1, min: 1, max: 4 },
+        telephoto: { anchor: 3, min: 3, max: 8 },
+      },
+    });
+
+    expect(view.getByText('0.6x')).toBeTruthy();
+    expect(view.getByText('1x')).toBeTruthy();
+    expect(view.getByText('3x')).toBeTruthy();
+  });
+
+  it('keeps the active camera preview zoom steady until the new rear lens is active', () => {
+    const ref = React.createRef<CaptureCardHandle>();
+    const onChangeBackCameraLens = jest.fn();
+    const view = renderCaptureCard(ref, {
+      captureMode: 'camera',
+      isCameraPreviewActive: true,
+      availableBackCameraLenses: ['wide', 'telephoto'],
+      backCameraLens: 'wide',
+      backCameraLensZoomConfig: {
+        'ultra-wide': { anchor: 0.5, min: 0.5, max: 1 },
+        wide: { anchor: 1, min: 1, max: 4 },
+        telephoto: { anchor: 2, min: 2, max: 8 },
+      },
+      onChangeBackCameraLens,
+    });
+
+    expect(mockCameraViewProps?.zoom).toBe(1);
+
+    fireEvent.press(view.getByTestId('capture-back-camera-lens-button-telephoto'));
+
+    expect(onChangeBackCameraLens).toHaveBeenCalledWith('telephoto');
+    expect(mockCameraViewProps?.zoom).toBe(1);
+
+    view.rerender(
+      <CaptureCard
+        {...createCaptureCardProps(ref, {
+          captureMode: 'camera',
+          isCameraPreviewActive: true,
+          availableBackCameraLenses: ['wide', 'telephoto'],
+          backCameraLens: 'telephoto',
+          backCameraLensZoomConfig: {
+            'ultra-wide': { anchor: 0.5, min: 0.5, max: 1 },
+            wide: { anchor: 1, min: 1, max: 4 },
+            telephoto: { anchor: 2, min: 2, max: 8 },
+          },
+          onChangeBackCameraLens,
+          cameraDevice: {
+            id: 'telephoto-camera',
+            position: 'back',
+            neutralZoom: 1,
+            minZoom: 1,
+            maxZoom: 4,
+            supportsFocus: true,
+          } as any,
+        })}
+      />
+    );
+
+    expect(mockCameraViewProps?.zoom).toBe(1);
+    expect(view.getByText('2x')).toBeTruthy();
+  });
+
   it('hides the back camera lens selector when only one rear lens is supported', () => {
     const ref = React.createRef<CaptureCardHandle>();
     const view = renderCaptureCard(ref, {
@@ -691,6 +765,32 @@ describe('CaptureCard doodle handle', () => {
     expect(view.queryByTestId('capture-back-camera-lens-button-wide')).toBeNull();
     expect(view.queryByTestId('capture-back-camera-lens-button-ultra-wide')).toBeNull();
     expect(view.queryByTestId('capture-back-camera-lens-button-telephoto')).toBeNull();
+  });
+
+  it('tightens footer spacing on compact screen heights so footer strips stay off the bottom edge', () => {
+    const ref = React.createRef<CaptureCardHandle>();
+    const compactFooterThreshold = getCaptureFooterCompactSnapHeightThreshold({ topInset: 0 });
+    const view = renderCaptureCard(ref, {
+      footerContent: <View testID="capture-footer-inner" />,
+      snapHeight: compactFooterThreshold,
+    });
+
+    expect(
+      StyleSheet.flatten(view.getByTestId('capture-footer-slot').props.style).paddingTop
+    ).toBe(DEFAULT_CAPTURE_FOOTER_TOP_PADDING);
+
+    view.rerender(
+      <CaptureCard
+        {...createCaptureCardProps(ref, {
+          footerContent: <View testID="capture-footer-inner" />,
+          snapHeight: compactFooterThreshold - 1,
+        })}
+      />
+    );
+
+    expect(
+      StyleSheet.flatten(view.getByTestId('capture-footer-slot').props.style).paddingTop
+    ).toBe(COMPACT_CAPTURE_FOOTER_TOP_PADDING);
   });
 
   it('tracks local doodle state through the imperative handle', () => {
@@ -850,9 +950,9 @@ describe('CaptureCard doodle handle', () => {
     });
   });
 
-  it('shows the camera zoom badge using the shared lens zoom level', () => {
+  it('shows the active zoom in the rear lens selector and hides the floating badge when the selector is visible', () => {
     const ref = React.createRef<CaptureCardHandle>();
-    const { getByText } = renderCaptureCard(ref, {
+    const { getByText, queryByTestId } = renderCaptureCard(ref, {
       captureMode: 'camera',
       isCameraPreviewActive: true,
       backCameraLens: 'telephoto',
@@ -871,6 +971,32 @@ describe('CaptureCard doodle handle', () => {
       } as any,
     });
 
+    expect(getByText('2x')).toBeTruthy();
+    expect(queryByTestId('capture-camera-zoom-badge')).toBeNull();
+  });
+
+  it('still shows the floating zoom badge when the rear lens selector is not available', () => {
+    const ref = React.createRef<CaptureCardHandle>();
+    const { getByTestId, getByText } = renderCaptureCard(ref, {
+      captureMode: 'camera',
+      isCameraPreviewActive: true,
+      backCameraLens: 'telephoto',
+      availableBackCameraLenses: ['telephoto'],
+      backCameraLensZoomConfig: {
+        'ultra-wide': { anchor: 0.5, min: 0.5, max: 1 },
+        wide: { anchor: 1, min: 1, max: 4 },
+        telephoto: { anchor: 2, min: 2, max: 8 },
+      },
+      cameraDevice: {
+        id: 'zoomed-camera',
+        position: 'back',
+        neutralZoom: 1,
+        maxZoom: 4,
+        supportsFocus: true,
+      } as any,
+    });
+
+    expect(getByTestId('capture-camera-zoom-badge')).toBeTruthy();
     expect(getByText('2.0x')).toBeTruthy();
   });
 

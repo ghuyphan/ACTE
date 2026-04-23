@@ -16,6 +16,12 @@ import Reanimated, { FadeIn, FadeOut, ZoomIn } from 'react-native-reanimated';
 import { ENABLE_PHOTO_STICKERS } from '../../../constants/experiments';
 import { useReducedMotion } from '../../../hooks/useReducedMotion';
 import {
+  formatCameraZoomFactor,
+  getBackCameraLensZoomSpec,
+  type BackCameraLens,
+  type BackCameraLensZoomConfig,
+} from '../../../services/cameraZoom';
+import {
   getCaptureNoteGradient,
 } from '../../../services/noteAppearance';
 import type { NoteStickerPlacement } from '../../../services/noteStickers';
@@ -488,8 +494,9 @@ export function PhotoCaptureSurface({
 }
 
 interface LiveCameraSurfaceProps {
-  backCameraLens: 'wide' | 'ultra-wide' | 'telephoto';
-  availableBackCameraLenses: ('wide' | 'ultra-wide' | 'telephoto')[];
+  backCameraLens: BackCameraLens;
+  availableBackCameraLenses: BackCameraLens[];
+  backCameraLensZoomConfig?: BackCameraLensZoomConfig;
   cameraDevice?: CameraDevice;
   cameraInstructionText?: string | null;
   cameraFocusPoint: { x: number; y: number } | null;
@@ -498,6 +505,7 @@ interface LiveCameraSurfaceProps {
   cameraPermissionRequiresSettings: boolean;
   cameraPreviewZoom: number;
   cameraRef: RefObject<Camera | null>;
+  cameraZoomSelectorLabel: string;
   dualCameraPreviewRef?: RefObject<DualCameraPreviewHandle | null>;
   dualCaptureAwaitingSecondShot?: boolean;
   dualCaptureFacingText?: string | null;
@@ -523,7 +531,7 @@ interface LiveCameraSurfaceProps {
   livePhotoProgressPath: ComponentProps<typeof SkiaPath>['path'];
   livePhotoRingProgress: number;
   needsCameraPermission: boolean;
-  onChangeBackCameraLens: (nextLens: 'wide' | 'ultra-wide' | 'telephoto') => void;
+  onChangeBackCameraLens: (nextLens: BackCameraLens) => void;
   shouldRenderCameraPreview: boolean;
   showCaptureCover: boolean;
   showCameraUnavailableState: boolean;
@@ -535,6 +543,7 @@ interface LiveCameraSurfaceProps {
 export function LiveCameraSurface({
   backCameraLens,
   availableBackCameraLenses,
+  backCameraLensZoomConfig,
   cameraDevice,
   cameraInstructionText = null,
   cameraFocusPoint,
@@ -543,6 +552,7 @@ export function LiveCameraSurface({
   cameraPermissionRequiresSettings,
   cameraPreviewZoom,
   cameraRef,
+  cameraZoomSelectorLabel,
   dualCameraPreviewRef,
   dualCaptureAwaitingSecondShot = false,
   dualCaptureFacingText = null,
@@ -579,8 +589,6 @@ export function LiveCameraSurface({
   const reduceMotionEnabled = useReducedMotion();
   const showDualCaptureReference =
     dualCaptureAwaitingSecondShot && Boolean(dualCaptureFirstShotUri);
-  const shouldShowZoomBadge =
-    !showDualCaptureReference && (showCameraZoomBadge || cameraPreviewZoom > 1.01);
   const shouldShowBackCameraLensSelector =
     facing === 'back' &&
     availableBackCameraLenses.length > 1 &&
@@ -588,25 +596,40 @@ export function LiveCameraSurface({
     !showDualCaptureReference &&
     !needsCameraPermission &&
     !showCameraUnavailableState;
+  const shouldShowZoomBadge =
+    !showDualCaptureReference &&
+    !shouldShowBackCameraLensSelector &&
+    (showCameraZoomBadge || cameraPreviewZoom > 1.01);
   const backCameraLensOptions = availableBackCameraLenses.map((lens) => {
+    const zoomSpec = getBackCameraLensZoomSpec(backCameraLensZoomConfig, lens);
+
     switch (lens) {
       case 'ultra-wide':
         return {
           lens,
-          label: t('capture.backCameraUltraWide', '0.5x'),
+          label:
+            lens === backCameraLens
+              ? cameraZoomSelectorLabel
+              : formatCameraZoomFactor(zoomSpec.anchor, 'selector'),
           accessibilityLabel: t('capture.backCameraUltraWideA11y', 'Use ultra-wide camera'),
         };
       case 'telephoto':
         return {
           lens,
-          label: t('capture.backCameraTelephoto', 'Tele'),
+          label:
+            lens === backCameraLens
+              ? cameraZoomSelectorLabel
+              : formatCameraZoomFactor(zoomSpec.anchor, 'selector'),
           accessibilityLabel: t('capture.backCameraTelephotoA11y', 'Use telephoto camera'),
         };
       case 'wide':
       default:
         return {
           lens,
-          label: t('capture.backCameraWide', '1x'),
+          label:
+            lens === backCameraLens
+              ? cameraZoomSelectorLabel
+              : formatCameraZoomFactor(zoomSpec.anchor, 'selector'),
           accessibilityLabel: t('capture.backCameraWideA11y', 'Use wide camera'),
         };
     }
@@ -755,7 +778,7 @@ export function LiveCameraSurface({
                 style={styles.cameraPreview}
               />
               {shouldShowZoomBadge ? (
-                <View pointerEvents="none" style={styles.cameraZoomBadge}>
+                <View testID="capture-camera-zoom-badge" pointerEvents="none" style={styles.cameraZoomBadge}>
                   <Text
                     style={[styles.cameraZoomBadgeText, { color: colors.captureCameraOverlayText }]}
                   >
