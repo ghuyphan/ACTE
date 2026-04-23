@@ -3,6 +3,7 @@ import {
   getCaptureNoteGradient,
   getGradientStickerMotionVariant,
   getNoteColorStickerMotion,
+  resolveSavedTextNoteColor,
   getTextNoteCardGradient,
 } from '../services/noteAppearance';
 
@@ -65,6 +66,22 @@ describe('noteAppearance', () => {
         noteColor: APP_THEME_DEFAULT_NOTE_COLOR_ID,
       })
     ).toEqual(['#F6D365', '#FDA085']);
+  });
+
+  it('can freeze the current app theme into a concrete saved note color', () => {
+    expect(
+      resolveSavedTextNoteColor(null, {
+        appTheme: 'peach',
+        colorScheme: 'light',
+      })
+    ).toBe('peach-theme-light');
+
+    expect(
+      resolveSavedTextNoteColor(APP_THEME_DEFAULT_NOTE_COLOR_ID, {
+        appTheme: 'matcha',
+        colorScheme: 'dark',
+      })
+    ).toBe('matcha-theme-dark');
   });
 
   it('falls back to a stable hashed gradient when no emoji palette matches', () => {

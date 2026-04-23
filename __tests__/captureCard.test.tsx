@@ -850,15 +850,22 @@ describe('CaptureCard doodle handle', () => {
     });
   });
 
-  it('shows the camera zoom badge when the active preview is zoomed', () => {
+  it('shows the camera zoom badge using the shared lens zoom level', () => {
     const ref = React.createRef<CaptureCardHandle>();
     const { getByText } = renderCaptureCard(ref, {
       captureMode: 'camera',
       isCameraPreviewActive: true,
+      backCameraLens: 'telephoto',
+      availableBackCameraLenses: ['wide', 'telephoto'],
+      backCameraLensZoomConfig: {
+        'ultra-wide': { anchor: 0.5, min: 0.5, max: 1 },
+        wide: { anchor: 1, min: 1, max: 4 },
+        telephoto: { anchor: 2, min: 2, max: 8 },
+      },
       cameraDevice: {
         id: 'zoomed-camera',
         position: 'back',
-        neutralZoom: 2,
+        neutralZoom: 1,
         maxZoom: 4,
         supportsFocus: true,
       } as any,

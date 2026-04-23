@@ -1,5 +1,9 @@
+import { Appearance } from 'react-native';
+import type { AppThemeType } from '../constants/appThemes';
 import {
   DEFAULT_NOTE_COLOR_ID,
+  getAppThemeCaptureNoteColorId,
+  LEGACY_NOTE_COLOR_PRESETS,
   NOTE_CARD_GRADIENTS,
   NOTE_COLOR_PRESETS,
   PREMIUM_NOTE_COLOR_IDS,
@@ -24,9 +28,10 @@ type NotePalette = {
 };
 
 const DEFAULT_CAPTURE_GRADIENT: GradientPair = ['#F6D365', '#FDA085'];
+const ALL_NOTE_COLOR_PRESETS = [...NOTE_COLOR_PRESETS, ...LEGACY_NOTE_COLOR_PRESETS];
 
 const NOTE_COLOR_PRESET_MAP = new Map<NoteColorId, NoteColorPreset>(
-  NOTE_COLOR_PRESETS.map((preset) => [preset.id, preset])
+  ALL_NOTE_COLOR_PRESETS.map((preset) => [preset.id, preset])
 );
 
 const EMOJI_NOTE_PALETTES: Record<string, NotePalette> = {
@@ -302,7 +307,94 @@ function getBaseGradientSeed(text: string, noteId?: string) {
 
 export { DEFAULT_NOTE_COLOR_ID, NOTE_COLOR_PRESETS };
 export { PREMIUM_NOTE_COLOR_IDS };
+export { getAppThemeCaptureNoteColorId };
 export type { NoteColorFinish, NoteColorId, NoteColorPreset };
+
+function isAdaptiveThemeFamilyNoteColor(noteColor?: string | null) {
+  return noteColor === 'peach-theme'
+    || noteColor === 'matcha-theme'
+    || noteColor === 'berry-theme'
+    || noteColor === 'cotton-candy-theme';
+}
+
+function normalizeAdaptiveThemeNoteColor(noteColor?: string | null): NoteColorId | null {
+  switch (noteColor) {
+    case 'peach-theme':
+    case 'peach-theme-light':
+    case 'peach-theme-dark':
+      return 'peach-theme';
+    case 'matcha-theme':
+    case 'matcha-theme-light':
+    case 'matcha-theme-dark':
+      return 'matcha-theme';
+    case 'berry-theme':
+    case 'berry-theme-light':
+    case 'berry-theme-dark':
+      return 'berry-theme';
+    case 'cotton-candy-theme':
+    case 'cotton-candy-theme-light':
+    case 'cotton-candy-theme-dark':
+      return 'cotton-candy-theme';
+    default:
+      return null;
+  }
+}
+
+function resolveDynamicThemeColorScheme(colorScheme?: 'light' | 'dark') {
+  if (colorScheme) {
+    return colorScheme;
+  }
+
+  return Appearance.getColorScheme() === 'dark' ? 'dark' : 'light';
+}
+
+export function resolveConcreteThemeNoteColorId(
+  noteColor?: string | null,
+  colorScheme?: 'light' | 'dark'
+): NoteColorId | null {
+  const resolvedColorScheme = resolveDynamicThemeColorScheme(colorScheme);
+
+  switch (noteColor) {
+    case 'peach-theme':
+      return resolvedColorScheme === 'dark' ? 'peach-theme-dark' : 'peach-theme-light';
+    case 'peach-theme-light':
+    case 'peach-theme-dark':
+      return noteColor;
+    case 'matcha-theme':
+      return resolvedColorScheme === 'dark' ? 'matcha-theme-dark' : 'matcha-theme-light';
+    case 'matcha-theme-light':
+    case 'matcha-theme-dark':
+      return noteColor;
+    case 'berry-theme':
+      return resolvedColorScheme === 'dark' ? 'berry-theme-dark' : 'berry-theme-light';
+    case 'berry-theme-light':
+    case 'berry-theme-dark':
+      return noteColor;
+    case 'cotton-candy-theme':
+      return resolvedColorScheme === 'dark' ? 'cotton-candy-theme-dark' : 'cotton-candy-theme-light';
+    case 'cotton-candy-theme-light':
+    case 'cotton-candy-theme-dark':
+      return noteColor;
+    default:
+      return null;
+  }
+}
+
+export function getPickerNoteColorId(noteColor?: string | null): NoteColorId | null {
+  return normalizeAdaptiveThemeNoteColor(noteColor) ?? getNoteColorPreset(noteColor)?.id ?? null;
+}
+
+function getAdaptiveThemeGradient(
+  noteColor?: string | null,
+  colorScheme?: 'light' | 'dark'
+): GradientPair | null {
+  const concreteThemeColorId = resolveConcreteThemeNoteColorId(noteColor, colorScheme);
+  if (!concreteThemeColorId) {
+    return null;
+  }
+
+  return getNoteColorPreset(concreteThemeColorId)?.card ?? null;
+}
 
 export function getNoteColorPreset(noteColor?: string | null) {
   if (!noteColor) {
@@ -320,7 +412,17 @@ export function isPremiumNoteColor(noteColor?: string | null) {
   return getNoteColorPreset(noteColor)?.tier === 'plus';
 }
 
-export function getNoteColorCardGradient(noteColor?: string | null): GradientPair | null {
+export function getNoteColorCardGradient(
+  noteColor?: string | null,
+  options?: { colorScheme?: 'light' | 'dark' }
+): GradientPair | null {
+  if (isAdaptiveThemeFamilyNoteColor(noteColor)) {
+    const adaptiveGradient = getAdaptiveThemeGradient(noteColor, options?.colorScheme);
+    if (adaptiveGradient) {
+      return adaptiveGradient;
+    }
+  }
+
   return getNoteColorPreset(noteColor)?.card ?? null;
 }
 
@@ -333,11 +435,19 @@ export function isAppThemeDefaultNoteColor(noteColor?: string | null) {
 }
 
 export function normalizeSavedTextNoteColor(noteColor?: string | null): NoteColorId {
-  return getNoteColorPreset(noteColor)?.id ?? DEFAULT_NOTE_COLOR_ID;
+  return resolveConcreteThemeNoteColorId(noteColor) ?? getNoteColorPreset(noteColor)?.id ?? DEFAULT_NOTE_COLOR_ID;
 }
 
-export function resolveSavedTextNoteColor(noteColor?: string | null): string {
+export function resolveSavedTextNoteColor(
+  noteColor?: string | null,
+  options?: { appTheme?: AppThemeType; colorScheme?: 'light' | 'dark' }
+): string {
   if (noteColor == null || isAppThemeDefaultNoteColor(noteColor)) {
+    if (options?.appTheme) {
+      const appThemeColorId = getAppThemeCaptureNoteColorId(options.appTheme);
+      return resolveConcreteThemeNoteColorId(appThemeColorId, options.colorScheme) ?? appThemeColorId;
+    }
+
     return APP_THEME_DEFAULT_NOTE_COLOR_ID;
   }
 
@@ -357,8 +467,11 @@ export function getCaptureNoteGradient(options?: {
   text?: string;
   noteColor?: string | null;
   fallbackGradient?: readonly [string, string] | null;
+  colorScheme?: 'light' | 'dark';
 }): GradientPair {
-  const selectedGradient = getNoteColorCardGradient(options?.noteColor);
+  const selectedGradient = getNoteColorCardGradient(options?.noteColor, {
+    colorScheme: options?.colorScheme,
+  });
   if (selectedGradient) {
     return selectedGradient;
   }
@@ -386,8 +499,11 @@ export function getTextNoteCardGradient(options: {
   emoji?: string | null;
   noteColor?: string | null;
   fallbackGradient?: readonly [string, string] | null;
+  colorScheme?: 'light' | 'dark';
 }): GradientPair {
-  const selectedGradient = getNoteColorCardGradient(options.noteColor);
+  const selectedGradient = getNoteColorCardGradient(options.noteColor, {
+    colorScheme: options.colorScheme,
+  });
   if (selectedGradient) {
     return selectedGradient;
   }

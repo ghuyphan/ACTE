@@ -27,6 +27,7 @@ import {
   getNoteByIdForScope,
   upsertNoteForScope,
 } from './database';
+import { resolveSavedTextNoteColor } from './noteAppearance';
 import {
   clearRemoteStickerAssetRefs,
   hydrateStickerPlacements,
@@ -1618,7 +1619,10 @@ async function deserializeRemoteNote(
     promptTextSnapshot: record.prompt_text_snapshot ?? null,
     promptAnswer: record.prompt_answer ?? null,
     moodEmoji: record.mood_emoji ?? null,
-    noteColor: record.note_color ?? null,
+    noteColor:
+      record.type === 'text'
+        ? resolveSavedTextNoteColor(record.note_color ?? null)
+        : null,
     latitude: record.latitude,
     longitude: record.longitude,
     radius: typeof record.radius === 'number' ? record.radius : 150,

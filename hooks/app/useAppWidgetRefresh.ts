@@ -4,16 +4,20 @@ import i18n from '../../constants/i18n';
 import { scheduleWidgetDataUpdate } from '../../services/widgetService';
 import { useAuth } from '../useAuth';
 import { useConnectivity } from '../useConnectivity';
+import { useTheme } from '../useTheme';
 
 export function useAppWidgetRefresh(options: { enabled?: boolean } = {}) {
   const enabled = options.enabled ?? true;
   const { user } = useAuth();
   const { isOnline } = useConnectivity();
+  const { appTheme, isDark } = useTheme();
   const hasTriggeredStartupRef = useRef(false);
   const previousRefreshStateRef = useRef<{
     userUid: string | null;
     isOnline: boolean;
     language: string;
+    appTheme: string;
+    colorScheme: 'light' | 'dark';
   } | null>(null);
   const currentLanguage = i18n.language;
 
@@ -64,10 +68,18 @@ export function useAppWidgetRefresh(options: { enabled?: boolean } = {}) {
   }, [enabled, refreshWidgetData]);
 
   useEffect(() => {
-    const nextState = {
+    const nextState: {
+      userUid: string | null;
+      isOnline: boolean;
+      language: string;
+      appTheme: string;
+      colorScheme: 'light' | 'dark';
+    } = {
       userUid: user?.uid ?? null,
       isOnline,
       language: currentLanguage,
+      appTheme,
+      colorScheme: isDark ? 'dark' : 'light',
     };
     const previousState = previousRefreshStateRef.current;
     previousRefreshStateRef.current = nextState;
@@ -88,6 +100,14 @@ export function useAppWidgetRefresh(options: { enabled?: boolean } = {}) {
 
     if (previousState.language !== nextState.language) {
       refreshWidgetData('content');
+      return;
     }
-  }, [currentLanguage, enabled, isOnline, refreshWidgetData, user?.uid]);
+
+    if (
+      previousState.appTheme !== nextState.appTheme ||
+      previousState.colorScheme !== nextState.colorScheme
+    ) {
+      refreshWidgetData('content');
+    }
+  }, [appTheme, currentLanguage, enabled, isDark, isOnline, refreshWidgetData, user?.uid]);
 }

@@ -5,6 +5,7 @@ import {
   setStoredActiveInvite,
 } from './activeInviteStorage';
 import { getDB, withDatabaseTransaction } from './database';
+import { resolveSavedTextNoteColor } from './noteAppearance';
 import { hasStoredStickerPayload } from './noteStickers';
 import { getUniqueNormalizedStrings } from './normalizedStrings';
 
@@ -102,7 +103,10 @@ function rowToSharedPost(row: SharedPostRow): SharedPost {
     doodleStrokesJson: row.doodle_strokes_json,
     hasStickers: hasStoredStickerPayload(row.sticker_placements_json),
     stickerPlacementsJson: row.sticker_placements_json,
-    noteColor: row.note_color,
+    noteColor:
+      row.type === 'text'
+        ? resolveSavedTextNoteColor(row.note_color ?? null)
+        : null,
     placeName: row.place_name,
     sourceNoteId: row.source_note_id,
     latitude: row.latitude,

@@ -489,7 +489,7 @@ export function PhotoCaptureSurface({
 
 interface LiveCameraSurfaceProps {
   backCameraLens: 'wide' | 'ultra-wide' | 'telephoto';
-  availableBackCameraLenses: Array<'wide' | 'ultra-wide' | 'telephoto'>;
+  availableBackCameraLenses: ('wide' | 'ultra-wide' | 'telephoto')[];
   cameraDevice?: CameraDevice;
   cameraInstructionText?: string | null;
   cameraFocusPoint: { x: number; y: number } | null;

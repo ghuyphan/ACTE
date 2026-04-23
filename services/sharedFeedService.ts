@@ -937,7 +937,10 @@ function mapSharedPost(record: SharedPostRow): SharedPost {
     doodleStrokesJson: record.doodle_strokes_json ?? null,
     hasStickers: hasStoredStickerPayload(record.sticker_placements_json),
     stickerPlacementsJson: record.sticker_placements_json ?? null,
-    noteColor: record.note_color ?? null,
+    noteColor:
+      record.type === 'text'
+        ? resolveSavedTextNoteColor(record.note_color ?? null)
+        : null,
     placeName: record.place_name ?? null,
     sourceNoteId: record.source_note_id ?? null,
     latitude: normalizeCoordinate(record.latitude),

@@ -227,7 +227,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
     const { user } = useAuth();
     const { setActiveNote, clearActiveNote } = useActiveNote();
     const { deleteSharedNote, sharedPosts, updateSharedNote } = useSharedFeedStore();
-    const { colors, isDark } = useTheme();
+    const { colors, isDark, appTheme } = useTheme();
     const { t } = useTranslation();
     const {
         tier,
@@ -1507,8 +1507,15 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
         if (editRadius !== note.radius) {
             updates.radius = editRadius;
         }
-        if (note.type === 'text' && editNoteColor !== currentNoteColor) {
-            updates.noteColor = editNoteColor;
+        if (note.type === 'text') {
+            const persistedNoteColor = resolveSavedTextNoteColor(editNoteColor, {
+                appTheme,
+                colorScheme: isDark ? 'dark' : 'light',
+            });
+
+            if (persistedNoteColor !== note.noteColor) {
+                updates.noteColor = persistedNoteColor;
+            }
         }
 
         if (Object.keys(updates).length > 0 || doodleChanged || stickersChanged) {

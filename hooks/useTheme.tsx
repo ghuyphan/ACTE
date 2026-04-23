@@ -561,7 +561,7 @@ const APP_THEME_STORAGE_KEY = 'settings.appTheme';
 const VALID_THEMES: ThemeType[] = ['light', 'dark', 'system'];
 const VALID_APP_THEMES: AppThemeType[] = APP_THEME_VALUES;
 
-function normalizeTheme(value: string | null): ThemeType {
+export function normalizeTheme(value: string | null): ThemeType {
     if (value && VALID_THEMES.includes(value as ThemeType)) {
         return value as ThemeType;
     }

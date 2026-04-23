@@ -65,7 +65,7 @@
         "switchText": "Text",
         "decorate": "Decorate",
         "noteColor": "Card color",
-        "noteColorHint": "Pick a fixed gradient, or choose Default to match your app theme.",
+        "noteColorHint": "Pick the gradient you want for this card.",
         "noteColorDefault": "Default",
         "details": "Details",
         "restaurantPlaceholder": "Place name (e.g. Phở Hòa)",

@@ -123,6 +123,7 @@ jest.mock('../hooks/useSyncStatus', () => ({
 
 jest.mock('../hooks/useTheme', () => ({
   useTheme: () => ({
+    appTheme: 'peach',
     isDark: false,
     colors: {
       background: '#FAF9F6',
@@ -557,6 +558,20 @@ describe('HomeScreen doodle save flow', () => {
       doodleOnlyCreatedInput.id,
       JSON.stringify([{ color: '#1C1C1E', points: [0.1, 0.1, 0.2, 0.2] }])
     );
+  });
+
+  it('freezes the current app-theme card color when saving a default text note', async () => {
+    const { getByTestId } = renderHomeScreen();
+
+    fireEvent.press(getByTestId('capture-save-button'));
+
+    await waitFor(() => {
+      expect(mockCreateNote).toHaveBeenCalledWith(
+        expect.objectContaining({
+          noteColor: 'peach-theme-light',
+        })
+      );
+    });
   });
 
   it('re-anchors Home on the capture card after an inline save', async () => {

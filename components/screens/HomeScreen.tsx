@@ -65,7 +65,10 @@ import {
   getRemainingPhotoSlots,
 } from '../../constants/subscription';
 import { DEFAULT_NOTE_RADIUS } from '../../constants/noteRadius';
-import { PREMIUM_NOTE_COLOR_IDS } from '../../services/noteAppearance';
+import {
+  PREMIUM_NOTE_COLOR_IDS,
+  resolveSavedTextNoteColor,
+} from '../../services/noteAppearance';
 import { resolveAutoNoteEmoji } from '../../services/noteDecorations';
 import { saveNoteDoodle } from '../../services/noteDoodles';
 import {
@@ -252,7 +255,7 @@ export default function HomeScreen() {
   const { openSharedManageAt } = useLocalSearchParams<{ openSharedManageAt?: string }>();
   const { height: windowHeight } = useWindowDimensions();
   const { t } = useTranslation();
-  const { colors, isDark } = useTheme();
+  const { colors, isDark, appTheme } = useTheme();
   const reduceMotionEnabled = useReducedMotion();
   const insets = useSafeAreaInsets();
   const bottomTabVisualInset = useBottomTabVisualInset();
@@ -494,6 +497,7 @@ export default function HomeScreen() {
     backCameraLens,
     setBackCameraLens,
     availableBackCameraLenses,
+    backCameraLensZoomConfig,
     selectedPhotoFilterId,
     setSelectedPhotoFilterId,
     cameraDevice,
@@ -2299,6 +2303,13 @@ export default function HomeScreen() {
           content: captureMode === 'camera' ? locationName : content,
           locationName,
         });
+        const persistedTextNoteColor =
+          captureMode === 'text'
+            ? resolveSavedTextNoteColor(noteColor, {
+                appTheme,
+                colorScheme: isDark ? 'dark' : 'light',
+              })
+            : null;
 
         const createdNote = await createNote({
           id: pendingNoteId,
@@ -2314,7 +2325,7 @@ export default function HomeScreen() {
           promptTextSnapshot: null,
           promptAnswer: null,
           moodEmoji: autoEmoji,
-          noteColor: captureMode === 'text' ? noteColor : null,
+          noteColor: persistedTextNoteColor,
           captureVariant: captureMode === 'camera' ? (cameraSubmode === 'dual' ? 'dual' : 'single') : null,
           dualPrimaryPhotoLocalUri:
             captureMode === 'camera' && cameraSubmode === 'dual'
@@ -2729,6 +2740,7 @@ export default function HomeScreen() {
           }}
           backCameraLens={backCameraLens}
           availableBackCameraLenses={availableBackCameraLenses}
+          backCameraLensZoomConfig={backCameraLensZoomConfig}
           onChangeBackCameraLens={handleChangeBackCameraLens}
           facing={facing}
           onToggleFacing={handleToggleFacing}
@@ -2808,7 +2820,11 @@ export default function HomeScreen() {
       dualCaptureAwaitingSecondShot,
       dualPrimaryPhoto,
       facing,
+      availableBackCameraLenses,
+      backCameraLens,
+      backCameraLensZoomConfig,
       handleCaptureTargetChange,
+      handleChangeBackCameraLens,
       handleChangeNoteColor,
       handleChangeCameraSubmode,
       handleChangePhotoFilter,

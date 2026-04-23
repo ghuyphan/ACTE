@@ -1,9 +1,16 @@
 import * as Location from 'expo-location';
-import { Platform } from 'react-native';
+import { Appearance, Platform } from 'react-native';
 import i18n from '../constants/i18n';
 import { getPersistentItem, setPersistentItem } from '../utils/appStorage';
 import { getSupabaseUser } from '../utils/supabase';
 import { formatDate } from '../utils/dateUtils';
+import {
+  getThemePalette,
+  normalizeAppTheme,
+  normalizeSystemColorScheme,
+  normalizeTheme,
+  resolveThemePreference,
+} from '../hooks/useTheme';
 import {
   getAllNotesForScope,
   getPersistedActiveNotesScope,
@@ -95,6 +102,8 @@ const WIDGET_SHARED_REFRESH_TTL_MS = 2 * 60 * 1000;
 const WIDGET_LOCATION_CACHE_TTL_MS = 60 * 1000;
 const WIDGET_REQUEST_DEDUPE_WINDOW_MS = 3 * 1000;
 const WIDGET_DEFAULT_REFRESH_DEBOUNCE_MS = 120;
+const WIDGET_THEME_STORAGE_KEY = 'settings.theme';
+const WIDGET_APP_THEME_STORAGE_KEY = 'settings.appTheme';
 let widgetUpdateInFlight: Promise<WidgetUpdateResult> | null = null;
 let pendingWidgetUpdateOptions: UpdateWidgetDataOptions | null = null;
 let lastWidgetRequestKey: string | null = null;
@@ -123,6 +132,21 @@ let widgetLocationCache:
     }
   | null = null;
 const widgetRefreshThrottleTimestamps = new Map<string, number>();
+
+async function getCurrentWidgetThemeCaptureGradient() {
+    const [savedTheme, savedAppTheme] = await Promise.all([
+        getPersistentItem(WIDGET_THEME_STORAGE_KEY),
+        getPersistentItem(WIDGET_APP_THEME_STORAGE_KEY),
+    ]);
+    const theme = normalizeTheme(savedTheme);
+    const appTheme = normalizeAppTheme(savedAppTheme);
+    const systemColorScheme = normalizeSystemColorScheme(Appearance.getColorScheme(), 'light');
+    const resolvedColorScheme = resolveThemePreference(theme, systemColorScheme);
+    const palette = getThemePalette(appTheme);
+    const colors = resolvedColorScheme === 'dark' ? palette.dark : palette.light;
+
+    return colors.captureGradient;
+}
 
 function buildWidgetUrl(path: string) {
     const normalizedPath = path.startsWith('/') ? path : `/${path}`;
@@ -526,6 +550,7 @@ async function buildWidgetPropsFromSelection(
     selection.selectionMode
   );
   const dateStr = formatDate(candidate.createdAt, 'short');
+  const themeCaptureGradient = await getCurrentWidgetThemeCaptureGradient();
   const textNoteGradient =
     candidate.noteType === 'text'
       ? getTextNoteCardGradient({
@@ -533,6 +558,7 @@ async function buildWidgetPropsFromSelection(
           noteId: candidate.id,
           emoji: candidate.moodEmoji,
           noteColor: candidate.noteColor,
+          fallbackGradient: themeCaptureGradient,
         })
       : null;
   const props: WidgetProps = {

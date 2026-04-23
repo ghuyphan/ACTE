@@ -179,6 +179,7 @@ jest.mock('react-i18next', () => ({
 jest.mock('../hooks/useTheme', () => ({
   CardGradients: [['#333333', '#555555']],
   useTheme: () => ({
+    appTheme: 'peach',
     isDark: false,
     colors: {
       background: '#FAF9F6',
@@ -723,6 +724,51 @@ describe('NoteDetailSheet', () => {
     expect(mockUpdateSharedNote).not.toHaveBeenCalled();
   });
 
+  it('freezes the current app-theme card color when saving a legacy default note', async () => {
+    mockGetNoteById.mockResolvedValueOnce({
+      id: 'note-1',
+      type: 'text',
+      content: 'Original note',
+      photoLocalUri: null,
+      photoRemoteBase64: null,
+      locationName: 'Old place',
+      latitude: 10.77,
+      longitude: 106.69,
+      radius: 150,
+      noteColor: 'app-theme-default',
+      isFavorite: false,
+      hasDoodle: false,
+      createdAt: '2026-03-10T00:00:00.000Z',
+      updatedAt: null,
+    });
+
+    const { getByTestId } = render(
+      <NoteDetailSheet noteId="note-1" visible onClose={() => undefined} />
+    );
+
+    await waitFor(() => {
+      expect(getByTestId('note-detail-edit')).toBeTruthy();
+    });
+
+    fireEvent.press(getByTestId('note-detail-edit'));
+
+    await act(async () => {
+      fireEvent.changeText(getByTestId('note-detail-content-input'), 'Updated note');
+    });
+
+    await act(async () => {
+      fireEvent.press(getByTestId('note-detail-edit'));
+    });
+
+    expect(mockUpdateNote).toHaveBeenCalledWith(
+      'note-1',
+      expect.objectContaining({
+        content: 'Updated note',
+        noteColor: 'peach-theme-light',
+      })
+    );
+  });
+
   it('uses keyboard-aware scrolling on iOS', async () => {
     const { UNSAFE_getByType } = render(
       <NoteDetailSheet noteId="note-1" visible onClose={() => undefined} />
@@ -993,6 +1039,7 @@ describe('NoteDetailSheet', () => {
       latitude: 10.77,
       longitude: 106.69,
       radius: 150,
+      noteColor: 'peach-theme-light',
       isFavorite: false,
       hasDoodle: true,
       doodleStrokesJson: JSON.stringify([{ color: '#FFFFFF', points: [0.1, 0.1, 0.2, 0.2] }]),

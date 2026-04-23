@@ -33,6 +33,7 @@ import Reanimated, {
 import { ENABLE_PHOTO_STICKERS } from '../../constants/experiments';
 import { formatRadiusLabel, NOTE_RADIUS_OPTIONS } from '../../constants/noteRadius';
 import { Layout } from '../../constants/theme';
+import type { BackCameraLensZoomConfig } from '../../hooks/useCaptureFlow';
 import { useReducedMotion } from '../../hooks/useReducedMotion';
 import { type NoteStickerPlacement } from '../../services/noteStickers';
 import type { PhotoFilterId } from '../../services/photoFilters';
@@ -155,7 +156,8 @@ interface CaptureCardProps {
   cameraPermissionRequiresSettings?: boolean;
   onRequestCameraPermission: () => void;
   backCameraLens?: 'wide' | 'ultra-wide' | 'telephoto';
-  availableBackCameraLenses?: Array<'wide' | 'ultra-wide' | 'telephoto'>;
+  availableBackCameraLenses?: ('wide' | 'ultra-wide' | 'telephoto')[];
+  backCameraLensZoomConfig?: BackCameraLensZoomConfig;
   onChangeBackCameraLens?: (nextLens: 'wide' | 'ultra-wide' | 'telephoto') => void;
   facing: 'back' | 'front';
   onToggleFacing: () => void;
@@ -231,6 +233,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   onRequestCameraPermission,
   backCameraLens = 'wide',
   availableBackCameraLenses = ['wide'],
+  backCameraLensZoomConfig,
   onChangeBackCameraLens = () => undefined,
   facing,
   onToggleFacing,
@@ -776,6 +779,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
     handleCameraInitialized,
     handleCameraPreviewStarted,
     handleCameraStartupFailure,
+    handleBackCameraLensPress,
     handleShutterLongPress,
     handleShutterPress,
     handleShutterRelease,
@@ -801,7 +805,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
     isCameraPreviewActive,
     isCameraRevealAllowed,
     backCameraLens,
-    availableBackCameraLenses,
+    backCameraLensZoomConfig,
     facing,
     cameraInstructionText,
     isLivePhotoCaptureInProgress,
@@ -1181,8 +1185,6 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
         <NoteColorPicker
           selectedColor={effectiveTextModeNoteColor}
           onSelectColor={handleSelectNoteColor}
-          autoLabel={t('capture.noteColorDefault', 'Default')}
-          includeAutoOption
           lockedColorIds={lockedNoteColorIds}
           previewOnlyColorIds={previewOnlyNoteColorIds}
           onLockedColorPress={handlePressLockedNoteColor}
@@ -1333,7 +1335,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                     livePhotoProgressPath={livePhotoProgressPath}
                     livePhotoRingProgress={livePhotoRingProgress}
                     needsCameraPermission={needsCameraPermission}
-                    onChangeBackCameraLens={onChangeBackCameraLens}
+                    onChangeBackCameraLens={handleBackCameraLensPress}
                     selectedPhotoFilterId={selectedPhotoFilterId}
                     shouldRenderCameraPreview={shouldRenderCameraPreview}
                     showCaptureCover={

@@ -4,7 +4,10 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useTheme } from '../../hooks/useTheme';
 import {
   NOTE_COLOR_PRESETS,
+  getAppThemeCaptureNoteColorId,
+  getPickerNoteColorId,
   getNoteColorCardGradient,
+  resolveConcreteThemeNoteColorId,
   isPremiumNoteColor,
 } from '../../services/noteAppearance';
 import PremiumNoteFinishOverlay from './PremiumNoteFinishOverlay';
@@ -13,8 +16,6 @@ interface NoteColorPickerProps {
   label?: string;
   selectedColor: string | null | undefined;
   onSelectColor: (nextColor: string | null) => void;
-  autoLabel?: string;
-  includeAutoOption?: boolean;
   testIDPrefix?: string;
   compact?: boolean;
   lockedColorIds?: string[];
@@ -26,17 +27,19 @@ export default function NoteColorPicker({
   label,
   selectedColor,
   onSelectColor,
-  autoLabel = 'Auto',
-  includeAutoOption = false,
   testIDPrefix,
   compact = false,
   lockedColorIds = [],
   previewOnlyColorIds = [],
   onLockedColorPress,
 }: NoteColorPickerProps) {
-  const { colors, isDark } = useTheme();
+  const { appTheme, colors, isDark } = useTheme();
   const lockedColorSet = new Set(lockedColorIds);
   const previewOnlyColorSet = new Set(previewOnlyColorIds);
+  const visualSelectedColor =
+    selectedColor != null
+      ? getPickerNoteColorId(selectedColor)
+      : getAppThemeCaptureNoteColorId(appTheme);
 
   return (
     <View style={[styles.section, compact ? styles.sectionCompact : null]}>
@@ -44,36 +47,11 @@ export default function NoteColorPicker({
         <Text style={[styles.label, { color: colors.secondaryText }]}>{label}</Text>
       ) : null}
       <View style={styles.swatchGrid}>
-        {includeAutoOption ? (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityState={{ selected: selectedColor == null }}
-            accessibilityLabel={autoLabel}
-            onPress={() => onSelectColor(null)}
-            style={[
-              styles.autoButton,
-              {
-                backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)',
-                borderColor:
-                  selectedColor == null ? colors.primary : colors.border,
-              },
-            ]}
-            testID={testIDPrefix ? `${testIDPrefix}-auto` : undefined}
-          >
-            <Text
-              style={[
-                styles.autoButtonText,
-                { color: selectedColor == null ? colors.primary : colors.text },
-              ]}
-            >
-              {autoLabel}
-            </Text>
-          </Pressable>
-        ) : null}
-
         {NOTE_COLOR_PRESETS.map((preset, index) => {
-          const gradient = getNoteColorCardGradient(preset.id) ?? preset.card;
-          const selected = preset.id === selectedColor;
+          const gradient = getNoteColorCardGradient(preset.id, {
+            colorScheme: isDark ? 'dark' : 'light',
+          }) ?? preset.card;
+          const selected = preset.id === visualSelectedColor;
           const previewOnly = previewOnlyColorSet.has(preset.id);
           const locked = lockedColorSet.has(preset.id) && !selected && !previewOnly;
           const premium = isPremiumNoteColor(preset.id);
@@ -83,14 +61,19 @@ export default function NoteColorPicker({
               key={preset.id}
               accessibilityRole="button"
               accessibilityState={{ selected }}
-              accessibilityLabel={`${label ?? autoLabel} ${index + 1}${premium ? ' Plus' : ''}`}
+              accessibilityLabel={`${label ?? 'Color'} ${index + 1}${premium ? ' Plus' : ''}`}
               onPress={() => {
                 if (locked) {
                   onLockedColorPress?.(preset.id);
                   return;
                 }
 
-                onSelectColor(preset.id);
+                onSelectColor(
+                  resolveConcreteThemeNoteColorId(
+                    preset.id,
+                    isDark ? 'dark' : 'light'
+                  ) ?? preset.id
+                );
               }}
               style={[
                 styles.swatchButton,
@@ -172,19 +155,6 @@ const styles = StyleSheet.create({
     gap: 8,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  autoButton: {
-    minWidth: 54,
-    height: 30,
-    borderRadius: 15,
-    borderWidth: 1,
-    paddingHorizontal: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  autoButtonText: {
-    fontSize: 12,
-    fontWeight: '600',
   },
   swatchButton: {
     width: 30,

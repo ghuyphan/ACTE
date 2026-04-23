@@ -559,6 +559,37 @@ export async function migrateLocalNotesScopeToUser(userUid: string): Promise<voi
     await migrateNotesScope(LOCAL_NOTES_SCOPE, userUid);
 }
 
+async function normalizeDynamicThemeNoteColors(database: SQLite.SQLiteDatabase) {
+    const replacements = [
+        ['peach-theme', resolveSavedTextNoteColor('peach-theme')],
+        ['matcha-theme', resolveSavedTextNoteColor('matcha-theme')],
+        ['berry-theme', resolveSavedTextNoteColor('berry-theme')],
+        ['cotton-candy-theme', resolveSavedTextNoteColor('cotton-candy-theme')],
+    ] as const;
+
+    for (const [dynamicColorId, concreteColorId] of replacements) {
+        if (dynamicColorId === concreteColorId) {
+            continue;
+        }
+
+        await database.runAsync(
+            `UPDATE notes
+             SET note_color = ?
+             WHERE type = 'text' AND note_color = ?`,
+            concreteColorId,
+            dynamicColorId
+        );
+
+        await database.runAsync(
+            `UPDATE shared_posts_cache
+             SET note_color = ?
+             WHERE type = 'text' AND note_color = ?`,
+            concreteColorId,
+            dynamicColorId
+        );
+    }
+}
+
 export async function hasScopeOwnedData(scope: string): Promise<boolean> {
     const normalizedScope = scope.trim();
     if (!normalizedScope) {
@@ -1235,6 +1266,8 @@ export async function getDB(): Promise<SQLite.SQLiteDatabase> {
                 await database.execAsync(`PRAGMA user_version = ${APP_SCHEMA_VERSION}`);
             }
 
+            await normalizeDynamicThemeNoteColors(database);
+
             db = createSerializedDatabase(database);
             return db;
         })().catch((error) => {
@@ -1412,7 +1445,10 @@ function rowToNote(row: NoteRow): Note {
         promptTextSnapshot: row.prompt_text_snapshot,
         promptAnswer: row.prompt_answer,
         moodEmoji: row.mood_emoji,
-        noteColor: row.note_color ?? null,
+        noteColor:
+            row.type === 'text'
+                ? resolveSavedTextNoteColor(row.note_color ?? null)
+                : null,
         captureVariant,
         dualPrimaryPhotoLocalUri:
             captureVariant === 'dual'

@@ -183,24 +183,78 @@ jest.mock('react-native-gesture-handler', () => {
   const React = require('react');
   const { View } = require('react-native');
 
-  const createGestureChain = () => {
+  const createGestureChain = (kind = 'generic', gestures: any[] = []) => {
+    const handlers: Record<string, ((...args: any[]) => any) | undefined> = {};
+    const config: Record<string, unknown> = {};
     const chain = {
-      runOnJS: () => chain,
-      enabled: () => chain,
-      maxDuration: () => chain,
-      maxDistance: () => chain,
-      numberOfTaps: () => chain,
-      maxPointers: () => chain,
-      activeOffsetX: () => chain,
-      minDistance: () => chain,
-      activeOffsetY: () => chain,
-      failOffsetY: () => chain,
-      failOffsetX: () => chain,
-      shouldCancelWhenOutside: () => chain,
-      onBegin: () => chain,
-      onUpdate: () => chain,
-      onEnd: () => chain,
-      onFinalize: () => chain,
+      kind,
+      gestures,
+      handlers,
+      config,
+      runOnJS: (value: unknown) => {
+        config.runOnJS = value;
+        return chain;
+      },
+      enabled: (value: unknown) => {
+        config.enabled = value;
+        return chain;
+      },
+      maxDuration: (value: unknown) => {
+        config.maxDuration = value;
+        return chain;
+      },
+      maxDistance: (value: unknown) => {
+        config.maxDistance = value;
+        return chain;
+      },
+      numberOfTaps: (value: unknown) => {
+        config.numberOfTaps = value;
+        return chain;
+      },
+      maxPointers: (value: unknown) => {
+        config.maxPointers = value;
+        return chain;
+      },
+      activeOffsetX: (value: unknown) => {
+        config.activeOffsetX = value;
+        return chain;
+      },
+      minDistance: (value: unknown) => {
+        config.minDistance = value;
+        return chain;
+      },
+      activeOffsetY: (value: unknown) => {
+        config.activeOffsetY = value;
+        return chain;
+      },
+      failOffsetY: (value: unknown) => {
+        config.failOffsetY = value;
+        return chain;
+      },
+      failOffsetX: (value: unknown) => {
+        config.failOffsetX = value;
+        return chain;
+      },
+      shouldCancelWhenOutside: (value: unknown) => {
+        config.shouldCancelWhenOutside = value;
+        return chain;
+      },
+      onBegin: (handler: (...args: any[]) => any) => {
+        handlers.onBegin = handler;
+        return chain;
+      },
+      onUpdate: (handler: (...args: any[]) => any) => {
+        handlers.onUpdate = handler;
+        return chain;
+      },
+      onEnd: (handler: (...args: any[]) => any) => {
+        handlers.onEnd = handler;
+        return chain;
+      },
+      onFinalize: (handler: (...args: any[]) => any) => {
+        handlers.onFinalize = handler;
+        return chain;
+      },
     };
 
     return chain;
@@ -210,12 +264,12 @@ jest.mock('react-native-gesture-handler', () => {
     GestureHandlerRootView: ({ children, ...props }: any) => React.createElement(View, props, children),
     GestureDetector: ({ children, ...props }: any) => React.createElement(View, props, children),
     Gesture: {
-      Tap: () => createGestureChain(),
-      Pan: () => createGestureChain(),
-      Pinch: () => createGestureChain(),
-      Rotation: () => createGestureChain(),
-      Exclusive: () => createGestureChain(),
-      Simultaneous: () => createGestureChain(),
+      Tap: () => createGestureChain('tap'),
+      Pan: () => createGestureChain('pan'),
+      Pinch: () => createGestureChain('pinch'),
+      Rotation: () => createGestureChain('rotation'),
+      Exclusive: (...gestures: any[]) => createGestureChain('exclusive', gestures),
+      Simultaneous: (...gestures: any[]) => createGestureChain('simultaneous', gestures),
     },
   };
 });

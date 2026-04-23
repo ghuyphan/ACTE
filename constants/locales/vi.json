@@ -65,7 +65,7 @@
         "switchText": "Viết",
         "decorate": "Trang trí",
         "noteColor": "Màu thẻ",
-        "noteColorHint": "Chọn một màu cố định hoặc chọn Mặc định để dùng theo chủ đề ứng dụng.",
+        "noteColorHint": "Chọn dải màu bạn muốn dùng cho thẻ này.",
         "noteColorDefault": "Mặc định",
         "details": "Chi tiết",
         "restaurantPlaceholder": "Tên quán (VD: Phở Anh Hai)",

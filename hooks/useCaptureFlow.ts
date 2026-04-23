@@ -1,5 +1,11 @@
 import { AppState, Platform } from 'react-native';
-import { Camera, type CameraPermissionStatus, useCameraDevice, useCameraPermission } from 'react-native-vision-camera';
+import {
+  Camera,
+  type CameraDevice,
+  type CameraPermissionStatus,
+  useCameraDevice,
+  useCameraPermission,
+} from 'react-native-vision-camera';
 import * as Haptics from './useHaptics';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { runOnJS, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
@@ -17,6 +23,12 @@ import { LIVE_PHOTO_MAX_DURATION_SECONDS } from '../services/livePhotoProcessing
 export type CaptureMode = 'text' | 'camera';
 export type CameraSubmode = 'single' | 'dual';
 export type BackCameraLens = 'wide' | 'ultra-wide' | 'telephoto';
+export type BackCameraLensZoomSpec = {
+  anchor: number;
+  min: number;
+  max: number;
+};
+export type BackCameraLensZoomConfig = Record<BackCameraLens, BackCameraLensZoomSpec>;
 export type CaptureDraftState = {
   captureMode: CaptureMode;
   cameraSubmode: CameraSubmode;
@@ -35,6 +47,12 @@ export type CaptureDraftState = {
 const LIVE_PHOTO_SETTLE_MS = 450;
 const LIVE_PHOTO_SAVE_GUARD_MS = 900;
 const LIVE_PHOTO_RELEASE_BUFFER_MS = 180;
+const MAX_PREVIEW_ZOOM_FACTOR = 8;
+const DEFAULT_BACK_CAMERA_LENS_ZOOM_ANCHORS: Record<BackCameraLens, number> = {
+  'ultra-wide': 0.5,
+  wide: 1,
+  telephoto: 2,
+};
 
 type CaptureCameraPermission = {
   granted: boolean;
@@ -48,6 +66,78 @@ type CameraCaptureErrorLike = {
 
 function normalizeCapturedFileUri(path: string) {
   return path.startsWith('file://') ? path : `file://${path}`;
+}
+
+function clamp(value: number, minValue: number, maxValue: number) {
+  return Math.min(maxValue, Math.max(minValue, value));
+}
+
+function getSafeRepresentativeFieldOfView(device?: CameraDevice | null) {
+  if (!device || !Array.isArray(device.formats)) {
+    return null;
+  }
+
+  const fieldOfView = device.formats.find((format) => Number.isFinite(format.fieldOfView) && format.fieldOfView > 0)
+    ?.fieldOfView;
+
+  return typeof fieldOfView === 'number' && fieldOfView > 0 ? fieldOfView : null;
+}
+
+function getLensAnchorFromFieldOfView(
+  lens: BackCameraLens,
+  targetFieldOfView: number | null,
+  wideFieldOfView: number | null
+) {
+  if (
+    lens === 'wide' ||
+    targetFieldOfView == null ||
+    wideFieldOfView == null ||
+    targetFieldOfView <= 0 ||
+    wideFieldOfView <= 0
+  ) {
+    return DEFAULT_BACK_CAMERA_LENS_ZOOM_ANCHORS[lens];
+  }
+
+  const halfWideRadians = (wideFieldOfView * Math.PI) / 360;
+  const halfTargetRadians = (targetFieldOfView * Math.PI) / 360;
+  const tangentRatio = Math.tan(halfWideRadians) / Math.tan(halfTargetRadians);
+
+  if (!Number.isFinite(tangentRatio) || tangentRatio <= 0) {
+    return DEFAULT_BACK_CAMERA_LENS_ZOOM_ANCHORS[lens];
+  }
+
+  if (lens === 'ultra-wide') {
+    return clamp(tangentRatio, 0.4, 0.95);
+  }
+
+  return clamp(tangentRatio, 1.05, 6);
+}
+
+function createBackCameraLensZoomSpec(
+  lens: BackCameraLens,
+  device?: CameraDevice | null,
+  anchor = DEFAULT_BACK_CAMERA_LENS_ZOOM_ANCHORS[lens]
+): BackCameraLensZoomSpec {
+  if (!device) {
+    return {
+      anchor,
+      min: anchor,
+      max: anchor,
+    };
+  }
+
+  const neutralZoom =
+    Number.isFinite(device.neutralZoom) && device.neutralZoom > 0 ? device.neutralZoom : 1;
+  const minZoom = Number.isFinite(device.minZoom) && device.minZoom > 0 ? device.minZoom : 1;
+  const maxZoom = Number.isFinite(device.maxZoom) && device.maxZoom > 0
+    ? Math.max(neutralZoom, Math.min(device.maxZoom, MAX_PREVIEW_ZOOM_FACTOR))
+    : neutralZoom;
+
+  return {
+    anchor,
+    min: (anchor * minZoom) / neutralZoom,
+    max: (anchor * maxZoom) / neutralZoom,
+  };
 }
 
 function getCaptureErrorCode(error: unknown) {
@@ -171,6 +261,36 @@ export function useCaptureFlow() {
     }
 
     return availableLenses;
+  }, [telephotoBackCameraDevice, ultraWideBackCameraDevice, wideBackCameraDevice]);
+
+  const backCameraLensZoomConfig = useMemo<BackCameraLensZoomConfig>(() => {
+    const wideFieldOfView = getSafeRepresentativeFieldOfView(wideBackCameraDevice);
+    const ultraWideFieldOfView = getSafeRepresentativeFieldOfView(ultraWideBackCameraDevice);
+    const telephotoFieldOfView = getSafeRepresentativeFieldOfView(telephotoBackCameraDevice);
+    const ultraWideAnchor = getLensAnchorFromFieldOfView(
+      'ultra-wide',
+      ultraWideFieldOfView,
+      wideFieldOfView
+    );
+    const telephotoAnchor = getLensAnchorFromFieldOfView(
+      'telephoto',
+      telephotoFieldOfView,
+      wideFieldOfView
+    );
+
+    return {
+      'ultra-wide': createBackCameraLensZoomSpec(
+        'ultra-wide',
+        ultraWideBackCameraDevice,
+        ultraWideAnchor
+      ),
+      wide: createBackCameraLensZoomSpec('wide', wideBackCameraDevice, 1),
+      telephoto: createBackCameraLensZoomSpec(
+        'telephoto',
+        telephotoBackCameraDevice,
+        telephotoAnchor
+      ),
+    };
   }, [telephotoBackCameraDevice, ultraWideBackCameraDevice, wideBackCameraDevice]);
 
   useEffect(() => {
@@ -688,6 +808,7 @@ export function useCaptureFlow() {
     backCameraLens,
     setBackCameraLens,
     availableBackCameraLenses,
+    backCameraLensZoomConfig,
     hasUltraWideBackCamera: Boolean(ultraWideBackCameraDevice),
     hasTelephotoBackCamera: Boolean(telephotoBackCameraDevice),
     selectedPhotoFilterId,
