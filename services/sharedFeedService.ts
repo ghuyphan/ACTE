@@ -1130,7 +1130,7 @@ export function subscribeToSharedFeed(
   let refreshInFlight: Promise<void> | null = null;
   let refreshQueued = false;
 
-  const refresh = () => {
+  const refresh = (options?: { force?: boolean }) => {
     if (disposed) {
       return;
     }
@@ -1140,7 +1140,7 @@ export function subscribeToSharedFeed(
       return;
     }
 
-    refreshInFlight = refreshSharedFeed(user)
+    refreshInFlight = refreshSharedFeed(user, options)
       .then((snapshot) => {
         if (!disposed) {
           handleSnapshot(snapshot);
@@ -1160,14 +1160,14 @@ export function subscribeToSharedFeed(
       });
   };
 
-  const scheduleRefresh = () => {
+  const scheduleRefresh = (options?: { force?: boolean }) => {
     if (refreshTimer) {
       clearTimeout(refreshTimer);
     }
 
     refreshTimer = setTimeout(() => {
       refreshTimer = null;
-      refresh();
+      refresh(options);
     }, 120);
   };
 
@@ -1181,7 +1181,7 @@ export function subscribeToSharedFeed(
         table: 'friendships',
         filter: `user_id=eq.${user.id}`,
       },
-      scheduleRefresh
+      () => scheduleRefresh({ force: true })
     )
     .on(
       'postgres_changes',
@@ -1191,7 +1191,7 @@ export function subscribeToSharedFeed(
         table: 'friend_invites',
         filter: `inviter_user_id=eq.${user.id}`,
       },
-      scheduleRefresh
+      () => scheduleRefresh({ force: true })
     )
     .on(
       'postgres_changes',
@@ -1202,7 +1202,7 @@ export function subscribeToSharedFeed(
       },
       (payload) => {
         if (shouldRefreshForSharedPostChange(payload, user.id)) {
-          scheduleRefresh();
+          scheduleRefresh({ force: true });
         }
       }
     )

@@ -278,6 +278,46 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
                 ).catch(() => null)
               : null);
 
+          const nextDualPrimaryPhotoLocalUri =
+            post.captureVariant === 'dual'
+              ? post.dualPrimaryPhotoLocalUri ??
+                (post.dualPrimaryPhotoPath
+                  ? await (isOnline
+                      ? downloadPhotoFromStorage(
+                          SHARED_POST_MEDIA_BUCKET,
+                          post.dualPrimaryPhotoPath,
+                          `shared-post-${post.id}-primary`
+                        )
+                      : downloadPhotoFromStorage(
+                          SHARED_POST_MEDIA_BUCKET,
+                          post.dualPrimaryPhotoPath,
+                          `shared-post-${post.id}-primary`,
+                          { preferCachedOnly: true }
+                        )
+                    ).catch(() => null)
+                  : null)
+              : null;
+
+          const nextDualSecondaryPhotoLocalUri =
+            post.captureVariant === 'dual'
+              ? post.dualSecondaryPhotoLocalUri ??
+                (post.dualSecondaryPhotoPath
+                  ? await (isOnline
+                      ? downloadPhotoFromStorage(
+                          SHARED_POST_MEDIA_BUCKET,
+                          post.dualSecondaryPhotoPath,
+                          `shared-post-${post.id}-secondary`
+                        )
+                      : downloadPhotoFromStorage(
+                          SHARED_POST_MEDIA_BUCKET,
+                          post.dualSecondaryPhotoPath,
+                          `shared-post-${post.id}-secondary`,
+                          { preferCachedOnly: true }
+                        )
+                    ).catch(() => null)
+                  : null)
+              : null;
+
           const nextPairedVideoLocalUri =
             post.pairedVideoLocalUri ??
             (post.isLivePhoto && post.pairedVideoPath
@@ -298,6 +338,8 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
 
           if (
             nextPhotoLocalUri === post.photoLocalUri &&
+            nextDualPrimaryPhotoLocalUri === (post.dualPrimaryPhotoLocalUri ?? null) &&
+            nextDualSecondaryPhotoLocalUri === (post.dualSecondaryPhotoLocalUri ?? null) &&
             nextPairedVideoLocalUri === (post.pairedVideoLocalUri ?? null)
           ) {
             return post;
@@ -306,6 +348,8 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
           return {
             ...post,
             photoLocalUri: nextPhotoLocalUri,
+            dualPrimaryPhotoLocalUri: nextDualPrimaryPhotoLocalUri,
+            dualSecondaryPhotoLocalUri: nextDualSecondaryPhotoLocalUri,
             pairedVideoLocalUri: nextPairedVideoLocalUri,
           };
         })
@@ -320,6 +364,8 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
       const mediaPatches: Array<{
         postId: string;
         photoLocalUri: string | null;
+        dualPrimaryPhotoLocalUri: string | null;
+        dualSecondaryPhotoLocalUri: string | null;
         pairedVideoLocalUri: string | null;
       }> = [];
 
@@ -330,11 +376,21 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
         }
 
         const nextPhotoLocalUri = hydratedPost.photoLocalUri ?? post.photoLocalUri ?? null;
+        const nextDualPrimaryPhotoLocalUri =
+          hydratedPost.captureVariant === 'dual'
+            ? hydratedPost.dualPrimaryPhotoLocalUri ?? post.dualPrimaryPhotoLocalUri ?? null
+            : null;
+        const nextDualSecondaryPhotoLocalUri =
+          hydratedPost.captureVariant === 'dual'
+            ? hydratedPost.dualSecondaryPhotoLocalUri ?? post.dualSecondaryPhotoLocalUri ?? null
+            : null;
         const nextPairedVideoLocalUri =
           hydratedPost.pairedVideoLocalUri ?? post.pairedVideoLocalUri ?? null;
 
         if (
           nextPhotoLocalUri === post.photoLocalUri &&
+          nextDualPrimaryPhotoLocalUri === (post.dualPrimaryPhotoLocalUri ?? null) &&
+          nextDualSecondaryPhotoLocalUri === (post.dualSecondaryPhotoLocalUri ?? null) &&
           nextPairedVideoLocalUri === (post.pairedVideoLocalUri ?? null)
         ) {
           return post;
@@ -344,11 +400,15 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
         mediaPatches.push({
           postId: post.id,
           photoLocalUri: nextPhotoLocalUri,
+          dualPrimaryPhotoLocalUri: nextDualPrimaryPhotoLocalUri,
+          dualSecondaryPhotoLocalUri: nextDualSecondaryPhotoLocalUri,
           pairedVideoLocalUri: nextPairedVideoLocalUri,
         });
         return {
           ...post,
           photoLocalUri: nextPhotoLocalUri,
+          dualPrimaryPhotoLocalUri: nextDualPrimaryPhotoLocalUri,
+          dualSecondaryPhotoLocalUri: nextDualSecondaryPhotoLocalUri,
           pairedVideoLocalUri: nextPairedVideoLocalUri,
         };
       });
@@ -1045,6 +1105,14 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
 
           const nextType = note.type;
           const nextPhotoPath = nextType === 'photo' ? post.photoPath : null;
+          const nextCaptureVariant: Note['captureVariant'] =
+            nextType === 'photo'
+              ? note.captureVariant === 'dual'
+                ? 'dual'
+                : note.captureVariant === 'single'
+                  ? 'single'
+                  : null
+              : null;
           const nextPairedVideoPath = nextType === 'photo' && note.isLivePhoto ? post.pairedVideoPath ?? null : null;
 
           return {
@@ -1056,6 +1124,21 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
                 : note.caption?.trim() ?? '',
             photoPath: nextPhotoPath,
             photoLocalUri: nextType === 'photo' ? getNotePhotoUri(note) : null,
+            captureVariant: nextCaptureVariant,
+            dualPrimaryPhotoPath:
+              nextCaptureVariant === 'dual' ? post.dualPrimaryPhotoPath ?? null : null,
+            dualSecondaryPhotoPath:
+              nextCaptureVariant === 'dual' ? post.dualSecondaryPhotoPath ?? null : null,
+            dualPrimaryPhotoLocalUri:
+              nextCaptureVariant === 'dual' ? note.dualPrimaryPhotoLocalUri ?? null : null,
+            dualSecondaryPhotoLocalUri:
+              nextCaptureVariant === 'dual' ? note.dualSecondaryPhotoLocalUri ?? null : null,
+            dualPrimaryFacing:
+              nextCaptureVariant === 'dual' ? note.dualPrimaryFacing ?? null : null,
+            dualSecondaryFacing:
+              nextCaptureVariant === 'dual' ? note.dualSecondaryFacing ?? null : null,
+            dualLayoutPreset:
+              nextCaptureVariant === 'dual' ? note.dualLayoutPreset ?? null : null,
             isLivePhoto: Boolean(nextType === 'photo' && note.isLivePhoto && nextPairedVideoPath),
             pairedVideoPath: nextPairedVideoPath,
             pairedVideoLocalUri:

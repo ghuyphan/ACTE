@@ -482,6 +482,8 @@ describe('useSharedFeedStore', () => {
         {
           postId: 'friend-photo-1',
           photoLocalUri: 'file:///shared/friend-photo-1.jpg',
+          dualPrimaryPhotoLocalUri: null,
+          dualSecondaryPhotoLocalUri: null,
           pairedVideoLocalUri: 'file:///shared/friend-photo-1.mov',
         },
       ]
@@ -546,6 +548,69 @@ describe('useSharedFeedStore', () => {
       'friend-1/friend-photo-1.mov',
       'friend-photo-1-motion',
       { preferCachedOnly: true }
+    );
+  });
+
+  it('hydrates shared dual photo media into local state and patches the cached media fields', async () => {
+    mockCachedSnapshot = {
+      friends: [],
+      sharedPosts: [
+        createSharedPost({
+          id: 'friend-dual-1',
+          authorUid: 'friend-1',
+          type: 'photo',
+          text: '',
+          photoPath: 'friend-1/friend-dual-1.jpg',
+          photoLocalUri: null,
+          captureVariant: 'dual',
+          dualPrimaryPhotoPath: 'friend-1/friend-dual-1.dual-primary',
+          dualSecondaryPhotoPath: 'friend-1/friend-dual-1.dual-secondary',
+          dualPrimaryPhotoLocalUri: null,
+          dualSecondaryPhotoLocalUri: null,
+        }),
+      ],
+      activeInvite: null,
+      lastUpdatedAt: '2026-03-24T00:00:00.000Z',
+    };
+    mockDownloadPhotoFromStorage.mockImplementation(
+      async (_bucket: string, path: string) => `file:///shared/${path}`
+    );
+
+    const { result } = renderHook(() => useSharedFeedStore(), { wrapper });
+
+    await waitFor(() => {
+      expect(result.current.ready).toBe(true);
+      expect(result.current.sharedPosts).toEqual([
+        expect.objectContaining({
+          id: 'friend-dual-1',
+          photoLocalUri: 'file:///shared/friend-1/friend-dual-1.jpg',
+          dualPrimaryPhotoLocalUri: 'file:///shared/friend-1/friend-dual-1.dual-primary',
+          dualSecondaryPhotoLocalUri: 'file:///shared/friend-1/friend-dual-1.dual-secondary',
+        }),
+      ]);
+    });
+
+    expect(mockDownloadPhotoFromStorage).toHaveBeenCalledWith(
+      'shared-post-media',
+      'friend-1/friend-dual-1.dual-primary',
+      'shared-post-friend-dual-1-primary'
+    );
+    expect(mockDownloadPhotoFromStorage).toHaveBeenCalledWith(
+      'shared-post-media',
+      'friend-1/friend-dual-1.dual-secondary',
+      'shared-post-friend-dual-1-secondary'
+    );
+    expect(mockPatchCachedSharedPostMedia).toHaveBeenCalledWith(
+      'me',
+      [
+        {
+          postId: 'friend-dual-1',
+          photoLocalUri: 'file:///shared/friend-1/friend-dual-1.jpg',
+          dualPrimaryPhotoLocalUri: 'file:///shared/friend-1/friend-dual-1.dual-primary',
+          dualSecondaryPhotoLocalUri: 'file:///shared/friend-1/friend-dual-1.dual-secondary',
+          pairedVideoLocalUri: null,
+        },
+      ]
     );
   });
 
@@ -1125,6 +1190,68 @@ describe('useSharedFeedStore', () => {
         ],
       })
     );
+  });
+
+  it('keeps dual-photo metadata in the local shared post when the source note changes', async () => {
+    mockCachedSnapshot = {
+      friends: [],
+      sharedPosts: [
+        createSharedPost({
+          id: 'shared-dual-1',
+          type: 'photo',
+          text: 'Original caption',
+          photoPath: 'me/shared-dual-1.jpg',
+          captureVariant: 'dual',
+          dualPrimaryPhotoPath: 'me/shared-dual-1.dual-primary',
+          dualSecondaryPhotoPath: 'me/shared-dual-1.dual-secondary',
+          dualPrimaryPhotoLocalUri: 'file:///old-primary.jpg',
+          dualSecondaryPhotoLocalUri: 'file:///old-secondary.jpg',
+        }),
+      ],
+      activeInvite: null,
+      lastUpdatedAt: '2026-03-23T00:00:00.000Z',
+    };
+    mockUpdateSharedPost.mockResolvedValue(undefined);
+
+    const { result } = renderHook(() => useSharedFeedStore(), { wrapper });
+
+    await waitFor(() => {
+      expect(result.current.ready).toBe(true);
+      expect(result.current.sharedPosts).toHaveLength(1);
+    });
+
+    const nextNote = createNote({
+      type: 'photo',
+      caption: 'Edited caption',
+      content: 'file:///composed.jpg',
+      photoLocalUri: 'file:///composed.jpg',
+      captureVariant: 'dual',
+      dualPrimaryPhotoLocalUri: 'file:///new-primary.jpg',
+      dualSecondaryPhotoLocalUri: 'file:///new-secondary.jpg',
+      dualPrimaryFacing: 'back',
+      dualSecondaryFacing: 'front',
+      dualLayoutPreset: 'top-left',
+      updatedAt: '2026-03-25T00:00:00.000Z',
+    });
+
+    await act(async () => {
+      await result.current.updateSharedNote(nextNote);
+    });
+
+    expect(result.current.sharedPosts).toEqual([
+      expect.objectContaining({
+        id: 'shared-dual-1',
+        text: 'Edited caption',
+        captureVariant: 'dual',
+        dualPrimaryPhotoPath: 'me/shared-dual-1.dual-primary',
+        dualSecondaryPhotoPath: 'me/shared-dual-1.dual-secondary',
+        dualPrimaryPhotoLocalUri: 'file:///new-primary.jpg',
+        dualSecondaryPhotoLocalUri: 'file:///new-secondary.jpg',
+        dualPrimaryFacing: 'back',
+        dualSecondaryFacing: 'front',
+        dualLayoutPreset: 'top-left',
+      }),
+    ]);
   });
 
   it('refreshes the shared feed when the app becomes active again', async () => {

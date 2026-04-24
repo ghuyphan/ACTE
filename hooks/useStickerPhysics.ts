@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react';
+import { useLayoutEffect, useMemo, useRef } from 'react';
 import {
   SensorType,
   useAnimatedSensor,
@@ -413,6 +413,61 @@ function applyBoundaryConstraint(
   }
 }
 
+function createStickerPhysicsStates(
+  descriptors: StickerPhysicsDescriptor[],
+  previousStates: StickerPhysicsState[],
+  options: {
+    layout: StickerCanvasLayout;
+    motionVariant: StickerMotionVariant;
+    preservePreviousState: boolean;
+    useRestPosition: boolean;
+  }
+): StickerPhysicsState[] {
+  const previousById = new Map(previousStates.map((state) => [state.id, state] as const));
+
+  return descriptors.map((descriptor) => {
+    const previousState = previousById.get(descriptor.id);
+    const nextState: StickerPhysicsState =
+      previousState && options.preservePreviousState
+        ? {
+            ...descriptor,
+            x: previousState.x,
+            y: previousState.y,
+            vx: previousState.vx,
+            vy: previousState.vy,
+            rotation: previousState.rotation,
+            angularVelocity: previousState.angularVelocity,
+            jellyScaleX: previousState.jellyScaleX,
+            jellyScaleY: previousState.jellyScaleY,
+          }
+        : {
+            ...descriptor,
+            x: descriptor.anchorX,
+            y: options.useRestPosition
+              ? getStickerRestAnchorY(
+                  descriptor.anchorY,
+                  options.layout.height,
+                  options.motionVariant,
+                  descriptor.anchorX
+                )
+              : descriptor.anchorY,
+            vx: 0,
+            vy: 0,
+            rotation: descriptor.baseRotation,
+            angularVelocity: 0,
+            jellyScaleX: 1,
+            jellyScaleY: 1,
+          };
+
+    applyBoundaryConstraint(
+      nextState,
+      options.layout,
+      getMotionProfile(options.motionVariant).boundaryRestitution
+    );
+    return nextState;
+  });
+}
+
 function getStickerSweepBounds(sticker: StickerPhysicsState) {
   'worklet';
 
@@ -556,21 +611,14 @@ export function useStickerPhysics({
   collisionInset,
   debugTiltOverride,
 }: UseStickerPhysicsParams): SharedValue<StickerPhysicsState[]> {
-  const gravitySensor = useAnimatedSensor(SensorType.GRAVITY, { interval: 'auto' });
-  const accelerometerSensor = useAnimatedSensor(SensorType.ACCELEROMETER, { interval: 'auto' });
-  const activeSharedValue = useSharedValue(isActive);
-  const physicsState = useSharedValue<StickerPhysicsState[]>([]);
-  const motionActivity = useSharedValue(0);
-  const previousGravity = useSharedValue({
-    initialized: false,
-    x: 0,
-    y: 0,
-  });
   const hasValidLayout = layout.width > 1 && layout.height > 1;
-
   const descriptors = useMemo<StickerPhysicsDescriptor[]>(
-    () =>
-      sortStickerPlacements(placements).map((placement) => {
+    () => {
+      if (!hasValidLayout) {
+        return [];
+      }
+
+      return sortStickerPlacements(placements).map((placement) => {
         const dimensions = getStickerDimensions(placement, layout, sizeMultiplier, minimumBaseSize);
         const isStamp = placement.renderMode === 'stamp';
         const stampCollisionShape =
@@ -603,11 +651,33 @@ export function useStickerPhysics({
           baseRotation: placement.rotation,
           opacity: placement.opacity,
         };
-      }),
-    [collisionInset, layout, minimumBaseSize, placements, sizeMultiplier]
+      });
+    },
+    [collisionInset, hasValidLayout, layout, minimumBaseSize, placements, sizeMultiplier]
   );
+  const initialPhysicsState = useMemo(
+    () =>
+      createStickerPhysicsStates(descriptors, [], {
+        layout,
+        motionVariant,
+        preservePreviousState: false,
+        useRestPosition: isActive,
+      }),
+    [descriptors, isActive, layout, motionVariant]
+  );
+  const gravitySensor = useAnimatedSensor(SensorType.GRAVITY, { interval: 'auto' });
+  const accelerometerSensor = useAnimatedSensor(SensorType.ACCELEROMETER, { interval: 'auto' });
+  const activeSharedValue = useSharedValue(isActive);
+  const physicsState = useSharedValue<StickerPhysicsState[]>(initialPhysicsState);
+  const motionActivity = useSharedValue(0);
+  const previousGravity = useSharedValue({
+    initialized: false,
+    x: 0,
+    y: 0,
+  });
+  const previousActiveRef = useRef(isActive);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     activeSharedValue.value = isActive;
     if (!isActive) {
       motionActivity.value = 0;
@@ -619,28 +689,16 @@ export function useStickerPhysics({
     }
   }, [activeSharedValue, isActive, motionActivity, previousGravity]);
 
-  useEffect(() => {
-    const previousStates = physicsState.value;
-    const previousById = new Map(previousStates.map((state) => [state.id, state] as const));
-
-    physicsState.value = descriptors.map((descriptor) => {
-      const previousState = previousById.get(descriptor.id);
-      const nextX = previousState && isActive ? previousState.x : descriptor.anchorX;
-      const nextY = previousState && isActive ? previousState.y : descriptor.anchorY;
-
-      return {
-        ...descriptor,
-        x: nextX,
-        y: nextY,
-        vx: previousState && isActive ? previousState.vx : 0,
-        vy: previousState && isActive ? previousState.vy : 0,
-        rotation: previousState && isActive ? previousState.rotation : descriptor.baseRotation,
-        angularVelocity: previousState && isActive ? previousState.angularVelocity : 0,
-        jellyScaleX: previousState && isActive ? previousState.jellyScaleX : 1,
-        jellyScaleY: previousState && isActive ? previousState.jellyScaleY : 1,
-      };
+  useLayoutEffect(() => {
+    const wasActive = previousActiveRef.current;
+    physicsState.value = createStickerPhysicsStates(descriptors, physicsState.value, {
+      layout,
+      motionVariant,
+      preservePreviousState: isActive && wasActive,
+      useRestPosition: isActive,
     });
-  }, [descriptors, isActive, physicsState]);
+    previousActiveRef.current = isActive;
+  }, [descriptors, isActive, layout, motionVariant, physicsState]);
 
   const frameCallback = useFrameCallback((frameInfo) => {
     'worklet';
@@ -891,7 +949,7 @@ export function useStickerPhysics({
     physicsState.value = nextStates;
   }, false);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     frameCallback.setActive(isActive && hasValidLayout && descriptors.length > 0);
     return () => {
       frameCallback.setActive(false);

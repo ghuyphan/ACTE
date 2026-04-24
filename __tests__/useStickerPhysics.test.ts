@@ -1,9 +1,12 @@
+import { renderHook } from '@testing-library/react-native';
 import {
   getStickerMotionActivity,
   getStickerRestAnchorY,
   resolveStickerCollisions,
   type StickerPhysicsState,
+  useStickerPhysics,
 } from '../hooks/useStickerPhysics';
+import type { NoteStickerPlacement } from '../services/noteStickers';
 
 function createPhysicsSticker(
   id: string,
@@ -48,7 +51,70 @@ function createStampPhysicsSticker(
   };
 }
 
+const stickerPlacement: NoteStickerPlacement = {
+  id: 'placement-1',
+  assetId: 'asset-1',
+  x: 0.5,
+  y: 0.8,
+  scale: 1,
+  rotation: 12,
+  zIndex: 1,
+  opacity: 0.9,
+  asset: {
+    id: 'asset-1',
+    ownerUid: '__local__',
+    localUri: 'file:///stickers/sticker-1.png',
+    remotePath: null,
+    mimeType: 'image/png',
+    width: 240,
+    height: 180,
+    createdAt: '2026-03-26T00:00:00.000Z',
+    updatedAt: null,
+    source: 'import',
+  },
+};
+
 describe('useStickerPhysics', () => {
+  it('seeds water physics at the rest position before the first frame', () => {
+    const { result } = renderHook(() =>
+      useStickerPhysics({
+        placements: [stickerPlacement],
+        layout: { width: 300, height: 300 },
+        isActive: true,
+        motionVariant: 'water',
+      })
+    );
+    const stickerState = result.current.value[0];
+
+    expect(stickerState.y).toBeCloseTo(
+      getStickerRestAnchorY(240, 300, 'water', 150),
+      2
+    );
+    expect(stickerState.y).not.toBe(240);
+  });
+
+  it('moves water physics to rest immediately when a card becomes active', () => {
+    const { result, rerender } = renderHook(
+      ({ isActive }: { isActive: boolean }) =>
+        useStickerPhysics({
+          placements: [stickerPlacement],
+          layout: { width: 300, height: 300 },
+          isActive,
+          motionVariant: 'water',
+        }),
+      { initialProps: { isActive: false } }
+    );
+
+    expect(result.current.value[0].y).toBe(240);
+
+    rerender({ isActive: true });
+
+    expect(result.current.value[0].y).toBeCloseTo(
+      getStickerRestAnchorY(240, 300, 'water', 150),
+      2
+    );
+  });
+
   it('keeps standard physics stickers anchored to their original vertical position', () => {
     expect(getStickerRestAnchorY(180, 300, 'physics')).toBe(180);
   });

@@ -74,15 +74,6 @@ interface StickerLayerProps {
   physicsState?: SharedValue<StickerPhysicsState[]>;
 }
 
-interface PhysicsStickerLayerProps {
-  placements: NoteStickerPlacement[];
-  layout: StickerCanvasLayout;
-  sizeMultiplier: number;
-  minimumBaseSize: number;
-  motionVariant: StickerMotionVariant;
-  debugTiltOverride?: SharedValue<DebugTiltState>;
-}
-
 const STICKER_OUTLINE_COLOR = 'rgba(255,255,255,0.98)';
 const PREFER_CONTINUOUS_OUTLINE = Platform.OS === 'android';
 
@@ -203,7 +194,6 @@ function PhysicsStickerSprite({
   outlineSize,
   physicsIndex,
   physicsState,
-  layout,
 }: {
   placement: NoteStickerPlacement;
   width: number;
@@ -211,7 +201,6 @@ function PhysicsStickerSprite({
   outlineSize: number;
   physicsIndex: number;
   physicsState: SharedValue<StickerPhysicsState[]>;
-  layout: StickerCanvasLayout;
 }) {
   const stickerState = useDerivedValue(
     () => {
@@ -222,18 +211,18 @@ function PhysicsStickerSprite({
   );
 
   const opacity = useDerivedValue(() => {
-    return stickerState.value?.opacity ?? placement.opacity;
-  }, [placement.opacity, stickerState]);
+    return stickerState.value?.opacity ?? 0;
+  }, [stickerState]);
 
   const motionTransform = useDerivedValue(() => {
     const state = stickerState.value;
 
     return [
-      { translateX: state?.x ?? placement.x * layout.width },
-      { translateY: state?.y ?? placement.y * layout.height },
+      { translateX: state?.x ?? 0 },
+      { translateY: state?.y ?? 0 },
       { rotate: ((state?.rotation ?? placement.rotation) * Math.PI) / 180 },
     ] as Transforms3d;
-  }, [layout.height, layout.width, placement.rotation, placement.x, placement.y, stickerState]);
+  }, [placement.rotation, stickerState]);
 
   const jellyTransform = useDerivedValue(() => {
     const state = stickerState.value;
@@ -285,7 +274,6 @@ function StickerLayer({
             outlineSize={outlineSize}
             physicsIndex={index}
             physicsState={physicsState}
-            layout={layout}
           />
         ) : (
           <MemoStickerSprite
@@ -304,35 +292,6 @@ function StickerLayer({
   );
 }
 
-function PhysicsStickerLayer({
-  placements,
-  layout,
-  sizeMultiplier,
-  minimumBaseSize,
-  motionVariant,
-  debugTiltOverride,
-}: PhysicsStickerLayerProps) {
-  const physicsState = useStickerPhysics({
-    placements,
-    layout,
-    isActive: true,
-    motionVariant,
-    sizeMultiplier,
-    minimumBaseSize,
-    debugTiltOverride,
-  });
-
-  return (
-    <StickerLayer
-      placements={placements}
-      layout={layout}
-      sizeMultiplier={sizeMultiplier}
-      minimumBaseSize={minimumBaseSize}
-      physicsState={physicsState}
-    />
-  );
-}
-
 export default function DynamicStickerCanvas({
   placements,
   style,
@@ -344,7 +303,7 @@ export default function DynamicStickerCanvas({
   motionVariant = 'physics',
   debugTiltOverride,
 }: DynamicStickerCanvasProps) {
-  const [layout, setLayout] = useState<StickerCanvasLayout>({ width: 1, height: 1 });
+  const [layout, setLayout] = useState<StickerCanvasLayout>({ width: 0, height: 0 });
   const [hydratedPlacements, setHydratedPlacements] = useState(placements);
 
   useEffect(() => {
@@ -378,42 +337,52 @@ export default function DynamicStickerCanvas({
     () => renderedPlacements.filter((placement) => placement.motionLocked === true),
     [renderedPlacements]
   );
-  const shouldAnimateStickers = isActive && unlockedPlacements.length > 0;
+  const hasMeasuredLayout = layout.width > 1 && layout.height > 1;
+  const physicsState = useStickerPhysics({
+    placements: unlockedPlacements,
+    layout,
+    isActive: hasMeasuredLayout && isActive && unlockedPlacements.length > 0,
+    motionVariant,
+    sizeMultiplier,
+    minimumBaseSize,
+    debugTiltOverride,
+  });
 
   const handleLayout = (event: LayoutChangeEvent) => {
     const { width, height } = event.nativeEvent.layout;
-    setLayout({
-      width: Math.max(width, 1),
-      height: Math.max(height, 1),
+    const nextLayout = {
+      width: Math.max(width, 0),
+      height: Math.max(height, 0),
+    };
+    setLayout((currentLayout) => {
+      if (currentLayout.width === nextLayout.width && currentLayout.height === nextLayout.height) {
+        return currentLayout;
+      }
+
+      return nextLayout;
     });
   };
 
   return (
     <View style={[styles.canvasWrap, style]} onLayout={handleLayout}>
       <Canvas pointerEvents="none" style={styles.canvas}>
-        <StickerLayer
-          placements={lockedPlacements}
-          layout={layout}
-          sizeMultiplier={sizeMultiplier}
-          minimumBaseSize={minimumBaseSize}
-        />
-        {shouldAnimateStickers ? (
-          <PhysicsStickerLayer
-            placements={unlockedPlacements}
-            layout={layout}
-            sizeMultiplier={sizeMultiplier}
-            minimumBaseSize={minimumBaseSize}
-            motionVariant={motionVariant}
-            debugTiltOverride={debugTiltOverride}
-          />
-        ) : (
-          <StickerLayer
-            placements={unlockedPlacements}
-            layout={layout}
-            sizeMultiplier={sizeMultiplier}
-            minimumBaseSize={minimumBaseSize}
-          />
-        )}
+        {hasMeasuredLayout ? (
+          <>
+            <StickerLayer
+              placements={lockedPlacements}
+              layout={layout}
+              sizeMultiplier={sizeMultiplier}
+              minimumBaseSize={minimumBaseSize}
+            />
+            <StickerLayer
+              placements={unlockedPlacements}
+              layout={layout}
+              sizeMultiplier={sizeMultiplier}
+              minimumBaseSize={minimumBaseSize}
+              physicsState={physicsState}
+            />
+          </>
+        ) : null}
       </Canvas>
     </View>
   );

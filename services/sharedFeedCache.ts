@@ -384,6 +384,8 @@ export async function patchCachedSharedPostMedia(
   patches: Array<{
     postId: string;
     photoLocalUri?: string | null;
+    dualPrimaryPhotoLocalUri?: string | null;
+    dualSecondaryPhotoLocalUri?: string | null;
     pairedVideoLocalUri?: string | null;
   }>
 ) {
@@ -391,6 +393,8 @@ export async function patchCachedSharedPostMedia(
     .map((patch) => ({
       postId: patch.postId.trim(),
       photoLocalUri: patch.photoLocalUri ?? null,
+      dualPrimaryPhotoLocalUri: patch.dualPrimaryPhotoLocalUri ?? null,
+      dualSecondaryPhotoLocalUri: patch.dualSecondaryPhotoLocalUri ?? null,
       pairedVideoLocalUri: patch.pairedVideoLocalUri ?? null,
     }))
     .filter((patch) => Boolean(patch.postId));
@@ -404,10 +408,14 @@ export async function patchCachedSharedPostMedia(
       await tx.runAsync(
         `UPDATE shared_posts_cache
          SET photo_local_uri = ?,
+             dual_primary_photo_local_uri = ?,
+             dual_secondary_photo_local_uri = ?,
              paired_video_local_uri = ?
          WHERE user_uid = ?
            AND id = ?`,
         patch.photoLocalUri,
+        patch.dualPrimaryPhotoLocalUri,
+        patch.dualSecondaryPhotoLocalUri,
         patch.pairedVideoLocalUri,
         userUid,
         patch.postId

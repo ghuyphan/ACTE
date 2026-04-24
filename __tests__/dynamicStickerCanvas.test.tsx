@@ -1,5 +1,6 @@
 import React from 'react';
-import { render } from '@testing-library/react-native';
+import { fireEvent, render } from '@testing-library/react-native';
+import { View } from 'react-native';
 import DynamicStickerCanvas from '../components/notes/DynamicStickerCanvas';
 import type { NoteStickerPlacement } from '../services/noteStickers';
 import { useStickerPhysics } from '../hooks/useStickerPhysics';
@@ -47,26 +48,65 @@ describe('DynamicStickerCanvas', () => {
     mockedUseStickerPhysics.mockClear();
   });
 
-  it('wires active sticker cards into the physics hook', () => {
-    render(<DynamicStickerCanvas placements={[stickerPlacement]} isActive motionVariant="water" />);
+  function reportCanvasLayout(view: ReturnType<typeof render>, width = 300, height = 300) {
+    const layoutHost = view.UNSAFE_queryAllByType(View).find(
+      (node) => typeof node.props.onLayout === 'function'
+    );
 
-    expect(mockedUseStickerPhysics).toHaveBeenCalledWith(
+    expect(layoutHost).toBeTruthy();
+
+    fireEvent(layoutHost!, 'layout', {
+      nativeEvent: {
+        layout: {
+          width,
+          height,
+        },
+      },
+    });
+  }
+
+  it('keeps physics inactive until real card bounds are available', () => {
+    const view = render(
+      <DynamicStickerCanvas placements={[stickerPlacement]} isActive motionVariant="water" />
+    );
+
+    expect(mockedUseStickerPhysics).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        placements: [stickerPlacement],
+        isActive: false,
+        layout: { width: 0, height: 0 },
+        motionVariant: 'water',
+      })
+    );
+
+    reportCanvasLayout(view);
+
+    expect(mockedUseStickerPhysics).toHaveBeenLastCalledWith(
       expect.objectContaining({
         placements: [stickerPlacement],
         isActive: true,
+        layout: { width: 300, height: 300 },
         motionVariant: 'water',
       })
     );
   });
 
   it('keeps the physics hook inactive for static sticker cards', () => {
-    render(<DynamicStickerCanvas placements={[stickerPlacement]} isActive={false} />);
+    const view = render(<DynamicStickerCanvas placements={[stickerPlacement]} isActive={false} />);
 
-    expect(mockedUseStickerPhysics).not.toHaveBeenCalled();
+    reportCanvasLayout(view);
+
+    expect(mockedUseStickerPhysics).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        placements: [stickerPlacement],
+        isActive: false,
+        layout: { width: 300, height: 300 },
+      })
+    );
   });
 
   it('keeps the physics hook inactive when sticker motion is locked', () => {
-    render(
+    const view = render(
       <DynamicStickerCanvas
         placements={[
           { ...stickerPlacement, id: 'locked-placement', motionLocked: true },
@@ -76,7 +116,9 @@ describe('DynamicStickerCanvas', () => {
       />
     );
 
-    expect(mockedUseStickerPhysics).toHaveBeenCalledWith(
+    reportCanvasLayout(view);
+
+    expect(mockedUseStickerPhysics).toHaveBeenLastCalledWith(
       expect.objectContaining({
         placements: [{ ...stickerPlacement, id: 'free-placement' }],
         isActive: true,
@@ -85,7 +127,7 @@ describe('DynamicStickerCanvas', () => {
   });
 
   it('does not mount physics when every sticker has locked motion', () => {
-    render(
+    const view = render(
       <DynamicStickerCanvas
         placements={[
           { ...stickerPlacement, id: 'locked-placement-1', motionLocked: true },
@@ -95,6 +137,14 @@ describe('DynamicStickerCanvas', () => {
       />
     );
 
-    expect(mockedUseStickerPhysics).not.toHaveBeenCalled();
+    reportCanvasLayout(view);
+
+    expect(mockedUseStickerPhysics).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        placements: [],
+        isActive: false,
+        layout: { width: 300, height: 300 },
+      })
+    );
   });
 });

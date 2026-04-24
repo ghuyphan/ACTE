@@ -47,8 +47,8 @@ export const CAMERA_FOCUS_RING_SIZE = 64;
 export const DOCKED_HEADER_CONTENT_OVERLAP = 8;
 export const CAMERA_ZOOM_BADGE_BACKGROUND = 'rgba(28,28,30,0.52)';
 export const BELOW_CARD_SECTION_HEIGHT = 162;
-export const COMPACT_CAPTURE_FOOTER_TOP_PADDING = 12;
-export const DEFAULT_CAPTURE_FOOTER_TOP_PADDING = 20;
+export const COMPACT_CAPTURE_FOOTER_TOP_PADDING = 8;
+export const DEFAULT_CAPTURE_FOOTER_TOP_PADDING = 12;
 const SHEET_HORIZONTAL_PADDING =
   Platform.OS === 'ios' ? Sheet.ios.horizontalPadding : Sheet.android.horizontalPadding;
 

@@ -287,6 +287,10 @@ export default function HomeScreen() {
     removeFriend,
     createSharedPost,
   } = useSharedFeedStore();
+  const captureAudienceFriends = useMemo(
+    () => friends.filter((friend) => friend.userId !== user?.uid),
+    [friends, user?.uid]
+  );
   const sharedPhase =
     sharedPhaseFromStore ??
     (sharedLoading
@@ -1261,21 +1265,21 @@ export default function HomeScreen() {
   }, [user?.uid]);
 
   useEffect(() => {
-    if (!sharedEnabled || friends.length === 0) {
+    if (!sharedEnabled || captureAudienceFriends.length === 0) {
       setCaptureTarget('private');
       setSelectedSharedAudienceUserId(null);
     }
-  }, [friends.length, sharedEnabled]);
+  }, [captureAudienceFriends.length, sharedEnabled]);
 
   useEffect(() => {
     if (!selectedSharedAudienceUserId) {
       return;
     }
 
-    if (!friends.some((friend) => friend.userId === selectedSharedAudienceUserId)) {
+    if (!captureAudienceFriends.some((friend) => friend.userId === selectedSharedAudienceUserId)) {
       setSelectedSharedAudienceUserId(null);
     }
-  }, [friends, selectedSharedAudienceUserId]);
+  }, [captureAudienceFriends, selectedSharedAudienceUserId]);
 
   useFocusEffect(
     useCallback(() => {
@@ -1706,10 +1710,10 @@ export default function HomeScreen() {
   });
 
   const captureFooterContent = useMemo(() => {
-    if (captureTarget === 'shared' && friends.length > 0) {
+    if (captureTarget === 'shared' && captureAudienceFriends.length > 0) {
       return (
         <CaptureAudienceStrip
-          friends={friends}
+          friends={captureAudienceFriends}
           selectedFriendUid={selectedSharedAudienceUserId}
           onSelectFriendUid={setSelectedSharedAudienceUserId}
           t={t}
@@ -1763,7 +1767,7 @@ export default function HomeScreen() {
     );
   }, [
     captureTarget,
-    friends,
+    captureAudienceFriends,
     handlePlacePulsePress,
     handleSharedPlacePulsePress,
     location,
@@ -2418,7 +2422,7 @@ export default function HomeScreen() {
         let shareFailureMessage: string | null = null;
 
         if (captureTarget === 'shared' && sharedEnabled && user) {
-          if (friends.length === 0) {
+          if (captureAudienceFriends.length === 0) {
             shareOutcome = 'no-friends';
           } else {
             try {
@@ -2518,7 +2522,7 @@ export default function HomeScreen() {
     promptHologramSaveChoice,
     captureTarget,
     createSharedPost,
-    friends.length,
+    captureAudienceFriends.length,
     selectedSharedAudienceUserId,
     tier,
     remindersEnabled,

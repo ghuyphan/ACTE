@@ -15,6 +15,10 @@ let mockSessionUserId = 'owner-1';
 let mockSharedPostsInsertError: unknown = null;
 const mockUndeletableSharedPostIds = new Set<string>();
 const mockDeleteResponseOmittedSharedPostIds = new Set<string>();
+const mockRealtimeHandlers: Array<{
+  table: string;
+  callback: (payload: unknown) => void;
+}> = [];
 
 function mockHashInviteToken(token: string) {
   return `digest-${token.replace(/[^a-z0-9]/gi, '').toLowerCase()}`;
@@ -581,10 +585,19 @@ jest.mock('../utils/supabase', () => ({
 
       return { data: null, error: null };
     },
-    channel: jest.fn(() => ({
-      on: jest.fn().mockReturnThis(),
-      subscribe: jest.fn(),
-    })),
+    channel: jest.fn(() => {
+      const channel = {
+        on: jest.fn((_event: string, config: { table?: string }, callback: (payload: unknown) => void) => {
+          mockRealtimeHandlers.push({
+            table: config.table ?? '',
+            callback,
+          });
+          return channel;
+        }),
+        subscribe: jest.fn(),
+      };
+      return channel;
+    }),
     removeChannel: jest.fn(async () => 'ok'),
   }),
   requireSupabase: () => ({
@@ -848,6 +861,7 @@ import {
   findFriendByUsername,
   removeFriend,
   refreshSharedFeed,
+  subscribeToSharedFeed,
 } from '../services/sharedFeedService';
 
 const ownerUser = {
@@ -887,6 +901,7 @@ const secondFriendUser = {
   mockSharedPostsInsertError = null;
   mockUndeletableSharedPostIds.clear();
   mockDeleteResponseOmittedSharedPostIds.clear();
+  mockRealtimeHandlers.length = 0;
     mockFriendInvites.clear();
     mockSharedPosts.clear();
     mockSharedPostTombstones.clear();
@@ -1081,6 +1096,78 @@ describe('sharedFeedService', () => {
       type: 'shared_post_created',
       postId: post.id,
     });
+  });
+
+  it('forces subscription refreshes so new shared posts are not hidden by refresh dedupe', async () => {
+    mockEnsureFriendMap(ownerUser.id).set(friendUser.id, {
+      display_name_snapshot: friendUser.username,
+      photo_url_snapshot: friendUser.photoURL,
+      friended_at: '2026-03-20T00:00:00.000Z',
+      last_shared_at: null,
+      created_by_invite_id: 'invite-1',
+    });
+    mockEnsureFriendMap(friendUser.id).set(ownerUser.id, {
+      display_name_snapshot: ownerUser.username,
+      photo_url_snapshot: ownerUser.photoURL,
+      friended_at: '2026-03-20T00:00:00.000Z',
+      last_shared_at: null,
+      created_by_invite_id: 'invite-1',
+    });
+
+    const nowSpy = jest.spyOn(Date, 'now');
+    nowSpy.mockReturnValue(1_000);
+    mockSessionUserId = friendUser.id;
+    const snapshots: any[] = [];
+    const unsubscribe = subscribeToSharedFeed(friendUser, {
+      onSnapshot: (snapshot) => {
+        snapshots.push(snapshot);
+      },
+    });
+
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(snapshots).toHaveLength(1);
+      expect(snapshots[0].sharedPosts).toHaveLength(0);
+
+      mockSessionUserId = ownerUser.id;
+      await createSharedPost(
+        ownerUser,
+        {
+          id: 'note-1',
+          type: 'text',
+          content: 'Hello friend',
+          locationName: 'Saigon',
+          latitude: 10.77,
+          longitude: 106.69,
+          moodEmoji: null,
+        } as any,
+        [friendUser.id]
+      );
+
+      nowSpy.mockReturnValue(1_100);
+      mockSessionUserId = friendUser.id;
+      const sharedPostRow = Array.from(mockSharedPosts.values())[0];
+      const sharedPostHandler = mockRealtimeHandlers.find((handler) => handler.table === 'shared_posts');
+      sharedPostHandler?.callback({
+        new: {
+          author_user_id: ownerUser.id,
+          audience_user_ids: sharedPostRow.audience_user_ids,
+        },
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 150));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(snapshots.at(-1).sharedPosts).toEqual([
+        expect.objectContaining({
+          authorUid: ownerUser.id,
+          text: 'Hello friend',
+        }),
+      ]);
+    } finally {
+      unsubscribe();
+      nowSpy.mockRestore();
+    }
   });
 
   it('preserves the paired motion clip extension when sharing a live photo note', async () => {
