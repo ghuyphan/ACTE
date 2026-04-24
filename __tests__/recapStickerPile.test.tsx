@@ -120,7 +120,18 @@ describe('RecapStickerPile', () => {
   it('lets callers disable recap physics entirely when needed', () => {
     render(<RecapStickerPile items={recapItems} physicsEnabled={false} />);
 
-    expect(mockedUseStickerPhysics).not.toHaveBeenCalled();
+    expect(mockedUseStickerPhysics).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sensorDriven: true,
+        collisionResponse: 'gentle',
+        isActive: false,
+        placements: expect.arrayContaining([
+          expect.objectContaining({
+            id: 'stamp-1',
+          }),
+        ]),
+      })
+    );
   });
 
   it('renders every recap item and keeps all of them in live physics', () => {

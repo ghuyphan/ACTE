@@ -23,7 +23,6 @@ import { GlassView } from '../../ui/GlassView';
 import {
   getStickerOutlineOffsets,
   getStickerOutlineSize,
-  type StickerCanvasLayout,
 } from '../stickerCanvasMetrics';
 import {
   createStampFramePath,
@@ -646,69 +645,6 @@ const RecapBubble = memo(function RecapBubble({
   );
 });
 
-function StaticRecapBubbles({
-  displayEntries,
-  staticAnchors,
-}: {
-  displayEntries: PileDisplayEntry[];
-  staticAnchors: ReturnType<typeof getPilePlacementAnchor>[];
-}) {
-  return (
-    <>
-      {displayEntries.map(({ item, metrics }, index) => (
-        <RecapBubble
-          key={item.key}
-          item={item}
-          metrics={metrics}
-          anchorX={staticAnchors[index]?.centerX ?? 0}
-          anchorY={staticAnchors[index]?.centerY ?? 0}
-          rotation={staticAnchors[index]?.rotation ?? 0}
-        />
-      ))}
-    </>
-  );
-}
-
-function PhysicsRecapBubbles({
-  displayEntries,
-  layout,
-  placements,
-  staticAnchors,
-}: {
-  displayEntries: PileDisplayEntry[];
-  layout: StickerCanvasLayout;
-  placements: NoteStickerPlacement[];
-  staticAnchors: ReturnType<typeof getPilePlacementAnchor>[];
-}) {
-  const physicsState = useStickerPhysics({
-    placements,
-    layout,
-    isActive: true,
-    sensorDriven: true,
-    collisionResponse: 'gentle',
-    motionVariant: 'physics',
-    minimumBaseSize: RECAP_MIN_PHYSICS_BASE,
-    collisionInset: RECAP_COLLISION_INSET,
-  });
-
-  return (
-    <>
-      {displayEntries.map(({ item, metrics }, index) => (
-        <RecapBubble
-          key={item.key}
-          item={item}
-          metrics={metrics}
-          anchorX={staticAnchors[index]?.centerX ?? 0}
-          anchorY={staticAnchors[index]?.centerY ?? 0}
-          rotation={staticAnchors[index]?.rotation ?? 0}
-          physicsState={physicsState}
-          physicsStateIndex={index}
-        />
-      ))}
-    </>
-  );
-}
-
 const RecapStickerPileContent = memo(function RecapStickerPileContent({
   title = 'Used this month',
   items,
@@ -718,7 +654,6 @@ const RecapStickerPileContent = memo(function RecapStickerPileContent({
   const displayItems = useMemo(() => items, [items]);
   const positions = useMemo(() => getPilePositions(displayItems.length), [displayItems.length]);
   const [layout, setLayout] = useState({ width: 1, height: 176 });
-  const hasMeasuredLayout = process.env.NODE_ENV === 'test' || layout.width > 1;
   const displayEntries = useMemo<PileDisplayEntry[]>(
     () => {
       const largestBaseSize = positions.reduce((largest, position) => Math.max(largest, position.size), 0);
@@ -756,7 +691,19 @@ const RecapStickerPileContent = memo(function RecapStickerPileContent({
       ),
     [displayEntries, layout.height, layout.width]
   );
-  const shouldAnimatePile = physicsEnabled && displayEntries.length > 0 && hasMeasuredLayout;
+  const physicsState = useStickerPhysics({
+    placements,
+    layout,
+    isActive:
+      physicsEnabled &&
+      displayEntries.length > 0 &&
+      (process.env.NODE_ENV === 'test' || layout.width > 1),
+    sensorDriven: true,
+    collisionResponse: 'gentle',
+    motionVariant: 'physics',
+    minimumBaseSize: RECAP_MIN_PHYSICS_BASE,
+    collisionInset: RECAP_COLLISION_INSET,
+  });
 
   const handleLayout = useCallback((event: LayoutChangeEvent) => {
     const { width, height } = event.nativeEvent.layout;
@@ -789,19 +736,18 @@ const RecapStickerPileContent = memo(function RecapStickerPileContent({
           <Text style={[styles.title, { color: colors.androidTabShellInactive }]}>{title}</Text>
         </View>
         <View style={styles.canvas} onLayout={handleLayout}>
-          {!hasMeasuredLayout ? null : shouldAnimatePile ? (
-            <PhysicsRecapBubbles
-              displayEntries={displayEntries}
-              layout={layout}
-              placements={placements}
-              staticAnchors={staticAnchors}
+          {displayEntries.map(({ item, metrics }, index) => (
+            <RecapBubble
+              key={item.key}
+              item={item}
+              metrics={metrics}
+              anchorX={staticAnchors[index]?.centerX ?? 0}
+              anchorY={staticAnchors[index]?.centerY ?? 0}
+              rotation={staticAnchors[index]?.rotation ?? 0}
+              physicsState={physicsState}
+              physicsStateIndex={index}
             />
-          ) : (
-            <StaticRecapBubbles
-              displayEntries={displayEntries}
-              staticAnchors={staticAnchors}
-            />
-          )}
+          ))}
         </View>
       </GlassView>
     ) : (
@@ -819,19 +765,18 @@ const RecapStickerPileContent = memo(function RecapStickerPileContent({
           <Text style={[styles.title, { color: colors.secondaryText }]}>{title}</Text>
         </View>
         <View style={styles.canvas} onLayout={handleLayout}>
-          {!hasMeasuredLayout ? null : shouldAnimatePile ? (
-            <PhysicsRecapBubbles
-              displayEntries={displayEntries}
-              layout={layout}
-              placements={placements}
-              staticAnchors={staticAnchors}
+          {displayEntries.map(({ item, metrics }, index) => (
+            <RecapBubble
+              key={item.key}
+              item={item}
+              metrics={metrics}
+              anchorX={staticAnchors[index]?.centerX ?? 0}
+              anchorY={staticAnchors[index]?.centerY ?? 0}
+              rotation={staticAnchors[index]?.rotation ?? 0}
+              physicsState={physicsState}
+              physicsStateIndex={index}
             />
-          ) : (
-            <StaticRecapBubbles
-              displayEntries={displayEntries}
-              staticAnchors={staticAnchors}
-            />
-          )}
+          ))}
         </View>
       </View>
     )
