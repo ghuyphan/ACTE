@@ -76,6 +76,8 @@ private const val STAMP_PAPER_BORDER_OPACITY = 0.10f
 private const val WIDGET_DUAL_INSET_SHELL_COLOR = "#131313"
 private const val WIDGET_DUAL_INSET_BORDER_OPACITY = 0.76f
 private const val WIDGET_DUAL_INSET_WASH_OPACITY = 0.04f
+private const val NOTE_CARD_REFERENCE_SIZE_DP = 353f
+private const val NOTE_CARD_DECORATION_INSET_DP = 6f
 private const val WIDGET_TEXT_SCALE = 0.9f
 private const val WIDGET_LOG_TAG = "NotoWidget"
 private val STICKER_OUTLINE_OFFSETS = listOf(
@@ -170,6 +172,13 @@ private data class WidgetIdleBodyLayoutMetrics(
 private data class WidgetLivePhotoBadgeLayoutMetrics(
   val horizontalPaddingPx: Int,
   val verticalPaddingPx: Int
+)
+
+private data class WidgetDecorationArtboard(
+  val leftPx: Float,
+  val topPx: Float,
+  val drawWidthPx: Float,
+  val drawHeightPx: Float
 )
 
 private data class WidgetAuthorChipLayoutMetrics(
@@ -2794,10 +2803,11 @@ class NotoWidgetProvider : AppWidgetProvider() {
       val parsed = runCatching { JSONArray(doodleStrokesJson) }.getOrNull() ?: return null
       val bitmap = Bitmap.createBitmap(widthPx, heightPx, Bitmap.Config.ARGB_8888)
       val canvas = Canvas(bitmap)
-      val paddingX = context.dpToPx(renderSpec.doodleInsetDp).toFloat()
-      val paddingY = context.dpToPx(renderSpec.doodleInsetDp).toFloat()
-      val drawWidth = max(1f, widthPx.toFloat() - (paddingX * 2f))
-      val drawHeight = max(1f, heightPx.toFloat() - (paddingY * 2f))
+      val artboard = resolveTextNoteDecorationArtboard(widthPx, heightPx)
+      val paddingX = artboard.leftPx
+      val paddingY = artboard.topPx
+      val drawWidth = artboard.drawWidthPx
+      val drawHeight = artboard.drawHeightPx
       val strokeWidth = max(context.dpToPx(4f).toFloat(), min(drawWidth, drawHeight) * 0.013f)
 
       for (index in 0 until parsed.length()) {
@@ -2869,6 +2879,20 @@ class NotoWidgetProvider : AppWidgetProvider() {
       }
 
       return bitmap
+    }
+
+    private fun resolveTextNoteDecorationArtboard(widthPx: Int, heightPx: Int): WidgetDecorationArtboard {
+      val outerSizePx = min(widthPx, heightPx).toFloat().coerceAtLeast(1f)
+      val insetPx = (outerSizePx * (NOTE_CARD_DECORATION_INSET_DP / NOTE_CARD_REFERENCE_SIZE_DP))
+        .coerceAtLeast(1f)
+      val drawSizePx = max(1f, outerSizePx - (insetPx * 2f))
+
+      return WidgetDecorationArtboard(
+        leftPx = ((widthPx - outerSizePx) / 2f) + insetPx,
+        topPx = ((heightPx - outerSizePx) / 2f) + insetPx,
+        drawWidthPx = drawSizePx,
+        drawHeightPx = drawSizePx
+      )
     }
 
     private fun renderStickerBitmap(
