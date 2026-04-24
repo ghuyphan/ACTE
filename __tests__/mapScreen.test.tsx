@@ -395,7 +395,7 @@ describe('MapScreen', () => {
     });
   });
 
-  it('keeps the nearby tray visible instead of swapping into a show-all state when panning to an empty area', async () => {
+  it('shows the area-empty state instead of previewing unrelated notes when panning away', async () => {
     const { getByTestId, queryByTestId, queryByText } = render(<MapScreen />);
 
     act(() => {
@@ -409,9 +409,8 @@ describe('MapScreen', () => {
 
     await waitFor(() => {
       expect(getByTestId('map-preview-shell')).toBeTruthy();
-      expect(getByTestId('map-preview-shell')).toBeTruthy();
-      expect(getByTestId('map-preview-list')).toBeTruthy();
-      expect(queryByTestId('map-show-all-results')).toBeNull();
+      expect(queryByTestId('map-preview-list')).toBeNull();
+      expect(getByTestId('map-show-all-results')).toBeTruthy();
       expect(queryByText('2 notes')).toBeNull();
     });
   });
@@ -960,8 +959,8 @@ describe('MapScreen', () => {
     });
   });
 
-  it('keeps filtered preview items available without switching into a show-all state', async () => {
-    const { getByTestId } = render(<MapScreen />);
+  it('does not keep offscreen filtered items in the preview tray', async () => {
+    const { getByTestId, queryByTestId } = render(<MapScreen />);
 
     act(() => {
       getByTestId('map-canvas').props.onRegionChangeComplete({
@@ -983,10 +982,10 @@ describe('MapScreen', () => {
     });
 
     fireEvent.press(getByTestId('map-filter-text'));
-    fireEvent.press(getByTestId('map-preview-item-text-1'));
 
     await waitFor(() => {
-      expect(mockOpenNoteDetail).toHaveBeenCalledWith('text-1');
+      expect(queryByTestId('map-preview-item-text-1')).toBeNull();
+      expect(getByTestId('map-show-all-results')).toBeTruthy();
     });
   });
 

@@ -20,6 +20,15 @@ describe('noteAppearance', () => {
     );
   });
 
+  it('gives newly detected mood emojis their own visual direction', () => {
+    expect(getTextNoteCardGradient({ text: 'Pool day', noteId: 'mood-water', emoji: '🌊' })).not.toEqual(
+      getTextNoteCardGradient({ text: 'Pool day', noteId: 'mood-water', emoji: null })
+    );
+    expect(getTextNoteCardGradient({ text: 'Birthday', noteId: 'mood-party', emoji: '🎉' })).not.toEqual(
+      getTextNoteCardGradient({ text: 'Birthday', noteId: 'mood-party', emoji: null })
+    );
+  });
+
   it('keeps the capture gradient stable for a given theme fallback regardless of note content', () => {
     const fallbackGradient: [string, string] = ['#D8E9C1', '#BEE7D7'];
 

@@ -16,6 +16,8 @@ const CLUSTER_RADIUS = 32;
 const CLUSTER_MAX_ZOOM = 16;
 const MIN_LONGITUDE_DELTA = 0.000001;
 const EARTH_RADIUS_METERS = 6371000;
+const PREVIEW_REGION_SCALE = 1.15;
+const PREVIEW_ITEM_LIMIT = 12;
 
 export type MapFilterType = 'all' | 'text' | 'photo';
 
@@ -389,7 +391,6 @@ interface BuildMapViewportStateParams {
   initialRegion: Region;
   visibleRegion: Region | null;
   nearbyBrowseRegion: Region | null;
-  location: Location.LocationObject | null;
   enableHeavyCalculations?: boolean;
 }
 
@@ -399,19 +400,12 @@ export function buildMapViewportState({
   initialRegion,
   visibleRegion,
   nearbyBrowseRegion,
-  location,
   enableHeavyCalculations = true,
 }: BuildMapViewportStateParams): MapViewportState {
+  const viewportRegion = visibleRegion ?? initialRegion ?? DEFAULT_REGION;
+  const browsingRegion = nearbyBrowseRegion ?? viewportRegion;
   const clusteringRegion = visibleRegion ?? initialRegion ?? DEFAULT_REGION;
-  const nearbyReferenceRegion = nearbyBrowseRegion ?? visibleRegion;
-  const nearbyAnchor = nearbyReferenceRegion
-    ? getRegionCenter(nearbyReferenceRegion)
-    : location
-      ? {
-          latitude: location.coords.latitude,
-          longitude: location.coords.longitude,
-        }
-      : getRegionCenter(initialRegion);
+  const nearbyAnchor = getRegionCenter(browsingRegion);
 
   if (!enableHeavyCalculations) {
     return {
@@ -422,16 +416,14 @@ export function buildMapViewportState({
     };
   }
 
-  const viewportRegion = visibleRegion ?? initialRegion ?? DEFAULT_REGION;
-  const nearbyRegion = nearbyReferenceRegion ?? viewportRegion;
   const notesInVisibleRegion = getNotesInRegion(filteredNotes, viewportRegion);
-  const nearbyCandidateNotes = getNotesInRegion(filteredNotes, nearbyRegion, 1.15);
+  const nearbyCandidateNotes = getNotesInRegion(filteredNotes, browsingRegion, PREVIEW_REGION_SCALE);
 
   return {
     clusterNodes: getMapClusterNodes(geometry.clusterIndex, clusteringRegion, geometry.pointGroupMap),
     nearbyAnchor,
     notesInVisibleRegion,
-    nearbyItems: getNearbyNoteItems(nearbyCandidateNotes, nearbyAnchor, 12),
+    nearbyItems: getNearbyNoteItems(nearbyCandidateNotes, nearbyAnchor, PREVIEW_ITEM_LIMIT),
   };
 }
 

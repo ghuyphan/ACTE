@@ -19,6 +19,34 @@ function haveSameNearbyOrder(left: NearbyNoteItem[], right: NearbyNoteItem[]) {
   return left.length === right.length && left.every((item, index) => item.note.id === right[index]?.note.id);
 }
 
+function getNearbyItemSignature(item: NearbyNoteItem) {
+  const { note } = item;
+  return [
+    note.id,
+    note.type,
+    note.content,
+    note.locationName ?? '',
+    note.moodEmoji ?? '',
+    note.noteColor ?? '',
+    note.isFavorite ? '1' : '0',
+    note.createdAt,
+    note.updatedAt ?? '',
+    note.latitude,
+    note.longitude,
+    item.distanceMeters.toFixed(2),
+  ].join('\u001f');
+}
+
+function haveSameNearbyItems(left: NearbyNoteItem[], right: NearbyNoteItem[]) {
+  return (
+    haveSameNearbyOrder(left, right) &&
+    left.every((item, index) => {
+      const nextItem = right[index];
+      return nextItem && getNearbyItemSignature(item) === getNearbyItemSignature(nextItem);
+    })
+  );
+}
+
 function mergeNearbyPreviewItems(current: NearbyNoteItem[], next: NearbyNoteItem[]) {
   if (next.length === 0) {
     return current.length === 0 ? current : [];
@@ -34,13 +62,13 @@ function mergeNearbyPreviewItems(current: NearbyNoteItem[], next: NearbyNoteItem
     .filter((item): item is NearbyNoteItem => Boolean(item));
 
   if (overlappingItems.length === 0) {
-    return haveSameNearbyOrder(current, next) ? current : next;
+    return haveSameNearbyItems(current, next) ? current : next;
   }
 
   const preservedIds = new Set(overlappingItems.map((item) => item.note.id));
   const appendedItems = next.filter((item) => !preservedIds.has(item.note.id));
   const mergedItems = [...overlappingItems, ...appendedItems];
-  return haveSameNearbyOrder(current, mergedItems) ? current : mergedItems;
+  return haveSameNearbyItems(current, mergedItems) ? current : mergedItems;
 }
 
 export function useMapPreviewState({
@@ -57,7 +85,7 @@ export function useMapPreviewState({
   const [showFriendsPreview, setShowFriendsPreview] = useState(false);
   const [activeFriendPostId, setActiveFriendPostId] = useState<string | null>(null);
   const nearbyItemsSignature = useMemo(
-    () => nearbyItems.map((item) => item.note.id).join('|'),
+    () => nearbyItems.map(getNearbyItemSignature).join('|'),
     [nearbyItems]
   );
   const nearbyItemsSnapshot = useMemo(() => nearbyItems, [nearbyItemsSignature]);

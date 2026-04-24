@@ -170,6 +170,61 @@ describe('noteDecorations', () => {
     ).toBe('🌆');
   });
 
+  it('recognizes richer social, celebration, and reset moods', () => {
+    expect(
+      resolveAutoNoteEmoji({
+        type: 'text',
+        content: 'Birthday dinner with the crew',
+        locationName: 'District 2',
+      })
+    ).toBe('🎉');
+    expect(
+      resolveAutoNoteEmoji({
+        type: 'text',
+        content: 'Friend catch-up after work',
+        locationName: 'Thao Dien',
+      })
+    ).toBe('👯');
+    expect(
+      resolveAutoNoteEmoji({
+        type: 'text',
+        content: 'Self-care reset after a long week',
+        locationName: 'Spa room',
+      })
+    ).toBe('🧘');
+  });
+
+  it('recognizes water, heritage, creative, and errand moods', () => {
+    expect(
+      resolveAutoNoteEmoji({
+        type: 'text',
+        content: 'Pool swim before sunset',
+        locationName: 'Riverside hotel',
+      })
+    ).toBe('🌊');
+    expect(
+      resolveAutoNoteEmoji({
+        type: 'text',
+        content: 'Walking tour through the ancient town',
+        locationName: 'Hoi An',
+      })
+    ).toBe('🏛️');
+    expect(
+      resolveAutoNoteEmoji({
+        type: 'text',
+        content: 'Brainstorm notes for the next prototype',
+        locationName: 'Studio',
+      })
+    ).toBe('🧠');
+    expect(
+      resolveAutoNoteEmoji({
+        type: 'text',
+        content: 'Aeon run for a few gifts',
+        locationName: 'Tan Phu',
+      })
+    ).toBe('🛍️');
+  });
+
   it('falls back to the updated daytime and dreamy defaults when no keyword wins', () => {
     expect(
       resolveAutoNoteEmoji({

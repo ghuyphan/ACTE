@@ -1147,6 +1147,15 @@ export default function MapScreenIOS() {
                 ? t('map.showAllResults', 'Show all results')
               : bottomOverlayKind === 'collapsed'
                 ? t('map.showPreview', 'Nearby notes')
+              : undefined
+          }
+          actionIcon={
+            bottomOverlayKind === 'filtered-empty'
+              ? 'close-circle-outline'
+              : bottomOverlayKind === 'area-empty'
+                ? 'map-outline'
+              : bottomOverlayKind === 'collapsed'
+                ? 'chevron-up'
                 : undefined
           }
           actionTestID={

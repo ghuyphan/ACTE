@@ -6,7 +6,6 @@ import { useTheme } from '../../hooks/useTheme';
 import { isOlderIOS } from '../../utils/platform';
 import MapPreviewSheet from './MapPreviewSheet';
 import {
-  getOverlayFallbackColor,
   getOverlayScrimColor,
   mapOverlayTokens,
 } from './overlayTokens';
@@ -18,6 +17,7 @@ interface MapStatusCardProps {
   subtitle?: string;
   icon?: keyof typeof Ionicons.glyphMap;
   actionLabel?: string;
+  actionIcon?: keyof typeof Ionicons.glyphMap;
   actionTestID?: string;
   onAction?: () => void;
   onInteraction?: () => void;
@@ -25,6 +25,7 @@ interface MapStatusCardProps {
 }
 
 const PREVIEW_HORIZONTAL_INSET = 14;
+const STATUS_CARD_MAX_WIDTH = 356;
 
 function getNoShadowBorderColor(isDark: boolean) {
   if (Platform.OS === 'android') {
@@ -34,6 +35,14 @@ function getNoShadowBorderColor(isDark: boolean) {
   return isDark ? 'rgba(255,255,255,0.2)' : 'rgba(17,24,39,0.12)';
 }
 
+function getStatusSurfaceColor(isDark: boolean) {
+  if (Platform.OS === 'android') {
+    return isDark ? 'rgba(24,20,18,0.9)' : 'rgba(255,251,246,0.96)';
+  }
+
+  return isDark ? 'rgba(16,18,24,0.9)' : 'rgba(255,253,249,0.94)';
+}
+
 export default function MapStatusCard({
   visible,
   bottomOffset,
@@ -41,6 +50,7 @@ export default function MapStatusCard({
   subtitle,
   icon = 'albums-outline',
   actionLabel,
+  actionIcon = 'arrow-forward-circle-outline',
   actionTestID,
   onAction,
   onInteraction,
@@ -64,7 +74,7 @@ export default function MapStatusCard({
     ? compactWidth
     : isActionOnly
       ? Math.min(fullSurfaceWidth, 196)
-      : fullSurfaceWidth;
+      : Math.min(fullSurfaceWidth, STATUS_CARD_MAX_WIDTH);
 
   const shellStyle = useMemo(
     () => [
@@ -72,7 +82,7 @@ export default function MapStatusCard({
       {
         width: shellWidth,
         borderColor: getNoShadowBorderColor(isDark),
-        backgroundColor: getOverlayFallbackColor(isDark),
+        backgroundColor: getStatusSurfaceColor(isDark),
       },
     ],
     [isDark, shellWidth]
@@ -119,7 +129,7 @@ export default function MapStatusCard({
               style={[
                 StyleSheet.absoluteFill,
                 {
-                  backgroundColor: getOverlayFallbackColor(isDark),
+                  backgroundColor: getStatusSurfaceColor(isDark),
                 },
               ]}
             />
@@ -154,23 +164,21 @@ export default function MapStatusCard({
               <Ionicons name="chevron-up" size={13} color={colors.primary} />
             </Pressable>
           ) : (
-            <View style={styles.content}>
-              <View style={styles.headerRow}>
-                <View style={[styles.iconWrap, { backgroundColor: `${colors.primary}18` }]}>
-                  <Ionicons name={icon} size={15} color={colors.primary} />
-                </View>
-                <View style={styles.copyWrap}>
-                  {title ? (
-                    <Text style={[styles.title, { color: colors.text }]} numberOfLines={2}>
-                      {title}
-                    </Text>
-                  ) : null}
-                  {subtitle ? (
-                    <Text style={[styles.subtitle, { color: colors.secondaryText }]} numberOfLines={2}>
-                      {subtitle}
-                    </Text>
-                  ) : null}
-                </View>
+            <View style={styles.contentRow}>
+              <View style={[styles.iconWrap, { backgroundColor: `${colors.primary}18` }]}>
+                <Ionicons name={icon} size={17} color={colors.primary} />
+              </View>
+              <View style={styles.copyWrap}>
+                {title ? (
+                  <Text style={[styles.title, { color: colors.text }]} numberOfLines={1}>
+                    {title}
+                  </Text>
+                ) : null}
+                {subtitle ? (
+                  <Text style={[styles.subtitle, { color: colors.secondaryText }]} numberOfLines={1}>
+                    {subtitle}
+                  </Text>
+                ) : null}
               </View>
 
               {actionLabel ? (
@@ -184,14 +192,16 @@ export default function MapStatusCard({
                   style={({ pressed }) => [
                     styles.actionButton,
                     {
+                      backgroundColor: `${colors.primary}14`,
+                      borderColor: `${colors.primary}2E`,
                       opacity: pressed ? 0.72 : 1,
                     },
                   ]}
                 >
+                  <Ionicons name={actionIcon} size={14} color={colors.primary} />
                   <Text style={[styles.actionText, { color: colors.primary }]} numberOfLines={1}>
                     {actionLabel}
                   </Text>
-                  <Ionicons name="arrow-forward" size={13} color={colors.primary} />
                 </Pressable>
               ) : null}
             </View>
@@ -210,8 +220,8 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderRadius: mapOverlayTokens.overlayRadius,
     overflow: 'hidden',
-    paddingHorizontal: mapOverlayTokens.overlayPadding,
-    paddingVertical: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
     ...mapOverlayTokens.overlayShadow,
   },
   surfaceNoShadow: {
@@ -222,20 +232,18 @@ const styles = StyleSheet.create({
     shadowRadius: 0,
     elevation: 0,
   },
-  content: {
-    gap: 10,
-  },
-  headerRow: {
+  contentRow: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 10,
+    alignItems: 'center',
+    gap: 11,
   },
   iconWrap: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
+    marginTop: 1,
   },
   copyWrap: {
     flex: 1,
@@ -244,21 +252,24 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 15,
     lineHeight: 19,
-    fontWeight: '700',
+    fontWeight: '800',
     fontFamily: 'Noto Sans',
-    marginBottom: 2,
+    marginBottom: 3,
   },
   subtitle: {
     fontSize: 13,
-    lineHeight: 18,
+    lineHeight: 17,
     fontFamily: 'Noto Sans',
   },
   actionButton: {
-    minHeight: 28,
+    minHeight: 32,
+    paddingHorizontal: 11,
+    borderRadius: 16,
+    borderWidth: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    alignSelf: 'flex-start',
     gap: 6,
+    flexShrink: 0,
   },
   actionOnlyPill: {
     minHeight: 24,

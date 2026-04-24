@@ -2,6 +2,8 @@ import type { Region } from 'react-native-maps';
 import type { Note } from '../services/database';
 import {
   applyMapFilters,
+  buildMapGeometry,
+  buildMapViewportState,
   buildClusterIndex,
   buildMapPointGroups,
   getMapClusterNodes,
@@ -83,5 +85,29 @@ describe('mapDomain', () => {
 
     const nearby = getNearbyNoteItems(notes, { latitude: 10.7605, longitude: 106.6605 }, 3);
     expect(nearby.map((item) => item.note.id)).toEqual(['near', 'mid', 'far']);
+  });
+
+  it('limits preview candidates to the active map region', () => {
+    const notes = [
+      makeNote({ id: 'in-view', latitude: 10.7602, longitude: 106.6602 }),
+      makeNote({ id: 'also-in-view', latitude: 10.763, longitude: 106.663 }),
+      makeNote({ id: 'far-away', latitude: 10.9, longitude: 106.9 }),
+    ];
+    const initialRegion: Region = {
+      latitude: 10.7605,
+      longitude: 106.6605,
+      latitudeDelta: 0.02,
+      longitudeDelta: 0.02,
+    };
+
+    const viewport = buildMapViewportState({
+      filteredNotes: notes,
+      geometry: buildMapGeometry(notes),
+      initialRegion,
+      visibleRegion: null,
+      nearbyBrowseRegion: null,
+    });
+
+    expect(viewport.nearbyItems.map((item) => item.note.id)).toEqual(['in-view', 'also-in-view']);
   });
 });

@@ -67,6 +67,14 @@ const EMOJI_NOTE_PALETTES: Record<string, NotePalette> = {
     capture: ['#E1CDD1', '#C09AA3'],
     card: ['#71555F', '#90707B'],
   },
+  '🧁': {
+    capture: ['#E5C9D0', '#C999A8'],
+    card: ['#745260', '#936C7B'],
+  },
+  '🎉': {
+    capture: ['#E5C8B9', '#C99887'],
+    card: ['#76514D', '#986B62'],
+  },
   '🧄': {
     capture: ['#E0D7BE', '#BEAA82'],
     card: ['#6B5946', '#88735D'],
@@ -83,9 +91,21 @@ const EMOJI_NOTE_PALETTES: Record<string, NotePalette> = {
     capture: ['#D7CCD9', '#B29EB8'],
     card: ['#5E566A', '#7C718B'],
   },
+  '👯': {
+    capture: ['#E0C9D8', '#BE95B1'],
+    card: ['#705066', '#906A83'],
+  },
+  '🧘': {
+    capture: ['#D7D8C9', '#ACB49B'],
+    card: ['#56604F', '#748069'],
+  },
   '🌿': {
     capture: ['#D4D9C8', '#AAB69A'],
     card: ['#4F5F52', '#6E836F'],
+  },
+  '🌊': {
+    capture: ['#C9DDE0', '#91B7BE'],
+    card: ['#49636C', '#6C8790'],
   },
   '🏃': {
     capture: ['#D6D8C0', '#B0B58A'],
@@ -95,9 +115,21 @@ const EMOJI_NOTE_PALETTES: Record<string, NotePalette> = {
     capture: ['#D1DADF', '#9EB0B7'],
     card: ['#4F6268', '#70868E'],
   },
+  '🌆': {
+    capture: ['#D4D3DF', '#A4ABB9'],
+    card: ['#535F70', '#748195'],
+  },
   '🏙️': {
     capture: ['#D1D5E0', '#A2AEBD'],
     card: ['#54616F', '#748395'],
+  },
+  '🏛️': {
+    capture: ['#DDD2C2', '#BCA789'],
+    card: ['#655842', '#857458'],
+  },
+  '🧠': {
+    capture: ['#D4CDE1', '#A79BC0'],
+    card: ['#56576D', '#767491'],
   },
   '📚': {
     capture: ['#D5D1DE', '#AAA1BC'],
@@ -106,6 +138,66 @@ const EMOJI_NOTE_PALETTES: Record<string, NotePalette> = {
   '🎨': {
     capture: ['#DCC8C1', '#BC9687'],
     card: ['#70564D', '#8F7367'],
+  },
+  '🎧': {
+    capture: ['#CDD3E1', '#9BA7C0'],
+    card: ['#515B72', '#717B95'],
+  },
+  '🎬': {
+    capture: ['#D3D0D8', '#A9A1B3'],
+    card: ['#5A5667', '#797289'],
+  },
+  '🎮': {
+    capture: ['#CED5E1', '#9AAABF'],
+    card: ['#4F6070', '#718292'],
+  },
+  '🛍️': {
+    capture: ['#E0C9C5', '#BE978F'],
+    card: ['#70524D', '#906F67'],
+  },
+  '💅': {
+    capture: ['#E2C7D1', '#C194A8'],
+    card: ['#725364', '#916D7F'],
+  },
+  '🏡': {
+    capture: ['#DED1BF', '#BAA185'],
+    card: ['#675444', '#86705A'],
+  },
+  '🛌': {
+    capture: ['#D7D1DE', '#A99FBB'],
+    card: ['#5A586A', '#78748C'],
+  },
+  '✈️': {
+    capture: ['#CAD9E1', '#96B0BF'],
+    card: ['#4D6170', '#6E8295'],
+  },
+  '🚗': {
+    capture: ['#D3D5CE', '#A9ADA0'],
+    card: ['#565E5B', '#76807A'],
+  },
+  '🚇': {
+    capture: ['#D6D0C9', '#AD9F91'],
+    card: ['#5F564F', '#80746B'],
+  },
+  '🌙': {
+    capture: ['#CBCFDE', '#9DA5BE'],
+    card: ['#4D5870', '#6D7893'],
+  },
+  '🌅': {
+    capture: ['#E0C6B8', '#BF9580'],
+    card: ['#755044', '#956C5A'],
+  },
+  '🌃': {
+    capture: ['#C8D0DE', '#99A5BD'],
+    card: ['#46546E', '#657593'],
+  },
+  '🌧️': {
+    capture: ['#CCD8DD', '#9DB1B9'],
+    card: ['#4E626B', '#6F838C'],
+  },
+  '💖': {
+    capture: ['#E3C7CD', '#C3929F'],
+    card: ['#74515F', '#946B7B'],
   },
   '🤍': {
     capture: ['#E0D2D1', '#BDA3A7'],
