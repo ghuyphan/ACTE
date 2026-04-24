@@ -457,12 +457,14 @@ async function enqueueSyncChange(
                      next_retry_at = NULL,
                      terminal = 0,
                      blocked_reason = NULL,
-                     lease_token = NULL
+                     lease_token = NULL,
+                     created_at = ?
                  WHERE id = ?`,
                 change.entity,
                 entityId,
                 nextOperation,
                 serializedPayload,
+                change.timestamp,
                 existing.id
             );
             return;

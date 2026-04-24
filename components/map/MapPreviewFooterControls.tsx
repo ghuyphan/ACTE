@@ -7,12 +7,16 @@ interface MapPreviewPositionPillProps {
   current: number;
   total: number;
   testID: string;
+  hasPrevious?: boolean;
+  hasNext?: boolean;
 }
 
 export function MapPreviewPositionPill({
   current,
   total,
   testID,
+  hasPrevious = false,
+  hasNext = false,
 }: MapPreviewPositionPillProps) {
   const { t } = useTranslation();
   const { colors } = useTheme();
@@ -37,9 +41,21 @@ export function MapPreviewPositionPill({
         },
       ]}
     >
+      <Ionicons
+        name="chevron-back"
+        size={12}
+        color={colors.primary}
+        style={[mapPreviewFooterStyles.positionCue, { opacity: hasPrevious ? 1 : 0.24 }]}
+      />
       <Text testID={testID} style={[mapPreviewFooterStyles.positionText, { color: colors.primary }]}>
         {label}
       </Text>
+      <Ionicons
+        name="chevron-forward"
+        size={12}
+        color={colors.primary}
+        style={[mapPreviewFooterStyles.positionCue, { opacity: hasNext ? 1 : 0.24 }]}
+      />
     </View>
   );
 }
@@ -109,18 +125,22 @@ export const mapPreviewFooterStyles = StyleSheet.create({
   },
   positionPill: {
     minHeight: 28,
-    minWidth: 52,
-    paddingHorizontal: 10,
+    minWidth: 74,
+    paddingHorizontal: 8,
     borderRadius: 999,
     borderWidth: StyleSheet.hairlineWidth,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 4,
   },
   positionText: {
     fontSize: 13,
     fontWeight: '700',
     fontFamily: 'Noto Sans',
+  },
+  positionCue: {
+    width: 12,
   },
   expandButton: {
     minHeight: 30,

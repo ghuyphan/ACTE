@@ -51,6 +51,7 @@ import { Shadows } from '../../constants/theme';
 
 const MIN_ZOOM_DELTA = 0.002;
 const RECENTER_BUTTON_ZOOM_DELTA = 0.012;
+const MARKER_FIRST_TAP_DELTA = 0.025;
 const MARKER_SECOND_TAP_DELTA = 0.012;
 const PROGRAMMATIC_REGION_TOLERANCE = 0.0005;
 const PREVIEW_FOCUS_REGION_GUARD_MS = 900;
@@ -91,6 +92,16 @@ function isCoordinateCenteredInRegion(region: Region | null, latitude: number, l
 
   const latitudeTolerance = Math.max(0.0004, region.latitudeDelta * 0.12);
   const longitudeTolerance = Math.max(0.0004, region.longitudeDelta * 0.12);
+
+  return (
+    Math.abs(region.latitude - latitude) <= latitudeTolerance &&
+    Math.abs(region.longitude - longitude) <= longitudeTolerance
+  );
+}
+
+function isCoordinateComfortablyInRegion(region: Region, latitude: number, longitude: number) {
+  const latitudeTolerance = Math.max(0.0008, region.latitudeDelta * 0.4);
+  const longitudeTolerance = Math.max(0.0008, region.longitudeDelta * 0.4);
 
   return (
     Math.abs(region.latitude - latitude) <= latitudeTolerance &&
@@ -493,14 +504,14 @@ export default function MapScreenIOS() {
 
   const goToMyLocation = useCallback(async () => {
     const result = await requestForegroundLocation();
-    const target = result.location;
+    const target = result?.location ?? location;
 
-    if (!target && result.requiresSettings) {
+    if (!target && result?.requiresSettings) {
       await openAppSettings();
       return;
     }
 
-    if (!target && result.reason === 'permission_denied') {
+    if (!target && result?.reason === 'permission_denied') {
       showAppAlert(
         t('map.locationPermissionTitle', 'Location access is off'),
         t(
@@ -560,6 +571,7 @@ export default function MapScreenIOS() {
     animateToRegion,
     emitLightHaptic,
     initialRegion,
+    location,
     openAppSettings,
     reduceMotionEnabled,
     requestForegroundLocation,
@@ -643,19 +655,22 @@ export default function MapScreenIOS() {
     ]
   );
 
-  const zoomToMarkerFocus = useCallback(
-    (latitude: number, longitude: number) => {
+  const focusMarkerOnMap = useCallback(
+    (latitude: number, longitude: number, options?: { closeZoom?: boolean }) => {
       const baseRegion = visibleRegion ?? initialRegion;
+      const maxDelta = options?.closeZoom ? MARKER_SECOND_TAP_DELTA : MARKER_FIRST_TAP_DELTA;
       const nextLatitudeDelta = Math.max(
         MIN_ZOOM_DELTA,
-        Math.min(baseRegion.latitudeDelta, MARKER_SECOND_TAP_DELTA)
+        Math.min(baseRegion.latitudeDelta, maxDelta)
       );
       const nextLongitudeDelta = Math.max(
         MIN_ZOOM_DELTA,
-        Math.min(baseRegion.longitudeDelta, MARKER_SECOND_TAP_DELTA)
+        Math.min(baseRegion.longitudeDelta, maxDelta)
       );
       const alreadyFocused =
-        isCoordinateCenteredInRegion(baseRegion, latitude, longitude) &&
+        (options?.closeZoom
+          ? isCoordinateCenteredInRegion(baseRegion, latitude, longitude)
+          : isCoordinateComfortablyInRegion(baseRegion, latitude, longitude)) &&
         baseRegion.latitudeDelta <= nextLatitudeDelta + PROGRAMMATIC_REGION_TOLERANCE &&
         baseRegion.longitudeDelta <= nextLongitudeDelta + PROGRAMMATIC_REGION_TOLERANCE;
 
@@ -691,8 +706,8 @@ export default function MapScreenIOS() {
         revealNotesPreview();
       }
 
-      if (isRepeatTap && group) {
-        zoomToMarkerFocus(group.latitude, group.longitude);
+      if (group) {
+        focusMarkerOnMap(group.latitude, group.longitude, { closeZoom: isRepeatTap });
       }
     },
     [
@@ -705,7 +720,7 @@ export default function MapScreenIOS() {
       selectedGroupId,
       triggerMarkerPulse,
       resetToNearbyPreview,
-      zoomToMarkerFocus,
+      focusMarkerOnMap,
     ]
   );
 
@@ -724,8 +739,8 @@ export default function MapScreenIOS() {
         revealNotesPreview();
       }
 
-      if (isRepeatTap && note) {
-        zoomToMarkerFocus(note.latitude, note.longitude);
+      if (note) {
+        focusMarkerOnMap(note.latitude, note.longitude, { closeZoom: isRepeatTap });
       }
     },
     [
@@ -738,7 +753,7 @@ export default function MapScreenIOS() {
       selectNoteById,
       triggerMarkerPulse,
       resetToNearbyPreview,
-      zoomToMarkerFocus,
+      focusMarkerOnMap,
     ]
   );
 

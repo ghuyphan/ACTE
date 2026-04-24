@@ -235,6 +235,11 @@ interface RemoteDeleteArtifactRow {
   sticker_placements_json: string | null;
 }
 
+interface RemoteNoteSnapshot extends RemoteArtifactSnapshot {
+  createdAt?: string | null;
+  updatedAt?: string | null;
+}
+
 interface QueueFlushFailure {
   itemId: number;
   error: string;
@@ -402,6 +407,7 @@ function isTerminalSyncError(error: unknown) {
   const message = getErrorMessage(error).toLowerCase();
   return (
     message.includes('too large to sync safely') ||
+    message.includes('too large to share') ||
     isSessionSyncError(error) ||
     isSupabasePolicyError(error) ||
     isSupabaseSchemaMismatchError(error)
@@ -430,7 +436,11 @@ function getBlockedSyncReason(error: unknown) {
     );
   }
 
-  if (getErrorMessage(error).toLowerCase().includes('too large to sync safely')) {
+  const normalizedErrorMessage = getErrorMessage(error).toLowerCase();
+  if (
+    normalizedErrorMessage.includes('too large to sync safely') ||
+    normalizedErrorMessage.includes('too large to share')
+  ) {
     return i18n.t(
       'settings.syncPhotoTooLargeMsg',
       'A photo is too large to sync safely. Retake it with a lower resolution, then try again.'
@@ -1217,10 +1227,10 @@ async function ensureSupabaseSessionMatchesUser(userId: string) {
   }
 }
 
-async function fetchRemoteArtifactSnapshots(
+async function fetchRemoteNoteSnapshots(
   userId: string,
   noteIds: Iterable<string>
-): Promise<Map<string, RemoteArtifactSnapshot>> {
+): Promise<Map<string, RemoteNoteSnapshot>> {
   const supabase = getSupabase();
   if (!supabase) {
     throw new Error('Cloud sync is unavailable in this build.');
@@ -1233,7 +1243,7 @@ async function fetchRemoteArtifactSnapshots(
         .filter(Boolean)
     )
   );
-  const artifactSnapshots = new Map<string, RemoteArtifactSnapshot>();
+  const noteSnapshots = new Map<string, RemoteNoteSnapshot>();
 
   for (let startIndex = 0; startIndex < normalizedNoteIds.length; startIndex += REMOTE_ARTIFACT_FETCH_BATCH_SIZE) {
     const noteIdChunk = normalizedNoteIds.slice(
@@ -1247,7 +1257,7 @@ async function fetchRemoteArtifactSnapshots(
     const { data, error } = await supabase
       .from('notes')
       .select(
-        'id, photo_path, dual_primary_photo_path, dual_secondary_photo_path, paired_video_path, sticker_placements_json'
+        'id, photo_path, dual_primary_photo_path, dual_secondary_photo_path, paired_video_path, sticker_placements_json, created_at, updated_at'
       )
       .eq('user_id', userId)
       .in('id', noteIdChunk);
@@ -1262,22 +1272,26 @@ async function fetchRemoteArtifactSnapshots(
       dual_secondary_photo_path?: string | null;
       paired_video_path?: string | null;
       sticker_placements_json?: string | null;
+      created_at?: string | null;
+      updated_at?: string | null;
     }[]) {
       if (!row.id) {
         continue;
       }
 
-      artifactSnapshots.set(row.id, {
+      noteSnapshots.set(row.id, {
         photoPath: row.photo_path ?? null,
         dualPrimaryPhotoPath: row.dual_primary_photo_path ?? null,
         dualSecondaryPhotoPath: row.dual_secondary_photo_path ?? null,
         pairedVideoPath: row.paired_video_path ?? null,
         stickerPlacementsJson: row.sticker_placements_json ?? null,
+        createdAt: row.created_at ?? null,
+        updatedAt: row.updated_at ?? null,
       });
     }
   }
 
-  return artifactSnapshots;
+  return noteSnapshots;
 }
 
 async function fetchRemoteNotePage(
@@ -1677,6 +1691,26 @@ function shouldIgnoreRemoteTombstone(
   }
 
   return false;
+}
+
+function isQueuedWriteStale(
+  remoteSnapshot: RemoteNoteSnapshot | null | undefined,
+  queuedAt: string
+) {
+  if (!remoteSnapshot) {
+    return false;
+  }
+
+  const remoteTimestamp = new Date(
+    remoteSnapshot.updatedAt ?? remoteSnapshot.createdAt ?? ''
+  ).getTime();
+  const queuedTimestamp = new Date(queuedAt).getTime();
+
+  return (
+    Number.isFinite(remoteTimestamp) &&
+    Number.isFinite(queuedTimestamp) &&
+    remoteTimestamp > queuedTimestamp
+  );
 }
 
 async function markItemFailed(
@@ -2153,10 +2187,10 @@ async function flushPendingQueueToSupabase(
       break;
     }
 
-    const remoteArtifactSnapshots = await fetchRemoteArtifactSnapshots(
+    const remoteNoteSnapshots = await fetchRemoteNoteSnapshots(
       userId,
       pendingChanges
-        .filter((change) => change.operation !== 'delete' && change.operation !== 'deleteAll')
+        .filter((change) => change.operation !== 'deleteAll')
         .map((change) => change.entityId)
         .filter((entityId): entityId is string => Boolean(entityId))
     );
@@ -2189,6 +2223,14 @@ async function flushPendingQueueToSupabase(
         }
 
         if (change.operation === 'delete') {
+          const remoteSnapshot = remoteNoteSnapshots.get(change.entityId) ?? null;
+          if (isQueuedWriteStale(remoteSnapshot, change.createdAt)) {
+            syncedNoteIds.add(change.entityId);
+            await syncRepository.markDone(change.id, leaseToken);
+            processedCount += 1;
+            continue;
+          }
+
           if (!(await syncRepository.hasLease(change.id, leaseToken))) {
             continue;
           }
@@ -2201,13 +2243,19 @@ async function flushPendingQueueToSupabase(
           if (!note) {
             await deleteRemoteNote(userId, change.entityId);
           } else {
+            const remoteSnapshot = remoteNoteSnapshots.get(note.id) ?? null;
+            if (isQueuedWriteStale(remoteSnapshot, change.createdAt)) {
+              syncedNoteIds.add(note.id);
+              await syncRepository.markDone(change.id, leaseToken);
+              processedCount += 1;
+              continue;
+            }
+
             await upsertRemoteNote(
               userId,
               note,
               syncMarker,
-              remoteArtifactSnapshots.has(note.id)
-                ? (remoteArtifactSnapshots.get(note.id) ?? null)
-                : null,
+              remoteSnapshot,
               ownerScope
             );
             syncedNoteIds.add(note.id);
@@ -2245,7 +2293,7 @@ async function uploadLocalSnapshotToSupabase(
   syncMarker: string,
   ownerScope: string
 ) {
-  const remoteArtifactSnapshots = await fetchRemoteArtifactSnapshots(
+  const remoteNoteSnapshots = await fetchRemoteNoteSnapshots(
     userId,
     notes.map((note) => note.id)
   );
@@ -2254,8 +2302,8 @@ async function uploadLocalSnapshotToSupabase(
       userId,
       note,
       syncMarker,
-      remoteArtifactSnapshots.has(note.id)
-        ? (remoteArtifactSnapshots.get(note.id) ?? null)
+      remoteNoteSnapshots.has(note.id)
+        ? (remoteNoteSnapshots.get(note.id) ?? null)
         : null,
       ownerScope
     );
@@ -2458,12 +2506,14 @@ function createSqliteSyncRepository(resolveScope: () => string): SyncRepository 
                next_retry_at = NULL,
                terminal = 0,
                blocked_reason = NULL,
-               lease_token = NULL
+               lease_token = NULL,
+               created_at = ?
            WHERE id = ? AND owner_uid = ?`,
           change.entity,
           entityId,
           nextOperation,
           serializedPayload,
+          change.timestamp,
           existing.id,
           scope
         );

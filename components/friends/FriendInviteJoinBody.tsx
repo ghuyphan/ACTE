@@ -244,7 +244,7 @@ export default function FriendInviteJoinBody({
             {searchResult ? (
               <SearchResultCard
                 result={searchResult}
-                addingFriend={addingFriend || isOfflineSignedIn}
+                addingFriend={addingFriend}
                 disabled={isOfflineSignedIn}
                 onAddFriend={() => {
                   dismissKeyboard();

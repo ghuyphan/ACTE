@@ -78,10 +78,21 @@ export default function FriendJoinScreen() {
   const [addingFriend, setAddingFriend] = useState(false);
   const [searchResult, setSearchResult] = useState<Awaited<ReturnType<typeof findFriendByUsername>> | null>(null);
   const [isPresented, setIsPresented] = useState(true);
+  const [autoJoinInviteValue, setAutoJoinInviteValue] = useState<string | null>(null);
   const dismissTargetRef = useRef<'tabs' | 'auth'>('tabs');
   const autoAttemptedRef = useRef(false);
+  const autoJoinInviteValueRef = useRef<string | null>(null);
   const dismissTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const didFinishDismissRef = useRef(false);
+
+  const setAutoJoinCandidate = useCallback((nextValue: string | null) => {
+    const normalizedValue = nextValue?.trim() || null;
+    if (autoJoinInviteValueRef.current !== normalizedValue) {
+      autoJoinInviteValueRef.current = normalizedValue;
+      autoAttemptedRef.current = false;
+    }
+    setAutoJoinInviteValue(normalizedValue);
+  }, []);
 
   useEffect(() => {
     const hasInviteId = typeof inviteId === 'string' && inviteId.trim();
@@ -89,37 +100,43 @@ export default function FriendJoinScreen() {
     const hasUsername = typeof username === 'string' && normalizeUsernameInput(username).length > 0;
 
     if (hasInviteId && hasInvite) {
-      setInviteValue(normalizeFriendInviteInput(
+      const nextInviteValue = normalizeFriendInviteInput(
         Linking.createURL('/friends/join', {
           queryParams: {
             inviteId: inviteId!.trim(),
             invite: invite!.trim(),
           },
         })
-      ));
+      );
+      setInviteValue(nextInviteValue);
+      setAutoJoinCandidate(nextInviteValue);
       setJoinMode('invite');
       return;
     }
 
     if (hasInvite) {
-      setInviteValue(normalizeFriendInviteInput(invite!.trim()));
+      const nextInviteValue = normalizeFriendInviteInput(invite!.trim());
+      setInviteValue(nextInviteValue);
+      setAutoJoinCandidate(nextInviteValue);
       setJoinMode('invite');
       return;
     }
 
     if (hasUsername) {
+      setAutoJoinCandidate(null);
       setUsernameValue(normalizeUsernameInput(username!));
       setJoinMode('username');
       return;
     }
 
+    setAutoJoinCandidate(null);
     if (modeParam === 'invite') {
       setJoinMode('invite');
       return;
     }
 
     setJoinMode('username');
-  }, [invite, inviteId, modeParam, username]);
+  }, [invite, inviteId, modeParam, setAutoJoinCandidate, username]);
 
   useEffect(() => {
     return () => {
@@ -216,15 +233,16 @@ export default function FriendJoinScreen() {
       !user ||
       !isOnline ||
       autoAttemptedRef.current ||
-      !inviteValue.trim() ||
+      !autoJoinInviteValue ||
+      inviteValue !== autoJoinInviteValue ||
       joinMode !== 'invite'
     ) {
       return;
     }
 
     autoAttemptedRef.current = true;
-    void joinInvite(inviteValue);
-  }, [authReady, inviteValue, isOnline, joinInvite, joinMode, user]);
+    void joinInvite(autoJoinInviteValue);
+  }, [authReady, autoJoinInviteValue, inviteValue, isOnline, joinInvite, joinMode, user]);
 
   const handleUsernameChange = useCallback((value: string) => {
     setUsernameValue(value);
@@ -394,9 +412,11 @@ export default function FriendJoinScreen() {
             isOnline={isOnline}
             bottomPadding={Platform.OS === 'ios' ? 0 : 4}
             onChangeMode={(nextMode) => {
+              setAutoJoinCandidate(null);
               setJoinMode(nextMode);
             }}
             onChangeInvite={(nextValue) => {
+              setAutoJoinCandidate(null);
               setInviteValue(normalizeFriendInviteInput(nextValue));
             }}
             onChangeUsername={handleUsernameChange}

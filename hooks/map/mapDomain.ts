@@ -422,15 +422,16 @@ export function buildMapViewportState({
     };
   }
 
-  const notesInVisibleRegion = visibleRegion
-    ? getNotesInRegion(filteredNotes, visibleRegion)
-    : filteredNotes;
+  const viewportRegion = visibleRegion ?? initialRegion ?? DEFAULT_REGION;
+  const nearbyRegion = nearbyReferenceRegion ?? viewportRegion;
+  const notesInVisibleRegion = getNotesInRegion(filteredNotes, viewportRegion);
+  const nearbyCandidateNotes = getNotesInRegion(filteredNotes, nearbyRegion, 1.15);
 
   return {
     clusterNodes: getMapClusterNodes(geometry.clusterIndex, clusteringRegion, geometry.pointGroupMap),
     nearbyAnchor,
     notesInVisibleRegion,
-    nearbyItems: getNearbyNoteItems(filteredNotes, nearbyAnchor, 30),
+    nearbyItems: getNearbyNoteItems(nearbyCandidateNotes, nearbyAnchor, 12),
   };
 }
 

@@ -136,7 +136,7 @@ const mockRunAsync = jest.fn(async (sql: string, ...args: any[]) => {
   }
 
   if (sql.includes('SET entity = ?')) {
-    const [entity, entityId, operation, payload, id, ownerUid] = args;
+    const [entity, entityId, operation, payload, createdAt, id, ownerUid] = args;
     queueRows = queueRows.map((row) =>
       row.id === id && row.owner_uid === ownerUid
         ? {
@@ -151,6 +151,7 @@ const mockRunAsync = jest.fn(async (sql: string, ...args: any[]) => {
             terminal: 0,
             blocked_reason: null,
             lease_token: null,
+            created_at: createdAt,
           }
         : row
     );
@@ -1644,6 +1645,195 @@ describe('syncService', () => {
         id: 'note-remote',
         content: 'remote memory',
         locationName: 'Da Nang',
+      })
+    );
+  });
+
+  it('does not let an older queued local update overwrite a newer remote note', async () => {
+    await AsyncStorage.setItem('sync.lastRemoteCursor.user-1', '2026-03-09T00:00:00.000Z');
+    localNotesStore = [
+      {
+        ...createTextNote('note-conflict', 'older local edit'),
+        updatedAt: '2026-03-10T00:00:00.000Z',
+      },
+    ];
+    mockRemoteNotes.set('note-conflict', {
+      id: 'note-conflict',
+      user_id: 'user-1',
+      type: 'text',
+      content: 'newer remote edit',
+      photo_path: null,
+      has_doodle: false,
+      doodle_strokes_json: null,
+      has_stickers: false,
+      sticker_placements_json: null,
+      location_name: 'Da Nang',
+      prompt_id: null,
+      prompt_text_snapshot: null,
+      prompt_answer: null,
+      mood_emoji: null,
+      note_color: null,
+      latitude: 16.06,
+      longitude: 108.22,
+      radius: 150,
+      is_favorite: false,
+      created_at: '2026-03-09T00:00:00.000Z',
+      updated_at: '2026-03-11T00:00:00.000Z',
+      synced_at: '2026-03-11T00:00:00.000Z',
+    });
+
+    await getSyncService().recordChange({
+      type: 'update',
+      entity: 'note',
+      entityId: 'note-conflict',
+      payload: { content: 'older local edit' },
+      timestamp: '2026-03-10T00:00:00.000Z',
+    });
+
+    const result = await syncNotes(syncUser, localNotesStore, { mode: 'incremental' });
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        status: 'success',
+        importedCount: 1,
+      })
+    );
+    expect(queueRows).toHaveLength(0);
+    expect(mockRemoteNotes.get('note-conflict')).toEqual(
+      expect.objectContaining({
+        content: 'newer remote edit',
+        updated_at: '2026-03-11T00:00:00.000Z',
+      })
+    );
+    expect(localNotesStore[0]).toEqual(
+      expect.objectContaining({
+        id: 'note-conflict',
+        content: 'newer remote edit',
+        updatedAt: '2026-03-11T00:00:00.000Z',
+      })
+    );
+  });
+
+  it('uses the latest coalesced queue timestamp when checking remote conflicts', async () => {
+    await AsyncStorage.setItem('sync.lastRemoteCursor.user-1', '2026-03-09T00:00:00.000Z');
+    localNotesStore = [
+      {
+        ...createTextNote('note-coalesced-conflict', 'latest local edit'),
+        updatedAt: '2026-03-12T00:00:00.000Z',
+      },
+    ];
+    mockRemoteNotes.set('note-coalesced-conflict', {
+      id: 'note-coalesced-conflict',
+      user_id: 'user-1',
+      type: 'text',
+      content: 'middle remote edit',
+      photo_path: null,
+      has_doodle: false,
+      doodle_strokes_json: null,
+      has_stickers: false,
+      sticker_placements_json: null,
+      location_name: 'Da Nang',
+      prompt_id: null,
+      prompt_text_snapshot: null,
+      prompt_answer: null,
+      mood_emoji: null,
+      note_color: null,
+      latitude: 16.06,
+      longitude: 108.22,
+      radius: 150,
+      is_favorite: false,
+      created_at: '2026-03-09T00:00:00.000Z',
+      updated_at: '2026-03-11T00:00:00.000Z',
+      synced_at: '2026-03-11T00:00:00.000Z',
+    });
+
+    await getSyncService().recordChange({
+      type: 'update',
+      entity: 'note',
+      entityId: 'note-coalesced-conflict',
+      payload: { content: 'older local edit' },
+      timestamp: '2026-03-10T00:00:00.000Z',
+    });
+    await getSyncService().recordChange({
+      type: 'update',
+      entity: 'note',
+      entityId: 'note-coalesced-conflict',
+      payload: { content: 'latest local edit' },
+      timestamp: '2026-03-12T00:00:00.000Z',
+    });
+
+    const result = await syncNotes(syncUser, localNotesStore, { mode: 'incremental' });
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        status: 'success',
+        syncedCount: 1,
+        importedCount: 0,
+      })
+    );
+    expect(queueRows).toHaveLength(0);
+    expect(mockRemoteNotes.get('note-coalesced-conflict')).toEqual(
+      expect.objectContaining({
+        content: 'latest local edit',
+        updated_at: '2026-03-12T00:00:00.000Z',
+      })
+    );
+  });
+
+  it('does not let an older queued local delete remove a newer remote note', async () => {
+    await AsyncStorage.setItem('sync.lastRemoteCursor.user-1', '2026-03-09T00:00:00.000Z');
+    mockRemoteNotes.set('note-delete-conflict', {
+      id: 'note-delete-conflict',
+      user_id: 'user-1',
+      type: 'text',
+      content: 'newer remote edit',
+      photo_path: null,
+      has_doodle: false,
+      doodle_strokes_json: null,
+      has_stickers: false,
+      sticker_placements_json: null,
+      location_name: 'Da Nang',
+      prompt_id: null,
+      prompt_text_snapshot: null,
+      prompt_answer: null,
+      mood_emoji: null,
+      note_color: null,
+      latitude: 16.06,
+      longitude: 108.22,
+      radius: 150,
+      is_favorite: false,
+      created_at: '2026-03-09T00:00:00.000Z',
+      updated_at: '2026-03-11T00:00:00.000Z',
+      synced_at: '2026-03-11T00:00:00.000Z',
+    });
+
+    await getSyncService().recordChange({
+      type: 'delete',
+      entity: 'note',
+      entityId: 'note-delete-conflict',
+      timestamp: '2026-03-10T00:00:00.000Z',
+    });
+
+    const result = await syncNotes(syncUser, [], { mode: 'incremental' });
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        status: 'success',
+        importedCount: 1,
+      })
+    );
+    expect(queueRows).toHaveLength(0);
+    expect(mockRemoteNotes.get('note-delete-conflict')).toEqual(
+      expect.objectContaining({
+        id: 'note-delete-conflict',
+        content: 'newer remote edit',
+      })
+    );
+    expect(mockRemoteNoteTombstones.has('note-delete-conflict')).toBe(false);
+    expect(localNotesStore[0]).toEqual(
+      expect.objectContaining({
+        id: 'note-delete-conflict',
+        content: 'newer remote edit',
       })
     );
   });

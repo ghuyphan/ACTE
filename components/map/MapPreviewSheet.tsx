@@ -53,6 +53,7 @@ interface MapPreviewSheetProps {
   allowDragDismiss?: boolean;
   allowExpand?: boolean;
   handleVisible?: boolean;
+  handleGestureHeight?: number;
   isExpanded?: boolean;
   previewProgress?: SharedValue<number>;
   previewGestureRange?: number;
@@ -78,6 +79,7 @@ export default function MapPreviewSheet({
   allowDragDismiss = true,
   allowExpand = false,
   handleVisible = true,
+  handleGestureHeight = 52,
   isExpanded = false,
   previewProgress,
   previewGestureRange = 1,
@@ -621,7 +623,7 @@ export default function MapPreviewSheet({
       <View pointerEvents="box-none">
         <GestureDetector gesture={panGesture}>
           <View
-            style={styles.handleGestureZone}
+            style={[styles.handleGestureZone, { height: handleGestureHeight }]}
             pointerEvents={handleVisible ? 'auto' : 'none'}
           >
             <Pressable
@@ -629,7 +631,10 @@ export default function MapPreviewSheet({
               accessibilityRole="button"
               accessibilityLabel={handleAccessibilityLabel}
               onPress={handlePress}
-              style={styles.dismissHandlePressable}
+              style={[
+                styles.dismissHandlePressable,
+                handleGestureHeight <= 28 ? styles.dismissHandlePressableCompact : null,
+              ]}
             >
               <Animated.View
                 style={[
@@ -662,12 +667,14 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     zIndex: 2,
-    height: 52,
   },
   dismissHandlePressable: {
     alignItems: 'center',
     paddingTop: 8,
     paddingBottom: 24,
+  },
+  dismissHandlePressableCompact: {
+    paddingBottom: 8,
   },
   dismissHandle: {
     width: 42,

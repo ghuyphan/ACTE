@@ -1,2 +1,2 @@
-export const photoOrbMinZoom = 16;
+export const photoOrbMinZoom = 15;
 export const samePlaceSplitMinZoom = 17;

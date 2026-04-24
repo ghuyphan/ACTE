@@ -1,20 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
 import { GlassView } from '../ui/GlassView';
-import { useEffect, useMemo } from 'react';
+import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import Reanimated, {
-  interpolateColor,
-  useAnimatedStyle,
-  useSharedValue,
-  withTiming,
-} from 'react-native-reanimated';
 import { useTheme } from '../../hooks/useTheme';
 import { isOlderIOS } from '../../utils/platform';
-import {
-  mapMotionDurations,
-  mapMotionPressTiming,
-} from './mapMotion';
 import {
   getOverlayBorderColor,
   getOverlayFallbackColor,
@@ -48,15 +38,10 @@ interface FilterChipProps {
   onPress: () => void;
   icon?: keyof typeof Ionicons.glyphMap;
   testID?: string;
-  reduceMotionEnabled: boolean;
 }
 
-const AnimatedIonicons = Reanimated.createAnimatedComponent(Ionicons);
-
-function FilterChip({ label, active, onPress, icon, testID, reduceMotionEnabled }: FilterChipProps) {
+function FilterChip({ label, active, onPress, icon, testID }: FilterChipProps) {
   const { colors, isDark } = useTheme();
-  const activeProgress = useSharedValue(active ? 1 : 0);
-  const pressScale = useSharedValue(1);
   const isAndroid = Platform.OS === 'android';
   const inactiveChipBackground = isAndroid
     ? colors.androidTabShellMutedBackground
@@ -64,71 +49,46 @@ function FilterChip({ label, active, onPress, icon, testID, reduceMotionEnabled 
   const inactiveChipBorderColor = isAndroid
     ? colors.androidTabShellMutedBorder
     : getOverlayBorderColor(isDark);
-
-  useEffect(() => {
-    activeProgress.value = reduceMotionEnabled
-      ? withTiming(active ? 1 : 0, { duration: mapMotionDurations.fast })
-      : withTiming(active ? 1 : 0, { duration: mapMotionDurations.standard });
-  }, [active, activeProgress, reduceMotionEnabled]);
-
-  const animatedWrapperStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: pressScale.value }],
-  }));
-
-  const animatedChipStyle = useAnimatedStyle(() => ({
-    backgroundColor: interpolateColor(
-      activeProgress.value,
-      [0, 1],
-      [
-        inactiveChipBackground,
-        isAndroid ? colors.androidTabShellSelectedBackground : `${colors.primary}1A`,
-      ]
-    ),
-    borderColor: interpolateColor(
-      activeProgress.value,
-      [0, 1],
-      [inactiveChipBorderColor, isAndroid ? colors.androidTabShellSelectedBorder : `${colors.primary}55`]
-    ),
-  }));
-
-  const animatedIconStyle = useAnimatedStyle(() => ({
-    color: interpolateColor(activeProgress.value, [0, 1], [colors.secondaryText, colors.primary]),
-  }));
-
-  const animatedTextStyle = useAnimatedStyle(() => ({
-    color: interpolateColor(activeProgress.value, [0, 1], [colors.text, colors.primary]),
-  }));
+  const chipBackground = active
+    ? isAndroid
+      ? colors.androidTabShellSelectedBackground
+      : `${colors.primary}18`
+    : inactiveChipBackground;
+  const chipBorderColor = active
+    ? isAndroid
+      ? colors.androidTabShellSelectedBorder
+      : `${colors.primary}44`
+    : inactiveChipBorderColor;
+  const chipContentColor = active ? colors.primary : colors.text;
 
   return (
-    <Reanimated.View style={animatedWrapperStyle}>
-      <Pressable
-        testID={testID}
-        accessibilityRole="button"
-        accessibilityState={{ selected: active }}
-        onPress={onPress}
-        onPressIn={() => {
-          pressScale.value = withTiming(0.96, mapMotionPressTiming);
-        }}
-        onPressOut={() => {
-          pressScale.value = withTiming(1, mapMotionPressTiming);
-        }}
-        hitSlop={4}
-      >
-        <Reanimated.View style={[styles.chipOuter, animatedChipStyle]}>
-          {icon ? (
-            <AnimatedIonicons
-              name={icon}
-              size={13}
-              color={active ? colors.primary : colors.secondaryText}
-              style={[styles.chipIcon, animatedIconStyle]}
-            />
-          ) : null}
-          <Reanimated.Text style={[styles.chipText, animatedTextStyle]} numberOfLines={1}>
-            {label}
-          </Reanimated.Text>
-        </Reanimated.View>
-      </Pressable>
-    </Reanimated.View>
+    <Pressable
+      testID={testID}
+      accessibilityRole="button"
+      accessibilityState={{ selected: active }}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.chipOuter,
+        {
+          backgroundColor: chipBackground,
+          borderColor: chipBorderColor,
+          opacity: pressed ? 0.72 : 1,
+        },
+      ]}
+      hitSlop={4}
+    >
+      {icon ? (
+        <Ionicons
+          name={icon}
+          size={13}
+          color={active ? colors.primary : colors.secondaryText}
+          style={styles.chipIcon}
+        />
+      ) : null}
+      <Text style={[styles.chipText, { color: chipContentColor }]} numberOfLines={1}>
+        {label}
+      </Text>
+    </Pressable>
   );
 }
 
@@ -140,7 +100,6 @@ export default function MapFilterBar({
   onInteraction,
   top = 0,
   hasActiveFilters = false,
-  reduceMotionEnabled,
   friendsChip,
 }: MapFilterBarProps) {
   const { t } = useTranslation();
@@ -261,7 +220,6 @@ export default function MapFilterBar({
                 icon={chip.icon}
                 onPress={chip.onPress}
                 testID={chip.testID}
-                reduceMotionEnabled={reduceMotionEnabled}
               />
             ))}
 
@@ -363,13 +321,13 @@ const styles = StyleSheet.create({
     borderRadius: mapOverlayTokens.overlayRadius,
   },
   content: {
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
   },
   inlineAction: {
-    minHeight: 34,
+    minHeight: 32,
     paddingHorizontal: 11,
-    borderRadius: 17,
+    borderRadius: 16,
     borderWidth: 1,
     flexDirection: 'row',
     alignItems: 'center',
@@ -388,15 +346,15 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 6,
     paddingRight: 8,
   },
   chipOuter: {
-    minHeight: 34,
+    minHeight: 32,
     flexDirection: 'row',
     alignItems: 'center',
-    borderRadius: 17,
-    paddingHorizontal: 14,
+    borderRadius: 16,
+    paddingHorizontal: 12,
     borderWidth: 1,
   },
   chipIcon: {

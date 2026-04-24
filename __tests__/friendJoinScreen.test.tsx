@@ -1,5 +1,5 @@
 import React from 'react';
-import { act, fireEvent, render } from '@testing-library/react-native';
+import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import FriendJoinScreen from '../app/friends/join';
 
 const mockReplace = jest.fn();
@@ -12,7 +12,12 @@ const mockAuthState = {
 const mockConnectivityState = {
   isOnline: true,
 };
-const mockUseLocalSearchParams = jest.fn(() => ({
+const mockUseLocalSearchParams = jest.fn<{
+  inviteId?: string;
+  invite?: string;
+  mode?: string;
+  username?: string;
+}, []>(() => ({
   inviteId: 'invite-1',
   invite: 'token-1',
 }));
@@ -109,14 +114,24 @@ jest.mock('../components/sheets/AppSheetScaffold', () => {
 
 jest.mock('../components/friends/FriendInviteJoinBody', () => {
   const React = require('react');
-  const { Pressable, Text, View } = require('react-native');
+  const { Pressable, Text, TextInput, View } = require('react-native');
   return function MockFriendInviteJoinBody({
+    inviteValue,
+    mode,
+    onChangeInvite,
+    onChangeMode,
     onGoToAuth,
+    onSubmitInvite,
     onSearchByUsername,
     isOnline,
     user,
   }: {
+    inviteValue?: string;
+    mode?: string;
+    onChangeInvite?: (value: string) => void;
+    onChangeMode?: (mode: 'username' | 'invite') => void;
     onGoToAuth: () => void;
+    onSubmitInvite?: () => void;
     onSearchByUsername?: () => void;
     isOnline?: boolean;
     user?: { uid: string } | null;
@@ -128,6 +143,18 @@ jest.mock('../components/friends/FriendInviteJoinBody', () => {
         </Pressable>
         <Pressable testID="friend-search" onPress={onSearchByUsername}>
           <Text>{user && isOnline === false ? 'offline' : 'search'}</Text>
+        </Pressable>
+        <Pressable testID="friend-mode-invite" onPress={() => onChangeMode?.('invite')}>
+          <Text>Invite mode</Text>
+        </Pressable>
+        <Text testID="friend-mode-label">{mode}</Text>
+        <TextInput
+          testID="friend-invite-input"
+          value={inviteValue}
+          onChangeText={onChangeInvite}
+        />
+        <Pressable testID="friend-submit-invite" onPress={onSubmitInvite}>
+          <Text>Continue</Text>
         </Pressable>
       </View>
     );
@@ -142,6 +169,10 @@ describe('FriendJoinScreen', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     jest.useFakeTimers();
+    mockUseLocalSearchParams.mockReturnValue({
+      inviteId: 'invite-1',
+      invite: 'token-1',
+    });
     mockAuthState.user = null;
     mockAuthState.isAuthAvailable = true;
     mockAuthState.isReady = true;
@@ -190,6 +221,29 @@ describe('FriendJoinScreen', () => {
     const { getByText } = render(<FriendJoinScreen />);
 
     expect(getByText('offline')).toBeTruthy();
+    expect(mockJoinInvite).not.toHaveBeenCalled();
+  });
+
+  it('auto-prompts signed-in users when the route contains an invite', async () => {
+    mockAuthState.user = { uid: 'user-1' };
+
+    render(<FriendJoinScreen />);
+
+    await waitFor(() => {
+      expect(mockJoinInvite).toHaveBeenCalledWith('/friends/join?inviteId=invite-1&invite=token-1');
+    });
+  });
+
+  it('does not auto-prompt while a signed-in user manually enters an invite', () => {
+    mockAuthState.user = { uid: 'user-1' };
+    mockUseLocalSearchParams.mockReturnValue({
+      mode: 'invite',
+    });
+
+    const { getByTestId } = render(<FriendJoinScreen />);
+
+    fireEvent.changeText(getByTestId('friend-invite-input'), 'token-typed-by-user');
+
     expect(mockJoinInvite).not.toHaveBeenCalled();
   });
 

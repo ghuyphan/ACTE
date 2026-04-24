@@ -73,14 +73,8 @@ interface MarkerRenderItem {
   isSelected: boolean;
   markerColor: string;
   pulseActive: boolean;
-  showRichPreviewMarker: boolean;
-  showStackPreviewMarker: boolean;
-  previewNoteId: string | null;
   photoNoteId: string | null;
   photoUri: string | null;
-  previewTitle: string | null;
-  previewText: string | null;
-  countBadgeLabel: string | null;
   noteId: string | null;
 }
 
@@ -88,22 +82,13 @@ interface MarkerContentProps {
   isCluster: boolean;
   pointCount: number;
   zoomLevel: number;
-  showRichPreview: boolean;
-  showStackPreview: boolean;
-  previewNoteId: string | null;
   showPhotoThumbnail: boolean;
   photoNoteId: string | null;
   photoUri: string | null;
-  previewTitle: string | null;
-  previewText: string | null;
-  countBadgeLabel: string | null;
   selected: boolean;
   color: string;
   accentColor: string;
   cardBackgroundColor: string;
-  cardTextColor: string;
-  cardSubtextColor: string;
-  labelShadowColor: string;
   pulseActive: boolean;
   pulseKey: number;
   reduceMotionEnabled: boolean;
@@ -122,25 +107,30 @@ function getClusterSize(pointCount: number) {
     return 34;
   }
 
-  if (pointCount < 25) {
+  if (pointCount < 100) {
     return 40;
   }
 
-  return 46;
+  return 48;
+}
+
+function formatMarkerCount(pointCount: number) {
+  if (pointCount > 99) {
+    return '99+';
+  }
+
+  return String(pointCount);
 }
 
 function getMapPalette(colors: ThemeColors, isDark: boolean) {
   return {
     focus: colors.primary,
     cluster: colors.primary,
-    text: colors.primary,
+    text: colors.accent,
     photo: colors.primary,
     cardBackground: colors.card,
-    cardText: colors.text,
-    cardSubtext: colors.secondaryText,
-    friend: colors.primary,
-    friendSoft: colors.primarySoft,
-    labelShadow: isDark ? 'rgba(0,0,0,0.3)' : 'rgba(43,38,33,0.14)',
+    friend: colors.accent,
+    friendSoft: isDark ? `${colors.accent}22` : `${colors.accent}1F`,
   };
 }
 
@@ -253,22 +243,13 @@ const MarkerContent = memo(function MarkerContent({
   isCluster,
   pointCount,
   zoomLevel,
-  showRichPreview,
-  showStackPreview,
-  previewNoteId,
   showPhotoThumbnail,
   photoNoteId,
   photoUri,
-  previewTitle,
-  previewText,
-  countBadgeLabel,
   selected,
   color,
   accentColor,
   cardBackgroundColor,
-  cardTextColor,
-  cardSubtextColor,
-  labelShadowColor,
   pulseActive,
   pulseKey,
   reduceMotionEnabled,
@@ -281,7 +262,7 @@ const MarkerContent = memo(function MarkerContent({
 
   const size = useMemo(() => (isCluster ? getClusterSize(pointCount) : pointCount > 1 ? 33 : 18), [isCluster, pointCount]);
   const leafMarkerBaseScale = useMemo(() => {
-    if (isCluster || showRichPreview || showStackPreview) {
+    if (isCluster) {
       return 1;
     }
 
@@ -294,7 +275,7 @@ const MarkerContent = memo(function MarkerContent({
     }
 
     return getLeafMarkerBaseScale(zoomLevel, 'single');
-  }, [isCluster, pointCount, showPhotoThumbnail, showRichPreview, showStackPreview, zoomLevel]);
+  }, [isCluster, pointCount, showPhotoThumbnail, zoomLevel]);
   const scaleProgress = useSharedValue(leafMarkerBaseScale);
 
   useEffect(() => {
@@ -331,7 +312,7 @@ const MarkerContent = memo(function MarkerContent({
     const scaleBoost = isCluster
       ? interpolate(pulseProgress.value, [0, 1], [1, 1.05])
       : interpolate(focusProgress, [0, 1], [1, pointCount > 1 ? 1.04 : 1.07]);
-    const lift = isCluster || showRichPreview || showStackPreview
+    const lift = isCluster
       ? 0
       : interpolate(focusProgress, [0, 1], [0, pointCount > 1 ? -0.5 : -1]);
     return {
@@ -340,7 +321,7 @@ const MarkerContent = memo(function MarkerContent({
         { scale: scaleBoost * scaleProgress.value },
       ],
     };
-  }, [isCluster, pointCount, scaleProgress, showRichPreview, showStackPreview]);
+  }, [isCluster, pointCount, scaleProgress]);
 
   const haloStyle = useAnimatedStyle(() => {
     const focusProgress = Math.max(activeProgress.value, pulseProgress.value);
@@ -412,150 +393,38 @@ const MarkerContent = memo(function MarkerContent({
               clusterStyle,
             ]}
           >
-            <Text style={styles.clusterText}>{pointCount}</Text>
+            <Text style={styles.clusterText}>{formatMarkerCount(pointCount)}</Text>
           </Reanimated.View>
-        ) : showRichPreview ? (
-          <View
-            testID={previewNoteId ? `note-marker-${previewNoteId}` : undefined}
-            style={styles.richMarkerWrap}
-          >
-            <View
-              style={[
-                styles.markerOrb,
-                styles.richMarkerOrb,
-                {
-                  borderColor: accentColor,
-                  backgroundColor: cardBackgroundColor,
-                },
-              ]}
-            >
-              {photoUri ? (
-                <Image
-                  testID={photoNoteId ? `photo-marker-${photoNoteId}` : undefined}
-                  source={{ uri: photoUri }}
-                  style={styles.richMarkerImage}
-                  contentFit="cover"
-                  transition={0}
-                  onLoadStart={handleImageLoadStart}
-                  onLoad={handleImageLoadEnd}
-                  onError={handleImageLoadEnd}
-                />
-              ) : (
-                <View style={[styles.richMarkerIconWrap, { backgroundColor: `${accentColor}14` }]}>
-                  <Ionicons name="document-text" size={18} color={accentColor} />
-                </View>
-              )}
-
-              {countBadgeLabel ? (
-                <View style={[styles.markerCountBadge, { backgroundColor: accentColor }]}>
-                  <Text style={styles.markerCountBadgeText}>{countBadgeLabel}</Text>
-                </View>
-              ) : null}
-            </View>
-            <View
-              style={[
-                styles.richMarkerLabel,
-                {
-                  backgroundColor: cardBackgroundColor,
-                  shadowColor: labelShadowColor,
-                },
-              ]}
-            >
-              {previewTitle ? (
-                <Text style={[styles.richMarkerTitle, { color: cardTextColor }]} numberOfLines={1}>
-                  {previewTitle}
-                </Text>
-              ) : null}
-              {previewText ? (
-                <Text style={[styles.richMarkerText, { color: cardSubtextColor }]} numberOfLines={2}>
-                  {previewText}
-                </Text>
-              ) : null}
-            </View>
-          </View>
-        ) : showStackPreview ? (
-          <View
-            testID={previewNoteId ? `stack-marker-${previewNoteId}` : undefined}
-            style={styles.stackMarkerWrap}
-          >
-            <View
-              style={[
-                styles.markerOrb,
-                styles.stackMarkerOrb,
-                {
-                  borderColor: selected ? accentColor : color,
-                  backgroundColor: cardBackgroundColor,
-                },
-              ]}
-            >
-              {photoUri ? (
-                <Image
-                  source={{ uri: photoUri }}
-                  style={styles.stackMarkerImage}
-                  contentFit="cover"
-                  transition={0}
-                  onLoadStart={handleImageLoadStart}
-                  onLoad={handleImageLoadEnd}
-                  onError={handleImageLoadEnd}
-                />
-              ) : (
-                <View style={[styles.stackMarkerIconWrap, { backgroundColor: `${color}16` }]}>
-                  <Ionicons name="albums" size={16} color={color} />
-                </View>
-              )}
-              {countBadgeLabel ? (
-                <View style={[styles.stackMarkerBadge, { backgroundColor: color }]}>
-                  <Text style={styles.stackMarkerBadgeText}>{countBadgeLabel}</Text>
-                </View>
-              ) : null}
-            </View>
-            <View
-              style={[
-                styles.stackMarkerLabel,
-                {
-                  backgroundColor: cardBackgroundColor,
-                  shadowColor: labelShadowColor,
-                },
-              ]}
-            >
-              <Text style={[styles.stackMarkerTitle, { color: cardTextColor }]} numberOfLines={1}>
-                {previewTitle || `${pointCount} notes`}
-              </Text>
-            </View>
-          </View>
         ) : showPhotoThumbnail && photoUri ? (
-          <View style={styles.markerOrbWrap}>
+          <View style={styles.photoMarkerShell}>
             <View
               testID={photoNoteId ? `photo-marker-${photoNoteId}` : undefined}
               style={[
-                styles.markerOrb,
-                styles.stackMarkerOrb,
+                styles.photoMarkerOrb,
                 {
                   borderColor: selected ? accentColor : 'rgba(255,255,255,0.96)',
                   backgroundColor: cardBackgroundColor,
                 },
               ]}
             >
-              <View style={styles.photoMarkerImageWrap}>
-                <Image
-                  source={{ uri: photoUri }}
-                  style={styles.photoMarkerImage}
-                  contentFit="cover"
-                  transition={0}
-                  onLoadStart={handleImageLoadStart}
-                  onLoad={handleImageLoadEnd}
-                  onError={handleImageLoadEnd}
-                />
-              </View>
-              <View
-                pointerEvents="none"
-                style={[
-                  styles.photoMarkerBadge,
-                  { backgroundColor: selected ? accentColor : `${color}F0` },
-                ]}
-              >
-                <Ionicons name="camera" size={10} color="#FFFFFF" />
-              </View>
+              <Image
+                source={{ uri: photoUri }}
+                style={styles.photoMarkerImage}
+                contentFit="cover"
+                transition={0}
+                onLoadStart={handleImageLoadStart}
+                onLoad={handleImageLoadEnd}
+                onError={handleImageLoadEnd}
+              />
+            </View>
+            <View
+              pointerEvents="none"
+              style={[
+                styles.photoMarkerBadge,
+                { backgroundColor: selected ? accentColor : `${color}F0` },
+              ]}
+            >
+              <Ionicons name="camera" size={10} color="#FFFFFF" />
             </View>
           </View>
         ) : pointCount > 1 ? (
@@ -569,7 +438,7 @@ const MarkerContent = memo(function MarkerContent({
             ]}
           >
             <Ionicons name="albums" size={12} color="#FFFFFF" />
-            <Text style={styles.groupMarkerText}>{pointCount}</Text>
+            <Text style={styles.groupMarkerText}>{formatMarkerCount(pointCount)}</Text>
           </Reanimated.View>
         ) : (
           <Reanimated.View style={[styles.singleMarker, singleMarkerOuterStyle]}>
@@ -629,8 +498,6 @@ function MapCanvas({
 
       for (const node of markerNodes) {
         const markerColor = node.primaryType === 'photo' ? palette.photo : palette.text;
-        const showRichPreviewMarker = false;
-        const showStackPreviewMarker = false;
         const shouldSplitSamePlaceGroup =
           !node.isCluster &&
           !preferLiteMarkers &&
@@ -655,14 +522,8 @@ function MapCanvas({
                 isSelected: selectedNote?.id === note.id,
                 markerColor: note.type === 'photo' ? palette.photo : palette.text,
                 pulseActive: markerPulseId === note.id,
-                showRichPreviewMarker,
-                showStackPreviewMarker,
-                previewNoteId: null,
                 photoNoteId: canShowPhotoThumbnail ? note.id : null,
                 photoUri: canShowPhotoThumbnail ? getNotePhotoUri(note) : null,
-                previewTitle: null,
-                previewText: null,
-                countBadgeLabel: null,
                 noteId: note.id,
               });
             });
@@ -678,7 +539,6 @@ function MapCanvas({
           !node.isCluster && node.noteIds.length > 0 ? noteById.get(node.noteIds[0]) ?? null : null;
         const canShowPhotoThumbnail =
           !preferLiteMarkers &&
-          !showRichPreviewMarker &&
           !node.isCluster &&
           node.pointCount === 1 &&
           node.primaryType === 'photo' &&
@@ -694,20 +554,27 @@ function MapCanvas({
           isSelected,
           markerColor,
           pulseActive,
-          showRichPreviewMarker,
-          showStackPreviewMarker,
-          previewNoteId: null,
           photoNoteId: canShowPhotoThumbnail ? representativeNote?.id ?? null : null,
           photoUri:
             canShowPhotoThumbnail && representativeNote ? getNotePhotoUri(representativeNote) : null,
-          previewTitle: null,
-          previewText: null,
-          countBadgeLabel: node.pointCount > 1 ? String(node.pointCount) : null,
           noteId: null,
         });
       }
 
-      return items;
+      return items.sort((left, right) => {
+        const leftPriority = left.node.isCluster ? 0 : left.isSelected ? 2 : 1;
+        const rightPriority = right.node.isCluster ? 0 : right.isSelected ? 2 : 1;
+
+        if (leftPriority !== rightPriority) {
+          return leftPriority - rightPriority;
+        }
+
+        if (left.pointCount !== right.pointCount) {
+          return right.pointCount - left.pointCount;
+        }
+
+        return left.key.localeCompare(right.key);
+      });
     },
     [
       currentZoom,
@@ -858,14 +725,8 @@ function MapCanvas({
           isSelected,
           markerColor,
           pulseActive,
-          showRichPreviewMarker,
-          showStackPreviewMarker,
-          previewNoteId,
           photoNoteId,
           photoUri,
-          previewTitle,
-          previewText,
-          countBadgeLabel,
           noteId,
         }) => {
         const showSelectedCallout =
@@ -894,6 +755,7 @@ function MapCanvas({
               testID={testID}
               coordinate={coordinate}
               pinColor={isSelected ? palette.focus : markerColor}
+              accessibilityLabel={node.isCluster ? `${formatMarkerCount(pointCount)} notes` : 'Map note marker'}
               onPress={(event) => {
                 event.stopPropagation?.();
                 if (noteId) {
@@ -909,6 +771,7 @@ function MapCanvas({
               testID={testID}
               coordinate={coordinate}
               anchor={showSelectedCallout ? selectedCalloutAnchor : { x: 0.5, y: 0.5 }}
+              accessibilityLabel={node.isCluster ? `${formatMarkerCount(pointCount)} notes` : 'Map note marker'}
               zIndex={markerZIndex}
               tracksViewChanges={
                 pulseActive ||
@@ -936,8 +799,6 @@ function MapCanvas({
                 style={[
                   styles.markerWrap,
                   showSelectedCallout ? styles.selectedMarkerHitArea : null,
-                  showRichPreviewMarker ? styles.richMarkerHitArea : null,
-                  showStackPreviewMarker ? styles.stackMarkerHitArea : null,
                 ]}
                 collapsable={false}
               >
@@ -954,22 +815,13 @@ function MapCanvas({
                   isCluster={node.isCluster}
                   pointCount={pointCount}
                   zoomLevel={currentZoom}
-                  showRichPreview={showRichPreviewMarker}
-                  showStackPreview={showStackPreviewMarker}
-                  previewNoteId={previewNoteId}
                   showPhotoThumbnail={Boolean(photoUri)}
                   photoNoteId={photoNoteId}
                   photoUri={photoUri}
-                  previewTitle={previewTitle}
-                  previewText={previewText}
-                  countBadgeLabel={showRichPreviewMarker || showStackPreviewMarker ? countBadgeLabel : null}
                   selected={isSelected}
                   color={node.isCluster ? palette.cluster : markerColor}
                   accentColor={palette.focus}
                   cardBackgroundColor={palette.cardBackground}
-                  cardTextColor={palette.cardText}
-                  cardSubtextColor={palette.cardSubtext}
-                  labelShadowColor={palette.labelShadow}
                   pulseActive={pulseActive}
                   pulseKey={markerPulseKey}
                   reduceMotionEnabled={reduceMotionEnabled}
@@ -1002,6 +854,7 @@ function MapCanvas({
               testID={`friend-marker-${post.id}`}
               coordinate={{ latitude: post.latitude, longitude: post.longitude }}
               pinColor={isSelected ? palette.friend : palette.focus}
+              accessibilityLabel={`${authorLabel}'s shared map marker`}
               onPress={(event) => {
                 event.stopPropagation?.();
                 onFriendPress(post.id);
@@ -1013,6 +866,7 @@ function MapCanvas({
               testID={`friend-marker-${post.id}`}
               coordinate={{ latitude: post.latitude, longitude: post.longitude }}
               anchor={showSelectedFriendCallout ? selectedCalloutAnchor : { x: 0.5, y: 0.5 }}
+              accessibilityLabel={`${authorLabel}'s shared map marker`}
               tracksViewChanges={
                 reduceMotionEnabled ||
                 (!isAndroid && showSelectedFriendCallout) ||
@@ -1173,14 +1027,14 @@ const styles = StyleSheet.create({
     minHeight: 60,
   },
   selectedMarkerHitArea: {
-    minWidth: 196,
+    minWidth: 212,
     minHeight: 148,
     justifyContent: 'flex-end',
   },
   selectedMarkerOverlay: {
     position: 'absolute',
     bottom: 52,
-    width: 188,
+    width: 204,
     alignItems: 'center',
   },
   selectedFriendMarkerHitArea: {
@@ -1193,15 +1047,6 @@ const styles = StyleSheet.create({
     bottom: 54,
     width: 196,
     alignItems: 'center',
-  },
-  richMarkerHitArea: {
-    minWidth: 164,
-    minHeight: 108,
-  },
-  stackMarkerHitArea: {
-    minWidth: 116,
-    minHeight: 86,
-    paddingBottom: 10,
   },
   halo: {
     position: 'absolute',
@@ -1244,23 +1089,31 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     fontFamily: 'Noto Sans',
   },
-  photoMarker: {
+  photoMarkerShell: {
+    width: 52,
+    height: 52,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'visible',
+  },
+  photoMarkerOrb: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    borderWidth: 2.5,
     overflow: 'hidden',
-    borderWidth: 2,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  photoMarkerImageWrap: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    overflow: 'hidden',
-    backgroundColor: 'rgba(255,255,255,0.14)',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 9 },
+    shadowOpacity: 0.14,
+    shadowRadius: 18,
+    elevation: 5,
   },
   photoMarkerImage: {
     width: '100%',
     height: '100%',
-    borderRadius: 19,
+    borderRadius: 22,
   },
   photoMarkerBadge: {
     position: 'absolute',
@@ -1293,133 +1146,6 @@ const styles = StyleSheet.create({
   markerOrbWrap: {
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  richMarkerWrap: {
-    width: 176,
-    height: 136,
-    alignItems: 'center',
-    justifyContent: 'flex-start',
-    gap: 8,
-  },
-  richMarkerOrb: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-  },
-  richMarkerImage: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-  },
-  richMarkerIconWrap: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  richMarkerLabel: {
-    width: 168,
-    height: 68,
-    borderRadius: 14,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    justifyContent: 'center',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.12,
-    shadowRadius: 16,
-    elevation: 4,
-  },
-  richMarkerTitle: {
-    fontSize: 13,
-    lineHeight: 16,
-    fontWeight: '700',
-    fontFamily: 'Noto Sans',
-    marginBottom: 2,
-  },
-  richMarkerText: {
-    fontSize: 11,
-    lineHeight: 14,
-    fontWeight: '500',
-    fontFamily: 'Noto Sans',
-  },
-  markerCountBadge: {
-    position: 'absolute',
-    top: -8,
-    right: -6,
-    minWidth: 22,
-    height: 22,
-    borderRadius: 11,
-    paddingHorizontal: 6,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: '#FFFFFF',
-  },
-  markerCountBadgeText: {
-    color: '#FFFFFF',
-    fontSize: 11,
-    lineHeight: 11,
-    fontWeight: '800',
-    fontFamily: 'Noto Sans',
-  },
-  stackMarkerWrap: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-  },
-  stackMarkerOrb: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
-  },
-  stackMarkerImage: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-  },
-  stackMarkerIconWrap: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  stackMarkerLabel: {
-    maxWidth: 148,
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.12,
-    shadowRadius: 16,
-    elevation: 4,
-  },
-  stackMarkerTitle: {
-    fontSize: 11,
-    lineHeight: 13,
-    fontWeight: '700',
-    fontFamily: 'Noto Sans',
-  },
-  stackMarkerBadge: {
-    position: 'absolute',
-    top: -6,
-    right: -5,
-    minWidth: 20,
-    height: 20,
-    borderRadius: 10,
-    paddingHorizontal: 5,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: '#FFFFFF',
-  },
-  stackMarkerBadgeText: {
-    color: '#FFFFFF',
-    fontSize: 10,
-    lineHeight: 10,
-    fontWeight: '800',
-    fontFamily: 'Noto Sans',
   },
   singleMarker: {
     width: 38,

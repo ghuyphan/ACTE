@@ -33,8 +33,8 @@ import {
 } from './overlayTokens';
 
 const PREVIEW_HORIZONTAL_INSET = 14;
-const PREVIEW_MEDIA_SIZE = 58;
-const PREVIEW_ROW_GAP = 10;
+const PREVIEW_MEDIA_SIZE = 56;
+const PREVIEW_ROW_GAP = 12;
 
 type PreviewMode = 'group' | 'nearby';
 
@@ -58,6 +58,12 @@ interface MapPreviewCardProps {
 
 interface PreviewRailItem {
   note: Note;
+}
+
+interface PreviewData {
+  previewItems: PreviewRailItem[];
+  activeIndex: number;
+  activePreviewItem: PreviewRailItem;
 }
 
 function getPreviewText(note: Note, photoLabel: string, noContentLabel: string) {
@@ -96,11 +102,7 @@ export default function MapPreviewCard({
     selectedGroup: MapPointGroup | null;
     selectedNoteIndex: number;
   } | null>(null);
-  const previewDataCacheRef = useRef<{
-    previewItems: PreviewRailItem[];
-    activeIndex: number;
-    activePreviewItem: PreviewRailItem;
-  } | null>(null);
+  const previewDataCacheRef = useRef<PreviewData | null>(null);
 
   const [isMounted, setIsMounted] = useState(visible);
   const fullSurfaceWidth = Math.max(0, windowWidth - PREVIEW_HORIZONTAL_INSET * 2);
@@ -173,26 +175,30 @@ export default function MapPreviewCard({
     return activeNearbyIndex >= 0 ? activeNearbyIndex : 0;
   }, [activeNearbyIndex, isGroupMode, previewItems.length, renderSelectedNoteIndex]);
 
-  const activePreviewItem = useMemo(() => {
+  const currentPreviewData = useMemo<PreviewData | null>(() => {
     if (previewItems.length === 0) {
       return null;
     }
 
-    return activeIndex >= 0 ? previewItems[activeIndex] ?? previewItems[0] : previewItems[0];
-  }, [activeIndex, previewItems]);
+    const activePreviewItem = activeIndex >= 0 ? previewItems[activeIndex] ?? previewItems[0] : previewItems[0];
+    if (!activePreviewItem) {
+      return null;
+    }
 
-  if (activePreviewItem && previewItems.length > 0) {
-    previewDataCacheRef.current = {
+    return {
       previewItems,
       activeIndex,
       activePreviewItem,
     };
-  }
+  }, [activeIndex, previewItems]);
 
-  const renderData =
-    activePreviewItem && previewItems.length > 0
-      ? { previewItems, activeIndex, activePreviewItem }
-      : previewDataCacheRef.current;
+  useEffect(() => {
+    if (currentPreviewData) {
+      previewDataCacheRef.current = currentPreviewData;
+    }
+  }, [currentPreviewData]);
+
+  const renderData = currentPreviewData ?? previewDataCacheRef.current;
 
   useEffect(() => {
     if (!visible || !previewListRef.current || activeIndex < 0) {
@@ -223,18 +229,39 @@ export default function MapPreviewCard({
     [onFocusPreviewNote, previewItems]
   );
 
-  const handlePreviewMomentumEnd = useCallback(
+  const getPreviewIndexFromScroll = useCallback(
+    (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+      if (nearbyPageWidth <= 0) {
+        return activeIndex;
+      }
+
+      const targetOffset = event.nativeEvent.targetContentOffset?.x;
+      const xOffset = typeof targetOffset === 'number' ? targetOffset : event.nativeEvent.contentOffset.x;
+      const velocityX = event.nativeEvent.velocity?.x ?? 0;
+      let nextIndex = Math.round(xOffset / nearbyPageWidth);
+
+      if (Math.abs(velocityX) > 0.18) {
+        const velocityIndex = activeIndex + (velocityX > 0 ? 1 : -1);
+        nextIndex = velocityX > 0
+          ? Math.max(nextIndex, velocityIndex)
+          : Math.min(nextIndex, velocityIndex);
+      }
+
+      return nextIndex;
+    },
+    [activeIndex, nearbyPageWidth]
+  );
+
+  const handlePreviewScrollEnd = useCallback(
     (event: NativeSyntheticEvent<NativeScrollEvent>) => {
       if (!previewDraggingRef.current) {
         return;
       }
-      previewDraggingRef.current = false;
 
-      const xOffset = event.nativeEvent.contentOffset.x;
-      const nextIndex = Math.round(xOffset / nearbyPageWidth);
-      commitNearbyFocus(nextIndex);
+      previewDraggingRef.current = false;
+      commitNearbyFocus(getPreviewIndexFromScroll(event));
     },
-    [commitNearbyFocus, nearbyPageWidth]
+    [commitNearbyFocus, getPreviewIndexFromScroll]
   );
 
   const activeRenderPreviewNoteId = renderData?.activePreviewItem.note.id ?? null;
@@ -260,6 +287,10 @@ export default function MapPreviewCard({
   const showPreviewCount = Boolean(renderData && renderData.previewItems.length > 1);
   const previewPosition = renderData ? Math.max(renderData.activeIndex, 0) + 1 : 0;
   const previewTotal = renderData?.previewItems.length ?? 0;
+  const showPreviousPreviewHint = showPreviewCount && previewPosition > 1;
+  const showNextPreviewHint = showPreviewCount && previewPosition < previewTotal;
+  const previewFadeColor = getOverlayFallbackColor(isDark);
+  const previewFadeTransparent = isDark ? 'rgba(16,18,24,0)' : 'rgba(255,255,255,0)';
 
   if ((!isMounted && !visible) || !renderData) {
     return null;
@@ -279,6 +310,7 @@ export default function MapPreviewCard({
       allowDragDismiss
       allowExpand={false}
       handleVisible
+      handleGestureHeight={24}
     >
       <View style={[styles.surfaceHost, { width: fullSurfaceWidth }]} pointerEvents="box-none">
         <View
@@ -320,163 +352,197 @@ export default function MapPreviewCard({
           ) : null}
 
           <View style={styles.cardContent}>
-            <FlashList
-              ref={previewListRef}
-              testID="map-preview-list"
-              horizontal
-              data={renderData.previewItems}
-              keyExtractor={(item) => item.note.id}
-              drawDistance={nearbyPageWidth * 2}
-              renderItem={({ item }) => {
-                const cardPreview = getPreviewText(
-                  item.note,
-                  t('map.photoNote', 'Photo Note'),
-                  t('map.noContent', 'No note content')
-                );
-                const photoUri = item.note.type === 'photo' ? getNotePhotoUri(item.note) : '';
-                const textTileGradient = getTextNoteCardGradient({
-                  text: item.note.content,
-                  noteId: item.note.id,
-                  emoji: item.note.moodEmoji,
-                  noteColor: item.note.noteColor,
-                  fallbackGradient: colors.captureGradient,
-                });
-                const isActive = item.note.id === renderData.activePreviewItem.note.id;
+            <View style={styles.previewListShell}>
+              <FlashList
+                ref={previewListRef}
+                testID="map-preview-list"
+                horizontal
+                data={renderData.previewItems}
+                keyExtractor={(item) => item.note.id}
+                drawDistance={nearbyPageWidth * 2}
+                renderItem={({ item }) => {
+                  const cardPreview = getPreviewText(
+                    item.note,
+                    t('map.photoNote', 'Photo Note'),
+                    t('map.noContent', 'No note content')
+                  );
+                  const photoUri = item.note.type === 'photo' ? getNotePhotoUri(item.note) : '';
+                  const textTileGradient = getTextNoteCardGradient({
+                    text: item.note.content,
+                    noteId: item.note.id,
+                    emoji: item.note.moodEmoji,
+                    noteColor: item.note.noteColor,
+                    fallbackGradient: colors.captureGradient,
+                  });
+                  const isActive = item.note.id === renderData.activePreviewItem.note.id;
 
-                return (
-                  <Pressable
-                    testID={`map-preview-item-${item.note.id}`}
-                    accessibilityRole="button"
-                    accessibilityState={{ selected: isActive }}
-                    style={({ pressed }) => [
-                      styles.previewPage,
-                      { width: nearbyPageWidth, opacity: pressed ? 0.88 : 1 },
-                    ]}
-                    onPress={() => handlePreviewItemPress(item.note.id)}
-                  >
-                    <View style={styles.previewPageInner}>
-                      <View style={styles.mediaWrap}>
-                        {photoUri ? (
-                          <Image
-                            testID={`map-preview-image-${item.note.id}`}
-                            source={{ uri: photoUri }}
-                            style={[
-                              styles.photoThumb,
-                              {
-                                backgroundColor: isDark
-                                  ? 'rgba(255,255,255,0.06)'
-                                  : 'rgba(0,0,0,0.04)',
-                              },
-                            ]}
-                            contentFit="cover"
-                            transition={0}
-                          />
-                        ) : (
-                          <LinearGradient
-                            colors={textTileGradient}
-                            start={{ x: 0, y: 0 }}
-                            end={{ x: 1, y: 1 }}
-                            style={styles.textThumb}
-                          >
-                            <View
+                  return (
+                    <Pressable
+                      testID={`map-preview-item-${item.note.id}`}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: isActive }}
+                      style={({ pressed }) => [
+                        styles.previewPage,
+                        { width: nearbyPageWidth, opacity: pressed ? 0.88 : 1 },
+                      ]}
+                      onPress={() => handlePreviewItemPress(item.note.id)}
+                    >
+                      <View style={styles.previewPageInner}>
+                        <View style={styles.mediaWrap}>
+                          {photoUri ? (
+                            <Image
+                              testID={`map-preview-image-${item.note.id}`}
+                              source={{ uri: photoUri }}
                               style={[
-                                styles.textThumbPaper,
+                                styles.photoThumb,
                                 {
                                   backgroundColor: isDark
-                                    ? 'rgba(28,28,30,0.76)'
-                                    : 'rgba(255,255,255,0.78)',
-                                  borderColor: isDark
-                                    ? 'rgba(255,255,255,0.12)'
-                                    : 'rgba(255,255,255,0.44)',
+                                    ? 'rgba(255,255,255,0.06)'
+                                    : 'rgba(0,0,0,0.04)',
+                                },
+                              ]}
+                              contentFit="cover"
+                              transition={0}
+                            />
+                          ) : (
+                            <LinearGradient
+                              colors={textTileGradient}
+                              start={{ x: 0, y: 0 }}
+                              end={{ x: 1, y: 1 }}
+                              style={[
+                                styles.textThumb,
+                                {
+                                  borderColor: isActive ? `${colors.primary}30` : getOverlayBorderColor(isDark),
                                 },
                               ]}
                             >
-                              <View
-                                style={[
-                                  styles.textThumbLine,
-                                  styles.textThumbLineLong,
-                                  {
-                                    backgroundColor: isDark
-                                      ? 'rgba(255,247,232,0.22)'
-                                      : 'rgba(92,74,58,0.22)',
-                                  },
-                                ]}
-                              />
-                              <View
-                                style={[
-                                  styles.textThumbLine,
-                                  styles.textThumbLineMedium,
-                                  {
-                                    backgroundColor: isDark
-                                      ? 'rgba(255,247,232,0.22)'
-                                      : 'rgba(92,74,58,0.22)',
-                                  },
-                                ]}
-                              />
-                              <View
-                                style={[
-                                  styles.textThumbLine,
-                                  styles.textThumbLineShort,
-                                  {
-                                    backgroundColor: isDark
-                                      ? 'rgba(255,247,232,0.22)'
-                                      : 'rgba(92,74,58,0.22)',
-                                  },
-                                ]}
-                              />
-                            </View>
-                          </LinearGradient>
-                        )}
-                      </View>
+                              {item.note.moodEmoji ? (
+                                <Text style={styles.textThumbEmoji} numberOfLines={1}>
+                                  {item.note.moodEmoji}
+                                </Text>
+                              ) : (
+                                <View
+                                  style={[
+                                    styles.textThumbPaper,
+                                    {
+                                      backgroundColor: isDark
+                                        ? 'rgba(28,28,30,0.72)'
+                                        : 'rgba(255,255,255,0.78)',
+                                      borderColor: isDark
+                                        ? 'rgba(255,255,255,0.13)'
+                                        : 'rgba(255,255,255,0.48)',
+                                    },
+                                  ]}
+                                >
+                                  <View
+                                    style={[
+                                      styles.textThumbLine,
+                                      styles.textThumbLineLong,
+                                      {
+                                        backgroundColor: isDark
+                                          ? 'rgba(255,247,232,0.24)'
+                                          : 'rgba(92,74,58,0.22)',
+                                      },
+                                    ]}
+                                  />
+                                  <View
+                                    style={[
+                                      styles.textThumbLine,
+                                      styles.textThumbLineMedium,
+                                      {
+                                        backgroundColor: isDark
+                                          ? 'rgba(255,247,232,0.24)'
+                                          : 'rgba(92,74,58,0.22)',
+                                      },
+                                    ]}
+                                  />
+                                  <View
+                                    style={[
+                                      styles.textThumbLine,
+                                      styles.textThumbLineShort,
+                                      {
+                                        backgroundColor: isDark
+                                          ? 'rgba(255,247,232,0.24)'
+                                          : 'rgba(92,74,58,0.22)',
+                                      },
+                                    ]}
+                                  />
+                                </View>
+                              )}
+                            </LinearGradient>
+                          )}
+                        </View>
 
-                      <View style={styles.copyWrap}>
-                        <Text
-                          style={[styles.eyebrow, { color: isActive ? colors.primary : colors.secondaryText }]}
-                          numberOfLines={1}
-                        >
-                          {item.note.type === 'photo'
-                            ? t('map.photoNote', 'Photo Note')
-                            : t('map.noteAtPlace', 'Saved here')}
-                        </Text>
-                        <Text
-                          style={[styles.title, { color: isActive ? colors.primary : colors.text }]}
-                          numberOfLines={1}
-                        >
-                          {item.note.locationName || t('map.unknownLocation', 'Unknown')}
-                        </Text>
-                        <Text
-                          style={[styles.content, { color: colors.secondaryText }]}
-                          numberOfLines={2}
-                        >
-                          {cardPreview}
-                        </Text>
+                        <View style={styles.copyWrap}>
+                          <Text
+                            style={[styles.eyebrow, { color: isActive ? colors.primary : colors.secondaryText }]}
+                            numberOfLines={1}
+                          >
+                            {item.note.type === 'photo'
+                              ? t('map.photoNote', 'Photo Note')
+                              : t('map.noteAtPlace', 'Saved here')}
+                          </Text>
+                          <Text
+                            style={[styles.title, { color: isActive ? colors.primary : colors.text }]}
+                            numberOfLines={1}
+                          >
+                            {item.note.locationName || t('map.unknownLocation', 'Unknown')}
+                          </Text>
+                          <Text
+                            style={[styles.content, { color: colors.secondaryText }]}
+                            numberOfLines={2}
+                          >
+                            {cardPreview}
+                          </Text>
+                        </View>
                       </View>
-                    </View>
-                  </Pressable>
-                );
-              }}
-              style={styles.previewList}
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.previewListContent}
-              snapToInterval={nearbyPageWidth > 0 ? nearbyPageWidth : undefined}
-              decelerationRate="fast"
-              snapToAlignment="start"
-              disableIntervalMomentum
-              bounces={false}
-              scrollEnabled={renderData.previewItems.length > 1}
-              onScrollBeginDrag={() => {
-                previewDraggingRef.current = true;
-              }}
-              onScrollEndDrag={(event) => {
-                const velocityX = event.nativeEvent.velocity?.x ?? 0;
-                if (Math.abs(velocityX) > 0.05) {
-                  return;
-                }
+                    </Pressable>
+                  );
+                }}
+                style={styles.previewList}
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.previewListContent}
+                snapToInterval={nearbyPageWidth > 0 ? nearbyPageWidth : undefined}
+                decelerationRate="fast"
+                snapToAlignment="start"
+                disableIntervalMomentum
+                bounces={false}
+                scrollEnabled={renderData.previewItems.length > 1}
+                onScrollBeginDrag={() => {
+                  previewDraggingRef.current = true;
+                }}
+                onScrollEndDrag={(event) => {
+                  const hasTargetOffset = typeof event.nativeEvent.targetContentOffset?.x === 'number';
+                  const velocityX = event.nativeEvent.velocity?.x ?? 0;
+                  if (!hasTargetOffset && Math.abs(velocityX) > 0.05) {
+                    return;
+                  }
 
-                handlePreviewMomentumEnd(event);
-              }}
-              onMomentumScrollEnd={handlePreviewMomentumEnd}
-            />
+                  handlePreviewScrollEnd(event);
+                }}
+                onMomentumScrollEnd={handlePreviewScrollEnd}
+              />
+
+              {showPreviousPreviewHint ? (
+                <LinearGradient
+                  pointerEvents="none"
+                  colors={[previewFadeColor, previewFadeTransparent]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={[styles.scrollFade, styles.scrollFadeLeft]}
+                />
+              ) : null}
+
+              {showNextPreviewHint ? (
+                <LinearGradient
+                  pointerEvents="none"
+                  colors={[previewFadeTransparent, previewFadeColor]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={[styles.scrollFade, styles.scrollFadeRight]}
+                />
+              ) : null}
+            </View>
 
             <View style={mapPreviewFooterStyles.footer}>
               {showPreviewCount ? (
@@ -484,6 +550,8 @@ export default function MapPreviewCard({
                   current={previewPosition}
                   total={previewTotal}
                   testID="map-preview-index"
+                  hasPrevious={showPreviousPreviewHint}
+                  hasNext={showNextPreviewHint}
                 />
               ) : (
                 <View />
@@ -537,24 +605,28 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   cardContent: {
-    paddingHorizontal: 14,
+    paddingHorizontal: 12,
     paddingTop: 12,
-    paddingBottom: 10,
+    paddingBottom: 9,
   },
   previewList: {
-    marginBottom: 8,
+    marginBottom: 0,
+  },
+  previewListShell: {
+    position: 'relative',
+    marginBottom: 6,
   },
   previewListContent: {
     gap: 0,
   },
   previewPage: {
-    minHeight: 70,
+    minHeight: 68,
   },
   previewPageInner: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: PREVIEW_ROW_GAP,
-    minHeight: 70,
+    minHeight: 68,
   },
   mediaWrap: {
     width: PREVIEW_MEDIA_SIZE,
@@ -585,11 +657,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.12)',
   },
   textThumbPaper: {
-    width: 40,
-    height: 40,
+    width: 38,
+    height: 38,
     borderRadius: 11,
     borderCurve: 'continuous',
     borderWidth: 1,
@@ -610,26 +681,41 @@ const styles = StyleSheet.create({
   textThumbLineShort: {
     width: '46%',
   },
+  textThumbEmoji: {
+    fontSize: 25,
+    lineHeight: 30,
+  },
   eyebrow: {
     fontSize: 11,
     lineHeight: 14,
     fontWeight: '700',
     fontFamily: 'Noto Sans',
-    marginBottom: 2,
-    textTransform: 'uppercase',
-    letterSpacing: 0.24,
+    marginBottom: 1,
   },
   title: {
     fontSize: 14,
     fontWeight: '800',
     lineHeight: 18,
-    marginBottom: 3,
+    marginBottom: 2,
     fontFamily: 'Noto Sans',
   },
   content: {
     fontSize: 12,
     lineHeight: 16,
     fontFamily: 'Noto Sans',
+  },
+  scrollFade: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    width: 18,
+    justifyContent: 'center',
+  },
+  scrollFadeLeft: {
+    left: 0,
+  },
+  scrollFadeRight: {
+    right: 0,
   },
   actionButton: {
     minHeight: 34,
