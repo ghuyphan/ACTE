@@ -232,6 +232,26 @@ describe('monthlyRecap', () => {
     expect(monthEntries[1].notes.map((note) => note.id)).toEqual(['late-feb-utc']);
   });
 
+  it('limits recap month entries to the requested latest-month window', () => {
+    const monthEntries = buildRecapMonthEntries(
+      [
+        buildNote({
+          id: 'old-january-note',
+          createdAt: '2026-01-10T10:00:00.000Z',
+        }),
+        buildNote({
+          id: 'latest-april-note',
+          createdAt: '2026-04-10T10:00:00.000Z',
+        }),
+      ],
+      { timeZone: 'UTC', monthWindow: 2 }
+    );
+
+    expect(monthEntries.map((entry) => entry.monthKey)).toEqual(['2026-04', '2026-03']);
+    expect(monthEntries[0].notes.map((note) => note.id)).toEqual(['latest-april-note']);
+    expect(monthEntries[1].notes).toEqual([]);
+  });
+
   it('reuses pre-scoped month notes without changing recap output', () => {
     const notes = [
       buildNote({

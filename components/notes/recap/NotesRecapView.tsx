@@ -1,13 +1,12 @@
 import { memo, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import Reanimated, { FadeIn, FadeInDown, FadeInUp } from 'react-native-reanimated';
-import { ActivityIndicator, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useReducedMotion } from '../../../hooks/useReducedMotion';
 import { useTheme } from '../../../hooks/useTheme';
 import { useNotesRecapViewModel } from '../../../hooks/state/useNotesRecapViewModel';
 import type { Note } from '../../../services/database';
-import { scheduleOnIdle } from '../../../utils/scheduleOnIdle';
 import { GlassView } from '../../ui/GlassView';
 import RecapCalendarGrid from './RecapCalendarGrid';
 import RecapMonthPicker from './RecapMonthPicker';
@@ -56,7 +55,6 @@ const NotesRecapView = memo(function NotesRecapView({
   const [hasCompletedFirstReveal, setHasCompletedFirstReveal] = useState(
     process.env.NODE_ENV === 'test'
   );
-  const [isPileReady, setIsPileReady] = useState(process.env.NODE_ENV === 'test');
 
   useEffect(() => {
     if (!isVisible || hasCompletedFirstReveal) {
@@ -80,34 +78,6 @@ const NotesRecapView = memo(function NotesRecapView({
       clearTimeout(timeoutId);
     };
   }, [hasCompletedFirstReveal, isVisible, reduceMotionEnabled]);
-
-  useEffect(() => {
-    if (!activeRecap) {
-      setIsPileReady(process.env.NODE_ENV === 'test');
-      return;
-    }
-
-    if (!isVisible) {
-      return;
-    }
-
-    if (isPileReady) {
-      return;
-    }
-
-    if (process.env.NODE_ENV === 'test') {
-      setIsPileReady(true);
-      return;
-    }
-
-    const idleHandle = scheduleOnIdle(() => {
-      setIsPileReady(true);
-    }, { timeout: 180 });
-
-    return () => {
-      idleHandle.cancel();
-    };
-  }, [activeRecap, isPileReady, isVisible]);
 
   const shouldEnablePilePhysics = isVisible && hasCompletedFirstReveal && !suspendPhysics;
   const glassColorScheme = isDark ? 'dark' : 'light';
@@ -196,48 +166,12 @@ const NotesRecapView = memo(function NotesRecapView({
                   RECAP_REVEAL_DURATION_MS
                 )}
               >
-                {isPileReady ? (
-                  <RecapStickerPile
-                    title={pileTitle}
-                    items={pileItems}
-                    deferUntilAfterInteractions
-                    physicsEnabled={shouldEnablePilePhysics}
-                  />
-                ) : (
-                  isAndroid ? (
-                    <GlassView
-                      style={[
-                        styles.recapPilePlaceholder,
-                        {
-                          borderColor: shellBorderColor,
-                        },
-                      ]}
-                      fallbackColor={shellBackgroundColor}
-                      glassEffectStyle="regular"
-                      colorScheme={glassColorScheme}
-                    >
-                      <Text style={[styles.recapPilePlaceholderTitle, { color: shellMutedTextColor }]}>
-                        {pileTitle ?? t('notes.recap.stickerTrayTitle', 'Used this month')}
-                      </Text>
-                      <ActivityIndicator size="small" color={colors.primary} />
-                    </GlassView>
-                  ) : (
-                    <View
-                      style={[
-                        styles.recapPilePlaceholder,
-                        {
-                          borderColor: shellBorderColor,
-                          backgroundColor: shellBackgroundColor,
-                        },
-                      ]}
-                    >
-                      <Text style={[styles.recapPilePlaceholderTitle, { color: shellMutedTextColor }]}>
-                        {pileTitle ?? t('notes.recap.stickerTrayTitle', 'Used this month')}
-                      </Text>
-                      <ActivityIndicator size="small" color={colors.primary} />
-                    </View>
-                  )
-                )}
+                <RecapStickerPile
+                  title={pileTitle}
+                  items={pileItems}
+                  deferUntilAfterInteractions
+                  physicsEnabled={shouldEnablePilePhysics}
+                />
               </Reanimated.View>
 
               <Reanimated.View
@@ -315,22 +249,6 @@ const styles = StyleSheet.create({
   },
   recapMonthHeader: {
     gap: 2,
-  },
-  recapPilePlaceholder: {
-    minHeight: 220,
-    borderRadius: 30,
-    borderCurve: 'continuous',
-    borderWidth: StyleSheet.hairlineWidth,
-    justifyContent: 'center',
-    gap: 12,
-    paddingHorizontal: 18,
-    paddingVertical: 20,
-  },
-  recapPilePlaceholderTitle: {
-    textAlign: 'center',
-    fontSize: 12,
-    lineHeight: 16,
-    fontWeight: '600',
   },
   recapCalendarShell: {
     borderRadius: 30,

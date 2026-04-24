@@ -62,12 +62,7 @@ describe('DynamicStickerCanvas', () => {
   it('keeps the physics hook inactive for static sticker cards', () => {
     render(<DynamicStickerCanvas placements={[stickerPlacement]} isActive={false} />);
 
-    expect(mockedUseStickerPhysics).toHaveBeenCalledWith(
-      expect.objectContaining({
-        placements: [stickerPlacement],
-        isActive: false,
-      })
-    );
+    expect(mockedUseStickerPhysics).not.toHaveBeenCalled();
   });
 
   it('keeps the physics hook inactive when sticker motion is locked', () => {
@@ -87,5 +82,19 @@ describe('DynamicStickerCanvas', () => {
         isActive: true,
       })
     );
+  });
+
+  it('does not mount physics when every sticker has locked motion', () => {
+    render(
+      <DynamicStickerCanvas
+        placements={[
+          { ...stickerPlacement, id: 'locked-placement-1', motionLocked: true },
+          { ...stickerPlacement, id: 'locked-placement-2', motionLocked: true },
+        ]}
+        isActive
+      />
+    );
+
+    expect(mockedUseStickerPhysics).not.toHaveBeenCalled();
   });
 });

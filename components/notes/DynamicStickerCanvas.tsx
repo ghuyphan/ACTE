@@ -74,6 +74,15 @@ interface StickerLayerProps {
   physicsState?: SharedValue<StickerPhysicsState[]>;
 }
 
+interface PhysicsStickerLayerProps {
+  placements: NoteStickerPlacement[];
+  layout: StickerCanvasLayout;
+  sizeMultiplier: number;
+  minimumBaseSize: number;
+  motionVariant: StickerMotionVariant;
+  debugTiltOverride?: SharedValue<DebugTiltState>;
+}
+
 const STICKER_OUTLINE_COLOR = 'rgba(255,255,255,0.98)';
 const PREFER_CONTINUOUS_OUTLINE = Platform.OS === 'android';
 
@@ -295,6 +304,35 @@ function StickerLayer({
   );
 }
 
+function PhysicsStickerLayer({
+  placements,
+  layout,
+  sizeMultiplier,
+  minimumBaseSize,
+  motionVariant,
+  debugTiltOverride,
+}: PhysicsStickerLayerProps) {
+  const physicsState = useStickerPhysics({
+    placements,
+    layout,
+    isActive: true,
+    motionVariant,
+    sizeMultiplier,
+    minimumBaseSize,
+    debugTiltOverride,
+  });
+
+  return (
+    <StickerLayer
+      placements={placements}
+      layout={layout}
+      sizeMultiplier={sizeMultiplier}
+      minimumBaseSize={minimumBaseSize}
+      physicsState={physicsState}
+    />
+  );
+}
+
 export default function DynamicStickerCanvas({
   placements,
   style,
@@ -340,15 +378,7 @@ export default function DynamicStickerCanvas({
     () => renderedPlacements.filter((placement) => placement.motionLocked === true),
     [renderedPlacements]
   );
-  const physicsState = useStickerPhysics({
-    placements: unlockedPlacements,
-    layout,
-    isActive: isActive && unlockedPlacements.length > 0,
-    motionVariant,
-    sizeMultiplier,
-    minimumBaseSize,
-    debugTiltOverride,
-  });
+  const shouldAnimateStickers = isActive && unlockedPlacements.length > 0;
 
   const handleLayout = (event: LayoutChangeEvent) => {
     const { width, height } = event.nativeEvent.layout;
@@ -367,13 +397,23 @@ export default function DynamicStickerCanvas({
           sizeMultiplier={sizeMultiplier}
           minimumBaseSize={minimumBaseSize}
         />
-        <StickerLayer
-          placements={unlockedPlacements}
-          layout={layout}
-          sizeMultiplier={sizeMultiplier}
-          minimumBaseSize={minimumBaseSize}
-          physicsState={physicsState}
-        />
+        {shouldAnimateStickers ? (
+          <PhysicsStickerLayer
+            placements={unlockedPlacements}
+            layout={layout}
+            sizeMultiplier={sizeMultiplier}
+            minimumBaseSize={minimumBaseSize}
+            motionVariant={motionVariant}
+            debugTiltOverride={debugTiltOverride}
+          />
+        ) : (
+          <StickerLayer
+            placements={unlockedPlacements}
+            layout={layout}
+            sizeMultiplier={sizeMultiplier}
+            minimumBaseSize={minimumBaseSize}
+          />
+        )}
       </Canvas>
     </View>
   );

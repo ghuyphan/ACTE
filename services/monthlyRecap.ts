@@ -416,7 +416,7 @@ export function buildRecapMonthEntries(
   }
 
   const minimumWindowStart = latestMonthIndex - (monthWindow - 1);
-  const firstMonthIndex = Math.min(earliestMonthIndex, minimumWindowStart);
+  const firstMonthIndex = Math.max(earliestMonthIndex, minimumWindowStart);
   const months: MonthlyRecapMonthEntry[] = [];
 
   for (let monthIndex = latestMonthIndex; monthIndex >= firstMonthIndex; monthIndex -= 1) {
