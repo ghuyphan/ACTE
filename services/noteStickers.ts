@@ -173,6 +173,7 @@ const REMOTE_STICKER_REGISTRY_RETRY_COOLDOWN_MS = 5 * 60 * 1000;
 
 let remoteStickerAssetRegistryUnavailableUntil = 0;
 let remoteStickerAssetRefsUnavailableUntil = 0;
+let generatedStickerIdFallbackCounter = 0;
 
 export function getStickerFileExtension(mimeType: string | null | undefined) {
   const normalizedMimeType = normalizeImageMimeType(mimeType);
@@ -331,12 +332,29 @@ function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function generateStickerAssetId() {
-  return `sticker-${Date.now()}-${Crypto.randomUUID().slice(0, 8)}`;
+function getRandomIdSegment() {
+  if (typeof Crypto.randomUUID === 'function') {
+    return Crypto.randomUUID().slice(0, 8);
+  }
+
+  generatedStickerIdFallbackCounter += 1;
+  return `${Date.now().toString(36)}-${generatedStickerIdFallbackCounter.toString(36)}`;
 }
 
-function generateStickerPlacementId() {
-  return `placement-${Date.now()}-${Crypto.randomUUID().slice(0, 8)}`;
+function generateStickerAssetId() {
+  return `sticker-${Date.now()}-${getRandomIdSegment()}`;
+}
+
+function generateStickerPlacementId(existingIds: ReadonlySet<string> = new Set()) {
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const candidate = `placement-${Date.now()}-${getRandomIdSegment()}`;
+    if (!existingIds.has(candidate)) {
+      return candidate;
+    }
+  }
+
+  generatedStickerIdFallbackCounter += 1;
+  return `placement-${Date.now()}-${generatedStickerIdFallbackCounter.toString(36)}`;
 }
 
 const NEW_STICKER_PLACEMENT_OFFSETS = [
@@ -938,6 +956,7 @@ export function createStickerPlacement(
   options: CreateStickerPlacementOptions = {}
 ): NoteStickerPlacement {
   const { nextZIndex, coordinates } = getNextStickerPlacementInsertState(existingPlacements);
+  const existingIds = new Set(existingPlacements.map((placement) => placement.id));
   const {
     suggestedRenderMode,
     ...placementAsset
@@ -947,7 +966,7 @@ export function createStickerPlacement(
     renderMode === 'stamp' ? (options.stampStyle === 'circle' ? 'circle' : 'classic') : undefined;
 
   return {
-    id: generateStickerPlacementId(),
+    id: generateStickerPlacementId(existingIds),
     assetId: placementAsset.id,
     x: coordinates.x,
     y: coordinates.y,
@@ -968,8 +987,13 @@ export function appendStickerPlacement(
   placement: NoteStickerPlacement
 ): AppendStickerPlacementResult {
   const { nextZIndex, coordinates } = getNextStickerPlacementInsertState(placements);
+  const existingIds = new Set(placements.map((candidate) => candidate.id));
+  const placementId = existingIds.has(placement.id)
+    ? generateStickerPlacementId(existingIds)
+    : placement.id;
   const insertedPlacement: NoteStickerPlacement = {
     ...placement,
+    id: placementId,
     x: coordinates.x,
     y: coordinates.y,
     zIndex: nextZIndex,
@@ -1119,7 +1143,7 @@ export function duplicateStickerPlacement(
     ...placements,
     {
       ...sourcePlacement,
-      id: generateStickerPlacementId(),
+      id: generateStickerPlacementId(new Set(placements.map((placement) => placement.id))),
       x: clamp01(sourcePlacement.x + 0.06),
       y: clamp01(sourcePlacement.y + 0.06),
       zIndex: placements.length + 1,

@@ -56,6 +56,9 @@ import {
   normalizeRemoteEntityIds,
   type RemoteArtifactSnapshot,
 } from './remoteArtifactUtils';
+import {
+  getOwnedSharedNoteIdsFromPosts,
+} from './sharedFeedOwnership';
 
 export interface FriendConnection {
   userId: string;
@@ -127,6 +130,7 @@ export interface SharedFeedSnapshot {
   friends: FriendConnection[];
   sharedPosts: SharedPost[];
   activeInvite: FriendInvite | null;
+  ownedSharedNoteIds?: string[];
 }
 
 interface SubscribeToSharedFeedOptions {
@@ -708,12 +712,28 @@ async function uploadSharedPostMediaArtifacts(options: {
   };
 }
 
-function shouldIncludeSharedPostInFeed(post: SharedPost, viewerUid: string, friendUids: Set<string>) {
+function shouldIncludeSharedPostInFeed(post: SharedPost, viewerUid: string) {
   if (post.authorUid === viewerUid) {
-    return post.audienceUserIds.some((audienceUid) => audienceUid !== viewerUid && friendUids.has(audienceUid));
+    return post.audienceUserIds.some((audienceUid) => audienceUid !== viewerUid);
   }
 
-  return friendUids.has(post.authorUid) && post.audienceUserIds.includes(viewerUid);
+  return post.audienceUserIds.includes(viewerUid);
+}
+
+function resolveAudienceFromFriends(
+  authorUid: string,
+  friends: FriendConnection[],
+  requestedAudienceUserIds?: string[] | null
+) {
+  const friendUidSet = new Set(friends.map((friend) => friend.userId.trim()).filter(Boolean));
+  const requestedRecipientUids =
+    requestedAudienceUserIds && requestedAudienceUserIds.length > 0
+      ? requestedAudienceUserIds
+          .map((userId) => userId.trim())
+          .filter((userId) => userId && friendUidSet.has(userId))
+      : Array.from(friendUidSet);
+
+  return Array.from(new Set([authorUid, ...requestedRecipientUids]));
 }
 
 function safelyDecodeInviteText(value: string) {
@@ -989,6 +1009,32 @@ async function getFriendsForUser(userUid: string) {
   );
 }
 
+async function getOwnedSharedSourceNoteIds(userUid: string, friends?: FriendConnection[]) {
+  const { data, error } = await requireSupabase()
+    .from('shared_posts')
+    .select('author_user_id, audience_user_ids, source_note_id')
+    .eq('author_user_id', userUid);
+
+  if (error) {
+    throw error;
+  }
+
+  const currentFriends = friends ?? await getFriendsForUser(userUid);
+  return getOwnedSharedNoteIdsFromPosts(
+    ((data ?? []) as Array<{
+      author_user_id?: string | null;
+      audience_user_ids?: string[] | null;
+      source_note_id?: string | null;
+    }>).map((row) => ({
+      authorUid: row.author_user_id ?? userUid,
+      audienceUserIds: Array.isArray(row.audience_user_ids) ? row.audience_user_ids : [],
+      sourceNoteId: row.source_note_id ?? null,
+    })),
+    userUid,
+    { friendUserIds: currentFriends.map((friend) => friend.userId) }
+  );
+}
+
 export function getSharedFeedErrorMessage(error: unknown) {
   const message = getSupabaseErrorMessage(error);
 
@@ -1046,11 +1092,10 @@ async function performSharedFeedRefresh(user: AppUser): Promise<SharedFeedSnapsh
   await ensureSupabaseSessionMatchesUser(user.id);
 
   const friends = await getFriendsForUser(user.id);
-  const friendUids = friends.map((friend: FriendConnection) => friend.userId);
-  const friendUidSet = new Set(friendUids);
 
-  const [activeInvite, postsResponse] = await Promise.all([
+  const [activeInvite, ownedSharedNoteIds, postsResponse] = await Promise.all([
     getActiveFriendInvite(user),
+    getOwnedSharedSourceNoteIds(user.id, friends),
     requireSupabase()
       .from('shared_posts')
       .select(
@@ -1067,12 +1112,13 @@ async function performSharedFeedRefresh(user: AppUser): Promise<SharedFeedSnapsh
 
   const sharedPosts = ((postsResponse.data ?? []) as SharedPostRow[])
     .map(mapSharedPost)
-    .filter((post) => shouldIncludeSharedPostInFeed(post, user.id, friendUidSet));
+    .filter((post) => shouldIncludeSharedPostInFeed(post, user.id));
 
   const snapshot = {
     friends,
     sharedPosts,
     activeInvite,
+    ownedSharedNoteIds,
   };
   await cacheSharedFeedSnapshot(user.id, snapshot);
   return snapshot;
@@ -1129,6 +1175,7 @@ export function subscribeToSharedFeed(
   let refreshTimer: ReturnType<typeof setTimeout> | null = null;
   let refreshInFlight: Promise<void> | null = null;
   let refreshQueued = false;
+  let refreshQueuedForce = false;
 
   const refresh = (options?: { force?: boolean }) => {
     if (disposed) {
@@ -1137,6 +1184,7 @@ export function subscribeToSharedFeed(
 
     if (refreshInFlight) {
       refreshQueued = true;
+      refreshQueuedForce = refreshQueuedForce || Boolean(options?.force);
       return;
     }
 
@@ -1154,8 +1202,10 @@ export function subscribeToSharedFeed(
       .finally(() => {
         refreshInFlight = null;
         if (!disposed && refreshQueued) {
+          const nextOptions = refreshQueuedForce ? { force: true } : undefined;
           refreshQueued = false;
-          scheduleRefresh();
+          refreshQueuedForce = false;
+          scheduleRefresh(nextOptions);
         }
       });
   };
@@ -1431,14 +1481,15 @@ export async function addFriendByUsername(
 export async function createSharedPost(
   user: AppUser,
   note: Note,
-  audienceUserIds: string[]
+  audienceUserIds?: string[] | null
 ): Promise<SharedPost> {
   await ensureSupabaseSessionMatchesUser(user.id);
   invalidateSharedFeedRefresh(user.id);
 
   const supabase = requireSupabase();
   const shareableNote = await hydrateShareableNote(note);
-  const dedupedAudience = Array.from(new Set([user.id, ...audienceUserIds.filter(Boolean)]));
+  const friends = await getFriendsForUser(user.id);
+  const dedupedAudience = resolveAudienceFromFriends(user.id, friends, audienceUserIds);
 
   if (dedupedAudience.length <= 1) {
     throw new Error('Connect a friend before sharing moments.');

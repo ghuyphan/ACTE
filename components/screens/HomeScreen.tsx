@@ -280,6 +280,7 @@ export default function HomeScreen() {
     initialLoadComplete: sharedInitialLoadComplete = true,
     friends,
     sharedPosts,
+    ownedSharedNoteIds: sharedOwnedNoteIds,
     activeInvite,
     refreshSharedFeed,
     createFriendInvite,
@@ -689,6 +690,7 @@ export default function HomeScreen() {
     sharedEnabled,
     sharedPhase,
     sharedPosts,
+    ownedSharedNoteIds: sharedOwnedNoteIds,
     syncBootstrapState,
     isFriendsFilterEnabled,
     suppressedHomeNoteIds,
@@ -1600,6 +1602,10 @@ export default function HomeScreen() {
 
     const nearbySharedPosts = sharedPosts
       .filter((post) => {
+        if (user?.uid && post.authorUid === user.uid) {
+          return false;
+        }
+
         if (!hasFiniteCoordinate(post.latitude) || !hasFiniteCoordinate(post.longitude)) {
           return false;
         }
@@ -1653,7 +1659,7 @@ export default function HomeScreen() {
       avatars,
       overflowCount: Math.max(uniqueNearbyAuthorIds.size - avatars.length, 0),
     };
-  }, [captureTarget, location, sharedEnabled, sharedPosts, sharedReady]);
+  }, [captureTarget, location, sharedEnabled, sharedPosts, sharedReady, user?.uid]);
 
   const handlePlacePulsePress = useCallback(() => {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);

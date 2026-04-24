@@ -824,7 +824,8 @@ export async function getDB(): Promise<SQLite.SQLiteDatabase> {
       );
       CREATE TABLE IF NOT EXISTS shared_feed_cache_meta (
         user_uid TEXT PRIMARY KEY NOT NULL,
-        last_updated_at TEXT
+        last_updated_at TEXT,
+        owned_shared_note_ids TEXT NOT NULL DEFAULT '[]'
       );
       CREATE TABLE IF NOT EXISTS monthly_recap_cache (
         owner_uid TEXT NOT NULL,
@@ -1244,9 +1245,19 @@ export async function getDB(): Promise<SQLite.SQLiteDatabase> {
             await database.execAsync(
                 `CREATE TABLE IF NOT EXISTS shared_feed_cache_meta (
                     user_uid TEXT PRIMARY KEY NOT NULL,
-                    last_updated_at TEXT
+                    last_updated_at TEXT,
+                    owned_shared_note_ids TEXT NOT NULL DEFAULT '[]'
                 )`
             );
+            const sharedFeedCacheMetaInfo = await database.getAllAsync<{ name: string }>(
+                `PRAGMA table_info(shared_feed_cache_meta)`
+            );
+            const sharedFeedCacheMetaColumns = sharedFeedCacheMetaInfo.map((col) => col.name);
+            if (!sharedFeedCacheMetaColumns.includes('owned_shared_note_ids')) {
+                await database.execAsync(
+                    `ALTER TABLE shared_feed_cache_meta ADD COLUMN owned_shared_note_ids TEXT NOT NULL DEFAULT '[]'`
+                );
+            }
             await database.execAsync(
                 `CREATE TABLE IF NOT EXISTS monthly_recap_cache (
                     owner_uid TEXT NOT NULL,

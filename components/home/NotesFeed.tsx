@@ -17,6 +17,7 @@ import {
 } from 'react-native';
 import { Note } from '../../services/database';
 import { SharedPost } from '../../services/sharedFeedService';
+import { normalizeOwnedSharedNoteIds } from '../../services/sharedFeedOwnership';
 import { Layout } from '../../constants/theme';
 import { buildHomeFeedItems, type HomeFeedItem, getHomeFeedItemKey } from './feedItems';
 import { NoteMemoryCard, SharedPostMemoryCard } from './MemoryCardPrimitives';
@@ -269,9 +270,24 @@ export default function NotesFeed({
   const scrollOffsetY = useSharedValue(0);
   const [activeCardKey, setActiveCardKey] = useState<string | null>(null);
   const [refreshGestureActive, setRefreshGestureActive] = useState(false);
-  const ownedSharedNoteIdSet = useMemo(
-    () => new Set(ownedSharedNoteIds),
+  const normalizedOwnedSharedNoteIds = useMemo(
+    () => normalizeOwnedSharedNoteIds(ownedSharedNoteIds),
     [ownedSharedNoteIds]
+  );
+  const ownedSharedNoteIdSet = useMemo(
+    () => new Set(normalizedOwnedSharedNoteIds),
+    [normalizedOwnedSharedNoteIds]
+  );
+  const ownedSharedNoteIdsKey = useMemo(
+    () => normalizedOwnedSharedNoteIds.join('|'),
+    [normalizedOwnedSharedNoteIds]
+  );
+  const listExtraData = useMemo(
+    () => ({
+      activeCardKey,
+      ownedSharedNoteIdsKey,
+    }),
+    [activeCardKey, ownedSharedNoteIdsKey]
   );
   const listData = useMemo<HomeFeedItem[]>(
     () => items ?? buildHomeFeedItems(notes, sharedPosts),
@@ -685,7 +701,7 @@ export default function NotesFeed({
       initialScrollIndex={typeof initialItemIndex === 'number' ? initialItemIndex : undefined}
       keyExtractor={getHomeFeedItemKey}
       renderItem={renderItem}
-      extraData={activeCardKey}
+      extraData={listExtraData}
       getItemType={getItemType}
       overrideItemLayout={overrideItemLayout as any}
       drawDistance={drawDistance}

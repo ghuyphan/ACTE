@@ -1,6 +1,10 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { buildHomeFeedItems, type HomeFeedItem } from '../../components/home/feedItems';
 import type { Note } from '../../services/database';
+import {
+  getOwnedSharedNoteIdsFromPosts,
+  normalizeOwnedSharedNoteIds,
+} from '../../services/sharedFeedOwnership';
 import type { SharedPost } from '../../services/sharedFeedService';
 import type { NotesLoadPhase } from '../state/useNotesStore';
 import type { SharedFeedLoadPhase } from '../useSharedFeedStore';
@@ -30,6 +34,7 @@ interface UseHomeFeedViewModelParams {
   sharedEnabled: boolean;
   sharedPhase: SharedFeedLoadPhase;
   sharedPosts: SharedPost[];
+  ownedSharedNoteIds?: string[];
   syncBootstrapState: SyncBootstrapState;
   isFriendsFilterEnabled: boolean;
   suppressedHomeNoteIds: string[];
@@ -56,6 +61,7 @@ export function useHomeFeedViewModel({
   sharedEnabled,
   sharedPhase,
   sharedPosts,
+  ownedSharedNoteIds: ownedSharedNoteIdsInput,
   syncBootstrapState,
   isFriendsFilterEnabled,
   suppressedHomeNoteIds,
@@ -105,25 +111,17 @@ export function useHomeFeedViewModel({
       item.kind !== 'note' || !suppressedHomeNoteIdSet.has(item.id)
     ));
   }, [authUserChanged, homeFeedItems, isFriendsFilterActive, suppressedHomeNoteIdSet]);
-  const ownedSharedNoteIds = useMemo(
-    () => (
-      authUserChanged || !currentUserUid
-        ? []
-        : Array.from(
-            new Set(
-              sharedPosts
-                .filter(
-                  (post) =>
-                    post.authorUid === currentUserUid &&
-                    typeof post.sourceNoteId === 'string' &&
-                    post.sourceNoteId.trim().length > 0
-                )
-                .map((post) => post.sourceNoteId as string)
-            )
-          )
-    ),
-    [authUserChanged, currentUserUid, sharedPosts]
-  );
+  const ownedSharedNoteIds = useMemo(() => {
+    if (authUserChanged || !currentUserUid) {
+      return [];
+    }
+
+    const derivedOwnedSharedNoteIds = getOwnedSharedNoteIdsFromPosts(sharedPosts, currentUserUid);
+    return normalizeOwnedSharedNoteIds([
+      ...(ownedSharedNoteIdsInput ?? []),
+      ...derivedOwnedSharedNoteIds,
+    ]);
+  }, [authUserChanged, currentUserUid, ownedSharedNoteIdsInput, sharedPosts]);
   const savedNoteRevealIsSharedByMe = useMemo(
     () => Boolean(savedNoteRevealNoteId && ownedSharedNoteIds.includes(savedNoteRevealNoteId)),
     [ownedSharedNoteIds, savedNoteRevealNoteId]

@@ -647,6 +647,61 @@ describe('NotesFeed capture visibility', () => {
     expect(new Set(keys).size).toBe(keys.length);
   });
 
+  it('includes shared-note ownership changes in the list extra data', () => {
+    const baseProps = {
+      flatListRef: { current: null },
+      captureHeader: <View testID="capture-header" />,
+      captureMode: 'camera' as const,
+      notes: [
+        {
+          id: 'note-1',
+          type: 'text',
+          content: 'hello',
+          locationName: 'Cafe',
+          latitude: 0,
+          longitude: 0,
+          radius: 150,
+          isFavorite: false,
+          createdAt: '2026-03-19T00:00:00.000Z',
+          updatedAt: null,
+        },
+      ] as any,
+      sharedPosts: [] as any,
+      refreshing: false,
+      onRefresh: jest.fn(),
+      topInset: 0,
+      snapHeight: 700,
+      onOpenNote: jest.fn(),
+      onOpenSharedPost: jest.fn(),
+      colors: {
+        primary: '#FFC107',
+        text: '#1C1C1E',
+        secondaryText: '#8E8E93',
+        danger: '#FF3B30',
+        card: '#FFFFFF',
+      },
+      t: ((key: string, fallback?: string) => fallback ?? key) as any,
+    };
+
+    const view = render(
+      <NotesFeed
+        {...baseProps}
+        ownedSharedNoteIds={[]}
+      />
+    );
+
+    expect(view.UNSAFE_getByType(FlatList).props.extraData.ownedSharedNoteIdsKey).toBe('');
+
+    view.rerender(
+      <NotesFeed
+        {...baseProps}
+        ownedSharedNoteIds={['note-1']}
+      />
+    );
+
+    expect(view.UNSAFE_getByType(FlatList).props.extraData.ownedSharedNoteIdsKey).toBe('note-1');
+  });
+
   it('uses content-aware item types for recycler reuse', () => {
     const { UNSAFE_getByType } = render(
       <NotesFeed

@@ -84,4 +84,115 @@ describe('shared feed cache persistence', () => {
     expect(countSqlPlaceholders(insertCall![0])).toBe(insertCall!.length - 1);
     expect(insertCall!.slice(-2)).toEqual([post.createdAt, post.updatedAt]);
   });
+
+  it('persists the complete owned shared note id index with the shared feed cache', async () => {
+    const { cacheSharedFeedSnapshot, getCachedSharedFeedSnapshot } =
+      require('../services/sharedFeedCache') as typeof import('../services/sharedFeedCache');
+
+    await cacheSharedFeedSnapshot('owner-1', {
+      friends: [],
+      sharedPosts: [],
+      activeInvite: null,
+      ownedSharedNoteIds: ['note-25', 'note-1', 'note-25', ' '],
+    });
+
+    const metaInsertCall = mockRunAsync.mock.calls.find(([sql]) =>
+      sql.includes('INSERT INTO shared_feed_cache_meta')
+    );
+
+    expect(metaInsertCall).toBeDefined();
+    expect(metaInsertCall).toEqual(
+      expect.arrayContaining(['owner-1', JSON.stringify(['note-1', 'note-25'])])
+    );
+
+    mockGetAllAsync.mockResolvedValue([]);
+    mockGetFirstAsync.mockResolvedValue({
+      last_updated_at: '2026-04-24T00:00:00.000Z',
+      owned_shared_note_ids: JSON.stringify(['note-1', 'note-25']),
+    });
+
+    const snapshot = await getCachedSharedFeedSnapshot('owner-1');
+
+    expect(snapshot.ownedSharedNoteIds).toEqual(['note-1', 'note-25']);
+  });
+
+  it('falls back to author-owned shared note ids when the persisted index is empty', async () => {
+    const { getCachedSharedFeedSnapshot } =
+      require('../services/sharedFeedCache') as typeof import('../services/sharedFeedCache');
+
+    mockGetAllAsync
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([
+        {
+          id: 'own-post',
+          author_uid: 'owner-1',
+          author_display_name: null,
+          author_photo_url_snapshot: null,
+          audience_user_ids: JSON.stringify(['owner-1', 'friend-1']),
+          type: 'text',
+          text: 'own',
+          photo_path: null,
+          photo_local_uri: null,
+          capture_variant: null,
+          dual_primary_photo_path: null,
+          dual_secondary_photo_path: null,
+          dual_primary_photo_local_uri: null,
+          dual_secondary_photo_local_uri: null,
+          is_live_photo: 0,
+          paired_video_path: null,
+          paired_video_local_uri: null,
+          dual_primary_facing: null,
+          dual_secondary_facing: null,
+          dual_layout_preset: null,
+          doodle_strokes_json: null,
+          sticker_placements_json: null,
+          note_color: null,
+          place_name: null,
+          source_note_id: 'own-note',
+          latitude: null,
+          longitude: null,
+          created_at: '2026-04-24T00:00:00.000Z',
+          updated_at: null,
+        },
+        {
+          id: 'friend-post',
+          author_uid: 'friend-1',
+          author_display_name: null,
+          author_photo_url_snapshot: null,
+          audience_user_ids: JSON.stringify(['owner-1', 'friend-1']),
+          type: 'text',
+          text: 'friend',
+          photo_path: null,
+          photo_local_uri: null,
+          capture_variant: null,
+          dual_primary_photo_path: null,
+          dual_secondary_photo_path: null,
+          dual_primary_photo_local_uri: null,
+          dual_secondary_photo_local_uri: null,
+          is_live_photo: 0,
+          paired_video_path: null,
+          paired_video_local_uri: null,
+          dual_primary_facing: null,
+          dual_secondary_facing: null,
+          dual_layout_preset: null,
+          doodle_strokes_json: null,
+          sticker_placements_json: null,
+          note_color: null,
+          place_name: null,
+          source_note_id: 'friend-note',
+          latitude: null,
+          longitude: null,
+          created_at: '2026-04-23T00:00:00.000Z',
+          updated_at: null,
+        },
+      ]);
+    mockGetFirstAsync.mockResolvedValue({
+      last_updated_at: '2026-04-24T00:00:00.000Z',
+      owned_shared_note_ids: JSON.stringify([]),
+    });
+
+    const snapshot = await getCachedSharedFeedSnapshot('owner-1');
+
+    expect(snapshot.ownedSharedNoteIds).toEqual(['own-note']);
+  });
 });

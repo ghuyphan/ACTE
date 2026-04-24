@@ -64,6 +64,13 @@ describe('supabase migration hardening', () => {
     resolve(__dirname, '../supabase/migrations/20260418120000_add_dual_capture_sync_columns.sql'),
     'utf8'
   );
+  const sharedPostMediaVisibilityMigration = readFileSync(
+    resolve(
+      __dirname,
+      '../supabase/migrations/20260424143000_extend_shared_post_media_visibility.sql'
+    ),
+    'utf8'
+  );
   const normalizedRemoveStorageCleanupTriggersMigration =
     removeStorageCleanupTriggersMigration.toLowerCase();
 
@@ -117,6 +124,15 @@ describe('supabase migration hardening', () => {
     expect(dualCaptureMigration).toContain('add column if not exists dual_secondary_photo_path text');
     expect(dualCaptureMigration).toContain('alter table public.shared_posts');
     expect(dualCaptureMigration).toContain('add column if not exists dual_layout_preset text');
+  });
+
+  it('allows recipients to read all shared post media path columns', () => {
+    expect(sharedPostMediaVisibilityMigration).toContain('drop policy if exists "shared_post_media_select_visible"');
+    expect(sharedPostMediaVisibilityMigration).toContain('shared_posts.photo_path = storage.objects.name');
+    expect(sharedPostMediaVisibilityMigration).toContain('shared_posts.dual_primary_photo_path = storage.objects.name');
+    expect(sharedPostMediaVisibilityMigration).toContain('shared_posts.dual_secondary_photo_path = storage.objects.name');
+    expect(sharedPostMediaVisibilityMigration).toContain('shared_posts.paired_video_path = storage.objects.name');
+    expect(sharedPostMediaVisibilityMigration).toContain('public.are_users_friends(shared_posts.author_user_id, auth.uid())');
   });
 
   it('adds shared post coordinates for map rendering', () => {

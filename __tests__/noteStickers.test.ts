@@ -101,6 +101,40 @@ describe('noteStickers helpers', () => {
     expect(insertion.placement.id).toBe(staleSecondPlacement.id);
   });
 
+  it('keeps repeated imports of the same reusable asset as separate visible placements', () => {
+    const firstPlacement = {
+      ...createStickerPlacement(baseAsset),
+      id: 'placement-1',
+    };
+    const reusedAssetPlacement = {
+      ...createStickerPlacement(baseAsset, [firstPlacement]),
+      id: 'placement-2',
+    };
+    const insertion = appendStickerPlacement([firstPlacement], reusedAssetPlacement);
+
+    expect(insertion.placements).toHaveLength(2);
+    expect(insertion.placements[0]?.assetId).toBe(baseAsset.id);
+    expect(insertion.placements[1]?.assetId).toBe(baseAsset.id);
+    expect(insertion.placements[0]?.id).not.toBe(insertion.placements[1]?.id);
+  });
+
+  it('repairs placement id collisions when appending a sticker', () => {
+    const firstPlacement = {
+      ...createStickerPlacement(baseAsset),
+      id: 'placement-1',
+    };
+    const collidingPlacement = {
+      ...createStickerPlacement({ ...baseAsset, id: 'sticker-2' }, [firstPlacement]),
+      id: firstPlacement.id,
+    };
+    const insertion = appendStickerPlacement([firstPlacement], collidingPlacement);
+
+    expect(insertion.placements).toHaveLength(2);
+    expect(insertion.placements[0]?.id).toBe(firstPlacement.id);
+    expect(insertion.placements[1]?.id).not.toBe(firstPlacement.id);
+    expect(insertion.placement.id).toBe(insertion.placements[1]?.id);
+  });
+
   it('updates transforms and brings stickers to front', () => {
     const firstPlacement = createStickerPlacement(baseAsset);
     const secondPlacement = createStickerPlacement({ ...baseAsset, id: 'sticker-2' }, [firstPlacement]);

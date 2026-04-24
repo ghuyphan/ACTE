@@ -586,7 +586,10 @@ jest.mock('../utils/supabase', () => ({
       return { data: null, error: null };
     },
     channel: jest.fn(() => {
-      const channel = {
+      const channel: {
+        on: jest.Mock;
+        subscribe: jest.Mock;
+      } = {
         on: jest.fn((_event: string, config: { table?: string }, callback: (payload: unknown) => void) => {
           mockRealtimeHandlers.push({
             table: config.table ?? '',
@@ -859,6 +862,7 @@ import {
   createSharedPost,
   deleteSharedPost,
   findFriendByUsername,
+  invalidateSharedFeedRefresh,
   removeFriend,
   refreshSharedFeed,
   subscribeToSharedFeed,
@@ -902,6 +906,9 @@ const secondFriendUser = {
   mockUndeletableSharedPostIds.clear();
   mockDeleteResponseOmittedSharedPostIds.clear();
   mockRealtimeHandlers.length = 0;
+  invalidateSharedFeedRefresh(ownerUser.id);
+  invalidateSharedFeedRefresh(friendUser.id);
+  invalidateSharedFeedRefresh(secondFriendUser.id);
     mockFriendInvites.clear();
     mockSharedPosts.clear();
     mockSharedPostTombstones.clear();
@@ -1092,10 +1099,170 @@ describe('sharedFeedService', () => {
       })
     );
     expect(mockCacheSharedFeedSnapshot).toHaveBeenCalled();
+    expect(snapshot.ownedSharedNoteIds).toEqual([]);
+    mockSessionUserId = ownerUser.id;
+    expect((await refreshSharedFeed(ownerUser, { force: true })).ownedSharedNoteIds).toEqual(['note-1']);
     expect(mockSendSocialNotificationEvent).toHaveBeenCalledWith({
       type: 'shared_post_created',
       postId: post.id,
     });
+  });
+
+  it('resolves all-share audiences from fresh server friendships', async () => {
+    mockEnsureFriendMap(ownerUser.id).set(friendUser.id, {
+      display_name_snapshot: friendUser.username,
+      photo_url_snapshot: friendUser.photoURL,
+      friended_at: '2026-03-20T00:00:00.000Z',
+      last_shared_at: null,
+      created_by_invite_id: 'invite-1',
+    });
+    mockEnsureFriendMap(ownerUser.id).set(secondFriendUser.id, {
+      display_name_snapshot: secondFriendUser.username,
+      photo_url_snapshot: secondFriendUser.photoURL,
+      friended_at: '2026-03-21T00:00:00.000Z',
+      last_shared_at: null,
+      created_by_invite_id: 'invite-2',
+    });
+
+    const post = await createSharedPost(
+      ownerUser,
+      {
+        id: 'note-all',
+        type: 'text',
+        content: 'Hello everyone',
+        locationName: 'Saigon',
+        latitude: 10.77,
+        longitude: 106.69,
+        moodEmoji: null,
+      } as any,
+      undefined
+    );
+
+    expect(post.audienceUserIds).toEqual([ownerUser.id, friendUser.id, secondFriendUser.id]);
+  });
+
+  it('does not count owner-only shared rows as shared note badges', async () => {
+    mockSharedPosts.set('owner-only', {
+      id: 'owner-only',
+      author_user_id: ownerUser.id,
+      author_display_name: ownerUser.username,
+      author_photo_url_snapshot: ownerUser.photoURL,
+      audience_user_ids: [ownerUser.id],
+      type: 'text',
+      text: 'Nobody else can see this',
+      photo_path: null,
+      capture_variant: null,
+      dual_primary_photo_path: null,
+      dual_secondary_photo_path: null,
+      dual_primary_facing: null,
+      dual_secondary_facing: null,
+      dual_layout_preset: null,
+      is_live_photo: false,
+      paired_video_path: null,
+      doodle_strokes_json: null,
+      sticker_placements_json: null,
+      note_color: null,
+      place_name: 'Saigon',
+      source_note_id: 'note-owner-only',
+      latitude: 10.77,
+      longitude: 106.69,
+      created_at: '2026-03-20T00:00:00.000Z',
+      updated_at: null,
+    });
+
+    const snapshot = await refreshSharedFeed(ownerUser);
+
+    expect(snapshot.ownedSharedNoteIds).toEqual([]);
+  });
+
+  it('keeps recipient-visible posts even if local friendship rows are asymmetric', async () => {
+    mockEnsureFriendMap(ownerUser.id).set(friendUser.id, {
+      display_name_snapshot: friendUser.username,
+      photo_url_snapshot: friendUser.photoURL,
+      friended_at: '2026-03-20T00:00:00.000Z',
+      last_shared_at: null,
+      created_by_invite_id: 'invite-1',
+    });
+
+    await createSharedPost(
+      ownerUser,
+      {
+        id: 'note-1',
+        type: 'text',
+        content: 'Shared text',
+        locationName: 'Saigon',
+        latitude: 10.77,
+        longitude: 106.69,
+        moodEmoji: null,
+      } as any,
+      [friendUser.id]
+    );
+
+    mockSessionUserId = friendUser.id;
+    const snapshot = await refreshSharedFeed(friendUser);
+
+    expect(snapshot.friends).toEqual([]);
+    expect(snapshot.sharedPosts).toEqual([
+      expect.objectContaining({
+        authorUid: ownerUser.id,
+        audienceUserIds: [ownerUser.id, friendUser.id],
+        sourceNoteId: 'note-1',
+      }),
+    ]);
+  });
+
+  it('returns authored shared note ids even when authored posts fall outside the feed limit', async () => {
+    mockEnsureFriendMap(ownerUser.id).set(friendUser.id, {
+      display_name_snapshot: friendUser.username,
+      photo_url_snapshot: friendUser.photoURL,
+      friended_at: '2026-03-20T00:00:00.000Z',
+      last_shared_at: null,
+      created_by_invite_id: 'invite-1',
+    });
+    mockEnsureFriendMap(friendUser.id).set(ownerUser.id, {
+      display_name_snapshot: ownerUser.username,
+      photo_url_snapshot: ownerUser.photoURL,
+      friended_at: '2026-03-20T00:00:00.000Z',
+      last_shared_at: null,
+      created_by_invite_id: 'invite-1',
+    });
+
+    for (let index = 0; index < 25; index += 1) {
+      mockSharedPosts.set(`shared-${index}`, {
+        id: `shared-${index}`,
+        author_user_id: ownerUser.id,
+        author_display_name: ownerUser.username,
+        author_photo_url_snapshot: ownerUser.photoURL,
+        audience_user_ids: [ownerUser.id, friendUser.id],
+        type: 'text',
+        text: `Shared note ${index}`,
+        photo_path: null,
+        capture_variant: null,
+        dual_primary_photo_path: null,
+        dual_secondary_photo_path: null,
+        dual_primary_facing: null,
+        dual_secondary_facing: null,
+        dual_layout_preset: null,
+        is_live_photo: false,
+        paired_video_path: null,
+        doodle_strokes_json: null,
+        sticker_placements_json: null,
+        note_color: null,
+        place_name: 'Saigon',
+        source_note_id: `note-${index}`,
+        latitude: 10.77,
+        longitude: 106.69,
+        created_at: `2026-03-${String(index + 1).padStart(2, '0')}T00:00:00.000Z`,
+        updated_at: null,
+      });
+    }
+
+    const snapshot = await refreshSharedFeed(ownerUser);
+
+    expect(snapshot.sharedPosts).toHaveLength(20);
+    expect(snapshot.sharedPosts.map((post) => post.sourceNoteId)).not.toContain('note-0');
+    expect(snapshot.ownedSharedNoteIds).toContain('note-0');
+    expect(snapshot.ownedSharedNoteIds).toHaveLength(25);
   });
 
   it('forces subscription refreshes so new shared posts are not hidden by refresh dedupe', async () => {

@@ -22,6 +22,7 @@ function buildSharedPost(overrides: Record<string, unknown> = {}) {
     id: 'shared-1',
     authorUid: 'friend-1',
     authorDisplayName: 'Lan',
+    audienceUserIds: ['user-1', 'friend-1'],
     type: 'text',
     text: 'Shared memory',
     placeName: 'District 5',
@@ -119,6 +120,38 @@ describe('useHomeFeedViewModel', () => {
     const { result } = renderHook(() => useHomeFeedViewModel(params));
 
     expect(result.current.feedMode).toBe('friends-empty');
+    expect(result.current.ownedSharedNoteIds).toEqual(['note-1']);
+    expect(result.current.savedNoteRevealIsSharedByMe).toBe(true);
+  });
+
+  it('uses the complete owned shared note id index instead of only visible shared posts', () => {
+    const params = createParams({
+      notes: [buildNote({ id: 'note-old' })],
+      sharedPosts: [],
+      ownedSharedNoteIds: ['note-old'],
+      savedNoteRevealNoteId: 'note-old',
+    });
+    const { result } = renderHook(() => useHomeFeedViewModel(params));
+
+    expect(result.current.ownedSharedNoteIds).toEqual(['note-old']);
+    expect(result.current.savedNoteRevealIsSharedByMe).toBe(true);
+  });
+
+  it('keeps authored shared posts as a fallback when the owned index is stale', () => {
+    const params = createParams({
+      notes: [buildNote()],
+      sharedPosts: [
+        buildSharedPost({
+          id: 'shared-owned',
+          authorUid: 'user-1',
+          sourceNoteId: 'note-1',
+        }),
+      ],
+      ownedSharedNoteIds: [],
+      savedNoteRevealNoteId: 'note-1',
+    });
+    const { result } = renderHook(() => useHomeFeedViewModel(params));
+
     expect(result.current.ownedSharedNoteIds).toEqual(['note-1']);
     expect(result.current.savedNoteRevealIsSharedByMe).toBe(true);
   });

@@ -7,7 +7,10 @@ import {
 import { getDB, withDatabaseTransaction } from './database';
 import { resolveSavedTextNoteColor } from './noteAppearance';
 import { hasStoredStickerPayload } from './noteStickers';
-import { getUniqueNormalizedStrings } from './normalizedStrings';
+import {
+  getOwnedSharedNoteIdsFromPosts,
+  normalizeOwnedSharedNoteIds,
+} from './sharedFeedOwnership';
 
 interface FriendRow {
   friend_uid: string;
@@ -53,6 +56,23 @@ interface SharedPostRow {
 
 interface MetaRow {
   last_updated_at: string | null;
+  owned_shared_note_ids: string | null;
+}
+
+function parseOwnedSharedNoteIds(rawValue: string | null | undefined, fallbackNoteIds: string[]) {
+  if (!rawValue) {
+    return fallbackNoteIds;
+  }
+
+  try {
+    const parsed = JSON.parse(rawValue);
+    if (!Array.isArray(parsed)) {
+      return fallbackNoteIds;
+    }
+    return normalizeOwnedSharedNoteIds([...parsed, ...fallbackNoteIds]);
+  } catch {
+    return fallbackNoteIds;
+  }
 }
 
 function rowToFriend(row: FriendRow): FriendConnection {
@@ -424,41 +444,13 @@ export async function patchCachedSharedPostMedia(
   });
 }
 
-export async function pruneCachedSharedPostsForSourceNotes(
-  userUid: string,
-  noteIds: string[],
-  options: { authorUid?: string | null } = {}
-) {
-  const normalizedNoteIds = getUniqueNormalizedStrings(noteIds);
-  if (normalizedNoteIds.length === 0) {
-    return;
-  }
-
-  const placeholders = normalizedNoteIds.map(() => '?').join(', ');
-  const params = options.authorUid
-    ? [userUid, options.authorUid, ...normalizedNoteIds]
-    : [userUid, ...normalizedNoteIds];
-
-  await withDatabaseTransaction(async (tx) => {
-    await tx.runAsync(
-      options.authorUid
-        ? `DELETE FROM shared_posts_cache
-           WHERE user_uid = ?
-             AND author_uid = ?
-             AND source_note_id IN (${placeholders})`
-        : `DELETE FROM shared_posts_cache
-           WHERE user_uid = ?
-             AND source_note_id IN (${placeholders})`,
-      ...params
-    );
-  });
-}
-
 export async function cacheSharedFeedSnapshot(
   userUid: string,
-  snapshot: Pick<SharedFeedSnapshot, 'friends' | 'sharedPosts' | 'activeInvite'>
+  snapshot: Pick<SharedFeedSnapshot, 'friends' | 'sharedPosts' | 'activeInvite' | 'ownedSharedNoteIds'>
 ) {
   const cachedAt = new Date().toISOString();
+  const ownedSharedNoteIds =
+    snapshot.ownedSharedNoteIds ?? getOwnedSharedNoteIdsFromPosts(snapshot.sharedPosts, userUid);
 
   await withDatabaseTransaction(async (tx) => {
     await tx.runAsync('DELETE FROM shared_friends_cache WHERE user_uid = ?', userUid);
@@ -558,12 +550,14 @@ export async function cacheSharedFeedSnapshot(
     }
 
     await tx.runAsync(
-      `INSERT INTO shared_feed_cache_meta (user_uid, last_updated_at)
-       VALUES (?, ?)
+      `INSERT INTO shared_feed_cache_meta (user_uid, last_updated_at, owned_shared_note_ids)
+       VALUES (?, ?, ?)
        ON CONFLICT(user_uid) DO UPDATE SET
-         last_updated_at = excluded.last_updated_at`,
+         last_updated_at = excluded.last_updated_at,
+         owned_shared_note_ids = excluded.owned_shared_note_ids`,
       userUid,
-      cachedAt
+      cachedAt,
+      JSON.stringify(normalizeOwnedSharedNoteIds(ownedSharedNoteIds))
     );
   });
 
@@ -578,6 +572,7 @@ export async function getCachedSharedFeedSnapshot(userUid: string): Promise<{
   friends: FriendConnection[];
   sharedPosts: SharedPost[];
   activeInvite: FriendInvite | null;
+  ownedSharedNoteIds: string[];
   lastUpdatedAt: string | null;
 }> {
   const { friendRows, sharedPostRows, metaRow } = await withDatabaseTransaction(
@@ -597,7 +592,7 @@ export async function getCachedSharedFeedSnapshot(userUid: string): Promise<{
         userUid
       );
       const nextMetaRow = await tx.getFirstAsync<MetaRow>(
-        `SELECT last_updated_at
+        `SELECT last_updated_at, owned_shared_note_ids
          FROM shared_feed_cache_meta
          WHERE user_uid = ?`,
         userUid
@@ -611,10 +606,17 @@ export async function getCachedSharedFeedSnapshot(userUid: string): Promise<{
     }
   );
 
+  const sharedPosts = sharedPostRows.map(rowToSharedPost);
+  const fallbackOwnedSharedNoteIds = getOwnedSharedNoteIdsFromPosts(sharedPosts, userUid);
+
   return {
     friends: friendRows.map(rowToFriend),
-    sharedPosts: sharedPostRows.map(rowToSharedPost),
+    sharedPosts,
     activeInvite: await getStoredActiveInvite(userUid),
+    ownedSharedNoteIds: parseOwnedSharedNoteIds(
+      metaRow?.owned_shared_note_ids,
+      fallbackOwnedSharedNoteIds
+    ),
     lastUpdatedAt: metaRow?.last_updated_at ?? null,
   };
 }
