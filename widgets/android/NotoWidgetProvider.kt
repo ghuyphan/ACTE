@@ -1118,6 +1118,7 @@ class NotoWidgetProvider : AppWidgetProvider() {
           bodyText = bodyText,
           geometry = geometry,
           typography = bodyTypography,
+          textStageInsets = textStageInsets,
           bodyForegroundColor = bodyForegroundColor,
           noteType = snapshot.noteType,
           layoutStage = layoutStage
@@ -1409,12 +1410,19 @@ class NotoWidgetProvider : AppWidgetProvider() {
       }
 
       when (noteColorId) {
-        "sky-blue", "holo-foil" -> return R.drawable.noto_widget_badge_light_blue
-        "jade-pop", "olive-lime" -> return R.drawable.noto_widget_badge_light_green
-        "pool-teal" -> return R.drawable.noto_widget_badge_light_teal
+        "sky-blue" -> return R.drawable.noto_widget_badge_light_sky
+        "holo-foil" -> return R.drawable.noto_widget_badge_light_blue
+        "matcha-theme", "matcha-theme-light", "matcha-theme-dark" -> return R.drawable.noto_widget_badge_light_matcha
+        "jade-pop" -> return R.drawable.noto_widget_badge_light_jade
+        "olive-lime" -> return R.drawable.noto_widget_badge_light_green
+        "pool-teal" -> return R.drawable.noto_widget_badge_light_pool
+        "berry-theme", "berry-theme-light", "berry-theme-dark" -> return R.drawable.noto_widget_badge_light_berry
+        "cotton-candy-theme", "cotton-candy-theme-light", "cotton-candy-theme-dark" -> return R.drawable.noto_widget_badge_light_cotton_candy
         "violet-bloom", "periwinkle-ink", "chrome-rare", "aurora-rgb" -> return R.drawable.noto_widget_badge_light_lavender
+        "peach-theme", "peach-theme-light", "peach-theme-dark" -> return R.drawable.noto_widget_badge_light_peach
         "sunset-coral", "raspberry-dusk" -> return R.drawable.noto_widget_badge_light_pink
-        "marigold-glow", "tangerine-clay" -> return R.drawable.noto_widget_badge_light_warm
+        "marigold-glow" -> return R.drawable.noto_widget_badge_light_marigold
+        "tangerine-clay" -> return R.drawable.noto_widget_badge_light_tangerine
       }
 
       if (textSurfaceGradient == null) {
@@ -1432,6 +1440,7 @@ class NotoWidgetProvider : AppWidgetProvider() {
       val saturation = hsv[1]
 
       return when {
+        saturation >= 0.08f && hue in 75f..170f -> R.drawable.noto_widget_badge_light_matcha
         saturation >= 0.08f && hue in 185f..320f -> R.drawable.noto_widget_badge_light_cool
         saturation >= 0.08f && hue in 8f..55f -> R.drawable.noto_widget_badge_light_warm
         else -> R.drawable.noto_widget_badge_light_neutral
@@ -1449,11 +1458,17 @@ class NotoWidgetProvider : AppWidgetProvider() {
 
       when (noteColorId) {
         "sky-blue", "holo-foil" -> return Color.parseColor("#546A86")
-        "jade-pop", "olive-lime" -> return Color.parseColor("#4E6954")
-        "pool-teal" -> return Color.parseColor("#476D73")
+        "matcha-theme", "matcha-theme-light", "matcha-theme-dark" -> return Color.parseColor("#657752")
+        "jade-pop" -> return Color.parseColor("#3F7058")
+        "olive-lime" -> return Color.parseColor("#4E6954")
+        "pool-teal" -> return Color.parseColor("#386D77")
+        "berry-theme", "berry-theme-light", "berry-theme-dark" -> return Color.parseColor("#665B88")
+        "cotton-candy-theme", "cotton-candy-theme-light", "cotton-candy-theme-dark" -> return Color.parseColor("#6E5B83")
         "violet-bloom", "periwinkle-ink", "chrome-rare", "aurora-rgb" -> return Color.parseColor("#655884")
+        "peach-theme", "peach-theme-light", "peach-theme-dark" -> return Color.parseColor("#7B5861")
         "sunset-coral", "raspberry-dusk" -> return Color.parseColor("#7A5568")
-        "marigold-glow", "tangerine-clay" -> return Color.parseColor("#7A5A46")
+        "marigold-glow" -> return Color.parseColor("#7A5A46")
+        "tangerine-clay" -> return Color.parseColor("#84523A")
       }
 
       return resolveGradientLocationForegroundColor(textSurfaceGradient)
@@ -1504,6 +1519,7 @@ class NotoWidgetProvider : AppWidgetProvider() {
       val hue = hsv[0]
       val saturation = hsv[1]
       val anchorColor = when {
+        saturation >= 0.08f && hue in 75f..170f -> Color.parseColor("#657752")
         saturation >= 0.08f && hue in 185f..320f -> Color.parseColor("#58657E")
         saturation >= 0.08f && hue in 8f..55f -> Color.parseColor("#70533F")
         else -> Color.parseColor("#675B50")
@@ -1809,19 +1825,19 @@ class NotoWidgetProvider : AppWidgetProvider() {
         when (layoutStage) {
           WidgetLayoutStage.SMALL -> when {
             trimmedLength <= 28 -> listOf(
-              scaleWidgetSp(11.8f) to 22f,
-              scaleWidgetSp(11.2f) to 20f,
-              scaleWidgetSp(10.6f) to 18f
+              scaleWidgetSp(16.8f) to 20f,
+              scaleWidgetSp(15.8f) to 18f,
+              scaleWidgetSp(14.8f) to 16f
             )
             trimmedLength <= 64 -> listOf(
-              scaleWidgetSp(11.4f) to 22f,
-              scaleWidgetSp(10.9f) to 20f,
-              scaleWidgetSp(10.4f) to 18f
+              scaleWidgetSp(15.8f) to 20f,
+              scaleWidgetSp(14.8f) to 18f,
+              scaleWidgetSp(13.8f) to 16f
             )
             else -> listOf(
-              scaleWidgetSp(11.1f) to 20f,
-              scaleWidgetSp(10.6f) to 18f,
-              scaleWidgetSp(10.2f) to 16f
+              scaleWidgetSp(14.8f) to 20f,
+              scaleWidgetSp(13.8f) to 18f,
+              scaleWidgetSp(12.8f) to 16f
             )
           }
           WidgetLayoutStage.MEDIUM -> when {
@@ -2040,6 +2056,7 @@ class NotoWidgetProvider : AppWidgetProvider() {
       bodyText: String,
       geometry: WidgetRenderGeometry,
       typography: WidgetBodyTypography,
+      textStageInsets: WidgetTextStageInsets,
       bodyForegroundColor: Int,
       noteType: String,
       layoutStage: WidgetLayoutStage
@@ -2066,6 +2083,8 @@ class NotoWidgetProvider : AppWidgetProvider() {
           else -> 3f
         }
       ).toFloat()
+      val shadowInsetPx = context.dpToPx(5f)
+      val layoutWidthPx = max(1, availableWidthPx - (shadowInsetPx * 2))
 
       val textPaint = TextPaint(Paint.ANTI_ALIAS_FLAG or Paint.SUBPIXEL_TEXT_FLAG).apply {
         color = bodyForegroundColor
@@ -2082,7 +2101,7 @@ class NotoWidgetProvider : AppWidgetProvider() {
       }
 
       val staticLayout = StaticLayout.Builder
-        .obtain(normalizedText, 0, normalizedText.length, textPaint, availableWidthPx)
+        .obtain(normalizedText, 0, normalizedText.length, textPaint, layoutWidthPx)
         .setAlignment(Layout.Alignment.ALIGN_CENTER)
         .setIncludePad(false)
         .setMaxLines(typography.maxLines)
@@ -2090,13 +2109,16 @@ class NotoWidgetProvider : AppWidgetProvider() {
         .setLineSpacing(lineSpacingExtraPx, 1f)
         .build()
 
-      val insetPx = context.dpToPx(4f)
-      val bitmapWidth = max(1, staticLayout.width + insetPx * 2)
-      val bitmapHeight = max(1, staticLayout.height + insetPx * 2)
+      val bitmapWidth = availableWidthPx
+      val bitmapHeight = max(
+        1,
+        geometry.contentHeightPx - textStageInsets.topPx - textStageInsets.bottomPx
+      )
+      val textTopPx = ((bitmapHeight - staticLayout.height) / 2f).coerceAtLeast(0f)
 
       return Bitmap.createBitmap(bitmapWidth, bitmapHeight, Bitmap.Config.ARGB_8888).also { bitmap ->
         val canvas = Canvas(bitmap)
-        canvas.translate(insetPx.toFloat(), insetPx.toFloat())
+        canvas.translate(shadowInsetPx.toFloat(), textTopPx)
         staticLayout.draw(canvas)
       }
     }

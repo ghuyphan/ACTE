@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
-import { memo, useEffect, useMemo, useRef, useState, type RefObject } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import { Platform, StyleSheet, Text, View } from 'react-native';
 import MapView, { Marker, Region } from 'react-native-maps';
 import Reanimated, {
@@ -98,8 +98,8 @@ interface MarkerContentProps {
 }
 
 const ANDROID_MARKER_REFRESH_MS = {
-  reducedMotion: 120,
-  standard: 320,
+  reducedMotion: 260,
+  standard: 950,
 } as const;
 
 function getClusterSize(pointCount: number) {
@@ -145,6 +145,21 @@ function getSharedPostMarkerPhotoUri(post: SharedPost) {
     post.dualSecondaryPhotoLocalUri?.trim() ||
     null
   );
+}
+
+type MarkerImageKind = 'own' | 'friend-avatar' | 'friend-badge' | 'friend-post';
+
+function getMarkerImageKey(kind: MarkerImageKind, id: string, uri: string | null | undefined) {
+  const trimmedUri = uri?.trim();
+  return trimmedUri ? `${kind}-${id}::${trimmedUri}` : null;
+}
+
+function isImagePending(pendingKeys: Set<string>, key: string | null) {
+  return key ? pendingKeys.has(key) : false;
+}
+
+function clearSetIfNeeded<T>(currentSet: Set<T>) {
+  return currentSet.size === 0 ? currentSet : new Set<T>();
 }
 
 function getLeafMarkerBaseScale(
@@ -357,7 +372,7 @@ const MarkerContent = memo(function MarkerContent({
 
   const singleMarkerOuterStyle = useAnimatedStyle(() => ({
     borderColor: interpolateColor(activeProgress.value, [0, 1], ['white', accentColor]),
-    backgroundColor: interpolateColor(activeProgress.value, [0, 1], [`${color}30`, `${accentColor}44`]),
+    backgroundColor: interpolateColor(activeProgress.value, [0, 1], [cardBackgroundColor, `${accentColor}44`]),
   }));
 
   const singleMarkerIconStyle = useAnimatedStyle(() => ({
@@ -490,7 +505,10 @@ function MapCanvas({
   const androidMarkerRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const selectedCalloutAnchor = useMemo(() => ({ x: 0.5, y: 0.86 }), []);
   // Android applies map color scheme only from initial props, so remount on theme flips.
-  const mapViewKey = isAndroid ? `map-${isDark ? 'dark' : 'light'}` : 'map';
+  const ownMarkerLayerKey = noteById.size === 0 ? 'notes-empty' : 'notes-present';
+  const mapViewKey = isAndroid
+    ? `map-${isDark ? 'dark' : 'light'}-${ownMarkerLayerKey}`
+    : 'map';
 
   const markerRenderItems = useMemo<MarkerRenderItem[]>(
     () => {
@@ -592,29 +610,80 @@ function MapCanvas({
     const nextKeys = new Set<string>();
 
     for (const item of markerRenderItems) {
-      if (item.photoUri) {
-        nextKeys.add(`${item.key}::${item.photoUri}`);
+      const imageKey = getMarkerImageKey('own', item.key, item.photoUri);
+      if (imageKey) {
+        nextKeys.add(imageKey);
       }
     }
 
     for (const post of friendMarkers) {
       const avatarUri = post.authorPhotoURLSnapshot?.trim();
-      if (avatarUri) {
-        nextKeys.add(`friend-${post.id}::${avatarUri}`);
-      }
-
       const sharedPhotoUri = getSharedPostMarkerPhotoUri(post);
-      if (sharedPhotoUri) {
-        nextKeys.add(`friend-post-${post.id}::${sharedPhotoUri}`);
+      const avatarKey = getMarkerImageKey('friend-avatar', post.id, avatarUri);
+      const badgeKey = getMarkerImageKey('friend-badge', post.id, avatarUri);
+      const postPhotoKey = getMarkerImageKey('friend-post', post.id, sharedPhotoUri);
+
+      if (!sharedPhotoUri && avatarKey) {
+        nextKeys.add(avatarKey);
+      }
+      if (badgeKey) {
+        nextKeys.add(badgeKey);
+      }
+      if (postPhotoKey) {
+        nextKeys.add(postPhotoKey);
       }
     }
 
     return nextKeys;
   }, [friendMarkers, markerRenderItems]);
+  const markerRenderSignature = useMemo(() => {
+    const ownMarkerSignature = markerRenderItems
+      .map((item) => [
+        item.key,
+        item.coordinate.latitude.toFixed(6),
+        item.coordinate.longitude.toFixed(6),
+        item.pointCount,
+        item.isSelected ? 'selected' : 'idle',
+        item.photoUri ?? '',
+      ].join(':'))
+      .join('|');
+    const friendMarkerSignature = friendMarkers
+      .map((post) => [
+        post.id,
+        post.latitude.toFixed(6),
+        post.longitude.toFixed(6),
+        selectedFriendPostId === post.id ? 'selected' : 'idle',
+        getSharedPostMarkerPhotoUri(post) ?? '',
+        post.authorPhotoURLSnapshot?.trim() ?? '',
+      ].join(':'))
+      .join('|');
+
+    return `${ownMarkerSignature}::${friendMarkerSignature}`;
+  }, [friendMarkers, markerRenderItems, selectedFriendPostId]);
+
+  const scheduleAndroidMarkerRefresh = useCallback(() => {
+    if (!isAndroid || preferLiteMarkers) {
+      setAndroidShouldTrackMarkerViews(false);
+      setPendingMarkerImageKeys(clearSetIfNeeded);
+      return;
+    }
+
+    setAndroidShouldTrackMarkerViews(true);
+
+    if (androidMarkerRefreshTimerRef.current) {
+      clearTimeout(androidMarkerRefreshTimerRef.current);
+    }
+
+    androidMarkerRefreshTimerRef.current = setTimeout(() => {
+      setAndroidShouldTrackMarkerViews(false);
+      setPendingMarkerImageKeys(clearSetIfNeeded);
+      androidMarkerRefreshTimerRef.current = null;
+    }, reduceMotionEnabled ? ANDROID_MARKER_REFRESH_MS.reducedMotion : ANDROID_MARKER_REFRESH_MS.standard);
+  }, [isAndroid, preferLiteMarkers, reduceMotionEnabled]);
 
   useEffect(() => {
     if (!isAndroid) {
-      setPendingMarkerImageKeys((current) => (current.size === 0 ? current : new Set()));
+      setPendingMarkerImageKeys(clearSetIfNeeded);
       return;
     }
 
@@ -635,6 +704,8 @@ function MapCanvas({
       return;
     }
 
+    scheduleAndroidMarkerRefresh();
+
     setPendingMarkerImageKeys((currentKeys) => {
       if (currentKeys.has(imageKey)) {
         return currentKeys;
@@ -650,6 +721,8 @@ function MapCanvas({
     if (!isAndroid) {
       return;
     }
+
+    scheduleAndroidMarkerRefresh();
 
     setPendingMarkerImageKeys((currentKeys) => {
       if (!currentKeys.has(imageKey)) {
@@ -670,33 +743,8 @@ function MapCanvas({
   }, []);
 
   useEffect(() => {
-    if (!isAndroid || preferLiteMarkers) {
-      setAndroidShouldTrackMarkerViews(false);
-      return;
-    }
-
-    setAndroidShouldTrackMarkerViews(true);
-
-    if (androidMarkerRefreshTimerRef.current) {
-      clearTimeout(androidMarkerRefreshTimerRef.current);
-    }
-
-    androidMarkerRefreshTimerRef.current = setTimeout(() => {
-      setAndroidShouldTrackMarkerViews(false);
-      androidMarkerRefreshTimerRef.current = null;
-    }, reduceMotionEnabled ? ANDROID_MARKER_REFRESH_MS.reducedMotion : ANDROID_MARKER_REFRESH_MS.standard);
-  }, [
-    currentZoom,
-    friendMarkers,
-    isAndroid,
-    isDark,
-    markerNodes,
-    selectedNote?.id,
-    preferLiteMarkers,
-    reduceMotionEnabled,
-    selectedFriendPostId,
-    selectedGroupId,
-  ]);
+    scheduleAndroidMarkerRefresh();
+  }, [currentZoom, isDark, markerRenderSignature, scheduleAndroidMarkerRefresh]);
 
   return (
     <MapView
@@ -737,7 +785,7 @@ function MapCanvas({
           Boolean(selectedNote) &&
           node.groupId === selectedGroup!.id;
         const markerZIndex = showSelectedCallout ? 30 : isSelected ? 20 : node.isCluster ? 5 : 10;
-        const imageTrackingKey = photoUri ? `${key}::${photoUri}` : null;
+        const imageTrackingKey = getMarkerImageKey('own', key, photoUri);
         const markerRenderKey = isAndroid
           ? `${key}-${
               showSelectedCallout
@@ -779,7 +827,7 @@ function MapCanvas({
                 (!isAndroid && (showSelectedCallout || isSelected)) ||
                 (isAndroid &&
                   (androidShouldTrackMarkerViews ||
-                    (imageTrackingKey ? pendingMarkerImageKeys.has(imageTrackingKey) : false)))
+                    isImagePending(pendingMarkerImageKeys, imageTrackingKey)))
               }
               onPress={(event) => {
                 event.stopPropagation?.();
@@ -838,10 +886,11 @@ function MapCanvas({
         const isSelected = selectedFriendPostId === post.id;
         const authorLabel = post.authorDisplayName?.trim() || 'F';
         const sharedPhotoUri = getSharedPostMarkerPhotoUri(post);
-        const friendImageTrackingKey = post.authorPhotoURLSnapshot?.trim()
-          ? `friend-${post.id}::${post.authorPhotoURLSnapshot.trim()}`
-          : null;
-        const friendPhotoTrackingKey = sharedPhotoUri ? `friend-post-${post.id}::${sharedPhotoUri}` : null;
+        const friendAvatarTrackingKey = sharedPhotoUri
+          ? null
+          : getMarkerImageKey('friend-avatar', post.id, post.authorPhotoURLSnapshot);
+        const friendBadgeTrackingKey = getMarkerImageKey('friend-badge', post.id, post.authorPhotoURLSnapshot);
+        const friendPhotoTrackingKey = getMarkerImageKey('friend-post', post.id, sharedPhotoUri);
         const showSelectedFriendCallout = isSelected;
         const friendMarkerKey = isAndroid
           ? `friend-${post.id}-${showSelectedFriendCallout ? 'callout' : isSelected ? 'selected' : 'idle'}`
@@ -872,12 +921,9 @@ function MapCanvas({
                 (!isAndroid && showSelectedFriendCallout) ||
                 (isAndroid &&
                   (androidShouldTrackMarkerViews ||
-                    (friendImageTrackingKey
-                      ? pendingMarkerImageKeys.has(friendImageTrackingKey)
-                      : false) ||
-                    (friendPhotoTrackingKey
-                      ? pendingMarkerImageKeys.has(friendPhotoTrackingKey)
-                      : false)))
+                    isImagePending(pendingMarkerImageKeys, friendAvatarTrackingKey) ||
+                    isImagePending(pendingMarkerImageKeys, friendBadgeTrackingKey) ||
+                    isImagePending(pendingMarkerImageKeys, friendPhotoTrackingKey)))
               }
               zIndex={showSelectedFriendCallout ? 30 : isSelected ? 20 : 10}
               onPress={(event) => {
@@ -946,18 +992,18 @@ function MapCanvas({
                       contentFit="cover"
                       transition={0}
                       onLoadStart={() => {
-                        if (friendImageTrackingKey) {
-                          handleMarkerImageLoadStart(friendImageTrackingKey);
+                        if (friendAvatarTrackingKey) {
+                          handleMarkerImageLoadStart(friendAvatarTrackingKey);
                         }
                       }}
                       onLoad={() => {
-                        if (friendImageTrackingKey) {
-                          handleMarkerImageLoadEnd(friendImageTrackingKey);
+                        if (friendAvatarTrackingKey) {
+                          handleMarkerImageLoadEnd(friendAvatarTrackingKey);
                         }
                       }}
                       onError={() => {
-                        if (friendImageTrackingKey) {
-                          handleMarkerImageLoadEnd(friendImageTrackingKey);
+                        if (friendAvatarTrackingKey) {
+                          handleMarkerImageLoadEnd(friendAvatarTrackingKey);
                         }
                       }}
                     />
@@ -982,18 +1028,18 @@ function MapCanvas({
                         contentFit="cover"
                         transition={0}
                         onLoadStart={() => {
-                          if (friendImageTrackingKey) {
-                            handleMarkerImageLoadStart(friendImageTrackingKey);
+                          if (friendBadgeTrackingKey) {
+                            handleMarkerImageLoadStart(friendBadgeTrackingKey);
                           }
                         }}
                         onLoad={() => {
-                          if (friendImageTrackingKey) {
-                            handleMarkerImageLoadEnd(friendImageTrackingKey);
+                          if (friendBadgeTrackingKey) {
+                            handleMarkerImageLoadEnd(friendBadgeTrackingKey);
                           }
                         }}
                         onError={() => {
-                          if (friendImageTrackingKey) {
-                            handleMarkerImageLoadEnd(friendImageTrackingKey);
+                          if (friendBadgeTrackingKey) {
+                            handleMarkerImageLoadEnd(friendBadgeTrackingKey);
                           }
                         }}
                       />
@@ -1109,6 +1155,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.14,
     shadowRadius: 18,
     elevation: 5,
+    zIndex: 1,
   },
   photoMarkerImage: {
     width: '100%',
@@ -1117,8 +1164,8 @@ const styles = StyleSheet.create({
   },
   photoMarkerBadge: {
     position: 'absolute',
-    right: -4,
-    bottom: -4,
+    right: 2,
+    bottom: 2,
     width: 18,
     height: 18,
     borderRadius: 9,
@@ -1130,7 +1177,8 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.14,
     shadowRadius: 8,
-    elevation: 3,
+    elevation: 8,
+    zIndex: 3,
   },
   markerOrb: {
     justifyContent: 'center',
@@ -1176,6 +1224,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     overflow: 'visible',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.12,
+    shadowRadius: 16,
+    elevation: 5,
   },
   friendPhotoMarker: {
     width: 44,

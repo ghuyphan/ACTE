@@ -1,4 +1,4 @@
-import { renderHook, waitFor } from '@testing-library/react-native';
+import { act, renderHook, waitFor } from '@testing-library/react-native';
 import type { NearbyNoteItem } from '../hooks/map/mapDomain';
 import { useMapPreviewState } from '../hooks/map/useMapPreviewState';
 import type { Note } from '../services/database';
@@ -51,6 +51,42 @@ describe('useMapPreviewState', () => {
     await waitFor(() => {
       expect(result.current.nearbyPreviewItems.map((item) => item.note.id)).toEqual(['near', 'farther']);
       expect(result.current.nearbyPreviewItems[0]?.note.content).toBe('Updated text');
+    });
+  });
+
+  it('drops pinned preview items that no longer exist in the valid note set', async () => {
+    const firstItems = [
+      makePreviewItem('near', 'Original text'),
+      makePreviewItem('farther', 'Second text'),
+    ];
+    const { result, rerender } = renderHook(
+      ({
+        nearbyItems,
+        validNoteIds,
+      }: {
+        nearbyItems: NearbyNoteItem[];
+        validNoteIds: ReadonlySet<string>;
+      }) => useMapPreviewState({ nearbyItems, friendPosts: [], validNoteIds }),
+      {
+        initialProps: {
+          nearbyItems: firstItems,
+          validNoteIds: new Set(['near', 'farther']),
+        },
+      }
+    );
+
+    act(() => {
+      result.current.focusNearbyPreview(firstItems, 'near');
+    });
+
+    rerender({
+      nearbyItems: [],
+      validNoteIds: new Set(['farther']),
+    });
+
+    await waitFor(() => {
+      expect(result.current.nearbyPreviewItems.map((item) => item.note.id)).toEqual(['farther']);
+      expect(result.current.activeNearbyNoteId).toBe('farther');
     });
   });
 });

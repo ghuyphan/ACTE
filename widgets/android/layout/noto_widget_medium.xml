@@ -261,7 +261,7 @@
                     android:layout_height="match_parent"
                     android:adjustViewBounds="false"
                     android:contentDescription="@null"
-                    android:scaleType="center"
+                    android:scaleType="fitCenter"
                     android:visibility="gone" />
             </FrameLayout>
 

@@ -12,6 +12,17 @@ const mockRequestForegroundLocation = jest.fn();
 const mockOpenAppSettings = jest.fn();
 const mockImpactAsync = jest.fn();
 let mockReduceMotionEnabled = false;
+let mockLocation: {
+  coords: {
+    latitude: number;
+    longitude: number;
+  };
+} | null = {
+  coords: {
+    latitude: 10.7605,
+    longitude: 106.6605,
+  },
+};
 const defaultSharedPosts = [
   {
     id: 'shared-friend-1',
@@ -233,12 +244,7 @@ jest.mock('../hooks/useSharedFeed', () => ({
 
 jest.mock('../hooks/useGeofence', () => ({
   useGeofence: () => ({
-    location: {
-      coords: {
-        latitude: 10.7605,
-        longitude: 106.6605,
-      },
-    },
+    location: mockLocation,
     requestForegroundLocation: (...args: unknown[]) => mockRequestForegroundLocation(...args),
     openAppSettings: (...args: unknown[]) => mockOpenAppSettings(...args),
   }),
@@ -308,6 +314,12 @@ describe('MapScreen', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockReduceMotionEnabled = false;
+    mockLocation = {
+      coords: {
+        latitude: 10.7605,
+        longitude: 106.6605,
+      },
+    };
     setPlatformOS('ios');
     resetMockNotes();
     resetMockSharedPosts();
@@ -337,7 +349,7 @@ describe('MapScreen', () => {
     fireEvent.press(getByTestId('map-filter-favorites'));
 
     await waitFor(() => {
-      expect(getByText('No notes match these filters')).toBeTruthy();
+      expect(getByText('Clear filters')).toBeTruthy();
       expect(getByTestId('map-top-header')).toBeTruthy();
       expect(getByTestId('map-overlay-host')).toBeTruthy();
     });
@@ -425,7 +437,7 @@ describe('MapScreen', () => {
     expect(await findByText('No notes')).toBeTruthy();
     const statusSurfaceStyle = StyleSheet.flatten(getByTestId('map-status-surface').props.style);
     expect(statusSurfaceStyle.borderWidth).toBe(1);
-    expect(statusSurfaceStyle.borderColor).toBe('rgba(17,24,39,0.12)');
+    expect(statusSurfaceStyle.borderColor).toBe('rgba(17,24,39,0.06)');
     expect(statusSurfaceStyle.shadowOpacity).toBe(0);
     expect(statusSurfaceStyle.elevation).toBe(0);
     expect(queryByTestId('map-create-first-note')).toBeNull();
@@ -451,7 +463,7 @@ describe('MapScreen', () => {
     fireEvent.press(getByTestId('map-filter-photo'));
     fireEvent.press(getByTestId('map-filter-favorites'));
 
-    expect(await findByText('No notes match these filters')).toBeTruthy();
+    expect(await findByText('Clear filters')).toBeTruthy();
     expect(getByTestId('map-clear-filters')).toBeTruthy();
 
     replaceMockNotes([]);
@@ -466,6 +478,33 @@ describe('MapScreen', () => {
     render(<MapScreen />);
 
     expect(mockAnimateToRegion).not.toHaveBeenCalled();
+  });
+
+  it('centers on location when the first location fix arrives after the map is ready', async () => {
+    mockLocation = null;
+
+    const { rerender } = render(<MapScreen />);
+
+    expect(mockAnimateToRegion).not.toHaveBeenCalled();
+
+    mockLocation = {
+      coords: {
+        latitude: 11.12,
+        longitude: 107.34,
+      },
+    };
+    rerender(<MapScreen />);
+
+    await waitFor(() => {
+      const lastCall = mockAnimateToRegion.mock.calls[mockAnimateToRegion.mock.calls.length - 1];
+      expect(lastCall?.[0]).toMatchObject({
+        latitude: 11.12,
+        longitude: 107.34,
+        latitudeDelta: 0.012,
+        longitudeDelta: 0.012,
+      });
+      expect(lastCall?.[1]).toBe(0);
+    });
   });
 
   it('mounts the shared map experience on Android instead of the placeholder fallback', async () => {
@@ -541,7 +580,7 @@ describe('MapScreen', () => {
     expect(getByTestId('note-marker-text-1')).toBeTruthy();
   });
 
-  it('stops tracking selected marker view changes after the Android refresh window closes', async () => {
+  it('keeps Android marker view changes active through the refresh window, then settles', async () => {
     jest.useFakeTimers();
     setPlatformOS('android');
 
@@ -569,6 +608,15 @@ describe('MapScreen', () => {
 
     act(() => {
       jest.advanceTimersByTime(400);
+    });
+
+    await waitFor(() => {
+      expect(getByTestId('note-marker-text-1')).toBeTruthy();
+      expect(getByTestId('leaf-marker-10.76000:106.66000').props.tracksViewChanges).toBe(true);
+    });
+
+    act(() => {
+      jest.advanceTimersByTime(700);
     });
 
     await waitFor(() => {
@@ -626,8 +674,8 @@ describe('MapScreen', () => {
       getByTestId('map-canvas').props.onRegionChangeComplete({
         latitude: 10.7615,
         longitude: 106.6615,
-        latitudeDelta: 0.004,
-        longitudeDelta: 0.004,
+        latitudeDelta: 0.008,
+        longitudeDelta: 0.008,
       });
     });
 
@@ -1205,6 +1253,27 @@ describe('MapScreen', () => {
     await waitFor(() => {
       expect(queryByTestId('note-marker-text-1')).toBeNull();
       expect(queryByTestId('note-marker-replacement-note')).toBeNull();
+    });
+  });
+
+  it('removes all own note markers after deleting every note', async () => {
+    const { getByTestId, queryByTestId, rerender } = render(<MapScreen />);
+
+    fireEvent.press(getByTestId('leaf-marker-10.76000:106.66000'));
+
+    await waitFor(() => {
+      expect(getByTestId('note-marker-text-1')).toBeTruthy();
+    });
+
+    replaceMockNotes([]);
+    rerender(<MapScreen />);
+
+    await waitFor(() => {
+      expect(queryByTestId('leaf-marker-10.76000:106.66000')).toBeNull();
+      expect(queryByTestId('leaf-marker-10.80000:106.70000')).toBeNull();
+      expect(queryByTestId('note-marker-text-1')).toBeNull();
+      expect(getByTestId('map-preview-shell')).toBeTruthy();
+      expect(getByTestId('map-status-surface')).toBeTruthy();
     });
   });
 

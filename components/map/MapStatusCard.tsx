@@ -1,11 +1,13 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useMemo, useState } from 'react';
-import { Platform, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { GlassView } from '../ui/GlassView';
 import { useTheme } from '../../hooks/useTheme';
 import { isOlderIOS } from '../../utils/platform';
 import MapPreviewSheet from './MapPreviewSheet';
 import {
+  getOverlayBorderColor,
+  getOverlayFallbackColor,
   getOverlayScrimColor,
   mapOverlayTokens,
 } from './overlayTokens';
@@ -26,22 +28,7 @@ interface MapStatusCardProps {
 
 const PREVIEW_HORIZONTAL_INSET = 14;
 const STATUS_CARD_MAX_WIDTH = 356;
-
-function getNoShadowBorderColor(isDark: boolean) {
-  if (Platform.OS === 'android') {
-    return isDark ? 'rgba(255,255,255,0.16)' : 'rgba(113,86,26,0.24)';
-  }
-
-  return isDark ? 'rgba(255,255,255,0.2)' : 'rgba(17,24,39,0.12)';
-}
-
-function getStatusSurfaceColor(isDark: boolean) {
-  if (Platform.OS === 'android') {
-    return isDark ? 'rgba(24,20,18,0.9)' : 'rgba(255,251,246,0.96)';
-  }
-
-  return isDark ? 'rgba(16,18,24,0.9)' : 'rgba(255,253,249,0.94)';
-}
+const STATUS_PILL_MAX_WIDTH = 218;
 
 export default function MapStatusCard({
   visible,
@@ -68,24 +55,22 @@ export default function MapStatusCard({
 
   const isPassivePill = Boolean(title) && !subtitle && !actionLabel;
   const isActionOnly = !title && !subtitle && Boolean(actionLabel);
+  const isPill = isActionOnly || isPassivePill;
   const fullSurfaceWidth = Math.max(0, windowWidth - PREVIEW_HORIZONTAL_INSET * 2);
-  const compactWidth = Math.min(fullSurfaceWidth, 168);
-  const shellWidth = isPassivePill
-    ? compactWidth
-    : isActionOnly
-      ? Math.min(fullSurfaceWidth, 196)
-      : Math.min(fullSurfaceWidth, STATUS_CARD_MAX_WIDTH);
+  const shellWidth = Math.min(fullSurfaceWidth, isPill ? STATUS_PILL_MAX_WIDTH : STATUS_CARD_MAX_WIDTH);
 
   const shellStyle = useMemo(
     () => [
       styles.surface,
+      isPill ? styles.pillSurface : null,
       {
-        width: shellWidth,
-        borderColor: getNoShadowBorderColor(isDark),
-        backgroundColor: getStatusSurfaceColor(isDark),
+        maxWidth: shellWidth,
+        width: isPill ? undefined : shellWidth,
+        borderColor: getOverlayBorderColor(isDark),
+        backgroundColor: getOverlayFallbackColor(isDark),
       },
     ],
-    [isDark, shellWidth]
+    [isDark, isPill, shellWidth]
   );
 
   if ((!isMounted && !visible) || (!title && !actionLabel)) {
@@ -107,7 +92,7 @@ export default function MapStatusCard({
       handleVisible={false}
     >
       <View style={styles.surfaceHost} pointerEvents="box-none">
-        <View testID="map-status-surface" style={[shellStyle, styles.surfaceNoShadow]}>
+        <View testID="map-status-surface" style={shellStyle}>
           <GlassView
             pointerEvents="none"
             glassEffectStyle="regular"
@@ -129,7 +114,7 @@ export default function MapStatusCard({
               style={[
                 StyleSheet.absoluteFill,
                 {
-                  backgroundColor: getStatusSurfaceColor(isDark),
+                  backgroundColor: getOverlayFallbackColor(isDark),
                 },
               ]}
             />
@@ -157,11 +142,10 @@ export default function MapStatusCard({
                 },
               ]}
             >
-              <Ionicons name={icon} size={14} color={colors.primary} />
+              <Ionicons name={actionIcon} size={14} color={colors.primary} />
               <Text style={[styles.pillLabel, { color: colors.primary }]} numberOfLines={1}>
                 {actionLabel}
               </Text>
-              <Ionicons name="chevron-up" size={13} color={colors.primary} />
             </Pressable>
           ) : (
             <View style={styles.contentRow}>
@@ -217,20 +201,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   surface: {
-    borderWidth: StyleSheet.hairlineWidth,
+    borderWidth: 1,
     borderRadius: mapOverlayTokens.overlayRadius,
     overflow: 'hidden',
     paddingHorizontal: 12,
     paddingVertical: 12,
-    ...mapOverlayTokens.overlayShadow,
-  },
-  surfaceNoShadow: {
-    borderWidth: 1,
     shadowColor: 'transparent',
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0,
     shadowRadius: 0,
     elevation: 0,
+  },
+  pillSurface: {
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
   },
   contentRow: {
     flexDirection: 'row',
@@ -272,11 +257,11 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
   actionOnlyPill: {
-    minHeight: 24,
+    minHeight: 22,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 7,
+    gap: 6,
   },
   actionText: {
     fontSize: 13,
@@ -284,11 +269,11 @@ const styles = StyleSheet.create({
     fontFamily: 'Noto Sans',
   },
   pillContent: {
-    minHeight: 24,
+    minHeight: 22,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 7,
+    gap: 6,
   },
   pillDot: {
     width: 7,
@@ -296,7 +281,7 @@ const styles = StyleSheet.create({
     borderRadius: 999,
   },
   pillLabel: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '600',
     fontFamily: 'Noto Sans',
   },

@@ -13,6 +13,7 @@ interface NotesPreviewState {
 interface UseMapPreviewStateParams {
   nearbyItems: NearbyNoteItem[];
   friendPosts: SharedPost[];
+  validNoteIds?: ReadonlySet<string>;
 }
 
 function haveSameNearbyOrder(left: NearbyNoteItem[], right: NearbyNoteItem[]) {
@@ -71,9 +72,29 @@ function mergeNearbyPreviewItems(current: NearbyNoteItem[], next: NearbyNoteItem
   return haveSameNearbyItems(current, mergedItems) ? current : mergedItems;
 }
 
+function filterValidNearbyItems(items: NearbyNoteItem[], validNoteIds?: ReadonlySet<string>) {
+  return validNoteIds ? items.filter((item) => validNoteIds.has(item.note.id)) : items;
+}
+
+function reconcilePinnedPreviewItems(
+  items: NearbyNoteItem[],
+  nearbyItems: NearbyNoteItem[],
+  validNoteIds?: ReadonlySet<string>
+) {
+  if (!validNoteIds) {
+    return items;
+  }
+
+  const nearbyItemById = new Map(nearbyItems.map((item) => [item.note.id, item] as const));
+  return items
+    .filter((item) => validNoteIds.has(item.note.id))
+    .map((item) => nearbyItemById.get(item.note.id) ?? item);
+}
+
 export function useMapPreviewState({
   nearbyItems,
   friendPosts,
+  validNoteIds,
 }: UseMapPreviewStateParams) {
   const [notesPreviewState, setNotesPreviewState] = useState<NotesPreviewState>({
     visibility: 'visible',
@@ -90,10 +111,10 @@ export function useMapPreviewState({
   );
   const nearbyItemsSnapshot = useMemo(() => nearbyItems, [nearbyItemsSignature]);
 
-  const nearbyPreviewItems = useMemo(
-    () => notesPreviewState.itemsOverride ?? stableNearbyItems,
-    [notesPreviewState.itemsOverride, stableNearbyItems]
-  );
+  const nearbyPreviewItems = useMemo(() => {
+    const items = notesPreviewState.itemsOverride ?? stableNearbyItems;
+    return filterValidNearbyItems(items, validNoteIds);
+  }, [notesPreviewState.itemsOverride, stableNearbyItems, validNoteIds]);
 
   useEffect(() => {
     if (notesPreviewState.itemsOverride !== null) {
@@ -102,6 +123,39 @@ export function useMapPreviewState({
 
     setStableNearbyItems((current) => mergeNearbyPreviewItems(current, nearbyItemsSnapshot));
   }, [nearbyItemsSignature, nearbyItemsSnapshot, notesPreviewState.itemsOverride]);
+
+  useEffect(() => {
+    if (!validNoteIds) {
+      return;
+    }
+
+    setNotesPreviewState((current) => {
+      if (current.itemsOverride === null) {
+        return current;
+      }
+
+      const reconciledItems = reconcilePinnedPreviewItems(
+        current.itemsOverride,
+        nearbyItemsSnapshot,
+        validNoteIds
+      );
+
+      if (reconciledItems.length === 0) {
+        return {
+          ...current,
+          itemsOverride: null,
+          persistsWhenAreaEmpty: false,
+        };
+      }
+
+      return haveSameNearbyItems(current.itemsOverride, reconciledItems)
+        ? current
+        : {
+            ...current,
+            itemsOverride: reconciledItems,
+          };
+    });
+  }, [nearbyItemsSnapshot, validNoteIds]);
 
   useEffect(() => {
     setActiveNearbyNoteId((current) => {

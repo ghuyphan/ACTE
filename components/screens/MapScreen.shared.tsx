@@ -142,7 +142,8 @@ export default function MapScreenIOS() {
   const [markerPulseKey, setMarkerPulseKey] = useState(0);
   const [mapUiReady, setMapUiReady] = useState(!shouldDeferMapWarmup);
   const [settledRegion, setSettledRegion] = useState<Region | null>(null);
-  const hasCenteredRef = useRef(false);
+  const hasAppliedInitialViewportRef = useRef(false);
+  const hasCenteredOnLocationRef = useRef(false);
   const markerPulseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const openFriendsPreviewTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingProgrammaticRegionRef = useRef<Region | null>(null);
@@ -219,6 +220,10 @@ export default function MapScreenIOS() {
         : [],
     [friendPosts, mapUiReady]
   );
+  const validPreviewNoteIds = useMemo(
+    () => new Set(filteredNotes.map((note) => note.id)),
+    [filteredNotes]
+  );
   const {
     activeFriendPostId,
     activeNearbyNoteId,
@@ -237,6 +242,7 @@ export default function MapScreenIOS() {
   } = useMapPreviewState({
     nearbyItems,
     friendPosts,
+    validNoteIds: validPreviewNoteIds,
   });
   const noteById = useMemo(() => new Map(notes.map((note) => [note.id, note] as const)), [notes]);
   const currentZoom = visibleRegion ? regionToZoom(visibleRegion) : regionToZoom(initialRegion);
@@ -935,12 +941,43 @@ export default function MapScreenIOS() {
   );
 
   useEffect(() => {
-    if (!mapUiReady || !isMapReady || hasCenteredRef.current || !mapRef.current) {
+    if (!mapUiReady || !isMapReady || !mapRef.current) {
       return;
     }
 
-    if (location) {
-      hasCenteredRef.current = true;
+    if (location && !hasCenteredOnLocationRef.current) {
+      const baseRegion = settledRegion ?? visibleRegion ?? initialRegion;
+      if (
+        isCoordinateCenteredInRegion(
+          baseRegion,
+          location.coords.latitude,
+          location.coords.longitude
+        )
+      ) {
+        hasCenteredOnLocationRef.current = true;
+        return;
+      }
+
+      animateToRegion(
+        {
+          latitude: location.coords.latitude,
+          longitude: location.coords.longitude,
+          latitudeDelta: Math.max(
+            MIN_ZOOM_DELTA,
+            Math.min(baseRegion.latitudeDelta, RECENTER_BUTTON_ZOOM_DELTA)
+          ),
+          longitudeDelta: Math.max(
+            MIN_ZOOM_DELTA,
+            Math.min(baseRegion.longitudeDelta, RECENTER_BUTTON_ZOOM_DELTA)
+          ),
+        },
+        0
+      );
+      hasCenteredOnLocationRef.current = true;
+      return;
+    }
+
+    if (hasAppliedInitialViewportRef.current || location) {
       return;
     }
 
@@ -963,12 +1000,22 @@ export default function MapScreenIOS() {
           animated: false,
         }
       );
-      hasCenteredRef.current = true;
+      hasAppliedInitialViewportRef.current = true;
       return;
     }
 
-    hasCenteredRef.current = true;
-  }, [friendMarkerPosts, isMapReady, location, mapUiReady, notes]);
+    hasAppliedInitialViewportRef.current = true;
+  }, [
+    animateToRegion,
+    friendMarkerPosts,
+    initialRegion,
+    isMapReady,
+    location,
+    mapUiReady,
+    notes,
+    settledRegion,
+    visibleRegion,
+  ]);
 
   if (loading) {
     return (
@@ -1119,16 +1166,6 @@ export default function MapScreenIOS() {
           title={
             bottomOverlayKind === 'no-notes'
               ? t('map.emptyTitleShort', 'No notes')
-              : bottomOverlayKind === 'filtered-empty'
-                ? t('map.filteredEmptyTitle', 'No notes match these filters')
-                : undefined
-          }
-          subtitle={
-            bottomOverlayKind === 'filtered-empty'
-              ? t(
-                  'map.filteredEmptySubtitle',
-                  'Try another filter combination or reset to view all notes'
-                )
               : undefined
           }
           icon={
