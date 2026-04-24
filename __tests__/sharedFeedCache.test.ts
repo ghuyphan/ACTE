@@ -116,6 +116,59 @@ describe('shared feed cache persistence', () => {
     expect(snapshot.ownedSharedNoteIds).toEqual(['note-1', 'note-25']);
   });
 
+  it('binds one value per placeholder when caching a full shared feed snapshot', async () => {
+    const { cacheSharedFeedSnapshot } =
+      require('../services/sharedFeedCache') as typeof import('../services/sharedFeedCache');
+
+    const post: SharedPost = {
+      id: 'post-1',
+      authorUid: 'owner-1',
+      authorDisplayName: 'Owner',
+      authorPhotoURLSnapshot: null,
+      audienceUserIds: ['owner-1', 'friend-1'],
+      type: 'text',
+      text: 'cached snapshot',
+      photoPath: null,
+      photoLocalUri: null,
+      captureVariant: null,
+      dualPrimaryPhotoPath: null,
+      dualSecondaryPhotoPath: null,
+      dualPrimaryPhotoLocalUri: null,
+      dualSecondaryPhotoLocalUri: null,
+      isLivePhoto: false,
+      pairedVideoPath: null,
+      pairedVideoLocalUri: null,
+      dualPrimaryFacing: null,
+      dualSecondaryFacing: null,
+      dualLayoutPreset: null,
+      doodleStrokesJson: null,
+      hasStickers: false,
+      stickerPlacementsJson: null,
+      noteColor: null,
+      placeName: 'District 1',
+      sourceNoteId: 'note-1',
+      latitude: 10.77,
+      longitude: 106.69,
+      createdAt: '2026-04-24T00:00:00.000Z',
+      updatedAt: null,
+    };
+
+    await cacheSharedFeedSnapshot('owner-1', {
+      friends: [],
+      sharedPosts: [post],
+      activeInvite: null,
+      ownedSharedNoteIds: ['note-1'],
+    });
+
+    const insertCall = mockRunAsync.mock.calls.find(([sql]) =>
+      sql.includes('INSERT INTO shared_posts_cache')
+    );
+
+    expect(insertCall).toBeDefined();
+    expect(countSqlPlaceholders(insertCall![0])).toBe(insertCall!.length - 1);
+    expect(insertCall!.slice(-2)).toEqual([post.createdAt, post.updatedAt]);
+  });
+
   it('falls back to author-owned shared note ids when the persisted index is empty', async () => {
     const { getCachedSharedFeedSnapshot } =
       require('../services/sharedFeedCache') as typeof import('../services/sharedFeedCache');
