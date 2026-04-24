@@ -217,8 +217,8 @@ export default function MapFriendsPreviewCard({
           style={[
             styles.surface,
             {
-              borderColor: getOverlayBorderColor(isDark),
-              backgroundColor: getOverlayFallbackColor(isDark),
+              borderColor: getOverlayBorderColor(isDark, colors),
+              backgroundColor: getOverlayFallbackColor(isDark, colors),
             },
           ]}
         >
@@ -227,6 +227,7 @@ export default function MapFriendsPreviewCard({
             glassEffectStyle="regular"
             colorScheme={isDark ? 'dark' : 'light'}
             fallbackColor="transparent"
+            tintColor={colors.glassOverlaySurface}
             style={StyleSheet.absoluteFill}
           />
           <View
@@ -235,7 +236,7 @@ export default function MapFriendsPreviewCard({
               StyleSheet.absoluteFill,
               {
                 backgroundColor: Platform.OS === 'android'
-                  ? getOverlayScrimColor(isDark)
+                  ? getOverlayScrimColor(isDark, colors)
                   : isDark
                     ? 'rgba(24,24,28,0.24)'
                     : 'rgba(255,255,255,0.44)',
@@ -247,7 +248,7 @@ export default function MapFriendsPreviewCard({
               style={[
                 StyleSheet.absoluteFill,
                 {
-                  backgroundColor: getOverlayFallbackColor(isDark),
+                  backgroundColor: getOverlayFallbackColor(isDark, colors),
                   borderRadius: mapOverlayTokens.overlayRadius,
                 },
               ]}

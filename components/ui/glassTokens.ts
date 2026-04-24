@@ -4,6 +4,27 @@ import { Shadows } from '../../constants/theme';
 interface GlassSurfacePaletteOptions {
   isDark: boolean;
   borderColor?: string;
+  colors?: Partial<{
+    card: string;
+    surface: string;
+    border: string;
+    primarySoft: string;
+    chromeSurface: string;
+    chromeBorder: string;
+    noticeSurface: string;
+    noticeBorder: string;
+    glassOverlaySurface: string;
+    glassOverlayBorder: string;
+    glassBackdrop: string;
+    captureGlassFill: string;
+    captureGlassBorder: string;
+    captureCardBorder: string;
+    androidTabShellMutedBackground: string;
+    androidTabShellMutedBorder: string;
+    androidTabShellSelectedBackground: string;
+    androidTabShellSelectedBorder: string;
+    androidTabShellScrim: string;
+  }>;
 }
 
 export const glassTokens = {
@@ -31,36 +52,52 @@ export const glassContainerShadow: ViewStyle =
 export function getGlassSurfacePalette({
   isDark,
   borderColor,
+  colors,
 }: GlassSurfacePaletteOptions) {
   return {
     fallbackSurfaceColor: isDark
-      ? 'rgba(24,24,28,0.94)'
-      : 'rgba(255,252,246,0.94)',
+      ? colors?.glassBackdrop ?? colors?.surface ?? 'rgba(24,24,28,0.94)'
+      : colors?.glassBackdrop ?? colors?.surface ?? 'rgba(255,252,246,0.94)',
     fallbackControlBackgroundColor: isDark
-      ? 'rgba(255,255,255,0.94)'
-      : 'rgba(255,255,255,0.88)',
+      ? colors?.glassOverlaySurface ??
+        colors?.captureGlassFill ??
+        colors?.androidTabShellSelectedBackground ??
+        colors?.noticeSurface ??
+        colors?.card ??
+        'rgba(255,255,255,0.94)'
+      : colors?.glassOverlaySurface ??
+        colors?.captureGlassFill ??
+        colors?.androidTabShellSelectedBackground ??
+        colors?.noticeSurface ??
+        colors?.card ??
+        'rgba(255,255,255,0.88)',
     controlBackgroundColor: isDark
-      ? 'rgba(24,20,18,0.68)'
-      : 'rgba(255,251,246,0.88)',
+      ? colors?.glassOverlaySurface ?? colors?.captureGlassFill ?? colors?.androidTabShellMutedBackground ?? 'rgba(24,20,18,0.68)'
+      : colors?.glassOverlaySurface ?? colors?.captureGlassFill ?? colors?.androidTabShellMutedBackground ?? 'rgba(255,251,246,0.88)',
     controlBorderColor:
-      borderColor ?? (isDark ? 'rgba(255,255,255,0.12)' : 'rgba(113,86,26,0.18)'),
+      borderColor ??
+      colors?.glassOverlayBorder ??
+      colors?.captureGlassBorder ??
+      colors?.androidTabShellMutedBorder ??
+      colors?.border ??
+      (isDark ? 'rgba(255,255,255,0.12)' : 'rgba(113,86,26,0.18)'),
     activeControlBackgroundColor: isDark
-      ? 'rgba(255,247,232,0.14)'
-      : 'rgba(109,95,74,0.10)',
+      ? colors?.primarySoft ?? colors?.androidTabShellSelectedBackground ?? 'rgba(255,247,232,0.14)'
+      : colors?.primarySoft ?? colors?.androidTabShellSelectedBackground ?? 'rgba(109,95,74,0.10)',
     subtleControlBackgroundColor: isDark
-      ? 'rgba(255,247,232,0.08)'
-      : 'rgba(255,255,255,0.62)',
+      ? colors?.chromeSurface ?? colors?.glassOverlaySurface ?? 'rgba(255,247,232,0.08)'
+      : colors?.chromeSurface ?? colors?.glassOverlaySurface ?? 'rgba(255,255,255,0.62)',
     subtleControlBorderColor: isDark
-      ? 'rgba(255,255,255,0.12)'
-      : 'rgba(113,86,26,0.12)',
+      ? colors?.chromeBorder ?? colors?.glassOverlayBorder ?? 'rgba(255,255,255,0.12)'
+      : colors?.chromeBorder ?? colors?.glassOverlayBorder ?? 'rgba(113,86,26,0.12)',
     searchFieldBackgroundColor: isDark
-      ? 'rgba(255,247,232,0.22)'
-      : 'rgba(255,255,255,0.88)',
+      ? colors?.noticeSurface ?? colors?.glassOverlaySurface ?? 'rgba(255,247,232,0.22)'
+      : colors?.noticeSurface ?? colors?.glassOverlaySurface ?? 'rgba(255,255,255,0.88)',
     searchFieldBorderColor: isDark
-      ? 'rgba(255,255,255,0.08)'
-      : 'rgba(113,86,26,0.10)',
+      ? colors?.noticeBorder ?? colors?.glassOverlayBorder ?? 'rgba(255,255,255,0.08)'
+      : colors?.noticeBorder ?? colors?.glassOverlayBorder ?? 'rgba(113,86,26,0.10)',
     dockedBackdropColor: isDark
-      ? 'rgba(18,13,10,0.22)'
-      : 'rgba(255,251,244,0.24)',
+      ? colors?.glassBackdrop ?? colors?.androidTabShellScrim ?? 'rgba(18,13,10,0.22)'
+      : colors?.glassBackdrop ?? colors?.androidTabShellScrim ?? 'rgba(255,251,244,0.24)',
   } as const;
 }

@@ -26,6 +26,8 @@ const accountDeletionUrl = process.env.EXPO_PUBLIC_ACCOUNT_DELETION_URL?.trim() 
 const privacyPolicyUrl = process.env.EXPO_PUBLIC_PRIVACY_POLICY_URL?.trim() ?? '';
 const buildProfile = process.env.EAS_BUILD_PROFILE?.trim() ?? '';
 const isProductionBuild = buildProfile === 'production';
+const targetPlatform = process.env.EAS_BUILD_PLATFORM?.trim().toLowerCase() ?? '';
+const shouldRequireIosBillingConfig = targetPlatform !== 'android';
 const enablePlaceReminders = process.env.EXPO_PUBLIC_ENABLE_PLACE_REMINDERS?.trim() !== 'false';
 const rootGoogleServicesFile = './google-services.json';
 const nativeAndroidGoogleServicesFile = './android/app/google-services.json';
@@ -102,7 +104,7 @@ function assertProductionConfig() {
   }
 
   if (!allowProductionWithoutBilling) {
-    if (!revenueCatIosApiKey) {
+    if (shouldRequireIosBillingConfig && !revenueCatIosApiKey) {
       missingItems.push('EXPO_PUBLIC_REVENUECAT_IOS_API_KEY');
     }
 

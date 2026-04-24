@@ -77,6 +77,58 @@ function normalizeDisplayName(value: string | null | undefined) {
   return trimmed || 'A friend';
 }
 
+function buildPushMessage(options: {
+  token: string;
+  platform: string;
+  title: string;
+  body: string;
+  data: Record<string, unknown>;
+}): PushMessage {
+  const isSharedPost = options.data.notificationType === 'shared-post';
+  if (isSharedPost) {
+    const data = {
+      ...options.data,
+      notificationTitle: options.title,
+      notificationBody: options.body,
+      notificationChannelId: ANDROID_SOCIAL_CHANNEL_ID,
+    };
+
+    if (options.platform === 'ios') {
+      return {
+        to: options.token,
+        _contentAvailable: true,
+        data,
+      };
+    }
+
+    if (options.platform === 'android') {
+      return {
+        to: options.token,
+        data,
+      };
+    }
+
+    return {
+      to: options.token,
+      sound: 'default',
+      title: options.title,
+      body: options.body,
+      channelId: ANDROID_SOCIAL_CHANNEL_ID,
+      _contentAvailable: true,
+      data,
+    };
+  }
+
+  return {
+    to: options.token,
+    sound: 'default',
+    title: options.title,
+    body: options.body,
+    channelId: ANDROID_SOCIAL_CHANNEL_ID,
+    data: options.data,
+  };
+}
+
 async function getAuthenticatedUser(request: Request, supabaseUrl: string, anonKey: string) {
   const authorization = request.headers.get('Authorization') ?? '';
   const userClient = createClient(supabaseUrl, anonKey, {
@@ -547,29 +599,15 @@ Deno.serve(async (request) => {
         });
       }
 
-      const messages: PushMessage[] = pushTargets.map(({ token, platform }) => {
-        if (platform === 'android' && notificationPayload.data.notificationType === 'shared-post') {
-          return {
-            to: token,
-            data: {
-              ...notificationPayload.data,
-              notificationTitle: notificationPayload.title,
-              notificationBody: notificationPayload.body,
-              notificationChannelId: ANDROID_SOCIAL_CHANNEL_ID,
-            },
-          };
-        }
-
-        return {
-          to: token,
-          sound: 'default' as const,
+      const messages: PushMessage[] = pushTargets.map(({ token, platform }) =>
+        buildPushMessage({
+          token,
+          platform,
           title: notificationPayload.title,
           body: notificationPayload.body,
-          channelId: ANDROID_SOCIAL_CHANNEL_ID,
-          _contentAvailable: notificationPayload.data.notificationType === 'shared-post',
           data: notificationPayload.data,
-        };
-      });
+        })
+      );
 
       const delivery = await sendExpoPushMessages(messages, expoAccessToken);
 

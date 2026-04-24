@@ -60,6 +60,7 @@ import {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  require('react-native').Platform.OS = 'android';
   mockIsTaskRegisteredAsync.mockResolvedValue(false);
   mockGetSupabaseUser.mockResolvedValue({ id: 'me', uid: 'me' });
   mockGetCachedSharedFeedSnapshot.mockResolvedValue({
@@ -107,6 +108,12 @@ describe('backgroundSocialPush', () => {
     expect(mockUpdateWidgetData).toHaveBeenCalledWith({
       includeLocationLookup: false,
       includeSharedRefresh: false,
+      sharedPosts: [
+        {
+          id: 'shared-1',
+          authorUid: 'friend-1',
+        },
+      ],
       preferredNoteId: 'shared-1',
     });
     expect(mockScheduleNotificationAsync).toHaveBeenCalledWith({
@@ -115,6 +122,47 @@ describe('backgroundSocialPush', () => {
         body: 'Open Noto to read the note they shared with you.',
         sound: 'default',
         channelId: 'social-v2',
+        data: {
+          route: '/shared/shared-1',
+          sharedPostId: 'shared-1',
+        },
+      },
+      trigger: null,
+    });
+  });
+
+  it('schedules a local iOS notification after a headless shared post refresh', async () => {
+    require('react-native').Platform.OS = 'ios';
+
+    const result = await handleSocialPushNotificationTask({
+      notification: null,
+      data: {
+        notificationType: 'shared-post',
+        sharedPostId: 'shared-1',
+        route: '/shared/shared-1',
+        notificationTitle: 'Bao shared a memory with you',
+        notificationBody: 'Open Noto to read the note they shared with you.',
+        notificationChannelId: 'social-v2',
+      },
+    } as any);
+
+    expect(result).toBe(0);
+    expect(mockUpdateWidgetData).toHaveBeenCalledWith({
+      includeLocationLookup: false,
+      includeSharedRefresh: false,
+      sharedPosts: [
+        {
+          id: 'shared-1',
+          authorUid: 'friend-1',
+        },
+      ],
+      preferredNoteId: 'shared-1',
+    });
+    expect(mockScheduleNotificationAsync).toHaveBeenCalledWith({
+      content: {
+        title: 'Bao shared a memory with you',
+        body: 'Open Noto to read the note they shared with you.',
+        sound: 'default',
         data: {
           route: '/shared/shared-1',
           sharedPostId: 'shared-1',
@@ -158,6 +206,12 @@ describe('backgroundSocialPush', () => {
     expect(mockUpdateWidgetData).toHaveBeenCalledWith({
       includeLocationLookup: false,
       includeSharedRefresh: false,
+      sharedPosts: [
+        {
+          id: 'shared-1',
+          authorUid: 'friend-1',
+        },
+      ],
       preferredNoteId: 'shared-1',
     });
     expect(mockScheduleNotificationAsync).toHaveBeenCalled();

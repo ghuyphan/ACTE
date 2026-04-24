@@ -28,7 +28,7 @@ interface MapStatusCardProps {
 
 const PREVIEW_HORIZONTAL_INSET = 14;
 const STATUS_CARD_MAX_WIDTH = 356;
-const STATUS_PILL_MAX_WIDTH = 218;
+const STATUS_PILL_MAX_WIDTH = 248;
 
 export default function MapStatusCard({
   visible,
@@ -64,13 +64,12 @@ export default function MapStatusCard({
       styles.surface,
       isPill ? styles.pillSurface : null,
       {
-        maxWidth: shellWidth,
-        width: isPill ? undefined : shellWidth,
-        borderColor: getOverlayBorderColor(isDark),
-        backgroundColor: getOverlayFallbackColor(isDark),
+        width: shellWidth,
+        borderColor: getOverlayBorderColor(isDark, colors),
+        backgroundColor: getOverlayFallbackColor(isDark, colors),
       },
     ],
-    [isDark, isPill, shellWidth]
+    [colors, isDark, isPill, shellWidth]
   );
 
   if ((!isMounted && !visible) || (!title && !actionLabel)) {
@@ -98,6 +97,7 @@ export default function MapStatusCard({
             glassEffectStyle="regular"
             colorScheme={isDark ? 'dark' : 'light'}
             fallbackColor="transparent"
+            tintColor={colors.glassOverlaySurface}
             style={StyleSheet.absoluteFill}
           />
           <View
@@ -105,7 +105,7 @@ export default function MapStatusCard({
             style={[
               StyleSheet.absoluteFill,
               {
-                backgroundColor: getOverlayScrimColor(isDark),
+                backgroundColor: getOverlayScrimColor(isDark, colors),
               },
             ]}
           />
@@ -114,7 +114,7 @@ export default function MapStatusCard({
               style={[
                 StyleSheet.absoluteFill,
                 {
-                  backgroundColor: getOverlayFallbackColor(isDark),
+                  backgroundColor: getOverlayFallbackColor(isDark, colors),
                 },
               ]}
             />
@@ -213,9 +213,9 @@ const styles = StyleSheet.create({
     elevation: 0,
   },
   pillSurface: {
-    borderRadius: 16,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    borderRadius: mapOverlayTokens.overlayCompactRadius,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
   },
   contentRow: {
     flexDirection: 'row',
@@ -257,11 +257,11 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
   actionOnlyPill: {
-    minHeight: 22,
+    minHeight: 24,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
+    gap: 7,
   },
   actionText: {
     fontSize: 13,
@@ -269,11 +269,11 @@ const styles = StyleSheet.create({
     fontFamily: 'Noto Sans',
   },
   pillContent: {
-    minHeight: 22,
+    minHeight: 24,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
+    gap: 7,
   },
   pillDot: {
     width: 7,
@@ -281,7 +281,7 @@ const styles = StyleSheet.create({
     borderRadius: 999,
   },
   pillLabel: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '600',
     fontFamily: 'Noto Sans',
   },

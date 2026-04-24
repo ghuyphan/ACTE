@@ -65,7 +65,7 @@ function extractSocialNotificationPayload(
   };
 }
 
-async function scheduleAndroidSocialNotification(payload: SocialNotificationPayload) {
+async function scheduleLocalSocialNotification(payload: SocialNotificationPayload) {
   const title = payload.notificationTitle;
   const body = payload.notificationBody;
   if (!title && !body) {
@@ -76,12 +76,15 @@ async function scheduleAndroidSocialNotification(payload: SocialNotificationPayl
     title: title || null,
     body: body || null,
     sound: 'default',
-    channelId: payload.notificationChannelId || ANDROID_SOCIAL_CHANNEL_ID,
     data: {
       route: payload.route,
       sharedPostId: payload.sharedPostId,
     },
   };
+
+  if (Platform.OS === 'android') {
+    content.channelId = payload.notificationChannelId || ANDROID_SOCIAL_CHANNEL_ID;
+  }
 
   await Notifications.scheduleNotificationAsync({
     content,
@@ -131,15 +134,15 @@ export async function handleSocialPushNotificationTask(
   const widgetResult = await updateWidgetData({
     includeLocationLookup: false,
     includeSharedRefresh: false,
+    sharedPosts: snapshot.sharedPosts,
     preferredNoteId: socialPayload.sharedPostId,
   });
 
   if (
-    Platform.OS === 'android' &&
     !isNotificationResponse(payload) &&
     payload.notification === null
   ) {
-    await scheduleAndroidSocialNotification(socialPayload);
+    await scheduleLocalSocialNotification(socialPayload);
   }
 
   return widgetResult.status === 'failed'

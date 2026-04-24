@@ -59,6 +59,7 @@ export function LiveCameraActionBar({
   const glassPalette = getGlassSurfacePalette({
     isDark: colors.captureGlassColorScheme === 'dark',
     borderColor: colors.captureCardBorder,
+    colors,
   });
 
   return (

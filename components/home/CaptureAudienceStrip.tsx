@@ -88,7 +88,7 @@ const AudienceChip = memo(function AudienceChip({
       activeProgress.value,
       [0, 1],
       [
-        isDark ? 'rgba(255,247,232,0.07)' : 'rgba(255,255,255,0.56)',
+        isDark ? colors.chromeSurface : colors.glassBackdrop,
         `${colors.primary}1A`,
       ]
     ),
@@ -96,7 +96,7 @@ const AudienceChip = memo(function AudienceChip({
       activeProgress.value,
       [0, 1],
       [
-        isDark ? 'rgba(255,255,255,0.12)' : 'rgba(113,86,26,0.12)',
+        isDark ? colors.chromeBorder : colors.border,
         colors.primary,
       ]
     ),

@@ -491,7 +491,11 @@ export default function NotesIndexScreen() {
                       }
                     : null,
                 ]}
-                fallbackColor={Platform.OS === 'android' ? colors.androidTabShellMutedBackground : undefined}
+                fallbackColor={
+                  Platform.OS === 'android'
+                    ? colors.androidTabShellMutedBackground
+                    : colors.glassBackdrop
+                }
                 glassEffectStyle="regular"
                 colorScheme={Platform.OS === 'android' ? (isDark ? 'dark' : 'light') : undefined}
               >

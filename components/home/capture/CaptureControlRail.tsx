@@ -30,6 +30,7 @@ export function CaptureControlRail({
   const glassPalette = getGlassSurfacePalette({
     isDark: colors.captureGlassColorScheme === 'dark',
     borderColor,
+    colors,
   });
   const railLayoutTransition = useMemo(
     () =>

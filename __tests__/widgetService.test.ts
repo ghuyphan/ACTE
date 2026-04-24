@@ -705,6 +705,51 @@ describe('widgetService', () => {
     );
   });
 
+  it('uses explicit shared posts from a background refresh before reading the shared cache', async () => {
+    mockCurrentUser = { id: 'me', uid: 'me' };
+    mockGetAllNotes.mockResolvedValue([]);
+    mockGetCachedSharedFeedSnapshot.mockResolvedValue({
+      friends: [],
+      sharedPosts: [
+        buildSharedPost({
+          id: 'stale-shared',
+          authorUid: 'friend-1',
+          text: 'Old cached memory',
+        }),
+      ],
+      activeInvite: null,
+      lastUpdatedAt: '2026-03-09T00:00:00.000Z',
+    });
+
+    await updateWidgetData({
+      referenceDate: new Date('2026-03-10T12:00:00.000Z'),
+      includeSharedRefresh: false,
+      sharedPosts: [
+        buildSharedPost({
+          id: 'fresh-shared',
+          authorUid: 'friend-2',
+          authorDisplayName: 'Bao',
+          text: 'Fresh background memory',
+          placeName: 'Friend Cafe',
+          createdAt: '2026-03-10T12:00:00.000Z',
+        }),
+      ],
+      preferredNoteId: 'fresh-shared',
+    });
+
+    expect(mockRefreshSharedFeed).not.toHaveBeenCalled();
+    expect(mockGetCachedSharedFeedSnapshot).not.toHaveBeenCalled();
+    const entries = getLastTimelineEntries();
+    expect(entries[0]?.props.props).toEqual(
+      expect.objectContaining({
+        isSharedContent: true,
+        authorDisplayName: 'Bao',
+        text: 'Fresh background memory',
+        primaryActionUrl: 'noto:///widget/shared-post/fresh-shared',
+      })
+    );
+  });
+
   it('cycles distinct memories across future timeline slots instead of getting stuck on the oldest one', async () => {
     await updateWidgetData({ referenceDate: new Date('2026-03-10T07:30:00.000Z') });
 

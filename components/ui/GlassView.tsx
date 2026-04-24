@@ -55,7 +55,7 @@ export function GlassView({
   }
 
   return (
-    <ExpoGlassView {...rest} style={style} colorScheme={colorScheme} tintColor={tintColor}>
+    <ExpoGlassView {...rest} style={style} colorScheme={colorScheme} tintColor={tintColor ?? fallbackColor}>
       {children}
     </ExpoGlassView>
   );

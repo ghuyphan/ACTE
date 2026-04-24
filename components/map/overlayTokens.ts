@@ -1,5 +1,19 @@
 import { Platform, type ViewStyle } from 'react-native';
 import { Shadows } from '../../constants/theme';
+import type { ThemeColors } from '../../hooks/useTheme';
+
+type OverlayThemeColors = Pick<
+  ThemeColors,
+  | 'androidTabShellBackground'
+  | 'androidTabShellBorder'
+  | 'androidTabShellMutedBackground'
+  | 'androidTabShellMutedBorder'
+  | 'androidTabShellScrim'
+  | 'chromeSurface'
+  | 'glassOverlayBorder'
+  | 'glassOverlaySurface'
+  | 'primarySoft'
+>;
 
 const ANDROID_OVERLAY_BORDER = {
   light: 'rgba(113,86,26,0.18)',
@@ -52,34 +66,34 @@ export const mapOverlayTokens = {
   ) satisfies ViewStyle,
 } as const;
 
-export function getOverlayBorderColor(isDark: boolean) {
+export function getOverlayBorderColor(isDark: boolean, colors?: OverlayThemeColors) {
   if (Platform.OS === 'android') {
-    return isDark ? ANDROID_OVERLAY_BORDER.dark : ANDROID_OVERLAY_BORDER.light;
+    return colors?.androidTabShellBorder ?? (isDark ? ANDROID_OVERLAY_BORDER.dark : ANDROID_OVERLAY_BORDER.light);
   }
 
-  return isDark ? mapOverlayTokens.overlayBorderColor.dark : mapOverlayTokens.overlayBorderColor.light;
+  return colors?.glassOverlayBorder ?? (isDark ? mapOverlayTokens.overlayBorderColor.dark : mapOverlayTokens.overlayBorderColor.light);
 }
 
-export function getOverlayFallbackColor(isDark: boolean) {
+export function getOverlayFallbackColor(isDark: boolean, colors?: OverlayThemeColors) {
   if (Platform.OS === 'android') {
-    return isDark ? ANDROID_OVERLAY_FILL.dark : ANDROID_OVERLAY_FILL.light;
+    return colors?.androidTabShellBackground ?? (isDark ? ANDROID_OVERLAY_FILL.dark : ANDROID_OVERLAY_FILL.light);
   }
 
-  return isDark ? 'rgba(16,18,24,0.78)' : 'rgba(255,255,255,0.82)';
+  return colors?.glassOverlaySurface ?? (isDark ? 'rgba(16,18,24,0.78)' : 'rgba(255,255,255,0.82)');
 }
 
-export function getOverlayMutedFillColor(isDark: boolean) {
+export function getOverlayMutedFillColor(isDark: boolean, colors?: OverlayThemeColors) {
   if (Platform.OS === 'android') {
-    return isDark ? ANDROID_OVERLAY_MUTED_FILL.dark : ANDROID_OVERLAY_MUTED_FILL.light;
+    return colors?.androidTabShellMutedBackground ?? (isDark ? ANDROID_OVERLAY_MUTED_FILL.dark : ANDROID_OVERLAY_MUTED_FILL.light);
   }
 
-  return isDark ? 'rgba(255,255,255,0.08)' : 'rgba(17,24,39,0.05)';
+  return colors?.chromeSurface ?? colors?.primarySoft ?? (isDark ? 'rgba(255,255,255,0.08)' : 'rgba(17,24,39,0.05)');
 }
 
-export function getOverlayScrimColor(isDark: boolean) {
+export function getOverlayScrimColor(isDark: boolean, colors?: OverlayThemeColors) {
   if (Platform.OS === 'android') {
-    return isDark ? ANDROID_OVERLAY_SCRIM.dark : ANDROID_OVERLAY_SCRIM.light;
+    return colors?.androidTabShellScrim ?? (isDark ? ANDROID_OVERLAY_SCRIM.dark : ANDROID_OVERLAY_SCRIM.light);
   }
 
-  return isDark ? 'rgba(12,12,18,0.10)' : 'rgba(255,255,255,0.04)';
+  return colors?.chromeSurface ?? (isDark ? 'rgba(12,12,18,0.10)' : 'rgba(255,255,255,0.04)');
 }

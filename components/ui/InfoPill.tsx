@@ -22,6 +22,7 @@ export default function InfoPill({
   textStyle,
 }: InfoPillProps) {
   const { colors, isDark } = useTheme();
+  const fallbackColor = colors.glassBackdrop;
 
   return (
     <View
@@ -38,12 +39,16 @@ export default function InfoPill({
           style={[
             StyleSheet.absoluteFill,
             {
-              backgroundColor: colors.glassBackdrop,
+              backgroundColor: fallbackColor,
             },
           ]}
         />
       ) : null}
-      <GlassView style={StyleSheet.absoluteFill} colorScheme={isDark ? 'dark' : 'light'} />
+      <GlassView
+        style={StyleSheet.absoluteFill}
+        colorScheme={isDark ? 'dark' : 'light'}
+        fallbackColor={fallbackColor}
+      />
       {icon ? <Ionicons name={icon} size={16} color={iconColor ?? colors.primary} /> : null}
       {typeof children === 'string' ? (
         <Text style={[styles.text, { color: colors.text }, textStyle]} numberOfLines={1}>

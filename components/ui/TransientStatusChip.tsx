@@ -48,6 +48,7 @@ export default function TransientStatusChip({ icon, label, style }: TransientSta
         style={styles.chip}
         glassEffectStyle="regular"
         colorScheme={isDark ? 'dark' : 'light'}
+        fallbackColor={colors.glassBackdrop}
       >
         {isOlderIOS ? (
           <View

@@ -129,6 +129,7 @@ function MetadataSurface({
   const glassPalette = getGlassSurfacePalette({
     isDark,
     borderColor: colors.border,
+    colors,
   });
 
   return (

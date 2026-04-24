@@ -208,7 +208,11 @@ export default function OnboardingScreen() {
                     style={[styles.emojiContainer, { overflow: 'hidden' }]}
                 >
                     <View style={[StyleSheet.absoluteFill, isOlderIOS && { backgroundColor: isDark ? 'rgba(0,0,0,0.5)' : 'rgba(255,255,255,0.5)' }]} />
-                    <GlassView style={StyleSheet.absoluteFill} colorScheme={isDark ? 'dark' : 'light'} />
+                    <GlassView
+                        style={StyleSheet.absoluteFill}
+                        colorScheme={isDark ? 'dark' : 'light'}
+                        fallbackColor={colors.glassBackdrop}
+                    />
                     <Text style={styles.emoji}>{slide.emoji}</Text>
                 </Animated.View>
 

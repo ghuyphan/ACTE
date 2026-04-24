@@ -701,14 +701,15 @@ export const LiveCameraSurface = memo(function LiveCameraSurface({
   const dualCaptureGuideInactivePip =
     colors.captureGlassColorScheme === 'light'
       ? CaptureChrome.dualCaptureGuide.lightInactivePip
-      : CaptureChrome.dualCaptureGuide.darkInactivePip;
+      : colors.captureGlassPlaceholder;
   const dualCaptureGuideDivider =
     colors.captureGlassColorScheme === 'light'
       ? CaptureChrome.dualCaptureGuide.lightDivider
-      : CaptureChrome.dualCaptureGuide.darkDivider;
+      : colors.captureGlassBorder;
   const glassPalette = getGlassSurfacePalette({
     isDark: colors.captureGlassColorScheme === 'dark',
     borderColor: colors.captureCardBorder,
+    colors,
   });
   const cameraLensOptionInactiveBackground = 'transparent';
   const cameraLensOptionActiveBackground = glassPalette.activeControlBackgroundColor;

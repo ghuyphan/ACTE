@@ -45,10 +45,10 @@ function FilterChip({ label, active, onPress, icon, testID }: FilterChipProps) {
   const isAndroid = Platform.OS === 'android';
   const inactiveChipBackground = isAndroid
     ? colors.androidTabShellMutedBackground
-    : getOverlayMutedFillColor(isDark);
+    : getOverlayMutedFillColor(isDark, colors);
   const inactiveChipBorderColor = isAndroid
     ? colors.androidTabShellMutedBorder
-    : getOverlayBorderColor(isDark);
+    : getOverlayBorderColor(isDark, colors);
   const chipBackground = active
     ? isAndroid
       ? colors.androidTabShellSelectedBackground
@@ -168,8 +168,8 @@ export default function MapFilterBar({
           styles.container,
           isAndroid ? styles.containerAndroidShadow : null,
           {
-            borderColor: getOverlayBorderColor(isDark),
-            backgroundColor: getOverlayFallbackColor(isDark),
+            borderColor: getOverlayBorderColor(isDark, colors),
+            backgroundColor: getOverlayFallbackColor(isDark, colors),
             shadowColor: isAndroid ? colors.androidTabShellShadow : undefined,
           },
         ]}
@@ -179,6 +179,7 @@ export default function MapFilterBar({
           glassEffectStyle="regular"
           colorScheme={isDark ? 'dark' : 'light'}
           fallbackColor="transparent"
+          tintColor={colors.glassOverlaySurface}
           style={StyleSheet.absoluteFill}
         />
         {Platform.OS === 'android' ? (
@@ -188,7 +189,7 @@ export default function MapFilterBar({
               StyleSheet.absoluteFill,
               styles.androidScrim,
               {
-                backgroundColor: getOverlayScrimColor(isDark),
+                backgroundColor: getOverlayScrimColor(isDark, colors),
               },
             ]}
           />
@@ -199,7 +200,7 @@ export default function MapFilterBar({
               StyleSheet.absoluteFill,
               {
                 borderRadius: mapOverlayTokens.overlayRadius,
-                backgroundColor: getOverlayFallbackColor(isDark),
+                backgroundColor: getOverlayFallbackColor(isDark, colors),
               },
             ]}
           />
@@ -270,14 +271,14 @@ export default function MapFilterBar({
                         : `${colors.primary}18`
                       : isAndroid
                         ? colors.androidTabShellMutedBackground
-                        : getOverlayMutedFillColor(isDark),
+                        : getOverlayMutedFillColor(isDark, colors),
                     borderColor: friendsChip.active
                       ? isAndroid
                         ? colors.androidTabShellSelectedBorder
                         : `${colors.primary}36`
                       : isAndroid
                         ? colors.androidTabShellMutedBorder
-                        : getOverlayBorderColor(isDark),
+                        : getOverlayBorderColor(isDark, colors),
                   },
                 ]}
               >

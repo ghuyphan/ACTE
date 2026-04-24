@@ -64,6 +64,7 @@ export { selectWidgetNote } from './widget/selection';
 
 export interface UpdateWidgetDataOptions {
   notes?: Note[];
+  sharedPosts?: SharedPost[];
   includeLocationLookup?: boolean;
   referenceDate?: Date;
   includeSharedRefresh?: boolean;
@@ -184,6 +185,11 @@ function buildWidgetNotesFingerprint(notes: Note[]) {
 function buildWidgetRequestKey(options: UpdateWidgetDataOptions) {
     return JSON.stringify({
         notes: options.notes ? buildWidgetNotesFingerprint(options.notes) : 'db',
+        sharedPosts: options.sharedPosts
+            ? options.sharedPosts
+                .map((post) => [post.id, post.updatedAt ?? post.createdAt].join(':'))
+                .join('|')
+            : 'cache',
         includeLocationLookup: options.includeLocationLookup !== false,
         includeSharedRefresh: options.includeSharedRefresh === true,
         referenceDate: options.referenceDate?.toISOString() ?? 'live',
@@ -253,6 +259,7 @@ function mergeWidgetUpdateOptions(
             current.includeSharedRefresh === true || incoming.includeSharedRefresh === true
                 ? true
                 : incoming.includeSharedRefresh ?? current.includeSharedRefresh,
+        sharedPosts: incoming.sharedPosts ?? current.sharedPosts,
         referenceDate: incoming.referenceDate ?? current.referenceDate,
         currentLocation:
             incoming.currentLocation !== undefined
@@ -437,12 +444,21 @@ function getAuthorInitials(displayName: string | null | undefined) {
 }
 
 
-async function getSharedWidgetFeedSnapshot(includeSharedRefresh = false): Promise<WidgetSharedFeedSnapshot> {
+async function getSharedWidgetFeedSnapshot(
+  includeSharedRefresh = false,
+  sharedPostsOverride?: SharedPost[]
+): Promise<WidgetSharedFeedSnapshot> {
   const currentUser = await getSupabaseUser();
   if (!currentUser) {
     sharedWidgetFeedCache = null;
     return {
       sharedPosts: [],
+    };
+  }
+
+  if (sharedPostsOverride) {
+    return {
+      sharedPosts: sharedPostsOverride.filter((post) => post.authorUid !== currentUser.id),
     };
   }
 
@@ -778,7 +794,8 @@ async function runWidgetUpdate(options: UpdateWidgetDataOptions = {}): Promise<W
     const noteScope = (await getPersistedActiveNotesScope()) ?? LOCAL_NOTES_SCOPE;
     const notes = options.notes ?? (await getAllNotesForScope(noteScope));
     const sharedFeedSnapshot = await getSharedWidgetFeedSnapshot(
-      options.includeSharedRefresh === true
+      options.includeSharedRefresh === true,
+      options.sharedPosts
     );
     const currentLocation =
       options.currentLocation !== undefined

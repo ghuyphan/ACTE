@@ -1096,8 +1096,8 @@ export default function MapScreenIOS() {
               Platform.OS === 'android'
                 ? {
                     borderWidth: 1,
-                    borderColor: getOverlayBorderColor(isDark),
-                    backgroundColor: getOverlayFallbackColor(isDark),
+                    borderColor: getOverlayBorderColor(isDark, colors),
+                    backgroundColor: getOverlayFallbackColor(isDark, colors),
                     shadowColor: colors.androidTabShellShadow,
                   }
                 : null,
@@ -1110,6 +1110,7 @@ export default function MapScreenIOS() {
               glassEffectStyle="regular"
               colorScheme={isDark ? 'dark' : 'light'}
               fallbackColor="transparent"
+              tintColor={colors.glassOverlaySurface}
             />
             {Platform.OS === 'android' ? (
               <View
@@ -1118,7 +1119,7 @@ export default function MapScreenIOS() {
                   StyleSheet.absoluteFill,
                   {
                     borderRadius: mapOverlayTokens.floatingButtonSize / 2,
-                    backgroundColor: getOverlayScrimColor(isDark),
+                    backgroundColor: getOverlayScrimColor(isDark, colors),
                   },
                 ]}
               />
@@ -1129,7 +1130,7 @@ export default function MapScreenIOS() {
                   StyleSheet.absoluteFill,
                   {
                     borderRadius: mapOverlayTokens.floatingButtonSize / 2,
-                    backgroundColor: getOverlayFallbackColor(isDark),
+                    backgroundColor: getOverlayFallbackColor(isDark, colors),
                   },
                 ]}
               />
@@ -1166,6 +1167,16 @@ export default function MapScreenIOS() {
           title={
             bottomOverlayKind === 'no-notes'
               ? t('map.emptyTitleShort', 'No notes')
+              : bottomOverlayKind === 'filtered-empty'
+                ? t('map.filteredEmptyTitle', 'No notes match these filters')
+                : undefined
+          }
+          subtitle={
+            bottomOverlayKind === 'filtered-empty'
+              ? t(
+                  'map.filteredEmptySubtitle',
+                  'Try another filter combination or reset to view all notes'
+                )
               : undefined
           }
           icon={

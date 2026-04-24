@@ -28,7 +28,7 @@ export default function GlassHeader({
   const { colors, isDark } = useTheme();
   const isAndroid = Platform.OS === 'android';
   const showDockedMaterial = dockedBlurred && !isAndroid;
-  const { dockedBackdropColor } = getGlassSurfacePalette({ isDark });
+  const { dockedBackdropColor, fallbackSurfaceColor } = getGlassSurfacePalette({ isDark, colors });
 
   if (docked) {
     return (
@@ -93,6 +93,7 @@ export default function GlassHeader({
         style={[styles.container, { height: Layout.headerHeight }]}
         glassEffectStyle="regular"
         colorScheme={isDark ? 'dark' : 'light'}
+        fallbackColor={fallbackSurfaceColor}
       >
         <View style={styles.content}>{children}</View>
       </GlassView>

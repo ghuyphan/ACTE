@@ -345,6 +345,7 @@ export function TextCaptureBottomBar({
   const glassPalette = getGlassSurfacePalette({
     isDark: colors.captureGlassColorScheme === 'dark',
     borderColor: colors.captureCardBorder,
+    colors,
   });
 
   return (
@@ -509,6 +510,7 @@ export function PhotoCaptureBottomBar({
   const glassPalette = getGlassSurfacePalette({
     isDark: colors.captureGlassColorScheme === 'dark',
     borderColor: colors.captureCardBorder,
+    colors,
   });
 
   return (

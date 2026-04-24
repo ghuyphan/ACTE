@@ -289,7 +289,7 @@ export default function MapPreviewCard({
   const previewTotal = renderData?.previewItems.length ?? 0;
   const showPreviousPreviewHint = showPreviewCount && previewPosition > 1;
   const showNextPreviewHint = showPreviewCount && previewPosition < previewTotal;
-  const previewFadeColor = getOverlayFallbackColor(isDark);
+  const previewFadeColor = getOverlayFallbackColor(isDark, colors);
   const previewFadeTransparent = isDark ? 'rgba(16,18,24,0)' : 'rgba(255,255,255,0)';
 
   if ((!isMounted && !visible) || !renderData) {
@@ -317,8 +317,8 @@ export default function MapPreviewCard({
           style={[
             styles.surface,
             {
-              borderColor: getOverlayBorderColor(isDark),
-              backgroundColor: getOverlayFallbackColor(isDark),
+              borderColor: getOverlayBorderColor(isDark, colors),
+              backgroundColor: getOverlayFallbackColor(isDark, colors),
             },
           ]}
         >
@@ -327,6 +327,7 @@ export default function MapPreviewCard({
             glassEffectStyle="regular"
             colorScheme={isDark ? 'dark' : 'light'}
             fallbackColor="transparent"
+            tintColor={colors.glassOverlaySurface}
             style={StyleSheet.absoluteFill}
           />
           {Platform.OS === 'android' ? (
@@ -335,7 +336,7 @@ export default function MapPreviewCard({
               style={[
                 StyleSheet.absoluteFill,
                 {
-                  backgroundColor: getOverlayScrimColor(isDark),
+                  backgroundColor: getOverlayScrimColor(isDark, colors),
                 },
               ]}
             />
@@ -345,7 +346,7 @@ export default function MapPreviewCard({
               style={[
                 StyleSheet.absoluteFill,
                 {
-                  backgroundColor: getOverlayFallbackColor(isDark),
+                  backgroundColor: getOverlayFallbackColor(isDark, colors),
                 },
               ]}
             />
@@ -412,7 +413,7 @@ export default function MapPreviewCard({
                               style={[
                                 styles.textThumb,
                                 {
-                                  borderColor: isActive ? `${colors.primary}30` : getOverlayBorderColor(isDark),
+                                  borderColor: isActive ? `${colors.primary}30` : getOverlayBorderColor(isDark, colors),
                                 },
                               ]}
                             >
@@ -426,10 +427,10 @@ export default function MapPreviewCard({
                                     styles.textThumbPaper,
                                     {
                                       backgroundColor: isDark
-                                        ? 'rgba(28,28,30,0.72)'
+                                        ? colors.card
                                         : 'rgba(255,255,255,0.78)',
                                       borderColor: isDark
-                                        ? 'rgba(255,255,255,0.13)'
+                                        ? colors.glassOverlayBorder
                                         : 'rgba(255,255,255,0.48)',
                                     },
                                   ]}
@@ -440,7 +441,7 @@ export default function MapPreviewCard({
                                       styles.textThumbLineLong,
                                       {
                                         backgroundColor: isDark
-                                          ? 'rgba(255,247,232,0.24)'
+                                          ? colors.primarySoft
                                           : 'rgba(92,74,58,0.22)',
                                       },
                                     ]}
@@ -451,7 +452,7 @@ export default function MapPreviewCard({
                                       styles.textThumbLineMedium,
                                       {
                                         backgroundColor: isDark
-                                          ? 'rgba(255,247,232,0.24)'
+                                          ? colors.primarySoft
                                           : 'rgba(92,74,58,0.22)',
                                       },
                                     ]}
@@ -462,7 +463,7 @@ export default function MapPreviewCard({
                                       styles.textThumbLineShort,
                                       {
                                         backgroundColor: isDark
-                                          ? 'rgba(255,247,232,0.24)'
+                                          ? colors.primarySoft
                                           : 'rgba(92,74,58,0.22)',
                                       },
                                     ]}

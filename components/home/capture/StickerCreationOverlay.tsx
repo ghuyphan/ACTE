@@ -283,10 +283,11 @@ function StickerCreationOverlay({
   const glassPalette = getGlassSurfacePalette({
     isDark,
     borderColor: colors.border,
+    colors,
   });
   const borderColor = glassPalette.controlBorderColor;
   const buttonFill = glassPalette.controlBackgroundColor;
-  const actionBarBackground = isDark ? 'rgba(18,14,12,0.88)' : 'rgba(255,250,244,0.96)';
+  const actionBarBackground = colors.glassBackdrop;
   const topInset = insets.top + 8;
   const bottomInset = Math.max(insets.bottom, 14);
 

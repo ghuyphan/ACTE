@@ -417,10 +417,10 @@ export default function AndroidFloatingTabBar({
   const selectedShellBackgroundColor = colors.androidTabShellSelectedBackground;
   const focusedSearchBackgroundColor = searchSelected
     ? colors.androidTabShellSelectedBackground
-    : colors.androidTabShellMutedBackground;
+    : colors.androidTabShellBackground;
   const focusedSearchBorderColor = searchSelected
     ? colors.androidTabShellSelectedBorder
-    : colors.androidTabShellMutedBorder;
+    : colors.androidTabShellBorder;
   const shellGradientColors: [string, string] = [colors.androidTabShellScrim, 'transparent'];
   const searchShellGradientColors: [string, string] = searchSelected
     ? colors.androidTabShellSelectedGradient

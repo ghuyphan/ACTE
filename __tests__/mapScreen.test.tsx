@@ -349,7 +349,8 @@ describe('MapScreen', () => {
     fireEvent.press(getByTestId('map-filter-favorites'));
 
     await waitFor(() => {
-      expect(getByText('Clear filters')).toBeTruthy();
+      expect(getByText('No notes match these filters')).toBeTruthy();
+      expect(getByText('Try another filter combination or reset to view all notes')).toBeTruthy();
       expect(getByTestId('map-top-header')).toBeTruthy();
       expect(getByTestId('map-overlay-host')).toBeTruthy();
     });
@@ -463,7 +464,7 @@ describe('MapScreen', () => {
     fireEvent.press(getByTestId('map-filter-photo'));
     fireEvent.press(getByTestId('map-filter-favorites'));
 
-    expect(await findByText('Clear filters')).toBeTruthy();
+    expect(await findByText('No notes match these filters')).toBeTruthy();
     expect(getByTestId('map-clear-filters')).toBeTruthy();
 
     replaceMockNotes([]);

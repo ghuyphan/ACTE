@@ -81,7 +81,7 @@ export default function SharedMomentsStrip({
   const { colors, isDark } = useTheme();
   const { t } = useTranslation();
 
-  const glassOverlay = isDark ? 'rgba(18,18,24,0.56)' : 'rgba(255,255,255,0.72)';
+  const glassOverlay = isDark ? colors.glassOverlaySurface : colors.glassBackdrop;
   const emptyTitle = useMemo(() => {
     if (!enabled) {
       return t('shared.unavailableTitle', 'Shared moments unavailable');
@@ -161,6 +161,7 @@ export default function SharedMomentsStrip({
           style={StyleSheet.absoluteFill}
           glassEffectStyle="regular"
           colorScheme={isDark ? 'dark' : 'light'}
+          fallbackColor={glassOverlay}
         />
         <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: glassOverlay }]} />
         {isOlderIOS ? (
@@ -170,7 +171,7 @@ export default function SharedMomentsStrip({
               StyleSheet.absoluteFill,
               {
                 borderRadius: 30,
-                backgroundColor: isDark ? 'rgba(18,18,24,0.9)' : 'rgba(255,255,255,0.92)',
+                backgroundColor: colors.glassBackdrop,
               },
             ]}
           />

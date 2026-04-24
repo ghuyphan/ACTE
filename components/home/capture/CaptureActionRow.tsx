@@ -27,6 +27,7 @@ function CaptureShareTargetButton({
   const glassPalette = getGlassSurfacePalette({
     isDark: colors.captureGlassColorScheme === 'dark',
     borderColor: colors.captureCardBorder,
+    colors,
   });
 
   return (
@@ -131,6 +132,7 @@ export function CaptureActionRow({
   const glassPalette = getGlassSurfacePalette({
     isDark: colors.captureGlassColorScheme === 'dark',
     borderColor: colors.captureCardBorder,
+    colors,
   });
   const remainingPhotoSlotsLabel =
     typeof remainingPhotoSlots === 'number' && remainingPhotoSlots > 0

@@ -45,6 +45,7 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 import { Sheet } from "../../constants/theme";
+import type { ThemeColors } from "../../hooks/useTheme";
 import { isIOS26OrNewer } from "../../utils/platform";
 import type { NotesRouteTransitionRect } from "../../utils/notesRouteTransition";
 import GlassHeader from "../ui/GlassHeader";
@@ -83,13 +84,22 @@ interface HomeHeaderSearchProps {
   hasFriendsForFilter?: boolean;
   onToggleCaptureMode: () => void;
   captureMode: "text" | "camera";
-  colors: {
-    text: string;
-    primary: string;
-    secondaryText: string;
-    card: string;
-    border: string;
-  };
+  colors: Pick<
+    ThemeColors,
+    | "text"
+    | "primary"
+    | "secondaryText"
+    | "card"
+    | "border"
+    | "primarySoft"
+    | "chromeSurface"
+    | "chromeBorder"
+    | "noticeSurface"
+    | "noticeBorder"
+    | "glassOverlaySurface"
+    | "glassOverlayBorder"
+    | "glassBackdrop"
+  >;
   isDark: boolean;
   t: TFunction;
   showDockedBlur?: boolean;
@@ -131,9 +141,10 @@ export default function HomeHeaderSearch({
   const glassPalette = getGlassSurfacePalette({
     isDark,
     borderColor: colors.border,
+    colors,
   });
   const neutralHeaderControlForegroundColor = isDark
-    ? "#FFF7E8"
+    ? colors.text
     : colors.secondaryText;
   const androidHeaderControlBackgroundColor =
     glassPalette.controlBackgroundColor;
@@ -261,6 +272,7 @@ export default function HomeHeaderSearch({
                     glass: {
                       variant: "regular",
                       interactive: true,
+                      tint: backgroundColor,
                     },
                     shape: isIconOnly ? "circle" : "capsule",
                   }),
@@ -325,6 +337,7 @@ export default function HomeHeaderSearch({
                     glass: {
                       variant: "regular",
                       interactive: true,
+                      tint: backgroundColor,
                     },
                     shape: "capsule",
                   }),
