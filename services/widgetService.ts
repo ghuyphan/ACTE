@@ -679,53 +679,63 @@ async function buildWidgetTimeline(options: {
     let resolvedProps: WidgetProps | null = null;
     let resolvedCandidateKey: string | null = null;
 
-    for (const selection of timelineSelections) {
-      const selectedCandidate = selection.selectedCandidate;
-      if (selectedCandidate && usedCandidateKeys.has(selectedCandidate.candidateKey)) {
-        continue;
+    for (let selectionPass = 0; selectionPass < 2 && !resolvedProps; selectionPass += 1) {
+      if (selectionPass > 0) {
+        usedCandidateKeys.clear();
       }
 
-      if (!selectedCandidate || selection.isIdleState) {
-        resolvedProps = buildIdleWidgetProps(notes.length, selection.selectionMode);
-        break;
-      }
+      for (const selection of timelineSelections) {
+        const selectedCandidate = selection.selectedCandidate;
+        if (selectedCandidate && usedCandidateKeys.has(selectedCandidate.candidateKey)) {
+          continue;
+        }
 
-      const attemptCandidates = [
-        selectedCandidate,
-        createTextFallbackWidgetCandidate(selectedCandidate),
-      ].filter((candidate): candidate is WidgetCandidate => Boolean(candidate));
-
-      for (const candidate of attemptCandidates) {
-        const cacheKey = `${candidate.candidateKey}:${candidate.noteType}`;
-        const cachedProps = renderCache.get(cacheKey);
-        if (cachedProps) {
-          resolvedProps = cachedProps;
-          resolvedCandidateKey = candidate.candidateKey;
+        if (!selectedCandidate || selection.isIdleState) {
+          resolvedProps = buildIdleWidgetProps(notes.length, selection.selectionMode);
           break;
         }
 
-        try {
-          const props = await buildWidgetPropsFromSelection(notes.length, selection, candidate);
-          if (isRenderableWidgetProps(props)) {
-            renderCache.set(cacheKey, props);
-            resolvedProps = props;
+        const attemptCandidates = [
+          selectedCandidate,
+          createTextFallbackWidgetCandidate(selectedCandidate),
+        ].filter((candidate): candidate is WidgetCandidate => Boolean(candidate));
+
+        for (const candidate of attemptCandidates) {
+          const cacheKey = `${candidate.candidateKey}:${candidate.noteType}`;
+          const cachedProps = renderCache.get(cacheKey);
+          if (cachedProps) {
+            resolvedProps = cachedProps;
             resolvedCandidateKey = candidate.candidateKey;
             break;
           }
 
-          console.warn(
-            '[widgetService] Selected widget candidate could not render, trying next candidate:',
-            candidate.candidateKey
-          );
-        } catch (error) {
-          console.warn(
-            '[widgetService] Failed to build widget props for selected candidate, trying next candidate:',
-            getWidgetWarningMessage(error)
-          );
+          try {
+            const props = await buildWidgetPropsFromSelection(notes.length, selection, candidate);
+            if (isRenderableWidgetProps(props)) {
+              renderCache.set(cacheKey, props);
+              resolvedProps = props;
+              resolvedCandidateKey = candidate.candidateKey;
+              break;
+            }
+
+            console.warn(
+              '[widgetService] Selected widget candidate could not render, trying next candidate:',
+              candidate.candidateKey
+            );
+          } catch (error) {
+            console.warn(
+              '[widgetService] Failed to build widget props for selected candidate, trying next candidate:',
+              getWidgetWarningMessage(error)
+            );
+          }
+        }
+
+        if (resolvedProps) {
+          break;
         }
       }
 
-      if (resolvedProps) {
+      if (!resolvedProps && usedCandidateKeys.size === 0) {
         break;
       }
     }

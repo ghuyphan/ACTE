@@ -11,6 +11,7 @@ function loadI18nModule(options?: {
   }));
   jest.doMock('../utils/appStorage', () => ({
     getPersistentItem: jest.fn(async (key: string) => storage.get(key) ?? null),
+    getPersistentItemSync: jest.fn((key: string) => storage.get(key) ?? null),
     multiSetPersistent: jest.fn(async (entries: Array<[string, string]>) => {
       entries.forEach(([key, value]) => {
         storage.set(key, value);

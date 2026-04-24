@@ -60,6 +60,7 @@ interface CaptureActionRowProps {
   animatedSaveIconStyle: CaptureCardAnimatedStyle;
   animatedSaveInnerStyle: CaptureCardAnimatedStyle;
   animatedSaveSpinnerStyle: CaptureCardAnimatedStyle;
+  animatedSaveSuccessStyle: CaptureCardAnimatedStyle;
   colors: CaptureCardColors;
   cameraUiStage: CameraUiStage;
   handleSavePressIn: () => void;
@@ -96,6 +97,7 @@ export function CaptureActionRow({
   animatedSaveIconStyle,
   animatedSaveInnerStyle,
   animatedSaveSpinnerStyle,
+  animatedSaveSuccessStyle,
   colors,
   cameraUiStage,
   handleSavePressIn,
@@ -268,6 +270,7 @@ export function CaptureActionRow({
         animatedSaveIconStyle={animatedSaveIconStyle}
         animatedSaveInnerStyle={animatedSaveInnerStyle}
         animatedSaveSpinnerStyle={animatedSaveSpinnerStyle}
+        animatedSaveSuccessStyle={animatedSaveSuccessStyle}
         colors={colors}
         isSaveBusy={isSaveBusy}
         isSaveDisabled={isSaveDisabled}

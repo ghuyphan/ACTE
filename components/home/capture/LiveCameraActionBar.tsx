@@ -54,6 +54,7 @@ export function LiveCameraActionBar({
   }
 
   const dualModeEnabled = cameraSubmode === 'dual';
+  const importDisabled = importingPhoto || dualModeEnabled;
 
   const glassPalette = getGlassSurfacePalette({
     isDark: colors.captureGlassColorScheme === 'dark',
@@ -146,19 +147,30 @@ export function LiveCameraActionBar({
             }
             accessibilityRole="button"
             onPress={onOpenPhotoLibrary}
-            disabled={importingPhoto || dualModeEnabled}
-            disabledOpacity={0.55}
+            accessibilityState={{
+              busy: importingPhoto,
+              disabled: importDisabled,
+            }}
+            active={importingPhoto}
+            disabled={importDisabled}
+            disabledOpacity={importingPhoto ? 1 : 0.55}
             pressedScale={0.96}
             style={[
               styles.liveCameraImportButton,
               {
-                backgroundColor: colors.captureGlassFill,
-                borderColor: colors.captureGlassBorder,
+                backgroundColor: importingPhoto
+                  ? glassPalette.activeControlBackgroundColor
+                  : colors.captureGlassFill,
+                borderColor: importingPhoto
+                  ? glassPalette.controlBorderColor
+                  : colors.captureGlassBorder,
               },
             ]}
           >
             {importingPhoto ? (
-              <ActivityIndicator size="small" color={colors.captureGlassText} />
+              <ActivityIndicator size="small" color={colors.captureGlassText} animating />
+            ) : libraryImportLocked ? (
+              <Ionicons name="lock-closed-outline" size={17} color={colors.captureGlassText} />
             ) : (
               <Ionicons name="images-outline" size={19} color={colors.captureGlassText} />
             )}

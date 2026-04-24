@@ -35,6 +35,7 @@ final class NotoDualCameraView: ExpoView {
 
   private let session = AVCaptureMultiCamSession()
   private let sessionQueue = DispatchQueue(label: "com.acte.noto.dualcamera.session")
+  private let sessionQueueKey = DispatchSpecificKey<Void>()
   private var configured = false
   private var active = false
   private var primaryFacing: String = "back"
@@ -54,6 +55,7 @@ final class NotoDualCameraView: ExpoView {
 
   override init(appContext: AppContext? = nil) {
     super.init(appContext: appContext)
+    sessionQueue.setSpecific(key: sessionQueueKey, value: ())
     clipsToBounds = true
     backgroundColor = .black
     if #available(iOS 13.0, *) {
@@ -63,6 +65,7 @@ final class NotoDualCameraView: ExpoView {
 
   required init?(coder: NSCoder) {
     super.init(coder: coder)
+    sessionQueue.setSpecific(key: sessionQueueKey, value: ())
     clipsToBounds = true
     backgroundColor = .black
     if #available(iOS 13.0, *) {
@@ -71,10 +74,16 @@ final class NotoDualCameraView: ExpoView {
   }
 
   deinit {
-    sessionQueue.sync {
+    let stopSession = {
       if session.isRunning {
         session.stopRunning()
       }
+    }
+
+    if DispatchQueue.getSpecific(key: sessionQueueKey) != nil {
+      stopSession()
+    } else {
+      sessionQueue.sync(execute: stopSession)
     }
   }
 
@@ -133,19 +142,34 @@ final class NotoDualCameraView: ExpoView {
       throw NotoDualCameraException("platform-unavailable", "Concurrent camera capture is unavailable on this device.")
     }
 
-    try await configureIfNeeded()
-    startPreview()
+    let captureTargets = try await performOnSessionQueue { [weak self] in
+      guard let self else {
+        throw NotoDualCameraException("capture-failed", "Dual camera view was released.")
+      }
 
-    guard let backPhotoOutput, let frontPhotoOutput else {
-      throw NotoDualCameraException("capture-failed", "Dual camera outputs are unavailable.")
+      try self.configureIfNeeded()
+      if !self.session.isRunning {
+        self.session.startRunning()
+      }
+      self.dispatchPreviewReadyIfNeeded()
+
+      guard let backPhotoOutput = self.backPhotoOutput, let frontPhotoOutput = self.frontPhotoOutput else {
+        throw NotoDualCameraException("capture-failed", "Dual camera outputs are unavailable.")
+      }
+
+      return (
+        backOutput: backPhotoOutput,
+        frontOutput: frontPhotoOutput,
+        primaryFacing: self.primaryFacing == "front" ? "front" : "back"
+      )
     }
 
-    let backData = try await capturePhoto(from: backPhotoOutput)
-    let frontData = try await capturePhoto(from: frontPhotoOutput)
+    let backData = try await capturePhoto(from: captureTargets.backOutput)
+    let frontData = try await capturePhoto(from: captureTargets.frontOutput)
 
     let backUrl = try writePhotoData(backData, suffix: "back")
     let frontUrl = try writePhotoData(frontData, suffix: "front")
-    let primaryFacingValue = primaryFacing == "front" ? "front" : "back"
+    let primaryFacingValue = captureTargets.primaryFacing
     let primaryUrl = primaryFacingValue == "front" ? frontUrl : backUrl
     let secondaryUrl = primaryFacingValue == "front" ? backUrl : frontUrl
 
@@ -166,13 +190,34 @@ final class NotoDualCameraView: ExpoView {
     settings.isHighResolutionPhotoEnabled = false
 
     return try await withCheckedThrowingContinuation { continuation in
-      let processor = PhotoCaptureProcessor { [weak self] result in
-        guard let self else { return }
-        self.captureProcessors.removeAll { $0 === processor }
-        continuation.resume(with: result)
+      sessionQueue.async { [weak self] in
+        guard let self else {
+          continuation.resume(throwing: NotoDualCameraException("capture-failed", "Dual camera view was released."))
+          return
+        }
+
+        let processor = PhotoCaptureProcessor { [weak self] result in
+          guard let self else { return }
+          self.sessionQueue.async {
+            self.captureProcessors.removeAll { $0 === processor }
+            continuation.resume(with: result)
+          }
+        }
+        self.captureProcessors.append(processor)
+        output.capturePhoto(with: settings, delegate: processor)
       }
-      captureProcessors.append(processor)
-      output.capturePhoto(with: settings, delegate: processor)
+    }
+  }
+
+  private func performOnSessionQueue<T>(_ work: @escaping () throws -> T) async throws -> T {
+    try await withCheckedThrowingContinuation { continuation in
+      sessionQueue.async {
+        do {
+          continuation.resume(returning: try work())
+        } catch {
+          continuation.resume(throwing: error)
+        }
+      }
     }
   }
 

@@ -57,6 +57,8 @@ export default function PrimaryButton({
   return (
     <Pressable
       accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ disabled: disabled || loading, busy: loading }}
       hitSlop={BUTTON_HIT_SLOP}
       pressRetentionOffset={BUTTON_PRESS_RETENTION_OFFSET}
       style={({ pressed }) => [

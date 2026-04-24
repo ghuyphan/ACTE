@@ -34,6 +34,7 @@ jest.mock('@react-native-async-storage/async-storage', () => ({
 
 jest.mock('../utils/appStorage', () => ({
   getPersistentItem: async (key: string) => mockStorage.get(key) ?? null,
+  getPersistentItemSync: () => undefined,
   removePersistentItem: async (key: string) => {
     mockStorage.delete(key);
   },

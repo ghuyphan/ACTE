@@ -459,6 +459,23 @@ function mergeUserWithPublicProfile(user: AppUser, profile: {
   };
 }
 
+function mergeSessionRefreshWithCurrentProfile(
+  refreshedUser: AppUser | null,
+  currentUser: AppUser | null
+) {
+  if (!refreshedUser || !currentUser || refreshedUser.uid !== currentUser.uid) {
+    return refreshedUser;
+  }
+
+  return {
+    ...refreshedUser,
+    displayName: currentUser.displayName ?? refreshedUser.displayName,
+    username: currentUser.username ?? refreshedUser.username ?? null,
+    usernameSetAt: currentUser.usernameSetAt ?? refreshedUser.usernameSetAt ?? null,
+    photoURL: currentUser.photoURL,
+  };
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AppUser | null>(null);
   const [isReady, setIsReady] = useState(() => !isSupportedPlatform());
@@ -559,7 +576,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             return null;
           }
 
-          const nextUser = await syncUserProfile(session);
+          const nextUser = mergeSessionRefreshWithCurrentProfile(
+            await syncUserProfile(session),
+            userRef.current
+          );
           if (authSessionSyncRequestIdRef.current !== requestId) {
             return null;
           }

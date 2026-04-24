@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import DoodleIcon from '../../ui/DoodleIcon';
 import StickerIcon from '../../ui/StickerIcon';
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { getNoteDetailTheme, type NoteDetailColors } from './noteDetailTheme';
 
@@ -32,8 +33,10 @@ export default function NoteDetailEditToolbar({
     onToggleStickerMode,
     onUndoDoodle,
     stickerModeEnabled,
-    stickersEnabled,
+	stickersEnabled,
 }: NoteDetailEditToolbarProps) {
+    const { t } = useTranslation();
+
     if (!isEditing) {
         return null;
     }
@@ -49,6 +52,9 @@ export default function NoteDetailEditToolbar({
             <View style={[styles.textCardActionCluster, styles.cardTopOverlayRowWrap]}>
                 <Pressable
                     testID="note-detail-doodle-toggle"
+                    accessibilityRole="button"
+                    accessibilityLabel={t('noteDetail.toggleDoodleMode', 'Toggle doodle mode')}
+                    accessibilityState={{ selected: doodleModeEnabled }}
                     onPress={onToggleDoodleMode}
                     style={[
                         styles.textCardActionButton,
@@ -67,6 +73,9 @@ export default function NoteDetailEditToolbar({
                 {stickersEnabled ? (
                     <Pressable
                         testID="note-detail-sticker-toggle"
+                        accessibilityRole="button"
+                        accessibilityLabel={t('noteDetail.toggleStickerMode', 'Toggle sticker mode')}
+                        accessibilityState={{ selected: stickerModeEnabled }}
                         onPress={onToggleStickerMode}
                         style={[
                             styles.textCardActionButton,
@@ -87,6 +96,9 @@ export default function NoteDetailEditToolbar({
                     <>
                         <Pressable
                             testID="note-detail-doodle-undo"
+                            accessibilityRole="button"
+                            accessibilityLabel={t('noteDetail.doodleUndo', 'Undo')}
+                            accessibilityState={{ disabled: editDoodleStrokesCount === 0 }}
                             onPress={onUndoDoodle}
                             disabled={editDoodleStrokesCount === 0}
                             style={[
@@ -103,6 +115,9 @@ export default function NoteDetailEditToolbar({
                         </Pressable>
                         <Pressable
                             testID="note-detail-doodle-clear"
+                            accessibilityRole="button"
+                            accessibilityLabel={t('noteDetail.doodleClear', 'Clear')}
+                            accessibilityState={{ disabled: editDoodleStrokesCount === 0 }}
                             onPress={onClearDoodle}
                             disabled={editDoodleStrokesCount === 0}
                             style={[
@@ -122,6 +137,9 @@ export default function NoteDetailEditToolbar({
                 {stickerModeEnabled ? (
                     <Pressable
                         testID="note-detail-sticker-import"
+                        accessibilityRole="button"
+                        accessibilityLabel={t('noteDetail.addSticker', 'Add sticker')}
+                        accessibilityState={{ disabled: importingSticker }}
                         onPress={onShowStickerSourceOptions}
                         disabled={importingSticker}
                         style={[

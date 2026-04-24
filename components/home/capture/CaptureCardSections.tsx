@@ -3,7 +3,7 @@ import { Canvas, Path as SkiaPath } from '@shopify/react-native-skia';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import type { TFunction } from 'i18next';
-import { type ComponentProps, type RefObject, useCallback } from 'react';
+import { memo, type ComponentProps, type RefObject, useCallback, useMemo } from 'react';
 import {
   Pressable,
   Text,
@@ -12,8 +12,9 @@ import {
 } from 'react-native';
 import { GestureDetector } from 'react-native-gesture-handler';
 import { Camera, type CameraDevice } from 'react-native-vision-camera';
-import Reanimated, { FadeIn, FadeOut, ZoomIn } from 'react-native-reanimated';
+import Reanimated, { FadeOut, ZoomIn } from 'react-native-reanimated';
 import { ENABLE_PHOTO_STICKERS } from '../../../constants/experiments';
+import { CaptureChrome } from '../../../constants/theme';
 import { useReducedMotion } from '../../../hooks/useReducedMotion';
 import {
   formatCameraZoomFactor,
@@ -33,16 +34,17 @@ import PremiumNoteFinishOverlay from '../../ui/PremiumNoteFinishOverlay';
 import PrimaryButton from '../../ui/PrimaryButton';
 import StickerPastePopover from '../../ui/StickerPastePopover';
 import LivePhotoIcon from '../../ui/LivePhotoIcon';
+import { getGlassSurfacePalette } from '../../ui/glassTokens';
 import {
   DualCameraPreview,
   type DualCameraPreviewHandle,
 } from './DualCameraPreview';
+import { CaptureControlRail } from './CaptureControlRail';
 import { CaptureAnimatedPressable, FilteredPhotoCanvas } from './CaptureControls';
 import { LiveCameraFilterOverlay } from './LiveCameraFilterOverlay';
 import {
   CAMERA_FOCUS_RING_SIZE,
   CARD_SIZE,
-  DUAL_CAMERA_INSET_SIZE,
   LIVE_PHOTO_RING_STROKE_WIDTH,
   PHOTO_CAPTION_MAX_LENGTH,
   styles,
@@ -53,10 +55,6 @@ import type {
   CaptureCardTextInputStyle,
   StickerAction,
 } from './captureShared';
-
-const LIVE_PHOTO_BORDER_DARK = 'rgba(255,255,255,0.14)';
-const LIVE_PHOTO_BORDER_LIGHT = 'rgba(255,255,255,0.42)';
-const STICKER_PASTE_POPOVER_BACKGROUND = 'rgba(255, 250, 242, 0.96)';
 
 interface TextCaptureSurfaceProps {
   activeTextPlaceholder: string;
@@ -87,7 +85,7 @@ interface TextCaptureSurfaceProps {
   onStickerEntryAnimationComplete: (placementId: string) => void;
 }
 
-export function TextCaptureSurface({
+export const TextCaptureSurface = memo(function TextCaptureSurface({
   activeTextPlaceholder,
   animatedAutoEmojiPopStyle,
   colors,
@@ -120,6 +118,18 @@ export function TextCaptureSurface({
     fallbackGradient: colors.captureGradient ?? colors.gradient ?? null,
   });
   const usesLightCaptureChrome = colors.captureGlassColorScheme === 'light';
+  const handleToggleSelectedPlacementMotionLock = useCallback(
+    () => handleSelectedStickerAction('motion-lock-toggle'),
+    [handleSelectedStickerAction]
+  );
+  const handleToggleSelectedPlacementOutline = useCallback(
+    () => handleSelectedStickerAction('outline-toggle'),
+    [handleSelectedStickerAction]
+  );
+  const handleRemoveSelectedPlacement = useCallback(
+    () => handleSelectedStickerAction('remove'),
+    [handleSelectedStickerAction]
+  );
 
   return (
     <View
@@ -127,7 +137,7 @@ export function TextCaptureSurface({
         styles.textCardShadow,
         usesLightCaptureChrome ? styles.textCardShadowLightContrast : null,
         {
-          shadowColor: usesLightCaptureChrome ? colors.text : '#000000',
+          shadowColor: usesLightCaptureChrome ? colors.text : CaptureChrome.shadowDark,
         },
       ]}
     >
@@ -166,15 +176,9 @@ export function TextCaptureSurface({
               onPressCanvas={handlePressStickerCanvas}
               entryAnimation={stickerEntryAnimation}
               onEntryAnimationComplete={onStickerEntryAnimationComplete}
-              onToggleSelectedPlacementMotionLock={() =>
-                handleSelectedStickerAction('motion-lock-toggle')
-              }
-              onToggleSelectedPlacementOutline={() =>
-                handleSelectedStickerAction('outline-toggle')
-              }
-              onRemoveSelectedPlacement={() =>
-                handleSelectedStickerAction('remove')
-              }
+              onToggleSelectedPlacementMotionLock={handleToggleSelectedPlacementMotionLock}
+              onToggleSelectedPlacementOutline={handleToggleSelectedPlacementOutline}
+              onRemoveSelectedPlacement={handleRemoveSelectedPlacement}
             />
           </View>
         ) : null}
@@ -240,7 +244,7 @@ export function TextCaptureSurface({
       </LinearGradient>
     </View>
   );
-}
+});
 
 interface PhotoCaptureSurfaceProps {
   capturedPairedVideo: string | null;
@@ -282,7 +286,7 @@ interface PhotoCaptureSurfaceProps {
   onStickerEntryAnimationComplete: (placementId: string) => void;
 }
 
-export function PhotoCaptureSurface({
+export const PhotoCaptureSurface = memo(function PhotoCaptureSurface({
   capturedPairedVideo,
   capturedPhoto,
   captureCoverAnimatedStyle,
@@ -319,9 +323,25 @@ export function PhotoCaptureSurface({
 }: PhotoCaptureSurfaceProps) {
   const photoPreviewControlBorder = hasLivePhotoMotion
     ? colors.captureGlassColorScheme === 'dark'
-      ? LIVE_PHOTO_BORDER_DARK
-      : LIVE_PHOTO_BORDER_LIGHT
+      ? CaptureChrome.livePhotoBorder.dark
+      : CaptureChrome.livePhotoBorder.light
     : colors.captureCameraOverlayBorder;
+  const handleToggleSelectedPlacementMotionLock = useCallback(
+    () => handleSelectedStickerAction('motion-lock-toggle'),
+    [handleSelectedStickerAction]
+  );
+  const handleToggleSelectedPlacementOutline = useCallback(
+    () => handleSelectedStickerAction('outline-toggle'),
+    [handleSelectedStickerAction]
+  );
+  const handleRemoveSelectedPlacement = useCallback(
+    () => handleSelectedStickerAction('remove'),
+    [handleSelectedStickerAction]
+  );
+  const handleClearPhotoCaption = useCallback(() => {
+    onChangeNoteText('');
+    noteInputRef.current?.focus();
+  }, [noteInputRef, onChangeNoteText]);
 
   return (
     <View
@@ -389,15 +409,9 @@ export function PhotoCaptureSurface({
             onPressCanvas={handlePressStickerCanvas}
             entryAnimation={stickerEntryAnimation}
             onEntryAnimationComplete={onStickerEntryAnimationComplete}
-            onToggleSelectedPlacementMotionLock={() =>
-              handleSelectedStickerAction('motion-lock-toggle')
-            }
-            onToggleSelectedPlacementOutline={() =>
-              handleSelectedStickerAction('outline-toggle')
-            }
-            onRemoveSelectedPlacement={() =>
-              handleSelectedStickerAction('remove')
-            }
+            onToggleSelectedPlacementMotionLock={handleToggleSelectedPlacementMotionLock}
+            onToggleSelectedPlacementOutline={handleToggleSelectedPlacementOutline}
+            onRemoveSelectedPlacement={handleRemoveSelectedPlacement}
           />
         </View>
       ) : null}
@@ -425,11 +439,11 @@ export function PhotoCaptureSurface({
           'capture.clipboardStickerReadyHint',
           'Copied image will be added as a sticker.'
         )}
-        backgroundColor={STICKER_PASTE_POPOVER_BACKGROUND}
+        backgroundColor={CaptureChrome.stickerPastePopoverBackground}
         borderColor={photoPreviewControlBorder}
         secondaryTextColor={colors.captureGlassIcon}
         buttonBackgroundColor={colors.captureButtonBg}
-        buttonTextColor="#FFFDFC"
+        buttonTextColor={CaptureChrome.stickerPasteButtonText}
         onPress={handleConfirmPasteFromPrompt}
         onDismiss={dismissPastePrompt}
         popoverTestID="capture-card-paste-popover"
@@ -474,10 +488,7 @@ export function PhotoCaptureSurface({
               accessibilityRole="button"
               accessibilityLabel={t('capture.clearPhotoCaption', 'Clear caption')}
               hitSlop={8}
-              onPress={() => {
-                onChangeNoteText('');
-                noteInputRef.current?.focus();
-              }}
+              onPress={handleClearPhotoCaption}
               style={styles.photoCaptionClearButton}
             >
               <Ionicons
@@ -491,7 +502,7 @@ export function PhotoCaptureSurface({
       </View>
     </View>
   );
-}
+});
 
 interface LiveCameraSurfaceProps {
   backCameraLens: BackCameraLens;
@@ -540,7 +551,7 @@ interface LiveCameraSurfaceProps {
   t: TFunction;
 }
 
-export function LiveCameraSurface({
+export const LiveCameraSurface = memo(function LiveCameraSurface({
   backCameraLens,
   availableBackCameraLenses,
   backCameraLensZoomConfig,
@@ -587,59 +598,62 @@ export function LiveCameraSurface({
   t,
 }: LiveCameraSurfaceProps) {
   const reduceMotionEnabled = useReducedMotion();
-  const showDualCaptureReference =
-    dualCaptureAwaitingSecondShot && Boolean(dualCaptureFirstShotUri);
+  const showDualCaptureFirstShotInset = Boolean(dualCaptureFirstShotUri);
   const shouldShowBackCameraLensSelector =
     facing === 'back' &&
     availableBackCameraLenses.length > 1 &&
     !dualModeEnabled &&
-    !showDualCaptureReference &&
+    !showDualCaptureFirstShotInset &&
     !needsCameraPermission &&
     !showCameraUnavailableState;
   const shouldShowZoomBadge =
-    !showDualCaptureReference &&
+    !showDualCaptureFirstShotInset &&
     !shouldShowBackCameraLensSelector &&
     (showCameraZoomBadge || cameraPreviewZoom > 1.01);
-  const backCameraLensOptions = availableBackCameraLenses.map((lens) => {
-    const zoomSpec = getBackCameraLensZoomSpec(backCameraLensZoomConfig, lens);
+  const backCameraLensOptions = useMemo(
+    () =>
+      availableBackCameraLenses.map((lens) => {
+        const zoomSpec = getBackCameraLensZoomSpec(backCameraLensZoomConfig, lens);
 
-    switch (lens) {
-      case 'ultra-wide':
-        return {
-          lens,
-          label:
-            lens === backCameraLens
-              ? cameraZoomSelectorLabel
-              : formatCameraZoomFactor(zoomSpec.anchor, 'selector'),
-          accessibilityLabel: t('capture.backCameraUltraWideA11y', 'Use ultra-wide camera'),
-        };
-      case 'telephoto':
-        return {
-          lens,
-          label:
-            lens === backCameraLens
-              ? cameraZoomSelectorLabel
-              : formatCameraZoomFactor(zoomSpec.anchor, 'selector'),
-          accessibilityLabel: t('capture.backCameraTelephotoA11y', 'Use telephoto camera'),
-        };
-      case 'wide':
-      default:
-        return {
-          lens,
-          label:
-            lens === backCameraLens
-              ? cameraZoomSelectorLabel
-              : formatCameraZoomFactor(zoomSpec.anchor, 'selector'),
-          accessibilityLabel: t('capture.backCameraWideA11y', 'Use wide camera'),
-        };
-    }
-  });
+        switch (lens) {
+          case 'ultra-wide':
+            return {
+              lens,
+              label:
+                lens === backCameraLens
+                  ? cameraZoomSelectorLabel
+                  : formatCameraZoomFactor(zoomSpec.anchor, 'selector'),
+              accessibilityLabel: t('capture.backCameraUltraWideA11y', 'Use ultra-wide camera'),
+            };
+          case 'telephoto':
+            return {
+              lens,
+              label:
+                lens === backCameraLens
+                  ? cameraZoomSelectorLabel
+                  : formatCameraZoomFactor(zoomSpec.anchor, 'selector'),
+              accessibilityLabel: t('capture.backCameraTelephotoA11y', 'Use telephoto camera'),
+            };
+          case 'wide':
+          default:
+            return {
+              lens,
+              label:
+                lens === backCameraLens
+                  ? cameraZoomSelectorLabel
+                  : formatCameraZoomFactor(zoomSpec.anchor, 'selector'),
+              accessibilityLabel: t('capture.backCameraWideA11y', 'Use wide camera'),
+            };
+        }
+      }),
+    [availableBackCameraLenses, backCameraLens, backCameraLensZoomConfig, cameraZoomSelectorLabel, t]
+  );
   const activeBackCameraLensOption =
     backCameraLensOptions.find((option) => option.lens === backCameraLens) ?? backCameraLensOptions[0];
   const showLivePhotoGuide =
     Boolean(cameraInstructionText) &&
     !dualModeEnabled &&
-    !showDualCaptureReference &&
+    !showDualCaptureFirstShotInset &&
     !needsCameraPermission &&
     !showCameraUnavailableState &&
     !isLivePhotoCaptureInProgress;
@@ -650,7 +664,7 @@ export function LiveCameraSurface({
     !needsCameraPermission &&
     !showCameraUnavailableState &&
     !isLivePhotoCaptureInProgress;
-  const showDualCaptureInset = Boolean(dualCaptureFirstShotUri) && !showDualCaptureReference;
+  const showDualCaptureInset = showDualCaptureFirstShotInset;
   const showDualCaptureStatus = Boolean(dualCaptureStatusText);
 
   const showDualCameraPreview =
@@ -658,9 +672,7 @@ export function LiveCameraSurface({
     !needsCameraPermission &&
     !showCameraUnavailableState;
   const shouldRenderSingleCameraPreview =
-    !dualModeEnabled && shouldRenderCameraPreview && !showDualCaptureReference;
-  const shouldRenderSingleCameraInsetPreview =
-    !dualModeEnabled && shouldRenderCameraPreview && showDualCaptureReference;
+    !dualModeEnabled && shouldRenderCameraPreview;
   const handleDualCameraPreviewReady = useCallback(() => {
     handleCameraInitialized();
     handleCameraPreviewStarted();
@@ -673,46 +685,34 @@ export function LiveCameraSurface({
     },
     [handleCameraStartupFailure]
   );
-  const handoffFadeIn = reduceMotionEnabled ? undefined : FadeIn.duration(160);
   const handoffFadeOut = reduceMotionEnabled ? undefined : FadeOut.duration(100);
   const handoffInsetIn = reduceMotionEnabled
     ? undefined
     : ZoomIn.springify().damping(18).stiffness(220).mass(0.9);
-  const handoffLiveInsetIn = reduceMotionEnabled ? undefined : FadeIn.duration(120);
   const dualCaptureGuideBackground =
     colors.captureGlassColorScheme === 'light'
-      ? 'rgba(255,248,239,0.92)'
-      : 'rgba(28,28,30,0.42)';
+      ? CaptureChrome.dualCaptureGuide.lightBackground
+      : CaptureChrome.dualCaptureGuide.darkBackground;
   const dualCaptureGuideBorder =
     colors.captureGlassColorScheme === 'light'
-      ? 'rgba(255,255,255,0.72)'
+      ? CaptureChrome.dualCaptureGuide.lightBorder
       : colors.captureGlassBorder;
   const dualCaptureGuideActivePip = colors.captureGlassText;
   const dualCaptureGuideInactivePip =
     colors.captureGlassColorScheme === 'light'
-      ? 'rgba(43,38,33,0.18)'
-      : 'rgba(255,247,232,0.3)';
+      ? CaptureChrome.dualCaptureGuide.lightInactivePip
+      : CaptureChrome.dualCaptureGuide.darkInactivePip;
   const dualCaptureGuideDivider =
     colors.captureGlassColorScheme === 'light'
-      ? 'rgba(43,38,33,0.12)'
-      : 'rgba(255,247,232,0.22)';
-  const cameraLensSelectorBackground =
-    colors.captureGlassColorScheme === 'light'
-      ? 'rgba(18,18,20,0.52)'
-      : 'rgba(12,12,14,0.68)';
-  const cameraLensSelectorBorder =
-    colors.captureGlassColorScheme === 'light'
-      ? 'rgba(255,255,255,0.18)'
-      : 'rgba(255,255,255,0.14)';
-  const cameraLensOptionInactiveBackground =
-    colors.captureGlassColorScheme === 'light'
-      ? 'rgba(255,255,255,0.06)'
-      : 'rgba(255,255,255,0.04)';
-  const cameraLensOptionActiveBackground =
-    colors.captureGlassColorScheme === 'light'
-      ? 'rgba(255,255,255,0.14)'
-      : 'rgba(0,0,0,0.22)';
-  const cameraLensOptionInactiveText = 'rgba(255,253,252,0.92)';
+      ? CaptureChrome.dualCaptureGuide.lightDivider
+      : CaptureChrome.dualCaptureGuide.darkDivider;
+  const glassPalette = getGlassSurfacePalette({
+    isDark: colors.captureGlassColorScheme === 'dark',
+    borderColor: colors.captureCardBorder,
+  });
+  const cameraLensOptionInactiveBackground = 'transparent';
+  const cameraLensOptionActiveBackground = glassPalette.activeControlBackgroundColor;
+  const cameraLensOptionInactiveText = colors.captureGlassText;
   const cameraLensOptionActiveText = colors.primary;
 
   return (
@@ -720,22 +720,6 @@ export function LiveCameraSurface({
       style={[styles.cameraContainer, { backgroundColor: colors.captureCameraOverlay }]}
       collapsable={false}
     >
-      {showDualCaptureReference ? (
-        <Reanimated.View
-          testID="capture-dual-reference-photo"
-          entering={handoffFadeIn}
-          exiting={handoffFadeOut}
-          style={styles.cameraDualReferenceLayer}
-        >
-          <Image
-            source={{ uri: dualCaptureFirstShotUri! }}
-            style={styles.cameraPreview}
-            contentFit="cover"
-            transition={0}
-            cachePolicy="none"
-          />
-        </Reanimated.View>
-      ) : null}
       {showDualCameraPreview && dualCameraSupported ? (
         <View style={styles.cameraGestureLayer} collapsable={false}>
           <DualCameraPreview
@@ -804,15 +788,12 @@ export function LiveCameraSurface({
           </GestureDetector>
           {shouldShowBackCameraLensSelector && activeBackCameraLensOption ? (
             <View pointerEvents="box-none" style={styles.cameraLensSelector}>
-              <View
+              <CaptureControlRail
                 testID="capture-back-camera-lens-selector"
-                style={[
-                  styles.cameraLensSelectorPill,
-                  {
-                    backgroundColor: cameraLensSelectorBackground,
-                    borderColor: cameraLensSelectorBorder,
-                  },
-                ]}
+                borderColor={glassPalette.controlBorderColor}
+                colors={colors}
+                style={styles.cameraLensSelectorPill}
+                rowStyle={styles.cameraLensSelectorRow}
               >
                 {backCameraLensOptions.map((option) => {
                   const selected = option.lens === activeBackCameraLensOption.lens;
@@ -834,7 +815,7 @@ export function LiveCameraSurface({
                           backgroundColor: selected
                             ? cameraLensOptionActiveBackground
                             : cameraLensOptionInactiveBackground,
-                          borderColor: selected ? colors.primary : 'transparent',
+                          borderColor: selected ? glassPalette.controlBorderColor : 'transparent',
                         },
                       ]}
                     >
@@ -853,7 +834,7 @@ export function LiveCameraSurface({
                     </CaptureAnimatedPressable>
                   );
                 })}
-              </View>
+              </CaptureControlRail>
             </View>
           ) : null}
         </>
@@ -929,48 +910,6 @@ export function LiveCameraSurface({
             </Text>
           </View>
         </View>
-      ) : null}
-      {shouldRenderSingleCameraInsetPreview ? (
-        <GestureDetector gesture={cameraZoomGesture}>
-          <Reanimated.View
-            testID="capture-dual-live-inset"
-            entering={handoffLiveInsetIn}
-            exiting={handoffFadeOut}
-            style={styles.cameraDualLiveInsetShell}
-            collapsable={false}
-          >
-            <View style={styles.cameraDualLiveInsetClip}>
-              <Camera
-                key={cameraKey}
-                style={styles.cameraPreview}
-                device={cameraDevice!}
-                isActive={canShowLiveCameraPreview}
-                preview
-                photo
-                video
-                photoQualityBalance="speed"
-                isMirrored={facing === 'front'}
-                zoom={cameraPreviewZoom}
-                resizeMode="cover"
-                androidPreviewViewType="texture-view"
-                ref={cameraRef}
-                onInitialized={handleCameraInitialized}
-                onPreviewStarted={handleCameraPreviewStarted}
-                onError={(error) => {
-                  handleCameraStartupFailure(error.message);
-                }}
-              />
-              <LiveCameraFilterOverlay
-                filterId={selectedPhotoFilterId}
-                width={DUAL_CAMERA_INSET_SIZE}
-                height={DUAL_CAMERA_INSET_SIZE}
-                style={styles.cameraPreview}
-              />
-              <View pointerEvents="none" style={styles.cameraDualLiveInsetFrost} />
-            </View>
-            <View pointerEvents="none" style={styles.cameraDualLiveInsetBorder} />
-          </Reanimated.View>
-        </GestureDetector>
       ) : null}
       {showDualCaptureStatus ? (
         <View pointerEvents="none" style={styles.cameraDualPreviewOnlyBadgeWrap}>
@@ -1083,4 +1022,4 @@ export function LiveCameraSurface({
       ) : null}
     </View>
   );
-}
+});

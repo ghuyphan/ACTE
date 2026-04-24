@@ -226,6 +226,15 @@ interface NoteTombstoneRow {
   deleted_at: string;
 }
 
+interface RemoteDeleteArtifactRow {
+  id: string;
+  photo_path: string | null;
+  dual_primary_photo_path: string | null;
+  dual_secondary_photo_path: string | null;
+  paired_video_path: string | null;
+  sticker_placements_json: string | null;
+}
+
 interface QueueFlushFailure {
   itemId: number;
   error: string;
@@ -769,6 +778,7 @@ async function upsertRemoteNoteTombstones(
   if (!supabase) {
     throw new Error('Cloud sync is unavailable in this build.');
   }
+  const supabaseClient = supabase;
 
   const rows = Array.from(
     new Set(
@@ -954,6 +964,17 @@ async function upsertSyncState(
     const db = await getDB();
     const existing = await getSyncStateRow(ownerScope);
     const updatedAt = new Date().toISOString();
+    const resolveField = <Key extends keyof typeof input>(
+      key: Key,
+      fallback: NonNullable<SyncStateRow[Key]> | null
+    ) => {
+      if (Object.prototype.hasOwnProperty.call(input, key)) {
+        return input[key] ?? null;
+      }
+
+      return existing?.[key] ?? fallback;
+    };
+
     await db.runAsync(
       `INSERT INTO sync_state (
          owner_uid,
@@ -980,13 +1001,13 @@ async function upsertSyncState(
          updated_at = excluded.updated_at`,
       ownerScope,
       userUid,
-      input.initial_sync_status ?? existing?.initial_sync_status ?? 'pending',
-      input.last_note_cursor_json ?? existing?.last_note_cursor_json ?? null,
-      input.last_tombstone_cursor_json ?? existing?.last_tombstone_cursor_json ?? null,
-      input.last_sync_started_at ?? existing?.last_sync_started_at ?? null,
-      input.last_sync_finished_at ?? existing?.last_sync_finished_at ?? null,
-      input.last_sync_status ?? existing?.last_sync_status ?? null,
-      input.last_sync_error ?? existing?.last_sync_error ?? null,
+      resolveField('initial_sync_status', 'pending'),
+      resolveField('last_note_cursor_json', null),
+      resolveField('last_tombstone_cursor_json', null),
+      resolveField('last_sync_started_at', null),
+      resolveField('last_sync_finished_at', null),
+      resolveField('last_sync_status', null),
+      resolveField('last_sync_error', null),
       updatedAt
     );
   } catch (error) {
@@ -1572,7 +1593,7 @@ async function deserializeRemoteNote(
     });
     return {
       note: existingLocalNote?.type === 'photo' ? existingLocalNote : null,
-      advanceCursor: true,
+      advanceCursor: Boolean(existingLocalNote?.type === 'photo'),
     };
   }
 
@@ -1825,32 +1846,51 @@ async function deleteAllRemoteNotesForUser(userId: string) {
   if (!supabase) {
     throw new Error('Cloud sync is unavailable in this build.');
   }
+  const supabaseClient = supabase;
 
-  const [{ data, error }, { data: sharedPosts, error: sharedPostsError }] = await Promise.all([
-    supabase
-      .from('notes')
-      .select(
-        'id, photo_path, dual_primary_photo_path, dual_secondary_photo_path, paired_video_path, sticker_placements_json'
-      )
-      .eq('user_id', userId),
-    supabase
-      .from('shared_posts')
-      .select(
-        'id, photo_path, dual_primary_photo_path, dual_secondary_photo_path, paired_video_path, sticker_placements_json'
-      )
-      .eq('author_user_id', userId),
+  async function fetchAllArtifactRows(
+    table: 'notes' | 'shared_posts',
+    ownerColumn: 'user_id' | 'author_user_id'
+  ) {
+    const rows: RemoteDeleteArtifactRow[] = [];
+    let offset = 0;
+
+    while (true) {
+      const { data, error } = await supabaseClient
+        .from(table)
+        .select(
+          'id, photo_path, dual_primary_photo_path, dual_secondary_photo_path, paired_video_path, sticker_placements_json'
+        )
+        .eq(ownerColumn, userId)
+        .order('id', { ascending: true })
+        .range(offset, offset + REMOTE_SYNC_PAGE_SIZE - 1);
+
+      if (error) {
+        throw error;
+      }
+
+      const page = (data ?? []) as RemoteDeleteArtifactRow[];
+      rows.push(...page);
+
+      if (page.length < REMOTE_SYNC_PAGE_SIZE) {
+        break;
+      }
+
+      offset += REMOTE_SYNC_PAGE_SIZE;
+    }
+
+    return rows;
+  }
+
+  const [data, sharedPosts] = await Promise.all([
+    fetchAllArtifactRows('notes', 'user_id'),
+    fetchAllArtifactRows('shared_posts', 'author_user_id'),
   ]);
-  if (error) {
-    throw error;
-  }
-  if (sharedPostsError) {
-    throw sharedPostsError;
-  }
 
   const deletedAt = new Date().toISOString();
 
   const expectedSharedPostIds = normalizeRemoteEntityIds(
-    ((sharedPosts ?? []) as { id?: string | null }[]).map((row) => row.id)
+    sharedPosts.map((row) => row.id)
   );
   const { data: deletedSharedPosts, error: deleteSharedPostsError } = await supabase
     .from('shared_posts')
@@ -1889,12 +1929,7 @@ async function deleteAllRemoteNotesForUser(userId: string) {
   );
 
   await Promise.all(
-    ((sharedPosts ?? []) as {
-      id?: string;
-      photo_path?: string | null;
-      paired_video_path?: string | null;
-      sticker_placements_json?: string | null;
-    }[]).map(
+    sharedPosts.map(
       async (row) => {
         const postId = typeof row.id === 'string' ? row.id.trim() : '';
         if (postId) {
@@ -1904,14 +1939,7 @@ async function deleteAllRemoteNotesForUser(userId: string) {
     )
   );
   await Promise.all(
-    ((sharedPosts ?? []) as {
-      id?: string;
-      photo_path?: string | null;
-      dual_primary_photo_path?: string | null;
-      dual_secondary_photo_path?: string | null;
-      paired_video_path?: string | null;
-      sticker_placements_json?: string | null;
-    }[]).map(async (row) => {
+    sharedPosts.map(async (row) => {
       await cleanupRemoteArtifactsBestEffort(
         `shared post ${typeof row.id === 'string' ? row.id : 'unknown'}`,
         SHARED_POST_MEDIA_BUCKET,
@@ -1927,7 +1955,7 @@ async function deleteAllRemoteNotesForUser(userId: string) {
   );
 
   const expectedNoteIds = normalizeRemoteEntityIds(
-    ((data ?? []) as { id?: string | null }[]).map((row) => row.id)
+    data.map((row) => row.id)
   );
   const { data: deletedNotes, error: deleteError } = await supabase
     .from('notes')
@@ -1965,20 +1993,13 @@ async function deleteAllRemoteNotesForUser(userId: string) {
     deletedAt
   );
   await Promise.all(
-    ((data ?? []) as { id?: string }[]).map((row) => {
+    data.map((row) => {
       const noteId = typeof row.id === 'string' ? row.id.trim() : '';
       return noteId ? clearRemoteStickerAssetRefs(userId, 'note', noteId) : Promise.resolve();
     })
   );
   await Promise.all(
-    ((data ?? []) as {
-      id?: string;
-      photo_path?: string | null;
-      dual_primary_photo_path?: string | null;
-      dual_secondary_photo_path?: string | null;
-      paired_video_path?: string | null;
-      sticker_placements_json?: string | null;
-    }[]).map(async (row) => {
+    data.map(async (row) => {
       await cleanupRemoteArtifactsBestEffort(
         `note ${typeof row.id === 'string' ? row.id : 'unknown'}`,
         NOTE_MEDIA_BUCKET,

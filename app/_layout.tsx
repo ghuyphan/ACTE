@@ -53,7 +53,7 @@ function AppContent() {
     authReady,
     isDatabaseReady,
     isStartupRouteReady,
-    notesReady: notesPhase === 'ready' || notesPhase === 'refreshing',
+    notesReady: notesPhase !== 'bootstrapping',
     startupError,
     themeReady,
   });

@@ -106,7 +106,7 @@ describe('database migrations', () => {
     expect(mockExecAsync).toHaveBeenCalledWith(expect.stringContaining('photo_local_uri TEXT'));
     expect(mockExecAsync).toHaveBeenCalledWith('ALTER TABLE notes ADD COLUMN caption TEXT');
     expect(mockExecAsync).toHaveBeenCalledWith('ALTER TABLE notes ADD COLUMN search_text TEXT NOT NULL DEFAULT \'\'');
-    expect(mockExecAsync).toHaveBeenCalledWith('CREATE INDEX IF NOT EXISTS idx_notes_search_text ON notes(search_text)');
+    expect(mockExecAsync).toHaveBeenCalledWith('DROP INDEX IF EXISTS idx_notes_search_text');
     expect(mockExecAsync).toHaveBeenCalledWith(
       expect.stringContaining('CREATE VIRTUAL TABLE IF NOT EXISTS notes_fts')
     );
@@ -118,9 +118,7 @@ describe('database migrations', () => {
     );
     expect(mockRunAsync).toHaveBeenCalledWith(
       expect.stringContaining('INSERT INTO notes_fts'),
-      'photo-1',
-      '__local__',
-      'district 3'
+      '__local__'
     );
   });
 

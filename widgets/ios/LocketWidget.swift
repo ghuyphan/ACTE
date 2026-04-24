@@ -1383,17 +1383,21 @@ private struct LocketWidgetEntryView: View {
     }
 
     private var accessorySymbolName: String {
-        if payload.noteCount <= 0 {
+        if isEmptyWidgetState {
             return "plus.circle.fill"
         }
 
         return payload.isIdleState ? "bookmark.fill" : "location.fill"
     }
 
+    private var isEmptyWidgetState: Bool {
+        payload.isIdleState && payload.noteCount <= 0
+    }
+
     private var accessoryTitle: String {
         let locationLabel = compactLocationName
 
-        if payload.noteCount <= 0 {
+        if isEmptyWidgetState {
             return payload.accessorySaveMemoryText.isEmpty
                 ? widgetLocalized("widget.accessorySaveMemory", fallback: "Save a memory")
                 : payload.accessorySaveMemoryText
@@ -1419,7 +1423,7 @@ private struct LocketWidgetEntryView: View {
     }
 
     private var accessorySubtitle: String {
-        if payload.noteCount <= 0 {
+        if isEmptyWidgetState {
             return payload.accessoryAddFirstPlaceText.isEmpty
                 ? widgetLocalized("widget.accessoryAddFirstPlace", fallback: "Add your first place")
                 : payload.accessoryAddFirstPlaceText
@@ -1439,7 +1443,7 @@ private struct LocketWidgetEntryView: View {
     }
 
     private var accessoryInlineText: String {
-        if payload.noteCount <= 0 {
+        if isEmptyWidgetState {
             return payload.accessorySaveMemoryText.isEmpty
                 ? widgetLocalized("widget.accessorySaveMemory", fallback: "Save a memory")
                 : payload.accessorySaveMemoryText
@@ -1464,7 +1468,7 @@ private struct LocketWidgetEntryView: View {
     }
 
     private var accessoryCircularValue: String {
-        if payload.noteCount <= 0 {
+        if isEmptyWidgetState {
             return "+"
         }
 
@@ -1476,7 +1480,7 @@ private struct LocketWidgetEntryView: View {
     }
 
     private var accessoryCircularCaption: String {
-        if payload.noteCount <= 0 {
+        if isEmptyWidgetState {
             return payload.accessoryAddLabelText.isEmpty
                 ? widgetLocalized("widget.accessoryAddLabel", fallback: "Add")
                 : payload.accessoryAddLabelText
@@ -1492,7 +1496,7 @@ private struct LocketWidgetEntryView: View {
     }
 
     private var accessoryRectangularValue: String? {
-        if payload.noteCount <= 0 {
+        if isEmptyWidgetState {
             return nil
         }
 
@@ -1628,7 +1632,7 @@ private struct LocketWidgetEntryView: View {
 
     private var accessoryCircularLayout: some View {
         VStack(spacing: 1) {
-            if payload.noteCount <= 0 {
+            if isEmptyWidgetState {
                 Image(systemName: "plus")
                     .font(.system(size: scaledWidgetFontSize(16), weight: .bold))
                     .widgetAccentable()

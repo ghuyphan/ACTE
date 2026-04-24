@@ -259,9 +259,13 @@ function CaptureDecorateRail({
             testID="capture-sticker-import"
             accessibilityLabel={t('capture.addSticker', 'Add sticker')}
             accessibilityRole="button"
+            accessibilityState={{
+              busy: importingSticker,
+              disabled: importingSticker,
+            }}
             onPress={handleShowStickerSourceOptions}
             disabled={importingSticker}
-            disabledOpacity={0.45}
+            disabledOpacity={importingSticker ? 1 : 0.45}
             style={[
               styles.textCardActionPill,
               {
@@ -275,6 +279,7 @@ function CaptureDecorateRail({
                 testID="capture-sticker-import-loading"
                 size="small"
                 color={theme.detailIconColor}
+                animating={importingSticker}
               />
             ) : (
               <Ionicons name="add-outline" size={14} color={theme.detailIconColor} />
@@ -390,6 +395,7 @@ export function TextCaptureBottomBar({
                   <CaptureAnimatedPressable
                     testID="capture-inline-paste-sticker"
                     accessibilityLabel={t('capture.pasteStickerAction', 'Paste sticker')}
+                    accessibilityState={{ busy: true, disabled: true }}
                     disabled
                     disabledOpacity={1}
                     style={[
@@ -405,6 +411,7 @@ export function TextCaptureBottomBar({
                       testID="capture-inline-paste-sticker-loading"
                       size="small"
                       color={colors.captureGlassText}
+                      animating={inlinePasteLoading}
                     />
                   </CaptureAnimatedPressable>
                 ) : useNativeInlinePasteButton ? (
@@ -432,6 +439,10 @@ export function TextCaptureBottomBar({
                     accessibilityLabel={t('capture.pasteStickerAction', 'Paste sticker')}
                     onPress={handleInlinePasteStickerPress}
                     disabled={inlinePasteLoading}
+                    accessibilityState={{
+                      busy: inlinePasteLoading,
+                      disabled: inlinePasteLoading,
+                    }}
                     disabledOpacity={1}
                     style={[
                       styles.textBottomToolsButton,

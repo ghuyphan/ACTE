@@ -4,6 +4,18 @@ const { version: appVersion } = require('./package.json');
 const googleMapsAndroidApiKey = process.env.EXPO_PUBLIC_GOOGLE_MAPS_ANDROID_API_KEY;
 const easProjectIdFromEnv = process.env.EXPO_PUBLIC_EAS_PROJECT_ID?.trim() ?? '';
 const googleIosClientId = process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID?.trim() ?? '';
+const revenueCatIosApiKey = process.env.EXPO_PUBLIC_REVENUECAT_IOS_API_KEY?.trim() ?? '';
+const revenueCatAndroidApiKey = process.env.EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY?.trim() ?? '';
+const revenueCatEntitlementId =
+  process.env.EXPO_PUBLIC_REVENUECAT_ENTITLEMENT_ID?.trim() ||
+  process.env.EXPO_PUBLIC_REVENUECAT_PLUS_ENTITLEMENT_ID?.trim() ||
+  '';
+const revenueCatOfferingId =
+  process.env.EXPO_PUBLIC_REVENUECAT_OFFERING_ID?.trim() ||
+  process.env.EXPO_PUBLIC_REVENUECAT_PLUS_OFFERING_ID?.trim() ||
+  '';
+const allowProductionWithoutBilling =
+  process.env.EXPO_PUBLIC_ALLOW_PRODUCTION_WITHOUT_BILLING?.trim() === 'true';
 const easAndroidGoogleServicesFile = process.env.GOOGLE_SERVICES_JSON?.trim();
 const easIosGoogleServicesFile = process.env.GOOGLE_SERVICE_INFO_PLIST?.trim();
 const easProjectId = easProjectIdFromEnv || '82e9519b-f89b-466e-af4d-697349535c13';
@@ -89,6 +101,24 @@ function assertProductionConfig() {
     missingItems.push('EXPO_PUBLIC_ACCOUNT_DELETION_URL or EXPO_PUBLIC_SUPPORT_EMAIL');
   }
 
+  if (!allowProductionWithoutBilling) {
+    if (!revenueCatIosApiKey) {
+      missingItems.push('EXPO_PUBLIC_REVENUECAT_IOS_API_KEY');
+    }
+
+    if (!revenueCatAndroidApiKey) {
+      missingItems.push('EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY');
+    }
+
+    if (!revenueCatEntitlementId) {
+      missingItems.push('EXPO_PUBLIC_REVENUECAT_ENTITLEMENT_ID');
+    }
+
+    if (!revenueCatOfferingId) {
+      missingItems.push('EXPO_PUBLIC_REVENUECAT_OFFERING_ID');
+    }
+  }
+
   if (missingItems.length > 0) {
     throw new Error(
       `Missing required production app config: ${missingItems.join(', ')}.`
@@ -152,7 +182,7 @@ const config = {
     permissions: [
       'android.permission.ACCESS_COARSE_LOCATION',
       'android.permission.ACCESS_FINE_LOCATION',
-      'android.permission.ACCESS_BACKGROUND_LOCATION',
+      ...(enablePlaceReminders ? ['android.permission.ACCESS_BACKGROUND_LOCATION'] : []),
     ],
     adaptiveIcon: {
       backgroundColor: '#F7F2EB',

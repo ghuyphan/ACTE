@@ -32,6 +32,7 @@ function createControllerOptions(
     isCameraPreviewActive: true,
     isCameraRevealAllowed: true,
     backCameraLens: 'wide',
+    availableBackCameraLenses: ['ultra-wide', 'wide', 'telephoto'],
     backCameraLensZoomConfig: {
       'ultra-wide': { anchor: 0.5, min: 0.5, max: 1 },
       wide: { anchor: 1, min: 1, max: 8 },
@@ -78,14 +79,16 @@ describe('useCaptureCardCameraController', () => {
     jest.useRealTimers();
   });
 
-  it('keeps pinch zoom on the active lens instead of swapping lenses mid-gesture', () => {
+  it('switches to the telephoto lens when pinch zoom crosses its anchor', () => {
     const onChangeBackCameraLens = jest.fn();
-    const { result } = renderHook(() =>
-      useCaptureCardCameraController(
-        createControllerOptions({
+    const { result, rerender } = renderHook(
+      (options: Parameters<typeof useCaptureCardCameraController>[0]) =>
+        useCaptureCardCameraController(options),
+      {
+        initialProps: createControllerOptions({
           onChangeBackCameraLens,
-        })
-      )
+        }),
+      }
     );
 
     act(() => {
@@ -99,24 +102,47 @@ describe('useCaptureCardCameraController', () => {
       pinchGesture.handlers.onUpdate?.({ scale: 3 });
     });
 
-    expect(onChangeBackCameraLens).not.toHaveBeenCalled();
+    expect(onChangeBackCameraLens).toHaveBeenCalledWith('telephoto');
     expect(result.current.cameraZoomLabel).toBe('2.5x');
     expect(result.current.cameraZoomSelectorLabel).toBe('2.5x');
     expect(result.current.cameraPreviewZoom).toBeCloseTo(2.54, 2);
+
+    act(() => {
+      rerender(
+        createControllerOptions({
+          onChangeBackCameraLens,
+          backCameraLens: 'telephoto',
+          cameraDevice: {
+            id: 'back-telephoto-camera',
+            position: 'back',
+            neutralZoom: 1,
+            minZoom: 1,
+            maxZoom: 8,
+            supportsFocus: true,
+          } as any,
+        })
+      );
+    });
+
+    expect(result.current.cameraZoomLabel).toBe('2.5x');
+    expect(result.current.cameraZoomSelectorLabel).toBe('2.5x');
+    expect(result.current.cameraPreviewZoom).toBeCloseTo(1.27, 2);
 
     act(() => {
       pinchGesture.handlers.onFinalize?.();
     });
   });
 
-  it('clamps pinch zoom to the active lens range instead of jumping to another rear lens', () => {
+  it('switches to the ultra-wide lens when pinch zoom goes below the wide range', () => {
     const onChangeBackCameraLens = jest.fn();
-    const { result } = renderHook(() =>
-      useCaptureCardCameraController(
-        createControllerOptions({
+    const { result, rerender } = renderHook(
+      (options: Parameters<typeof useCaptureCardCameraController>[0]) =>
+        useCaptureCardCameraController(options),
+      {
+        initialProps: createControllerOptions({
           onChangeBackCameraLens,
-        })
-      )
+        }),
+      }
     );
 
     act(() => {
@@ -130,10 +156,65 @@ describe('useCaptureCardCameraController', () => {
       pinchGesture.handlers.onUpdate?.({ scale: 0.2 });
     });
 
-    expect(onChangeBackCameraLens).not.toHaveBeenCalled();
-    expect(result.current.cameraZoomLabel).toBe('1.0x');
-    expect(result.current.cameraZoomSelectorLabel).toBe('1x');
+    expect(onChangeBackCameraLens).toHaveBeenCalledWith('ultra-wide');
+    expect(result.current.cameraZoomLabel).toBe('0.5x');
+    expect(result.current.cameraZoomSelectorLabel).toBe('0.5x');
     expect(result.current.cameraPreviewZoom).toBe(1);
+
+    act(() => {
+      rerender(
+        createControllerOptions({
+          onChangeBackCameraLens,
+          backCameraLens: 'ultra-wide',
+          cameraDevice: {
+            id: 'back-ultra-wide-camera',
+            position: 'back',
+            neutralZoom: 1,
+            minZoom: 1,
+            maxZoom: 2,
+            supportsFocus: true,
+          } as any,
+        })
+      );
+    });
+
+    expect(result.current.cameraZoomLabel).toBe('0.5x');
+    expect(result.current.cameraZoomSelectorLabel).toBe('0.5x');
+    expect(result.current.cameraPreviewZoom).toBe(1);
+
+    act(() => {
+      pinchGesture.handlers.onFinalize?.();
+    });
+  });
+
+  it('cancels a pending pinch lens switch when the gesture returns to the active lens range', () => {
+    const onChangeBackCameraLens = jest.fn();
+    const { result } = renderHook(
+      (options: Parameters<typeof useCaptureCardCameraController>[0]) =>
+        useCaptureCardCameraController(options),
+      {
+        initialProps: createControllerOptions({
+          onChangeBackCameraLens,
+        }),
+      }
+    );
+
+    act(() => {
+      result.current.handleCameraPreviewStarted();
+    });
+
+    const pinchGesture = getPinchGesture(result.current.cameraZoomGesture);
+
+    act(() => {
+      pinchGesture.handlers.onBegin?.();
+      pinchGesture.handlers.onUpdate?.({ scale: 3 });
+      pinchGesture.handlers.onUpdate?.({ scale: 1.5 });
+    });
+
+    expect(onChangeBackCameraLens).toHaveBeenNthCalledWith(1, 'telephoto');
+    expect(onChangeBackCameraLens).toHaveBeenNthCalledWith(2, 'wide');
+    expect(result.current.cameraZoomLabel).toBe('1.4x');
+    expect(result.current.cameraZoomSelectorLabel).toBe('1.4x');
 
     act(() => {
       pinchGesture.handlers.onFinalize?.();

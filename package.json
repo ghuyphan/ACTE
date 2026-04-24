@@ -10,9 +10,12 @@
     "lint": "expo lint",
     "lint:ci": "expo lint --max-warnings 0",
     "theme:audit": "node scripts/theme-audit.js",
+    "expo:doctor": "npx expo-doctor",
+    "audit:prod": "npm audit --omit=dev --audit-level=moderate",
+    "supabase:functions:check": "deno check supabase/functions/*/index.ts",
     "typecheck": "tsc --noEmit",
     "test": "jest",
-    "verify": "npm run lint:ci && npm run theme:audit && npm run typecheck && npm test -- --runInBand",
+    "verify": "npm run lint:ci && npm run theme:audit && npm run typecheck && npm test -- --runInBand && npm run expo:doctor && npm run audit:prod",
     "update:preview": "npx eas-cli update --channel preview",
     "update:production": "npx eas-cli update --channel production"
   },
@@ -32,7 +35,7 @@
     "@supabase/supabase-js": "^2.99.3",
     "base64-arraybuffer": "^1.0.2",
     "expo": "^55.0.4",
-    "expo-blur": "~55.0.12",
+    "expo-blur": "~55.0.14",
     "expo-build-properties": "~55.0.9",
     "expo-clipboard": "~55.0.8",
     "expo-constants": "~55.0.7",
@@ -48,7 +51,7 @@
     "expo-linking": "~55.0.7",
     "expo-localization": "^55.0.8",
     "expo-location": "~55.1.2",
-    "expo-media-library": "~55.0.9",
+    "expo-media-library": "~55.0.15",
     "expo-notifications": "~55.0.10",
     "expo-router": "~55.0.3",
     "expo-secure-store": "^55.0.9",
@@ -80,7 +83,7 @@
     "react-native-view-shot": "^4.0.3",
     "react-native-vision-camera": "^4.7.3",
     "react-native-web": "~0.21.0",
-    "react-native-worklets": "0.7.2",
+    "react-native-worklets": "0.7.4",
     "supercluster": "^8.0.1",
     "xcode": "^3.0.1"
   },
@@ -146,6 +149,8 @@
     }
   },
   "overrides": {
-    "@tootallnate/once": "^3.0.1"
+    "@tootallnate/once": "^3.0.1",
+    "@xmldom/xmldom": "^0.9.10",
+    "uuid": "^14.0.0"
   }
 }

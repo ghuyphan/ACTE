@@ -12,6 +12,7 @@ interface CaptureSaveButtonProps {
   animatedSaveIconStyle: CaptureCardAnimatedStyle;
   animatedSaveInnerStyle: CaptureCardAnimatedStyle;
   animatedSaveSpinnerStyle: CaptureCardAnimatedStyle;
+  animatedSaveSuccessStyle: CaptureCardAnimatedStyle;
   colors: CaptureCardColors;
   isSaveBusy: boolean;
   isSaveDisabled: boolean;
@@ -29,6 +30,7 @@ export function CaptureSaveButton({
   animatedSaveIconStyle,
   animatedSaveInnerStyle,
   animatedSaveSpinnerStyle,
+  animatedSaveSuccessStyle,
   colors,
   isSaveBusy,
   isSaveDisabled,
@@ -47,13 +49,14 @@ export function CaptureSaveButton({
       accessibilityState={{
         busy: isSaveBusy,
         disabled: isSaveDisabled,
+        selected: isSaveSuccessful,
       }}
       onPress={onSaveNote}
       onPressIn={onPressIn}
       onPressOut={onPressOut}
       disabled={isSaveDisabled}
       pressedScale={0.985}
-      disabledOpacity={isSaveDisabled ? 0.72 : 1}
+      disabledOpacity={isSaveBusy || isSaveSuccessful ? 1 : 0.72}
       style={[
         styles.shutterOuter,
         {
@@ -100,7 +103,18 @@ export function CaptureSaveButton({
               testID="capture-save-button-spinner-indicator"
               size="small"
               color="#FFFFFF"
-              animating
+              animating={isSaveBusy}
+            />
+          </Reanimated.View>
+          <Reanimated.View
+            testID="capture-save-button-success-icon"
+            pointerEvents="none"
+            style={[styles.captureToggleIconLayer, animatedSaveSuccessStyle]}
+          >
+            <Ionicons
+              name="checkmark"
+              size={27}
+              color="#FFFFFF"
             />
           </Reanimated.View>
         </Reanimated.View>

@@ -1217,7 +1217,7 @@ describe('CaptureCard doodle handle', () => {
     expect(view.queryByTestId('mock-dual-camera-view')).toBeNull();
   });
 
-  it('shows the first dual capture in the inset preview while waiting for the second shot', () => {
+  it('keeps the live camera primary while showing the first dual capture as an inset', () => {
     const ref = React.createRef<CaptureCardHandle>();
     const onResetDualCaptureSequence = jest.fn();
     const view = renderCaptureCard(ref, {
@@ -1232,8 +1232,10 @@ describe('CaptureCard doodle handle', () => {
       onResetDualCaptureSequence,
     });
 
-    expect(view.getByTestId('capture-dual-reference-photo')).toBeTruthy();
-    expect(view.getByTestId('capture-dual-live-inset')).toBeTruthy();
+    expect(view.getByTestId('mock-camera-view')).toBeTruthy();
+    expect(view.getByTestId('capture-dual-inset-preview')).toBeTruthy();
+    expect(view.queryByTestId('capture-dual-reference-photo')).toBeNull();
+    expect(view.queryByTestId('capture-dual-live-inset')).toBeNull();
     expect(view.getByTestId('capture-dual-step-indicator')).toBeTruthy();
     expect(view.getByText('2/2')).toBeTruthy();
     expect(view.getByText('Front')).toBeTruthy();
@@ -1343,7 +1345,20 @@ describe('CaptureCard doodle handle', () => {
 
     expect(getByTestId('capture-save-button-icon')).toBeTruthy();
     expect(getByTestId('capture-save-button-spinner')).toBeTruthy();
+    expect(getByTestId('capture-save-button-success-icon')).toBeTruthy();
     expect(getByTestId('capture-save-button-spinner-indicator').props.animating).toBe(true);
+  });
+
+  it('shows a stable saved state without keeping the spinner active', () => {
+    const ref = React.createRef<CaptureCardHandle>();
+    const { getByTestId } = renderCaptureCard(ref, {
+      captureMode: 'camera',
+      capturedPhoto: 'file:///captured-photo.jpg',
+      saveState: 'success',
+    });
+
+    expect(getByTestId('capture-save-button-success-icon')).toBeTruthy();
+    expect(getByTestId('capture-save-button-spinner-indicator').props.animating).toBe(false);
   });
 
   it('renders live photo playback on the captured-photo review surface', () => {

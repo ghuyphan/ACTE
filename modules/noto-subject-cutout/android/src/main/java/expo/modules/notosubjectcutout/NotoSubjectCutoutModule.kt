@@ -25,6 +25,7 @@ private const val LOG_TAG = "NotoSubjectCutout"
 private const val SUBJECT_MASK_MIN_ALPHA_CONFIDENCE = 0.08f
 private const val SUBJECT_MASK_FULL_ALPHA_CONFIDENCE = 0.72f
 private const val PREPARE_BITMAP_SIZE = 256
+private const val MAX_SUBJECT_CUTOUT_EDGE_PX = 1600
 
 class NotoSubjectCutoutModule : Module() {
   private val segmenterOptions by lazy {
@@ -80,8 +81,7 @@ class NotoSubjectCutoutModule : Module() {
       val segmenter = getOrCreateSegmenter()
 
       try {
-        val sourceBitmap = BitmapFactory.decodeFile(sourceFile.absolutePath)
-          ?: throw SubjectCutoutException("source-unavailable", "Unable to decode the source image.")
+        val sourceBitmap = decodeScaledBitmap(sourceFile, MAX_SUBJECT_CUTOUT_EDGE_PX)
         Log.d(
           LOG_TAG,
           "cutOutAsync: source=${sourceFile.absolutePath} size=${sourceBitmap.width}x${sourceBitmap.height}"
@@ -89,7 +89,7 @@ class NotoSubjectCutoutModule : Module() {
 
         segmenter.getInitTask().await()
 
-        val result = segmenter.process(InputImage.fromFilePath(context, Uri.fromFile(sourceFile))).await()
+        val result = segmenter.process(InputImage.fromBitmap(sourceBitmap, 0)).await()
         val foregroundMask = result.foregroundConfidenceMask
         Log.d(
           LOG_TAG,
@@ -140,6 +140,33 @@ class NotoSubjectCutoutModule : Module() {
     warmBitmap.eraseColor(Color.WHITE)
     Log.d(LOG_TAG, "warmSubjectCutout: warming with ${PREPARE_BITMAP_SIZE}x${PREPARE_BITMAP_SIZE} bitmap")
     segmenter.process(InputImage.fromBitmap(warmBitmap, 0)).await()
+  }
+
+  private fun decodeScaledBitmap(sourceFile: File, maxEdgePx: Int): Bitmap {
+    val bounds = BitmapFactory.Options().apply {
+      inJustDecodeBounds = true
+    }
+    BitmapFactory.decodeFile(sourceFile.absolutePath, bounds)
+
+    if (bounds.outWidth <= 0 || bounds.outHeight <= 0) {
+      throw SubjectCutoutException("source-unavailable", "Unable to decode the source image.")
+    }
+
+    var sampleSize = 1
+    while (
+      bounds.outWidth / (sampleSize * 2) >= maxEdgePx ||
+      bounds.outHeight / (sampleSize * 2) >= maxEdgePx
+    ) {
+      sampleSize *= 2
+    }
+
+    val decodeOptions = BitmapFactory.Options().apply {
+      inSampleSize = sampleSize
+      inPreferredConfig = Bitmap.Config.ARGB_8888
+    }
+
+    return BitmapFactory.decodeFile(sourceFile.absolutePath, decodeOptions)
+      ?: throw SubjectCutoutException("source-unavailable", "Unable to decode the source image.")
   }
 
   private fun applyConfidenceMaskToBitmap(

@@ -260,10 +260,11 @@ Deno.serve(async (request) => {
 
     const { error: deleteError } = await adminClient.auth.admin.deleteUser(user.id);
     if (deleteError) {
+      console.error('delete-account auth deletion failed:', deleteError);
       return Response.json<DeleteAccountResponse>(
         {
           success: false,
-          error: deleteError.message || 'Could not delete this account right now.',
+          error: 'Could not delete this account right now.',
         },
         { status: 500, headers: corsHeaders }
       );
@@ -271,11 +272,11 @@ Deno.serve(async (request) => {
 
     return Response.json<DeleteAccountResponse>({ success: true }, { headers: corsHeaders });
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Unexpected delete-account failure.';
+    console.error('delete-account failed:', error);
     return Response.json<DeleteAccountResponse>(
       {
         success: false,
-        error: message,
+        error: 'Could not delete this account right now.',
       },
       { status: 500, headers: corsHeaders }
     );

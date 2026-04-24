@@ -71,6 +71,7 @@ jest.mock('../hooks/useAuth', () => ({
 
 jest.mock('../utils/appStorage', () => ({
   getPersistentItem: (key: string) => mockGetPersistentItem(key),
+  getPersistentItemSync: () => undefined,
   setPersistentItem: (key: string, value: string) => mockSetPersistentItem(key, value),
 }));
 

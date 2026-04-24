@@ -50,6 +50,7 @@ export const CaptureAnimatedPressable = memo(function CaptureAnimatedPressable({
   contentActiveTranslateY = 0,
   childrenContainerStyle,
   hapticStyle = Haptics.ImpactFeedbackStyle.Light,
+  hitSlop,
   onPress,
   onPressIn,
   onPressOut,
@@ -139,6 +140,7 @@ export const CaptureAnimatedPressable = memo(function CaptureAnimatedPressable({
     <AnimatedPressable
       {...props}
       disabled={disabled}
+      hitSlop={hitSlop ?? 8}
       onPress={handlePress}
       onPressIn={handlePressIn}
       onPressOut={handlePressOut}

@@ -41,19 +41,51 @@ describe('mediaIntegrity', () => {
     mockGetAllAsync.mockResolvedValueOnce([
       { content: 'photos/local-note.jpg', photo_local_uri: null },
       { content: 'file:///documents/photos/account-note.jpg', photo_local_uri: null },
+      {
+        content: 'file:///documents/photos/dual-composed.jpg',
+        photo_local_uri: null,
+        photo_synced_local_uri: 'file:///documents/photos/synced.jpg',
+        paired_video_local_uri: 'file:///documents/live-photo-videos/live-local.mp4',
+        paired_video_synced_local_uri: 'file:///documents/live-photo-videos/live-synced.mp4',
+        dual_primary_photo_local_uri: 'file:///documents/photos/dual-primary.jpg',
+        dual_secondary_photo_local_uri: 'file:///documents/photos/dual-secondary.jpg',
+        dual_composed_photo_local_uri: 'file:///documents/photos/dual-composed.jpg',
+      },
     ]);
-    mockReadDirectoryAsync.mockResolvedValueOnce([
-      'local-note.jpg',
-      'account-note.jpg',
-      'orphan.jpg',
-    ]);
+    mockReadDirectoryAsync
+      .mockResolvedValueOnce([
+        'local-note.jpg',
+        'account-note.jpg',
+        'synced.jpg',
+        'dual-primary.jpg',
+        'dual-secondary.jpg',
+        'dual-composed.jpg',
+        'orphan.jpg',
+      ])
+      .mockResolvedValueOnce([
+        'live-local.mp4',
+        'live-synced.mp4',
+        'orphan-live.mp4',
+      ]);
 
     const deletedCount = await cleanupOrphanPhotoFiles();
 
-    expect(deletedCount).toBe(1);
+    expect(deletedCount).toBe(2);
     expect(mockDeleteAsync).toHaveBeenCalledWith('file:///documents/photos/orphan.jpg', {
       idempotent: true,
     });
+    expect(mockDeleteAsync).toHaveBeenCalledWith(
+      'file:///documents/live-photo-videos/orphan-live.mp4',
+      { idempotent: true }
+    );
+    expect(mockDeleteAsync).not.toHaveBeenCalledWith(
+      'file:///documents/photos/dual-primary.jpg',
+      expect.anything()
+    );
+    expect(mockDeleteAsync).not.toHaveBeenCalledWith(
+      'file:///documents/photos/dual-secondary.jpg',
+      expect.anything()
+    );
   });
 
   it('keeps sticker files referenced by any persisted scope', async () => {

@@ -105,6 +105,7 @@ import { isIOS26OrNewer } from '../../utils/platform';
 
 const LIVE_PHOTO_CAMERA_HINT_SEEN_KEY = 'noto.capture.live-photo-hint-seen.v1';
 const CAPTURE_DRAFT_STORAGE_KEY = 'noto.capture.home-draft.v1';
+const REMINDER_RECOVERY_PROMPT_KEY_PREFIX = 'noto.home.reminder-recovery-prompt.v1.';
 const PLACE_PULSE_RADIUS_METERS = 500;
 const SHARED_PLACE_PULSE_MAX_AVATARS = 3;
 const SHARED_PLACE_PULSE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
@@ -1330,29 +1331,22 @@ export default function HomeScreen() {
       return;
     }
 
-    let focusTimeout: ReturnType<typeof setTimeout> | null = null;
-    let idleHandle: ReturnType<typeof scheduleOnIdle> | null = null;
     let cancelled = false;
-    idleHandle = scheduleOnIdle(() => {
-      focusTimeout = setTimeout(() => {
-        if (cancelled) {
-          return;
-        }
+    const focusTimeout = setTimeout(() => {
+      if (cancelled) {
+        return;
+      }
 
-        clearFeedFocus?.(pendingFeedFocusRequestId);
-        flatListRef.current?.scrollToOffset({
-          offset: (targetIndex + 1) * snapHeight,
-          animated: true,
-        });
-      }, 0);
-    });
+      clearFeedFocus?.(pendingFeedFocusRequestId);
+      flatListRef.current?.scrollToOffset({
+        offset: (targetIndex + 1) * snapHeight,
+        animated: true,
+      });
+    }, 0);
 
     return () => {
       cancelled = true;
-      idleHandle?.cancel();
-      if (focusTimeout) {
-        clearTimeout(focusTimeout);
-      }
+      clearTimeout(focusTimeout);
     };
   }, [
     clearFeedFocus,
@@ -1470,6 +1464,59 @@ export default function HomeScreen() {
       },
     });
   }, [requestReminderPermissions, showAlert, showDoneSheet, t]);
+
+  useEffect(() => {
+    if (remindersEnabled || notes.length === 0 || syncBootstrapState !== 'complete') {
+      return;
+    }
+
+    const reminderGroups = getReminderPlaceGroups(notes);
+    if (reminderGroups.length === 0) {
+      return;
+    }
+
+    const promptScope = user?.uid?.trim() || 'local';
+    const promptKey = `${REMINDER_RECOVERY_PROMPT_KEY_PREFIX}${promptScope}`;
+    let cancelled = false;
+
+    void getPersistentItem(promptKey)
+      .then((storedValue) => {
+        if (cancelled || storedValue === '1') {
+          return;
+        }
+
+        void setPersistentItem(promptKey, '1').catch(() => undefined);
+        showAlert({
+          variant: 'info',
+          title: t('capture.reminderRecoveryTitle', 'Enable reminders for your saved places'),
+          message: t(
+            'capture.reminderRecoveryMsg',
+            'Noto found saved places in your journal. Turn on background location and notifications if you want a reminder when you return.'
+          ),
+          primaryAction: {
+            label: t('capture.enableReminders', 'Enable reminders'),
+            onPress: promptReminderPermissionsFromDisclosure,
+          },
+          secondaryAction: {
+            label: t('common.notNow', 'Not now'),
+            variant: 'secondary',
+          },
+        });
+      })
+      .catch(() => undefined);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    notes,
+    promptReminderPermissionsFromDisclosure,
+    remindersEnabled,
+    showAlert,
+    syncBootstrapState,
+    t,
+    user?.uid,
+  ]);
 
   const showSharedUnavailableSheet = useCallback(() => {
     showAlert({
@@ -2446,7 +2493,9 @@ export default function HomeScreen() {
     requestForegroundLocation,
     clearInlineSaveTimers,
     completeInlineSaveFlow,
+    appTheme,
     getLocationUnavailableMessage,
+    isDark,
     showDoneSheet,
     t,
     captureMode,

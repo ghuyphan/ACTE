@@ -408,6 +408,28 @@ function executeNotesQuery(state: any) {
     rows = rows.slice(state.rangeStart, state.rangeEnd + 1);
   }
 
+  if (state.orderFields.length > 0) {
+    rows = [...rows].sort((left, right) => {
+      for (const order of state.orderFields) {
+        const leftValue = String(left?.[order.field] ?? '');
+        const rightValue = String(right?.[order.field] ?? '');
+        const comparison = order.ascending
+          ? leftValue.localeCompare(rightValue)
+          : rightValue.localeCompare(leftValue);
+
+        if (comparison !== 0) {
+          return comparison;
+        }
+      }
+
+      return 0;
+    });
+  }
+
+  if (typeof state.rangeStart === 'number' && typeof state.rangeEnd === 'number') {
+    rows = rows.slice(state.rangeStart, state.rangeEnd + 1);
+  }
+
   return rows;
 }
 
@@ -614,6 +636,9 @@ function mockCreateSharedPostsQueryBuilder() {
       | { type: 'eq'; field: string; value: unknown }
       | { type: 'in'; field: string; values: unknown[] }
     )[],
+    orderFields: [] as { field: string; ascending: boolean }[],
+    rangeStart: null as number | null,
+    rangeEnd: null as number | null,
     deleteMode: false,
   };
 
@@ -625,6 +650,15 @@ function mockCreateSharedPostsQueryBuilder() {
     },
     in: (field: string, values: unknown[]) => {
       state.filters.push({ type: 'in', field, values });
+      return builder;
+    },
+    order: (field: string, options?: { ascending?: boolean }) => {
+      state.orderFields.push({ field, ascending: options?.ascending ?? true });
+      return builder;
+    },
+    range: (from: number, to: number) => {
+      state.rangeStart = from;
+      state.rangeEnd = to;
       return builder;
     },
     delete: () => {
@@ -1757,7 +1791,7 @@ describe('syncService', () => {
     );
   });
 
-  it('skips a missing remote photo object and still completes the first full sync', async () => {
+  it('blocks the remote cursor when a required photo object is temporarily missing', async () => {
     mockRemoteNotes.set('note-photo-missing', {
       id: 'note-photo-missing',
       user_id: 'user-1',
@@ -1816,8 +1850,8 @@ describe('syncService', () => {
     expect(result).toEqual(
       expect.objectContaining({
         status: 'success',
-        importedCount: 1,
-        bootstrapCompleted: true,
+        importedCount: 0,
+        bootstrapCompleted: false,
       })
     );
     expect(consoleWarnSpy).toHaveBeenCalledWith(
@@ -1827,17 +1861,14 @@ describe('syncService', () => {
         photoPath: 'user-1/note-photo-missing',
       })
     );
-    expect(mockUpsertNote).toHaveBeenCalledWith(
+    expect(mockUpsertNote).not.toHaveBeenCalledWith(
       expect.objectContaining({
         id: 'note-text-later',
       })
     );
-    await expect(isInitialSyncPendingForUser('user-1')).resolves.toBe(false);
+    await expect(isInitialSyncPendingForUser('user-1')).resolves.toBe(true);
     await expect(getStoredRemoteSyncCursor()).resolves.toEqual({
-      notes: {
-        syncedAt: '2026-03-12T00:00:00.000Z',
-        id: 'note-text-later',
-      },
+      notes: null,
       tombstones: null,
     });
   });

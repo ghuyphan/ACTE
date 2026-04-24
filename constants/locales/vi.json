@@ -254,6 +254,7 @@
         "cancel": "Hủy",
         "unlockStickerMotion": "Mở khóa hiệu ứng chuyển động sticker",
         "lockStickerMotion": "Khóa hiệu ứng chuyển động sticker",
+        "deleteSticker": "Xóa sticker",
         "doneStickers": "Xong",
         "stickers": "Sticker",
         "remindersUnavailableSettingsMsg": "Noto cần quyền vị trí nền và thông báo để bật nhắc nhở. Mở Cài đặt để cấp lại quyền nhé."
@@ -340,6 +341,9 @@
         "doodleSave": "Lưu nét vẽ",
         "doodleSaveErrorTitle": "Không thể lưu nét vẽ",
         "doodleSaveErrorMsg": "Vui lòng thử lại sau ít phút.",
+        "toggleDoodleMode": "Bật hoặc tắt chế độ vẽ",
+        "toggleStickerMode": "Bật hoặc tắt chế độ nhãn dán",
+        "addSticker": "Thêm nhãn dán",
         "radiusValue": "Bán kính nhắc nhở: {{value}}",
         "editContent": "Viết thêm vài dòng...",
         "editPhotoCaption": "Viết một dòng ngắn...",

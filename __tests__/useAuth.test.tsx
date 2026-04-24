@@ -460,6 +460,41 @@ describe('useAuth', () => {
     expect(hook.result.current.user?.username).toBe('huy');
   });
 
+  it('keeps the hydrated profile avatar when refreshing the same session', async () => {
+    mockAuthState.initialSession = buildSession();
+    mockHasScopeOwnedData.mockResolvedValue(false);
+    mockUpsertPublicUserProfile.mockResolvedValueOnce({
+      displayName: 'Huy',
+      username: 'huy',
+      usernameSetAt: '2026-04-11T08:00:00.000Z',
+      photoURL: 'data:image/jpeg;base64,current-avatar',
+      updatedAt: '2026-04-11T00:00:00.000Z',
+    });
+    mockUpsertPublicUserProfile.mockImplementationOnce(
+      () =>
+        new Promise(() => {
+          // Keep the refresh reconciliation pending so this catches the immediate
+          // foreground-session state, before any public profile response can repair it.
+        })
+    );
+
+    const hook = renderHook(() => useAuth(), { wrapper });
+
+    await waitFor(() => {
+      expect(hook.result.current.user?.photoURL).toBe('data:image/jpeg;base64,current-avatar');
+    });
+
+    await act(async () => {
+      appStateListener?.('active');
+    });
+
+    await waitFor(() => {
+      expect(mockGetSession).toHaveBeenCalledTimes(2);
+    });
+
+    expect(hook.result.current.user?.photoURL).toBe('data:image/jpeg;base64,current-avatar');
+  });
+
   it('creates an email account and stores the display name and username metadata', async () => {
     const hook = renderHook(() => useAuth(), { wrapper });
 

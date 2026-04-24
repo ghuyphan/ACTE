@@ -15,6 +15,7 @@ interface CaptureControlRailProps {
   children: ReactNode;
   rowStyle?: ViewStyle;
   style?: ViewStyle;
+  testID?: string;
 }
 
 export function CaptureControlRail({
@@ -23,6 +24,7 @@ export function CaptureControlRail({
   children,
   rowStyle,
   style,
+  testID,
 }: CaptureControlRailProps) {
   const reduceMotionEnabled = useReducedMotion();
   const glassPalette = getGlassSurfacePalette({
@@ -39,6 +41,7 @@ export function CaptureControlRail({
 
   return (
     <Reanimated.View
+      testID={testID}
       layout={railLayoutTransition}
       style={[styles.textBottomToolsBar, style, { borderColor }]}
     >

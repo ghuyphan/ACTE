@@ -256,7 +256,7 @@ describe('delete-account edge function', () => {
 
     await expect(response.json()).resolves.toEqual({
       success: false,
-      error: 'Failed to delete sticker asset refs during account cleanup: refs delete failed',
+      error: 'Could not delete this account right now.',
     });
     expect(response.status).toBe(500);
     expect(fixtures.deleteUser).not.toHaveBeenCalled();
@@ -277,7 +277,7 @@ describe('delete-account edge function', () => {
 
     await expect(response.json()).resolves.toEqual({
       success: false,
-      error: 'Failed to delete device push tokens during account cleanup: push token delete failed',
+      error: 'Could not delete this account right now.',
     });
     expect(response.status).toBe(500);
     expect(fixtures.deleteUser).not.toHaveBeenCalled();

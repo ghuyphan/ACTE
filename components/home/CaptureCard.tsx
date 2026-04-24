@@ -108,6 +108,13 @@ const DEFAULT_CAPTURE_TEXT_PLACEHOLDERS = [
   'Anything here worth saving for later?',
   'Drop a small memory here...',
 ];
+const DEFAULT_AVAILABLE_BACK_CAMERA_LENSES: BackCameraLens[] = ['wide'];
+const EMPTY_BACK_CAMERA_LENSES: BackCameraLens[] = [];
+const EMPTY_LOCKED_NOTE_COLOR_IDS: string[] = [];
+const EMPTY_PREVIEW_ONLY_NOTE_COLOR_IDS: string[] = [];
+const EMPTY_LOCKED_PHOTO_FILTER_IDS: PhotoFilterId[] = [];
+const noop = () => undefined;
+
 function getCaptureTextPlaceholderVariants(t: TFunction) {
   const translated = t('capture.textPlaceholderVariants', {
     returnObjects: true,
@@ -222,28 +229,28 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   onChangeNoteText,
   noteColor = null,
   onChangeNoteColor,
-  lockedNoteColorIds = [],
-  previewOnlyNoteColorIds = [],
+  lockedNoteColorIds = EMPTY_LOCKED_NOTE_COLOR_IDS,
+  previewOnlyNoteColorIds = EMPTY_PREVIEW_ONLY_NOTE_COLOR_IDS,
   onPressLockedNoteColor,
   capturedPhoto,
   capturedPairedVideo = null,
   onRetakePhoto,
-  onImportMotionClip = () => undefined,
-  onRemoveMotionClip = () => undefined,
+  onImportMotionClip = noop,
+  onRemoveMotionClip = noop,
   needsCameraPermission,
   cameraPermissionRequiresSettings = false,
   onRequestCameraPermission,
   backCameraLens = 'wide',
-  availableBackCameraLenses = ['wide'],
+  availableBackCameraLenses = DEFAULT_AVAILABLE_BACK_CAMERA_LENSES,
   backCameraLensZoomConfig,
-  onChangeBackCameraLens = () => undefined,
+  onChangeBackCameraLens = noop,
   facing,
   onToggleFacing,
-  onChangeCameraSubmode = () => undefined,
+  onChangeCameraSubmode = noop,
   onOpenPhotoLibrary,
   selectedPhotoFilterId,
   onChangePhotoFilter,
-  lockedPhotoFilterIds = [],
+  lockedPhotoFilterIds = EMPTY_LOCKED_PHOTO_FILTER_IDS,
   onPressLockedPhotoFilter = onChangePhotoFilter,
   cameraRef,
   cameraDevice,
@@ -253,7 +260,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   onShutterPressIn,
   onShutterPressOut,
   onTakePicture,
-  onStartLivePhotoCapture = () => undefined,
+  onStartLivePhotoCapture = noop,
   onSaveNote,
   saving,
   saveState = 'idle',
@@ -273,7 +280,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   onChangeRadius,
   shareTarget,
   onChangeShareTarget,
-  onResetDualCaptureSequence = () => undefined,
+  onResetDualCaptureSequence = noop,
   onDoodleModeChange,
   onGestureActiveChange,
   onTextEntryFocusChange,
@@ -495,6 +502,10 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   const handlePhotoCaptionBlur = useCallback(() => {
     setIsPhotoCaptionFocused(false);
   }, []);
+  const handleTextNoteInputFocus = useCallback(() => {
+    handleNoteInputFocus();
+    scheduleIosKeyboardLiftUpdate();
+  }, [handleNoteInputFocus, scheduleIosKeyboardLiftUpdate]);
 
   useEffect(() => {
     onTextEntryFocusChange?.(isCaptureTextEntryFocused);
@@ -807,6 +818,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
     isCameraPreviewActive,
     isCameraRevealAllowed,
     backCameraLens,
+    availableBackCameraLenses,
     backCameraLensZoomConfig,
     facing,
     cameraInstructionText,
@@ -1055,7 +1067,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
     ],
   }));
   const animatedSaveIconStyle = useAnimatedStyle(() => ({
-    opacity: 1 - saveBusyProgress.value,
+    opacity: 1 - Math.max(saveBusyProgress.value, saveSuccessProgress.value),
     transform: [
       { translateY: saveBusyProgress.value * (reduceMotionEnabled ? 0 : -4) },
       {
@@ -1064,6 +1076,13 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
           saveSuccessProgress.value * 0.12 -
           saveBusyProgress.value * (reduceMotionEnabled ? 0.01 : 0.04),
       },
+    ],
+  }));
+  const animatedSaveSuccessStyle = useAnimatedStyle(() => ({
+    opacity: saveSuccessProgress.value,
+    transform: [
+      { translateY: (1 - saveSuccessProgress.value) * (reduceMotionEnabled ? 0 : 4) },
+      { scale: 0.82 + saveSuccessProgress.value * 0.18 },
     ],
   }));
   const animatedSaveSpinnerStyle = useAnimatedStyle(() => ({
@@ -1153,6 +1172,8 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
     (cameraUiStage === 'live' || cameraUiStage === 'capturing');
   const controlsUiStage: CameraUiStage =
     captureMode === 'camera' && shouldRenderCaptureCover ? 'capturing' : cameraUiStage;
+  const liveAvailableBackCameraLenses =
+    facing === 'back' ? availableBackCameraLenses : EMPTY_BACK_CAMERA_LENSES;
 
   useEffect(() => {
     if (shouldShowCaptureCover) {
@@ -1289,10 +1310,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
               handleChangeNoteText={handleChangeNoteText}
               handleChangeStickerPlacements={handleChangeStickerPlacements}
               handleNoteInputBlur={handleNoteInputBlur}
-              handleNoteInputFocus={() => {
-                handleNoteInputFocus();
-                scheduleIosKeyboardLiftUpdate();
-              }}
+              handleNoteInputFocus={handleTextNoteInputFocus}
               handlePressStickerCanvas={handlePressStickerCanvas}
               handleSelectedStickerAction={handleSelectedStickerAction}
               handleSelectSticker={handleSelectSticker}
@@ -1316,7 +1334,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                 <View style={styles.cameraSurfaceLayer}>
                   <LiveCameraSurface
                     backCameraLens={backCameraLens}
-                    availableBackCameraLenses={facing === 'back' ? availableBackCameraLenses : []}
+                    availableBackCameraLenses={liveAvailableBackCameraLenses}
                     backCameraLensZoomConfig={backCameraLensZoomConfig}
                     cameraDevice={cameraDevice}
                     cameraInstructionText={cameraInstructionText}
@@ -1509,6 +1527,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
               animatedSaveIconStyle={animatedSaveIconStyle}
               animatedSaveInnerStyle={animatedSaveInnerStyle}
               animatedSaveSpinnerStyle={animatedSaveSpinnerStyle}
+              animatedSaveSuccessStyle={animatedSaveSuccessStyle}
               colors={colors}
               cameraUiStage={controlsUiStage}
               handleSavePressIn={handleSavePressIn}

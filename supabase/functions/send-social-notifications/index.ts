@@ -619,12 +619,11 @@ Deno.serve(async (request) => {
       throw error;
     }
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : 'Unexpected social notification failure.';
+    console.error('send-social-notifications failed:', error);
     return jsonResponse(
       {
         success: false,
-        error: message,
+        error: 'Could not send social notification right now.',
       },
       500
     );

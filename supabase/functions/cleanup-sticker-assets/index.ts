@@ -220,10 +220,11 @@ Deno.serve(async (request) => {
       deletedAssetIds,
     });
   } catch (error) {
+    console.error('cleanup-sticker-assets failed:', error);
     return jsonResponse(
       {
         success: false,
-        error: error instanceof Error ? error.message : 'Unknown cleanup error',
+        error: 'Could not clean up sticker assets right now.',
       },
       500
     );

@@ -1738,7 +1738,9 @@ export async function deleteOwnedSharedPostsForNotes(
   const supabase = requireSupabase();
   const { data, error } = await supabase
     .from('shared_posts')
-    .select('id, photo_path, paired_video_path, sticker_placements_json')
+    .select(
+      'id, photo_path, dual_primary_photo_path, dual_secondary_photo_path, paired_video_path, sticker_placements_json'
+    )
     .eq('author_user_id', user.id)
     .in('source_note_id', dedupedNoteIds);
 
@@ -1749,6 +1751,8 @@ export async function deleteOwnedSharedPostsForNotes(
   const rows = (data ?? []) as Array<{
     id: string;
     photo_path?: string | null;
+    dual_primary_photo_path?: string | null;
+    dual_secondary_photo_path?: string | null;
     paired_video_path?: string | null;
     sticker_placements_json?: string | null;
   }>;
@@ -1806,6 +1810,8 @@ export async function deleteOwnedSharedPostsForNotes(
         SHARED_POST_MEDIA_BUCKET,
         getReusableSharedPostCleanupArtifacts({
           photoPath: row.photo_path ?? null,
+          dualPrimaryPhotoPath: row.dual_primary_photo_path ?? null,
+          dualSecondaryPhotoPath: row.dual_secondary_photo_path ?? null,
           pairedVideoPath: row.paired_video_path ?? null,
           stickerPaths: getRemoteStickerAssetPaths(row.sticker_placements_json ?? null),
         })
@@ -1824,7 +1830,7 @@ export async function deleteSharedPost(
   const supabase = requireSupabase();
   const { data: existing, error: fetchError } = await supabase
     .from('shared_posts')
-    .select('photo_path, paired_video_path, sticker_placements_json')
+    .select('photo_path, dual_primary_photo_path, dual_secondary_photo_path, paired_video_path, sticker_placements_json')
     .eq('id', postId)
     .eq('author_user_id', user.id)
     .maybeSingle();
@@ -1873,6 +1879,12 @@ export async function deleteSharedPost(
     SHARED_POST_MEDIA_BUCKET,
     getReusableSharedPostCleanupArtifacts({
       photoPath: (existing as { photo_path?: string | null } | null)?.photo_path ?? null,
+      dualPrimaryPhotoPath:
+        (existing as { dual_primary_photo_path?: string | null } | null)?.dual_primary_photo_path ??
+        null,
+      dualSecondaryPhotoPath:
+        (existing as { dual_secondary_photo_path?: string | null } | null)?.dual_secondary_photo_path ??
+        null,
       pairedVideoPath:
         (existing as { paired_video_path?: string | null } | null)?.paired_video_path ?? null,
       stickerPaths: getRemoteStickerAssetPaths(

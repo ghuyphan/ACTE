@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Image as ExpoImage } from 'expo-image';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   LayoutChangeEvent,
   Pressable,
@@ -132,12 +133,19 @@ const StickerSelectionControls = memo(function StickerSelectionControls({
   onToggleSelectedPlacementOutline?: (placementId: string) => void;
   onRemoveSelectedPlacement?: (placementId: string) => void;
 }) {
+  const { t } = useTranslation();
+
   return (
     <View style={styles.selectionControls}>
       <Pressable
         testID={`note-sticker-lock-toggle-${placementId}`}
         accessibilityRole="button"
-        accessibilityLabel={motionLocked ? 'Unlock sticker motion' : 'Lock sticker motion'}
+        accessibilityLabel={
+          motionLocked
+            ? t('capture.unlockStickerMotion', 'Unlock sticker motion')
+            : t('capture.lockStickerMotion', 'Lock sticker motion')
+        }
+        accessibilityState={{ selected: motionLocked }}
         onPress={() => onToggleSelectedPlacementMotionLock?.(placementId)}
         style={[
           styles.selectionControlButton,
@@ -154,7 +162,12 @@ const StickerSelectionControls = memo(function StickerSelectionControls({
         <Pressable
           testID={`note-sticker-outline-toggle-${placementId}`}
           accessibilityRole="button"
-          accessibilityLabel={outlineEnabled ? 'Turn off outline' : 'Turn on outline'}
+          accessibilityLabel={
+            outlineEnabled
+              ? t('capture.stickerOutlineDisable', 'Turn off outline')
+              : t('capture.stickerOutlineEnable', 'Turn on outline')
+          }
+          accessibilityState={{ selected: outlineEnabled }}
           onPress={() => onToggleSelectedPlacementOutline?.(placementId)}
           style={[
             styles.selectionControlButton,
@@ -171,7 +184,7 @@ const StickerSelectionControls = memo(function StickerSelectionControls({
       <Pressable
         testID={`note-sticker-remove-${placementId}`}
         accessibilityRole="button"
-        accessibilityLabel="Delete sticker"
+        accessibilityLabel={t('capture.deleteSticker', 'Delete sticker')}
         onPress={() => onRemoveSelectedPlacement?.(placementId)}
         style={styles.selectionControlButton}
       >

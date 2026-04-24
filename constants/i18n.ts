@@ -4,7 +4,7 @@ import { initReactI18next } from 'react-i18next';
 
 import en from './locales/en.json';
 import vi from './locales/vi.json';
-import { getPersistentItem, multiSetPersistent } from '../utils/appStorage';
+import { getPersistentItem, getPersistentItemSync, multiSetPersistent } from '../utils/appStorage';
 
 const STORE_LANGUAGE_KEY = 'settings.lang';
 const STORE_LANGUAGE_SOURCE_KEY = 'settings.lang.source';
@@ -34,8 +34,17 @@ export function normalizeAppLanguage(language: string | null | undefined): AppLa
 
 export async function detectInitialLanguage(): Promise<AppLanguageCode> {
     try {
-        const languageSource = await getPersistentItem(STORE_LANGUAGE_SOURCE_KEY);
-        const storedLanguage = await getPersistentItem(STORE_LANGUAGE_KEY);
+        const cachedLanguageSource = getPersistentItemSync(STORE_LANGUAGE_SOURCE_KEY);
+        const cachedStoredLanguage = getPersistentItemSync(STORE_LANGUAGE_KEY);
+
+        if (cachedLanguageSource === EXPLICIT_LANGUAGE_SOURCE && cachedStoredLanguage) {
+            return normalizeAppLanguage(cachedStoredLanguage);
+        }
+
+        const [languageSource, storedLanguage] = await Promise.all([
+            getPersistentItem(STORE_LANGUAGE_SOURCE_KEY),
+            getPersistentItem(STORE_LANGUAGE_KEY),
+        ]);
         if (languageSource === EXPLICIT_LANGUAGE_SOURCE && storedLanguage) {
             return normalizeAppLanguage(storedLanguage);
         }
@@ -43,6 +52,10 @@ export async function detectInitialLanguage(): Promise<AppLanguageCode> {
         console.error('Error reading language', error);
     }
 
+    return detectDeviceLanguage();
+}
+
+function detectDeviceLanguage(): AppLanguageCode {
     const [deviceLocale] = getLocales();
     const localeCandidate = [
         deviceLocale?.languageTag,

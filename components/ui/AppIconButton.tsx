@@ -6,7 +6,7 @@ import { useTheme } from '../../hooks/useTheme';
 type AppIconButtonProps = {
   icon: React.ComponentProps<typeof Ionicons>['name'];
   onPress: () => void;
-  accessibilityLabel?: string;
+  accessibilityLabel: string;
   size?: number;
   style?: StyleProp<ViewStyle>;
   testID?: string;
@@ -28,6 +28,7 @@ export default function AppIconButton({
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
+      accessibilityState={{ disabled }}
       disabled={disabled}
       onPress={onPress}
       style={({ pressed }) => [

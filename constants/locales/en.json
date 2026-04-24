@@ -254,6 +254,7 @@
         "cancel": "Cancel",
         "unlockStickerMotion": "Unlock sticker motion",
         "lockStickerMotion": "Lock sticker motion",
+        "deleteSticker": "Delete sticker",
         "doneStickers": "Done",
         "stickers": "Stickers",
         "remindersUnavailableSettingsMsg": "Background location or notifications are blocked for Noto. Open Settings to enable reminders."
@@ -340,6 +341,9 @@
         "doodleSave": "Save doodle",
         "doodleSaveErrorTitle": "Could not save doodle",
         "doodleSaveErrorMsg": "Please try again later.",
+        "toggleDoodleMode": "Toggle doodle mode",
+        "toggleStickerMode": "Toggle sticker mode",
+        "addSticker": "Add sticker",
         "radiusValue": "Reminder distance: {{value}}",
         "editContent": "Write a bit more...",
         "editPhotoCaption": "Add a short note...",

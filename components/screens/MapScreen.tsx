@@ -1,1 +1,1 @@
-export { default } from './MapScreen.ios';
+export { default } from './MapScreen.shared';

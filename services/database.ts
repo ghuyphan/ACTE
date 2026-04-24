@@ -9,15 +9,15 @@ import { resolveSavedTextNoteColor } from './noteAppearance';
 import { resolveStoredPhotoUri } from './photoStorage';
 import { resolveStoredPairedVideoUri } from './livePhotoStorage';
 import {
-    buildMonthlyRecap,
     buildMonthlyRecapDigest,
+    buildMonthlyRecapFromScopedNotes,
     deserializeMonthlyRecap,
     getMonthRange,
-    getNotesForMonth,
     getRecapMonthKeyForDate,
     serializeMonthlyRecap,
     type CachedMonthlyRecapEntry,
     type MonthlyRecap,
+    type MonthlyRecapMonth,
 } from './monthlyRecap';
 
 // ─── Types ──────────────────────────────────────────────────────────
@@ -736,6 +736,7 @@ export async function getDB(): Promise<SQLite.SQLiteDatabase> {
         created_at TEXT NOT NULL
       );
       CREATE INDEX IF NOT EXISTS idx_sync_queue_status_created ON sync_queue(status, created_at ASC);
+      CREATE INDEX IF NOT EXISTS idx_sync_queue_owner_created ON sync_queue(owner_uid, created_at DESC);
       CREATE TABLE IF NOT EXISTS sync_state (
         owner_uid TEXT PRIMARY KEY NOT NULL,
         user_uid TEXT,
@@ -804,6 +805,7 @@ export async function getDB(): Promise<SQLite.SQLiteDatabase> {
         PRIMARY KEY (user_uid, id)
       );
       CREATE INDEX IF NOT EXISTS idx_shared_posts_cache_user_created ON shared_posts_cache(user_uid, created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_shared_posts_cache_user_source_note ON shared_posts_cache(user_uid, source_note_id);
       CREATE TABLE IF NOT EXISTS shared_invites_cache (
         user_uid TEXT PRIMARY KEY NOT NULL,
         id TEXT NOT NULL,
@@ -920,12 +922,12 @@ export async function getDB(): Promise<SQLite.SQLiteDatabase> {
                 await database.execAsync(`ALTER TABLE notes ADD COLUMN dual_composed_photo_local_uri TEXT`);
             }
 
-            await database.execAsync(`CREATE INDEX IF NOT EXISTS idx_notes_search_text ON notes(search_text)`);
             await database.execAsync(`CREATE INDEX IF NOT EXISTS idx_notes_owner_created ON notes(owner_uid, created_at DESC)`);
             await database.execAsync(
                 `CREATE VIRTUAL TABLE IF NOT EXISTS ${NOTES_FTS_TABLE}
                  USING fts5(note_id UNINDEXED, owner_uid, search_text)`
             );
+            await database.execAsync(`DROP INDEX IF EXISTS idx_notes_search_text`);
             await database.execAsync(
                 `CREATE TABLE IF NOT EXISTS note_doodles (
                     note_id TEXT PRIMARY KEY NOT NULL,
@@ -1026,22 +1028,13 @@ export async function getDB(): Promise<SQLite.SQLiteDatabase> {
             }
 
             if (currentUserVersion < APP_SCHEMA_VERSION) {
-                const searchRows = await database.getAllAsync<{
-                    id: string;
-                    owner_uid: string | null;
-                    search_text: string | null;
-                }>(`SELECT id, owner_uid, search_text FROM notes`);
-
                 await database.runAsync(`DELETE FROM ${NOTES_FTS_TABLE}`);
-                for (const row of searchRows) {
-                    await database.runAsync(
-                        `INSERT INTO ${NOTES_FTS_TABLE} (note_id, owner_uid, search_text)
-                         VALUES (?, ?, ?)`,
-                        row.id,
-                        row.owner_uid ?? LOCAL_NOTES_SCOPE,
-                        row.search_text ?? ''
-                    );
-                }
+                await database.runAsync(
+                    `INSERT INTO ${NOTES_FTS_TABLE} (note_id, owner_uid, search_text)
+                     SELECT id, COALESCE(owner_uid, ?), COALESCE(search_text, '')
+                     FROM notes`,
+                    LOCAL_NOTES_SCOPE
+                );
             }
 
             const syncQueueInfo = await database.getAllAsync<{ name: string }>(`PRAGMA table_info(sync_queue)`);
@@ -1074,6 +1067,9 @@ export async function getDB(): Promise<SQLite.SQLiteDatabase> {
             );
             await database.execAsync(
                 `CREATE INDEX IF NOT EXISTS idx_sync_queue_owner_coalesce ON sync_queue(owner_uid, coalesce_key)`
+            );
+            await database.execAsync(
+                `CREATE INDEX IF NOT EXISTS idx_sync_queue_owner_created ON sync_queue(owner_uid, created_at DESC)`
             );
             await database.execAsync(
                 `CREATE TABLE IF NOT EXISTS sync_state (
@@ -1225,6 +1221,9 @@ export async function getDB(): Promise<SQLite.SQLiteDatabase> {
                 `CREATE INDEX IF NOT EXISTS idx_shared_posts_cache_user_created ON shared_posts_cache(user_uid, created_at DESC)`
             );
             await database.execAsync(
+                `CREATE INDEX IF NOT EXISTS idx_shared_posts_cache_user_source_note ON shared_posts_cache(user_uid, source_note_id)`
+            );
+            await database.execAsync(
                 `CREATE TABLE IF NOT EXISTS shared_invites_cache (
                     user_uid TEXT PRIMARY KEY NOT NULL,
                     id TEXT NOT NULL,
@@ -1264,9 +1263,8 @@ export async function getDB(): Promise<SQLite.SQLiteDatabase> {
 
             if (currentUserVersion < APP_SCHEMA_VERSION) {
                 await database.execAsync(`PRAGMA user_version = ${APP_SCHEMA_VERSION}`);
+                await normalizeDynamicThemeNoteColors(database);
             }
-
-            await normalizeDynamicThemeNoteColors(database);
 
             db = createSerializedDatabase(database);
             return db;
@@ -1809,6 +1807,25 @@ export async function getNotesPageForScope(
     return rows.map(rowToNote);
 }
 
+export async function getNotesForMonthRangeForScope(
+    scope: string,
+    month: MonthlyRecapMonth
+): Promise<Note[]> {
+    const database = await getDB();
+    const rows = await database.getAllAsync<NoteRow>(
+        `SELECT ${NOTES_SELECT_FIELDS}
+         FROM ${NOTES_FROM_CLAUSE}
+         WHERE owner_uid = ?
+           AND created_at >= ?
+           AND created_at < ?
+         ORDER BY created_at DESC`,
+        scope,
+        month.start.toISOString(),
+        month.endExclusive.toISOString()
+    );
+    return rows.map(rowToNote);
+}
+
 export async function getNoteById(id: string): Promise<Note | null> {
     const database = await getDB();
     const scope = getCurrentScope();
@@ -2293,9 +2310,8 @@ export async function refreshCachedMonthlyRecapForMonthKey(
         return null;
     }
 
-    const notes = await getAllNotesForScope(scope);
     const monthRange = getMonthRange(parts.year, parts.month, timeZone);
-    const monthNotes = getNotesForMonth(notes, monthRange);
+    const monthNotes = await getNotesForMonthRangeForScope(scope, monthRange);
 
     if (monthNotes.length === 0) {
         const database = await getDB();
@@ -2309,7 +2325,7 @@ export async function refreshCachedMonthlyRecapForMonthKey(
         return null;
     }
 
-    const recap = buildMonthlyRecap(notes, {
+    const recap = buildMonthlyRecapFromScopedNotes(monthNotes, {
         year: parts.year,
         month: parts.month,
         timeZone,

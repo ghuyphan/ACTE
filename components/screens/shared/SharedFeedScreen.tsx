@@ -1,8 +1,8 @@
 import { FlashList } from '@shopify/flash-list';
 import { Stack, useRouter } from 'expo-router';
-import { useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ActivityIndicator, Dimensions, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { SharedPostMemoryCard } from '../../home/MemoryCardPrimitives';
 import { Layout } from '../../../constants/theme';
@@ -13,13 +13,10 @@ import { useTheme } from '../../../hooks/useTheme';
 import { SharedPost } from '../../../services/sharedFeedService';
 import { formatNoteTimestamp } from '../../../utils/dateUtils';
 
-const { width } = Dimensions.get('window');
-const DEFAULT_SHARED_CARD_SIZE = width - (Layout.screenPadding - 8) * 2;
-const ESTIMATED_SHARED_CARD_HEIGHT = DEFAULT_SHARED_CARD_SIZE + 84;
-
 export default function SharedIndexScreen() {
   const { t } = useTranslation();
   const { colors } = useTheme();
+  const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { isReady: authReady, user } = useAuth();
@@ -30,6 +27,31 @@ export default function SharedIndexScreen() {
   const sortedPosts = useMemo(
     () => [...sharedPosts].sort((left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime()),
     [sharedPosts]
+  );
+  const estimatedSharedCardHeight = useMemo(
+    () => width - (Layout.screenPadding - 8) * 2 + 84,
+    [width]
+  );
+  const handlePressSharedPost = useCallback(
+    (postId: string) => {
+      router.push(`/shared/${postId}` as any);
+    },
+    [router]
+  );
+  const renderSharedPost = useCallback(
+    ({ item }: { item: SharedPost }) => (
+      <SharedPostMemoryCard
+        post={item}
+        colors={colors}
+        t={t}
+        containerStyle={styles.cardRow}
+        showSharedBadge={user?.uid === item.authorUid}
+        onPress={() => {
+          handlePressSharedPost(item.id);
+        }}
+      />
+    ),
+    [colors, handlePressSharedPost, t, user?.uid]
   );
   const cacheBanner =
     dataSource === 'cache' ? (
@@ -92,6 +114,11 @@ export default function SharedIndexScreen() {
       </Text>
       <Pressable
         accessibilityRole="button"
+        accessibilityLabel={
+          socialPushStatus === 'blocked'
+            ? t('common.openSettings', 'Open Settings')
+            : t('onboarding.allowNotifications', 'Allow notifications')
+        }
         onPress={() => {
           void enableFromPrompt();
         }}
@@ -101,7 +128,7 @@ export default function SharedIndexScreen() {
           pressed ? styles.socialPushBannerButtonPressed : null,
         ]}
       >
-        <Text style={styles.socialPushBannerButtonLabel}>
+        <Text style={[styles.socialPushBannerButtonLabel, { color: colors.onPrimary }]}>
           {socialPushStatus === 'blocked'
             ? t('common.openSettings', 'Open Settings')
             : t('onboarding.allowNotifications', 'Allow notifications')}
@@ -158,9 +185,11 @@ export default function SharedIndexScreen() {
                 },
               } as any);
             }}
+            accessibilityRole="button"
+            accessibilityLabel={t('shared.signInButton', 'Sign in')}
             style={[styles.signInButton, { backgroundColor: colors.primary }]}
           >
-            <Text style={styles.signInButtonLabel}>
+            <Text style={[styles.signInButtonLabel, { color: colors.onPrimary }]}>
               {t('shared.signInButton', 'Sign in')}
             </Text>
           </Pressable>
@@ -182,19 +211,8 @@ export default function SharedIndexScreen() {
           data={sortedPosts}
           keyExtractor={(item) => item.id}
           getItemType={(item) => item.type}
-          drawDistance={ESTIMATED_SHARED_CARD_HEIGHT * 2}
-          renderItem={({ item }: { item: SharedPost }) => (
-            <SharedPostMemoryCard
-              post={item}
-              colors={colors}
-              t={t}
-              containerStyle={styles.cardRow}
-              showSharedBadge={user?.uid === item.authorUid}
-              onPress={() => {
-                router.push(`/shared/${item.id}` as any);
-              }}
-            />
-          )}
+          drawDistance={estimatedSharedCardHeight * 2}
+          renderItem={renderSharedPost}
           showsVerticalScrollIndicator={false}
           ListHeaderComponent={
             cacheBanner || socialPushBanner ? (
@@ -297,7 +315,6 @@ const styles = StyleSheet.create({
     opacity: 0.82,
   },
   socialPushBannerButtonLabel: {
-    color: '#1C1C1E',
     fontSize: 14,
     fontWeight: '700',
     fontFamily: 'Noto Sans',
@@ -324,7 +341,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
   },
   signInButtonLabel: {
-    color: '#1C1C1E',
     fontSize: 15,
     fontWeight: '700',
     fontFamily: 'Noto Sans',

@@ -64,6 +64,36 @@ export const Shadows = {
   },
 } as const;
 
+export const CaptureChrome = {
+  shadowDark: '#000000',
+  stickerPastePopoverBackground: 'rgba(255, 250, 242, 0.96)',
+  stickerPasteButtonText: '#FFFDFC',
+  livePhotoBorder: {
+    dark: 'rgba(255,255,255,0.14)',
+    light: 'rgba(255,255,255,0.42)',
+  },
+  dualCaptureGuide: {
+    lightBackground: 'rgba(255,248,239,0.92)',
+    darkBackground: 'rgba(28,28,30,0.42)',
+    lightBorder: 'rgba(255,255,255,0.72)',
+    lightInactivePip: 'rgba(43,38,33,0.18)',
+    darkInactivePip: 'rgba(255,247,232,0.3)',
+    lightDivider: 'rgba(43,38,33,0.12)',
+    darkDivider: 'rgba(255,247,232,0.22)',
+  },
+  cameraLensSelector: {
+    lightBackground: 'rgba(18,18,20,0.52)',
+    darkBackground: 'rgba(12,12,14,0.68)',
+    lightBorder: 'rgba(255,255,255,0.18)',
+    darkBorder: 'rgba(255,255,255,0.14)',
+    lightInactiveBackground: 'rgba(255,255,255,0.06)',
+    darkInactiveBackground: 'rgba(255,255,255,0.04)',
+    lightActiveBackground: 'rgba(255,255,255,0.14)',
+    darkActiveBackground: 'rgba(0,0,0,0.22)',
+    inactiveText: 'rgba(255,253,252,0.92)',
+  },
+} as const;
+
 export const Sheet = {
   maxHeight: 680,
   ios: {

@@ -17,7 +17,7 @@ import {
   getPhotoNoteLimitForTier,
   isRevenueCatConfigured,
 } from '../constants/subscription';
-import { getPersistentItem, setPersistentItem } from '../utils/appStorage';
+import { getPersistentItem, getPersistentItemSync, setPersistentItem } from '../utils/appStorage';
 import { getSupabase } from '../utils/supabase';
 import { useAuth } from './useAuth';
 import { useConnectivity } from './useConnectivity';
@@ -259,39 +259,57 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
       setIsSnapshotHydrated(true);
     };
 
+    const applyCachedSnapshot = (rawValue: string | null) => {
+      if (!rawValue) {
+        cachedSnapshotRef.current = null;
+        setCachedSnapshot(null);
+        finalizeSnapshotHydration();
+        return;
+      }
+
+      const parsed = JSON.parse(rawValue) as SubscriptionSnapshot;
+      if (snapshotLoadRequestIdRef.current !== requestId) {
+        return;
+      }
+
+      cachedSnapshotRef.current = parsed;
+      setCachedSnapshot(parsed);
+
+      if (!receivedLiveRemotePhotoNoteCountRef.current) {
+        const normalizedCachedRemoteCount = normalizeRemoteDailyPhotoNoteCount({
+          photo_note_daily_count: parsed.remotePhotoNoteCount ?? null,
+          photo_note_daily_date: parsed.remotePhotoNoteUsageDate ?? null,
+        });
+        setRemotePhotoNoteCount(normalizedCachedRemoteCount);
+        setIsRemotePhotoNoteCountReady(
+          normalizedCachedRemoteCount !== null || parsed.remotePhotoNoteUsageDate !== null
+        );
+      }
+
+      finalizeSnapshotHydration();
+    };
+
+    const syncRawValue = getPersistentItemSync(snapshotStorageKey);
+    if (syncRawValue !== undefined) {
+      try {
+        applyCachedSnapshot(syncRawValue);
+      } catch (error) {
+        console.warn('[subscription] Failed to load cached subscription snapshot:', error);
+        finalizeSnapshotHydration();
+      }
+
+      return () => {
+        cancelled = true;
+      };
+    }
+
     void getPersistentItem(snapshotStorageKey)
       .then((rawValue) => {
         if (cancelled || snapshotLoadRequestIdRef.current !== requestId) {
           return;
         }
 
-        if (!rawValue) {
-          cachedSnapshotRef.current = null;
-          setCachedSnapshot(null);
-          finalizeSnapshotHydration();
-          return;
-        }
-
-        const parsed = JSON.parse(rawValue) as SubscriptionSnapshot;
-        if (snapshotLoadRequestIdRef.current !== requestId) {
-          return;
-        }
-
-        cachedSnapshotRef.current = parsed;
-        setCachedSnapshot(parsed);
-
-        if (!receivedLiveRemotePhotoNoteCountRef.current) {
-          const normalizedCachedRemoteCount = normalizeRemoteDailyPhotoNoteCount({
-            photo_note_daily_count: parsed.remotePhotoNoteCount ?? null,
-            photo_note_daily_date: parsed.remotePhotoNoteUsageDate ?? null,
-          });
-          setRemotePhotoNoteCount(normalizedCachedRemoteCount);
-          setIsRemotePhotoNoteCountReady(
-            normalizedCachedRemoteCount !== null || parsed.remotePhotoNoteUsageDate !== null
-          );
-        }
-
-        finalizeSnapshotHydration();
+        applyCachedSnapshot(rawValue);
       })
       .catch((error) => {
         console.warn('[subscription] Failed to load cached subscription snapshot:', error);

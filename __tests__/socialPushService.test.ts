@@ -39,6 +39,7 @@ jest.mock('react-native', () => ({
 
 jest.mock('../utils/appStorage', () => ({
   getPersistentItem: (...args: unknown[]) => mockGetPersistentItem(...args),
+  getPersistentItemSync: () => undefined,
   removePersistentItem: (...args: unknown[]) => mockRemovePersistentItem(...args),
   setPersistentItem: (...args: unknown[]) => mockSetPersistentItem(...args),
 }));

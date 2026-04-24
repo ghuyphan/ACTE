@@ -174,6 +174,7 @@ jest.mock('../hooks/useCaptureFlow', () => ({
 
 jest.mock('../utils/appStorage', () => ({
   getPersistentItem: (key: string) => mockGetPersistentItem(key),
+  getPersistentItemSync: () => undefined,
   removePersistentItem: (key: string) => mockRemovePersistentItem(key),
   setPersistentItem: (key: string, value: string) => mockSetPersistentItem(key, value),
 }));

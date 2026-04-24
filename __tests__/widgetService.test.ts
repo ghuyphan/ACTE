@@ -697,13 +697,15 @@ describe('widgetService', () => {
     expect(entries[0]?.props.props).toEqual(
       expect.objectContaining({
         isSharedContent: true,
+        isIdleState: false,
+        noteCount: 0,
         authorDisplayName: 'Bao',
         text: 'Shared hello',
       })
     );
   });
 
-  it('rotates distinct memories across future timeline slots before repeating the last candidate', async () => {
+  it('cycles distinct memories across future timeline slots instead of getting stuck on the oldest one', async () => {
     await updateWidgetData({ referenceDate: new Date('2026-03-10T07:30:00.000Z') });
 
     const entries = getLastTimelineEntries();
@@ -711,7 +713,7 @@ describe('widgetService', () => {
     expect(entries).toHaveLength(4);
     expect(entries[0]?.props.props.text).toBe('Latest note');
     expect(entries[1]?.props.props.text).toBe('Older note');
-    expect(entries[2]?.props.props.text).toBe('Older note');
+    expect(entries[2]?.props.props.text).toBe('Latest note');
     expect(entries[3]?.props.props.text).toBe('Older note');
   });
 

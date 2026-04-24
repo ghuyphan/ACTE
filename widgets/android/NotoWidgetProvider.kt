@@ -28,6 +28,7 @@ import android.text.TextPaint
 import android.text.TextUtils
 import android.util.SizeF
 import android.util.Base64
+import android.util.Log
 import android.util.TypedValue
 import android.view.View
 import android.widget.RemoteViews
@@ -38,6 +39,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.io.ByteArrayInputStream
 import java.io.File
+import java.util.concurrent.Executors
 import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.math.cos
@@ -75,6 +77,7 @@ private const val WIDGET_DUAL_INSET_SHELL_COLOR = "#131313"
 private const val WIDGET_DUAL_INSET_BORDER_OPACITY = 0.76f
 private const val WIDGET_DUAL_INSET_WASH_OPACITY = 0.04f
 private const val WIDGET_TEXT_SCALE = 0.9f
+private const val WIDGET_LOG_TAG = "NotoWidget"
 private val STICKER_OUTLINE_OFFSETS = listOf(
   PointF(-1f, 0f),
   PointF(-0.92f, -0.38f),
@@ -834,9 +837,7 @@ class NotoWidgetProvider : AppWidgetProvider() {
     appWidgetManager: AppWidgetManager,
     appWidgetIds: IntArray
   ) {
-    appWidgetIds.forEach { appWidgetId ->
-      updateWidget(context, appWidgetManager, appWidgetId)
-    }
+    enqueueWidgetUpdates(context, appWidgetIds)
   }
 
   override fun onAppWidgetOptionsChanged(
@@ -845,21 +846,40 @@ class NotoWidgetProvider : AppWidgetProvider() {
     appWidgetId: Int,
     newOptions: Bundle
   ) {
-    updateWidget(context, appWidgetManager, appWidgetId)
+    enqueueWidgetUpdates(context, intArrayOf(appWidgetId))
   }
 
   companion object {
+    private val widgetUpdateExecutor = Executors.newSingleThreadExecutor()
+
     fun updateAllWidgets(context: Context) {
       val appWidgetManager = AppWidgetManager.getInstance(context)
       val componentName = ComponentName(context, NotoWidgetProvider::class.java)
       val appWidgetIds = appWidgetManager.getAppWidgetIds(componentName)
-      appWidgetIds.forEach { appWidgetId ->
-        updateWidget(context, appWidgetManager, appWidgetId)
+      enqueueWidgetUpdates(context, appWidgetIds)
+    }
+
+    private fun enqueueWidgetUpdates(context: Context, appWidgetIds: IntArray) {
+      if (appWidgetIds.isEmpty()) {
+        return
+      }
+
+      val appContext = context.applicationContext
+      widgetUpdateExecutor.execute {
+        val appWidgetManager = AppWidgetManager.getInstance(appContext)
+        appWidgetIds.forEach { appWidgetId ->
+          try {
+            updateWidget(appContext, appWidgetManager, appWidgetId)
+          } catch (error: Throwable) {
+            Log.w(WIDGET_LOG_TAG, "Widget update failed for id=$appWidgetId", error)
+          }
+        }
       }
     }
 
     private fun updateWidget(context: Context, manager: AppWidgetManager, appWidgetId: Int) {
-      val snapshot = parseSnapshotOrNull(NotoWidgetStorage.loadSnapshotJson(context)) ?: return
+      val snapshot =
+        parseSnapshotOrNull(NotoWidgetStorage.loadSnapshotJson(context)) ?: createPlaceholderSnapshot(context)
       val options = manager.getAppWidgetOptions(appWidgetId)
       val layoutStage = resolveWidgetLayoutStage(options)
       val views = RemoteViews(
@@ -875,6 +895,49 @@ class NotoWidgetProvider : AppWidgetProvider() {
       bindSnapshot(context, views, snapshot, options, layoutStage, appWidgetId)
 
       manager.updateAppWidget(appWidgetId, views)
+    }
+
+    private fun createPlaceholderSnapshot(context: Context): NotoWidgetSnapshot {
+      return NotoWidgetSnapshot(
+        noteType = "text",
+        text = "",
+        noteColorId = null,
+        locationName = "",
+        date = "",
+        noteCount = 0,
+        nearbyPlacesCount = 0,
+        isLivePhoto = false,
+        isDualCapture = false,
+        backgroundImageUrl = null,
+        backgroundImageBase64 = null,
+        dualInsetImageUrl = null,
+        dualLayoutPreset = null,
+        backgroundGradientStartColor = null,
+        backgroundGradientEndColor = null,
+        hasDoodle = false,
+        doodleStrokesJson = null,
+        hasStickers = false,
+        stickerPlacementsJson = null,
+        isIdleState = true,
+        idleText = context.getString(R.string.noto_widget_idle_fallback),
+        savedCountText = "",
+        nearbyPlacesLabelText = "",
+        memoryReminderText = context.getString(R.string.noto_widget_memory_fallback),
+        accessorySaveMemoryText = "",
+        accessoryAddFirstPlaceText = "",
+        accessoryMemoryNearbyText = "",
+        accessoryOpenAppText = "",
+        accessoryAddLabelText = "",
+        accessorySavedLabelText = "",
+        accessoryNearLabelText = "",
+        livePhotoBadgeText = "",
+        isSharedContent = false,
+        authorDisplayName = "",
+        authorInitials = "",
+        authorAvatarImageUrl = null,
+        authorAvatarImageBase64 = null,
+        primaryActionUrl = "noto:///"
+      )
     }
 
     private fun bindRootIntent(context: Context, views: RemoteViews, appWidgetId: Int, snapshot: NotoWidgetSnapshot) {
@@ -893,10 +956,14 @@ class NotoWidgetProvider : AppWidgetProvider() {
       appWidgetId: Int
     ) {
       val stageMetrics = resolveWidgetStageMetrics(layoutStage)
-      val hasImage = !snapshot.backgroundImageUrl.isNullOrBlank() || !snapshot.backgroundImageBase64.isNullOrBlank()
-      val showIdle = snapshot.noteCount <= 0 || (snapshot.isIdleState && snapshot.text.isBlank() && !hasImage)
-      val showLivePhotoBadge = shouldShowLivePhotoBadge(snapshot, showIdle, hasImage)
-      val usesTextSurface = showIdle || !hasImage
+      val hasDeclaredImage = !snapshot.backgroundImageUrl.isNullOrBlank() || !snapshot.backgroundImageBase64.isNullOrBlank()
+      val showIdle = snapshot.isIdleState && snapshot.text.isBlank() && !hasDeclaredImage
+      val geometry = resolveWidgetRenderGeometryPx(context, options, layoutStage)
+      views.setViewPadding(R.id.widget_root, 0, 0, 0, 0)
+      views.setViewPadding(R.id.widget_card_inner, 0, 0, 0, 0)
+      val hasRenderedPhoto = bindPhotoState(context, views, snapshot, showIdle, geometry)
+      val showLivePhotoBadge = shouldShowLivePhotoBadge(snapshot, showIdle, hasRenderedPhoto)
+      val usesTextSurface = showIdle || !hasRenderedPhoto
       val hasVisualOnlyContent =
         !showIdle &&
         snapshot.noteType == "text" &&
@@ -908,15 +975,12 @@ class NotoWidgetProvider : AppWidgetProvider() {
       val shouldHidePhotoBodyText =
         !showIdle &&
         snapshot.noteType == "photo" &&
-        hasImage
-      val photoTitleText = if (!showIdle && snapshot.noteType == "photo" && hasImage) {
+        hasRenderedPhoto
+      val photoTitleText = if (!showIdle && snapshot.noteType == "photo" && hasRenderedPhoto) {
         snapshot.text.trim()
       } else {
         ""
       }
-      val geometry = resolveWidgetRenderGeometryPx(context, options, layoutStage)
-      views.setViewPadding(R.id.widget_root, 0, 0, 0, 0)
-      views.setViewPadding(R.id.widget_card_inner, 0, 0, 0, 0)
       val idleBodyText = if (showIdle) {
         snapshot.idleText.ifBlank { context.getString(R.string.noto_widget_idle_fallback) }
       } else {
@@ -940,7 +1004,6 @@ class NotoWidgetProvider : AppWidgetProvider() {
 
       bindCardSurfaceState(views, geometry, usesTextSurface, showIdle, textSurfaceGradient)
       bindTextBackgroundState(views, geometry, usesTextSurface, showIdle, textSurfaceGradient)
-      bindPhotoState(context, views, snapshot, showIdle, geometry)
       bindStickerState(context, views, snapshot, options, layoutStage, geometry, showIdle)
       bindDoodleState(context, views, snapshot, options, layoutStage, geometry, usesTextSurface, showIdle)
       val showAuthorChip = bindAuthorState(context, views, snapshot, showIdle, usesTextSurface, layoutStage, geometry)
@@ -1205,7 +1268,7 @@ class NotoWidgetProvider : AppWidgetProvider() {
       snapshot: NotoWidgetSnapshot,
       showIdle: Boolean,
       geometry: WidgetRenderGeometry
-    ) {
+    ): Boolean {
       val photoBitmap = if (!showIdle) {
         decodePhoto(
           snapshot = snapshot,
@@ -1239,6 +1302,8 @@ class NotoWidgetProvider : AppWidgetProvider() {
         showIdle = showIdle || !hasPhoto,
         geometry = geometry
       )
+
+      return hasPhoto
     }
 
     private fun bindDualCaptureInset(

@@ -10,7 +10,12 @@ import { PHOTO_DIRECTORY, resolveStoredPhotoUri } from './photoStorage';
 interface PhotoReferenceRow {
   content: string;
   photo_local_uri: string | null;
+  photo_synced_local_uri: string | null;
   paired_video_local_uri: string | null;
+  paired_video_synced_local_uri: string | null;
+  dual_primary_photo_local_uri: string | null;
+  dual_secondary_photo_local_uri: string | null;
+  dual_composed_photo_local_uri: string | null;
 }
 
 interface StickerReferenceRow {
@@ -20,8 +25,14 @@ interface StickerReferenceRow {
 async function getReferencedPhotoPaths() {
   const database = await getDB();
   const rows = await database.getAllAsync<PhotoReferenceRow>(
-    `SELECT content, photo_local_uri
-     , paired_video_local_uri
+    `SELECT content,
+            photo_local_uri,
+            photo_synced_local_uri,
+            paired_video_local_uri,
+            paired_video_synced_local_uri,
+            dual_primary_photo_local_uri,
+            dual_secondary_photo_local_uri,
+            dual_composed_photo_local_uri
      FROM notes
      WHERE type = 'photo'`
   );
@@ -30,7 +41,12 @@ async function getReferencedPhotoPaths() {
     rows
       .flatMap((row) => [
         resolveStoredPhotoUri(row.photo_local_uri ?? row.content),
+        resolveStoredPhotoUri(row.photo_synced_local_uri),
+        resolveStoredPhotoUri(row.dual_primary_photo_local_uri),
+        resolveStoredPhotoUri(row.dual_secondary_photo_local_uri),
+        resolveStoredPhotoUri(row.dual_composed_photo_local_uri),
         resolveStoredPairedVideoUri(row.paired_video_local_uri),
+        resolveStoredPairedVideoUri(row.paired_video_synced_local_uri),
       ])
       .filter(Boolean)
   );
