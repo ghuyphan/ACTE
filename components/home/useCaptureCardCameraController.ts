@@ -13,12 +13,10 @@ import { Gesture } from 'react-native-gesture-handler';
 import {
   cancelAnimation,
   Easing,
-  interpolateColor,
   type SharedValue,
   useAnimatedStyle,
   useSharedValue,
   withDelay,
-  withRepeat,
   withSequence,
   withSpring,
   withTiming,
@@ -77,7 +75,7 @@ interface UseCaptureCardCameraControllerOptions {
   interactionsDisabled: boolean;
   reduceMotionEnabled: boolean;
   shutterScale: SharedValue<number>;
-  colors: Pick<ThemeColors, 'primary' | 'border'>;
+  colors: Pick<ThemeColors, 'border'>;
   t: TFunction;
   cardSize: number;
   livePhotoRingStrokeWidth: number;
@@ -229,8 +227,6 @@ export function useCaptureCardCameraController({
   const cameraTransitionMaskOpacity = useSharedValue(0);
   const cameraFocusRingOpacity = useSharedValue(0);
   const cameraFocusRingScale = useSharedValue(1.08);
-  const livePhotoVisualProgress = useSharedValue(isLivePhotoCaptureInProgress ? 1 : 0);
-  const livePhotoHaloProgress = useSharedValue(0);
   const showCameraInstructionHint = Boolean(cameraInstructionText) && !capturedPhoto;
   const shouldPrepareCameraPreview =
     captureMode === 'camera' &&
@@ -742,21 +738,9 @@ export function useCaptureCardCameraController({
   }), [cameraFocusRingOpacity, cameraFocusRingScale]);
 
   const shutterOuterAnimatedStyle = useAnimatedStyle(() => ({
-    borderColor: interpolateColor(
-      livePhotoVisualProgress.value,
-      [0, 1],
-      [colors.border, `${colors.primary}3D`]
-    ),
+    borderColor: colors.border,
     borderWidth: 4,
-    transform: [{ scale: 1 + livePhotoHaloProgress.value * 0.025 }],
-  }), [colors.border, colors.primary, livePhotoHaloProgress, livePhotoVisualProgress]);
-
-  const shutterCaptureHaloAnimatedStyle = useAnimatedStyle(() => ({
-    opacity: livePhotoVisualProgress.value * (
-      reduceMotionEnabled ? 0.12 : 0.16 + livePhotoHaloProgress.value * 0.14
-    ),
-    transform: [{ scale: 1 + livePhotoHaloProgress.value * (reduceMotionEnabled ? 0.04 : 0.18) }],
-  }), [livePhotoHaloProgress, livePhotoVisualProgress, reduceMotionEnabled]);
+  }), [colors.border]);
 
   const shutterInnerAnimatedStyle = useAnimatedStyle(() => ({
     width: SHUTTER_CORE_SIZE,
@@ -764,49 +748,6 @@ export function useCaptureCardCameraController({
     borderRadius: SHUTTER_CORE_SIZE / 2,
     transform: [{ scale: shutterScale.value }],
   }), [shutterScale]);
-
-  useEffect(() => {
-    livePhotoVisualProgress.value = withTiming(isLivePhotoCaptureInProgress ? 1 : 0, {
-      duration: reduceMotionEnabled ? 110 : 180,
-      easing: Easing.out(Easing.cubic),
-    });
-
-    cancelAnimation(livePhotoHaloProgress);
-    livePhotoHaloProgress.value = 0;
-
-    if (!isLivePhotoCaptureInProgress) {
-      return;
-    }
-
-    if (reduceMotionEnabled) {
-      livePhotoHaloProgress.value = 1;
-      return;
-    }
-
-    livePhotoHaloProgress.value = withRepeat(
-      withSequence(
-        withTiming(1, {
-          duration: 720,
-          easing: Easing.out(Easing.quad),
-        }),
-        withTiming(0, {
-          duration: 720,
-          easing: Easing.inOut(Easing.quad),
-        })
-      ),
-      -1,
-      false
-    );
-
-    return () => {
-      cancelAnimation(livePhotoHaloProgress);
-    };
-  }, [
-    isLivePhotoCaptureInProgress,
-    livePhotoHaloProgress,
-    livePhotoVisualProgress,
-    reduceMotionEnabled,
-  ]);
 
   useEffect(() => {
     if (!isLivePhotoCaptureInProgress) {
@@ -1078,7 +1019,6 @@ export function useCaptureCardCameraController({
       showCameraInstructionHint,
       showCameraUnavailableState,
       showCameraZoomBadge: showCameraZoomBadge || shouldShowPersistentCameraZoomBadge,
-      shutterCaptureHaloAnimatedStyle,
       shutterInnerAnimatedStyle,
       shutterOuterAnimatedStyle,
     }),
@@ -1113,7 +1053,6 @@ export function useCaptureCardCameraController({
       showCameraUnavailableState,
       showCameraZoomBadge,
       shouldShowPersistentCameraZoomBadge,
-      shutterCaptureHaloAnimatedStyle,
       shutterInnerAnimatedStyle,
       shutterOuterAnimatedStyle,
     ]

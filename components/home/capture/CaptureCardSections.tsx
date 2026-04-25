@@ -34,7 +34,6 @@ import PremiumNoteFinishOverlay from '../../ui/PremiumNoteFinishOverlay';
 import PrimaryButton from '../../ui/PrimaryButton';
 import StickerPastePopover from '../../ui/StickerPastePopover';
 import LivePhotoIcon from '../../ui/LivePhotoIcon';
-import { getGlassSurfacePalette } from '../../ui/glassTokens';
 import {
   DualCameraPreview,
   type DualCameraPreviewHandle,
@@ -42,6 +41,7 @@ import {
 import { CaptureControlRail } from './CaptureControlRail';
 import { CaptureAnimatedPressable, FilteredPhotoCanvas } from './CaptureControls';
 import { LiveCameraFilterOverlay } from './LiveCameraFilterOverlay';
+import { getCaptureChromePalette } from './captureControlVisuals';
 import {
   CAMERA_FOCUS_RING_SIZE,
   CARD_SIZE,
@@ -452,6 +452,7 @@ export const PhotoCaptureSurface = memo(function PhotoCaptureSurface({
       />
       <View pointerEvents="box-none" style={styles.cardBottomOverlay}>
         <View
+          testID="capture-photo-caption-container"
           style={[
             styles.photoCaptionOverlayField,
             {
@@ -689,28 +690,13 @@ export const LiveCameraSurface = memo(function LiveCameraSurface({
   const handoffInsetIn = reduceMotionEnabled
     ? undefined
     : ZoomIn.springify().damping(18).stiffness(220).mass(0.9);
-  const dualCaptureGuideBackground =
-    colors.captureGlassColorScheme === 'light'
-      ? CaptureChrome.dualCaptureGuide.lightBackground
-      : CaptureChrome.dualCaptureGuide.darkBackground;
-  const dualCaptureGuideBorder =
-    colors.captureGlassColorScheme === 'light'
-      ? CaptureChrome.dualCaptureGuide.lightBorder
-      : colors.captureGlassBorder;
-  const dualCaptureGuideActivePip = colors.captureGlassText;
-  const dualCaptureGuideInactivePip =
-    colors.captureGlassColorScheme === 'light'
-      ? CaptureChrome.dualCaptureGuide.lightInactivePip
-      : colors.captureGlassPlaceholder;
-  const dualCaptureGuideDivider =
-    colors.captureGlassColorScheme === 'light'
-      ? CaptureChrome.dualCaptureGuide.lightDivider
-      : colors.captureGlassBorder;
-  const glassPalette = getGlassSurfacePalette({
-    isDark: colors.captureGlassColorScheme === 'dark',
-    borderColor: colors.captureCardBorder,
-    colors,
-  });
+  const glassPalette = getCaptureChromePalette(colors);
+  const dualCaptureGuideBackground = glassPalette.activeControlBackgroundColor;
+  const dualCaptureGuideBorder = glassPalette.controlBorderColor;
+  const dualCaptureGuideActivePip = colors.primary;
+  const dualCaptureGuideInactivePip = colors.captureGlassPlaceholder;
+  const dualCaptureGuideDivider = colors.captureGlassBorder;
+  const dualCaptureGuideText = colors.primary;
   const cameraLensOptionInactiveBackground = 'transparent';
   const cameraLensOptionActiveBackground = glassPalette.activeControlBackgroundColor;
   const cameraLensOptionInactiveText = colors.captureGlassText;
@@ -788,7 +774,11 @@ export const LiveCameraSurface = memo(function LiveCameraSurface({
             </View>
           </GestureDetector>
           {shouldShowBackCameraLensSelector && activeBackCameraLensOption ? (
-            <View pointerEvents="box-none" style={styles.cameraLensSelector}>
+            <View
+              testID="capture-camera-zoom-container"
+              pointerEvents="box-none"
+              style={styles.cameraLensSelector}
+            >
               <CaptureControlRail
                 testID="capture-back-camera-lens-selector"
                 borderColor={glassPalette.controlBorderColor}
@@ -847,6 +837,7 @@ export const LiveCameraSurface = memo(function LiveCameraSurface({
           style={styles.cameraLivePhotoGuideOverlay}
         >
           <View
+            testID="capture-dual-step-pill"
             style={[
               styles.dualCaptureStepIndicator,
               {
@@ -857,6 +848,7 @@ export const LiveCameraSurface = memo(function LiveCameraSurface({
           >
             <View style={styles.dualCaptureStepPips}>
               <View
+                testID="capture-dual-step-pip-1"
                 style={[
                   styles.dualCaptureStepPip,
                   styles.dualCaptureStepPipActive,
@@ -864,6 +856,7 @@ export const LiveCameraSurface = memo(function LiveCameraSurface({
                 ]}
               />
               <View
+                testID="capture-dual-step-pip-2"
                 style={[
                   styles.dualCaptureStepPip,
                   { backgroundColor: dualCaptureGuideInactivePip },
@@ -874,7 +867,7 @@ export const LiveCameraSurface = memo(function LiveCameraSurface({
                 ]}
               />
             </View>
-            <Text style={[styles.dualCaptureStepLabel, { color: colors.captureGlassText }]}>
+            <Text style={[styles.dualCaptureStepLabel, { color: dualCaptureGuideText }]}>
               {dualCaptureStepText}
             </Text>
             {dualCaptureAwaitingSecondShot && dualCaptureFacingText ? (
@@ -884,7 +877,7 @@ export const LiveCameraSurface = memo(function LiveCameraSurface({
                   { borderLeftColor: dualCaptureGuideDivider },
                 ]}
               >
-                <Text style={[styles.dualCaptureFacingText, { color: colors.captureGlassText }]}>
+                <Text style={[styles.dualCaptureFacingText, { color: dualCaptureGuideText }]}>
                   {dualCaptureFacingText}
                 </Text>
               </View>

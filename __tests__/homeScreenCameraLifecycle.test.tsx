@@ -1,6 +1,6 @@
 import React from 'react';
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
-import { AppState } from 'react-native';
+import { AppState, Platform } from 'react-native';
 let mockCaptureCardProps: any = null;
 let mockCaptureCardHandle: any = null;
 const mockNotes: any[] = [];
@@ -503,6 +503,118 @@ describe('HomeScreen camera lifecycle', () => {
     expect(mockCaptureCardProps?.lockedPhotoFilterIds).toEqual(
       expect.arrayContaining(['warm', 'cool', 'mono', 'vivid', 'vintage'])
     );
+  });
+
+  it('allows the capture share target to toggle back without a transition lock', async () => {
+    mockUser = { uid: 'me' };
+    mockFriends.push({ userId: 'friend-1', displayName: 'Friend' });
+
+    render(<HomeScreen />);
+
+    act(() => {
+      mockCaptureCardProps?.onChangeShareTarget?.('shared');
+    });
+
+    await waitFor(() => {
+      expect(mockCaptureCardProps?.shareTarget).toBe('shared');
+    });
+
+    act(() => {
+      mockCaptureCardProps?.onChangeShareTarget?.('private');
+    });
+
+    await waitFor(() => {
+      expect(mockCaptureCardProps?.shareTarget).toBe('private');
+    });
+  });
+
+  it('keeps capture controls locked while a sequential dual capture advances state', async () => {
+    const originalPlatform = Platform.OS;
+    let resolveCapture: ((uri: string | null) => void) | null = null;
+    const capturePhotoFile = jest.fn(
+      () => new Promise<string | null>((resolve) => {
+        resolveCapture = resolve;
+      })
+    );
+    Platform.OS = 'android';
+    mockUseCaptureFlow.mockImplementation(() => {
+      const createSharedValue = (value: number) => ({ value } as any);
+      return {
+        captureScale: createSharedValue(1),
+        captureTranslateY: createSharedValue(0),
+        shutterScale: createSharedValue(1),
+        captureMode: 'camera',
+        cameraSubmode: 'dual',
+        cameraSessionKey: 1,
+        setCaptureMode: jest.fn(),
+        setCameraSubmode: jest.fn(),
+        noteText: '',
+        setNoteText: jest.fn(),
+        capturedPhoto: null,
+        setCapturedPhoto: jest.fn(),
+        capturedPairedVideo: null,
+        setCapturedPairedVideo: jest.fn(),
+        dualPrimaryPhoto: null,
+        setDualPrimaryPhoto: jest.fn(),
+        dualSecondaryPhoto: null,
+        setDualSecondaryPhoto: jest.fn(),
+        dualPrimaryFacing: null,
+        setDualPrimaryFacing: jest.fn(),
+        dualSecondaryFacing: null,
+        setDualSecondaryFacing: jest.fn(),
+        radius: 150,
+        setRadius: jest.fn(),
+        facing: 'back',
+        setFacing: jest.fn(),
+        selectedPhotoFilterId: 'original',
+        setSelectedPhotoFilterId: jest.fn(),
+        cameraDevice: undefined,
+        backCameraDeviceId: 'back-camera',
+        frontCameraDeviceId: 'front-camera',
+        permission: { granted: true, canAskAgain: true },
+        requestPermission: mockRequestPermission,
+        cameraRef: { current: null },
+        isModeSwitchAnimating: false,
+        toggleCaptureMode: jest.fn(),
+        handleShutterPressIn: jest.fn(),
+        handleShutterPressOut: jest.fn(),
+        takePicture: jest.fn(),
+        capturePhotoFile,
+        startLivePhotoCapture: jest.fn(),
+        isStillPhotoCaptureInProgress: false,
+        isLivePhotoCaptureInProgress: false,
+        isLivePhotoCaptureSettling: false,
+        isLivePhotoSaveGuardActive: false,
+        needsCameraPermission: false,
+        resetCapture: jest.fn(),
+        restoreCaptureState: jest.fn(),
+        clearDualCaptureState: jest.fn(),
+      };
+    });
+
+    try {
+      render(<HomeScreen />);
+
+      act(() => {
+        mockCaptureCardProps?.onTakePicture?.();
+      });
+
+      await waitFor(() => {
+        expect(capturePhotoFile).toHaveBeenCalledTimes(1);
+        expect(mockCaptureCardProps?.isStillPhotoCaptureInProgress).toBe(true);
+      });
+
+      await act(async () => {
+        resolveCapture?.('file:///tmp/dual-first.jpg');
+        await Promise.resolve();
+      });
+
+      await waitFor(() => {
+        expect(mockCaptureCardProps?.isStillPhotoCaptureInProgress).toBe(false);
+      });
+    } finally {
+      Platform.OS = originalPlatform;
+    }
   });
 
   it('locks capture scrolling while a text input session is active', () => {

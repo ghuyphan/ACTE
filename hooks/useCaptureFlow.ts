@@ -129,6 +129,7 @@ export function useCaptureFlow() {
   const livePhotoVideoResolveRef = useRef<((uri: string | null) => void) | null>(null);
   const livePhotoVideoRejectRef = useRef<((error: unknown) => void) | null>(null);
   const suppressNextPhotoTapRef = useRef(false);
+  const stillPhotoCaptureInFlightRef = useRef(false);
   const captureScale = useSharedValue(1);
   const captureTranslateY = useSharedValue(0);
   const shutterScale = useSharedValue(1);
@@ -298,6 +299,7 @@ export function useCaptureFlow() {
     const camera = cameraRef.current;
     const wasRecording = livePhotoRecordingActiveRef.current;
     livePhotoRecordingActiveRef.current = false;
+    stillPhotoCaptureInFlightRef.current = false;
     livePhotoRecordingStartedAtRef.current = null;
 
     if (camera && wasRecording) {
@@ -401,8 +403,12 @@ export function useCaptureFlow() {
   }, []);
 
   const handleShutterPressIn = useCallback(() => {
+    if (stillPhotoCaptureInFlightRef.current || isLivePhotoCaptureInProgress) {
+      return;
+    }
+
     shutterScale.value = withTiming(0.85, CAPTURE_BUTTON_PRESS_IN);
-  }, [shutterScale]);
+  }, [isLivePhotoCaptureInProgress, shutterScale]);
 
   const finishLivePhotoCapture = useCallback(async () => {
     clearLivePhotoStopTimeout();
@@ -489,10 +495,11 @@ export function useCaptureFlow() {
       return;
     }
 
-    if (!cameraRef.current) {
+    if (!cameraRef.current || stillPhotoCaptureInFlightRef.current || isLivePhotoCaptureInProgress) {
       return;
     }
 
+    stillPhotoCaptureInFlightRef.current = true;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setIsStillPhotoCaptureInProgress(true);
 
@@ -510,9 +517,16 @@ export function useCaptureFlow() {
         setCapturedPhoto(normalizeCapturedFileUri(photo.path));
       }
     } finally {
+      stillPhotoCaptureInFlightRef.current = false;
       setIsStillPhotoCaptureInProgress(false);
     }
-  }, [cameraRef, clearDualCaptureState, clearLivePhotoSaveGuard, shutterScale]);
+  }, [
+    cameraRef,
+    clearDualCaptureState,
+    clearLivePhotoSaveGuard,
+    isLivePhotoCaptureInProgress,
+    shutterScale,
+  ]);
 
   const capturePhotoFile = useCallback(async () => {
     if (suppressNextPhotoTapRef.current) {
@@ -520,10 +534,11 @@ export function useCaptureFlow() {
       return null;
     }
 
-    if (!cameraRef.current) {
+    if (!cameraRef.current || stillPhotoCaptureInFlightRef.current || isLivePhotoCaptureInProgress) {
       return null;
     }
 
+    stillPhotoCaptureInFlightRef.current = true;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setIsStillPhotoCaptureInProgress(true);
 
@@ -537,12 +552,13 @@ export function useCaptureFlow() {
       setIsLivePhotoCaptureSettling(false);
       return photo?.path ? normalizeCapturedFileUri(photo.path) : null;
     } finally {
+      stillPhotoCaptureInFlightRef.current = false;
       setIsStillPhotoCaptureInProgress(false);
     }
-  }, [cameraRef, clearLivePhotoSaveGuard, shutterScale]);
+  }, [cameraRef, clearLivePhotoSaveGuard, isLivePhotoCaptureInProgress, shutterScale]);
 
   const startLivePhotoCapture = useCallback(async () => {
-    if (!cameraRef.current || isLivePhotoCaptureInProgress) {
+    if (!cameraRef.current || isLivePhotoCaptureInProgress || stillPhotoCaptureInFlightRef.current) {
       return;
     }
 
@@ -594,6 +610,7 @@ export function useCaptureFlow() {
       });
 
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      stillPhotoCaptureInFlightRef.current = true;
       setIsStillPhotoCaptureInProgress(true);
       livePhotoPhotoPromiseRef.current = cameraRef.current
         .takePhoto({
@@ -615,6 +632,7 @@ export function useCaptureFlow() {
           return null;
         })
         .finally(() => {
+          stillPhotoCaptureInFlightRef.current = false;
           setIsStillPhotoCaptureInProgress(false);
         });
 
@@ -623,6 +641,7 @@ export function useCaptureFlow() {
       }, LIVE_PHOTO_MAX_DURATION_SECONDS * 1000);
     } catch (error) {
       livePhotoRecordingActiveRef.current = false;
+      stillPhotoCaptureInFlightRef.current = false;
       setIsLivePhotoCaptureInProgress(false);
       setIsStillPhotoCaptureInProgress(false);
       try {
@@ -653,6 +672,7 @@ export function useCaptureFlow() {
   const resetCapture = useCallback(() => {
     setNoteText('');
     void cancelLivePhotoCapture();
+    stillPhotoCaptureInFlightRef.current = false;
     setCapturedPhoto(null);
     setCapturedPairedVideo(null);
     clearDualCaptureState();
@@ -673,6 +693,7 @@ export function useCaptureFlow() {
 
   const restoreCaptureState = useCallback((draft: CaptureDraftState) => {
     void cancelLivePhotoCapture();
+    stillPhotoCaptureInFlightRef.current = false;
     setCaptureMode(draft.captureMode);
     setCameraSubmode(draft.cameraSubmode ?? 'single');
     setNoteText(draft.noteText);

@@ -94,7 +94,11 @@ import {
   PREVIEWABLE_PREMIUM_NOTE_COLOR_IDS,
 } from '../../services/premiumNoteFinish';
 import { generateNoteId, type Note } from '../../services/database';
-import { getDualCameraAvailability, type DualCameraStillCapture } from '../../services/dualCamera';
+import {
+  createSequentialDualCameraStillCapture,
+  getDualCameraAvailability,
+  type DualCameraStillCapture,
+} from '../../services/dualCamera';
 import { getDistanceMeters, getReminderPlaceGroups } from '../../services/reminderSelection';
 import { getSharedFeedErrorMessage, type SharedPost } from '../../services/sharedFeedService';
 import type { NotesRouteTransitionRect } from '../../utils/notesRouteTransition';
@@ -110,7 +114,6 @@ const REMINDER_RECOVERY_PROMPT_KEY_PREFIX = 'noto.home.reminder-recovery-prompt.
 const PLACE_PULSE_RADIUS_METERS = 500;
 const SHARED_PLACE_PULSE_MAX_AVATARS = 3;
 const SHARED_PLACE_PULSE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
-const CAPTURE_FOOTER_TRANSITION_GUARD_MS = 220;
 const EMPTY_SHARED_PLACE_PULSE_AVATARS: SharedPlacePulseAvatar[] = [];
 type SaveButtonState = 'idle' | 'saving' | 'success';
 type HomeFeedSurfaceProps = {
@@ -353,8 +356,6 @@ export default function HomeScreen() {
   const [settledSharedButtonMode, setSettledSharedButtonMode] = useState<'manage' | 'filter'>('manage');
   const [isFriendsFilterEnabled, setIsFriendsFilterEnabled] = useState(false);
   const [captureTarget, setCaptureTarget] = useState<'private' | 'shared'>('private');
-  const captureTargetTransitionLockedRef = useRef(false);
-  const captureTargetTransitionUnlockTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [selectedSharedAudienceUserId, setSelectedSharedAudienceUserId] = useState<string | null>(null);
   const [noteColor, setNoteColor] = useState<string | null>(null);
   const [showSharedManageSheet, setShowSharedManageSheet] = useState(false);
@@ -546,6 +547,9 @@ export default function HomeScreen() {
     Platform.OS === 'android' && Boolean(backCameraDeviceId && frontCameraDeviceId);
   const dualCaptureFeatureSupported = dualCaptureUsesSequentialCapture || dualCaptureSupported;
   const dualCaptureUiEnabled = dualCaptureFeatureSupported;
+  const dualCaptureOperationInFlightRef = useRef(false);
+  const [dualCaptureOperationInProgress, setDualCaptureOperationInProgress] = useState(false);
+  const cameraCaptureInProgress = isStillPhotoCaptureInProgress || dualCaptureOperationInProgress;
   const dualCaptureAwaitingSecondShot =
     cameraSubmode === 'dual' &&
     dualCaptureUsesSequentialCapture &&
@@ -975,8 +979,15 @@ export default function HomeScreen() {
   );
 
   const handleTakeDualPicture = useCallback(async () => {
-    if (dualCaptureUsesSequentialCapture) {
-      try {
+    if (dualCaptureOperationInFlightRef.current) {
+      return;
+    }
+
+    dualCaptureOperationInFlightRef.current = true;
+    setDualCaptureOperationInProgress(true);
+
+    try {
+      if (dualCaptureUsesSequentialCapture) {
         const capturedUri = await capturePhotoFile();
         if (!capturedUri) {
           return;
@@ -994,14 +1005,12 @@ export default function HomeScreen() {
           return;
         }
 
-        const result = {
-          primaryUri: dualPrimaryPhoto,
-          secondaryUri: capturedUri,
-          primaryFacing: dualPrimaryFacing,
-          secondaryFacing: currentFacing,
-          width: 0,
-          height: 0,
-        } satisfies DualCameraStillCapture;
+        const result = createSequentialDualCameraStillCapture({
+          firstShotUri: dualPrimaryPhoto,
+          firstShotFacing: dualPrimaryFacing,
+          secondShotUri: capturedUri,
+          secondShotFacing: currentFacing,
+        });
 
         const composedUri = await composeDualCapturePhoto(result);
         if (!composedUri) {
@@ -1011,26 +1020,13 @@ export default function HomeScreen() {
         setDualSecondaryPhoto(capturedUri);
         setDualSecondaryFacing(currentFacing);
         setCapturedPhoto(composedUri);
-      } catch (error) {
-        console.warn('[dual-capture] Sequential capture failed:', error);
-        clearDualCaptureState();
-        showAlert({
-          variant: 'error',
-          title: t('capture.error', 'Error'),
-          message: t('capture.dualCaptureFailed', 'We could not capture both cameras right now.'),
-          primaryAction: {
-            label: t('common.done', 'Done'),
-          },
-        });
+        return;
       }
-      return;
-    }
 
-    if (!dualCameraPreviewRef.current) {
-      return;
-    }
+      if (!dualCameraPreviewRef.current) {
+        return;
+      }
 
-    try {
       const result = await dualCameraPreviewRef.current.captureStill();
       const composedUri = await composeDualCapturePhoto(result);
       if (!composedUri) {
@@ -1045,6 +1041,9 @@ export default function HomeScreen() {
       setCapturedPhoto(composedUri);
     } catch (error) {
       console.warn('[dual-capture] Capture failed:', error);
+      if (dualCaptureUsesSequentialCapture) {
+        clearDualCaptureState();
+      }
       showAlert({
         variant: 'error',
         title: t('capture.error', 'Error'),
@@ -1053,6 +1052,9 @@ export default function HomeScreen() {
           label: t('common.done', 'Done'),
         },
       });
+    } finally {
+      dualCaptureOperationInFlightRef.current = false;
+      setDualCaptureOperationInProgress(false);
     }
   }, [
     capturePhotoFile,
@@ -1266,14 +1268,6 @@ export default function HomeScreen() {
 
     return () => {
       subscription.remove();
-    };
-  }, []);
-
-  useEffect(() => {
-    return () => {
-      if (captureTargetTransitionUnlockTimeoutRef.current) {
-        clearTimeout(captureTargetTransitionUnlockTimeoutRef.current);
-      }
     };
   }, []);
 
@@ -1748,20 +1742,11 @@ export default function HomeScreen() {
     onAfterSharedFeedMutation: requestPromoteSharedPosts,
   });
 
-  const handleGuardedCaptureTargetChange = useCallback(
+  const handleShareTargetChange = useCallback(
     (nextTarget: 'private' | 'shared') => {
-      if (nextTarget === captureTarget || captureTargetTransitionLockedRef.current) {
+      if (nextTarget === captureTarget) {
         return;
       }
-
-      captureTargetTransitionLockedRef.current = true;
-      if (captureTargetTransitionUnlockTimeoutRef.current) {
-        clearTimeout(captureTargetTransitionUnlockTimeoutRef.current);
-      }
-      captureTargetTransitionUnlockTimeoutRef.current = setTimeout(() => {
-        captureTargetTransitionLockedRef.current = false;
-        captureTargetTransitionUnlockTimeoutRef.current = null;
-      }, CAPTURE_FOOTER_TRANSITION_GUARD_MS);
 
       handleCaptureTargetChange(nextTarget);
     },
@@ -2903,7 +2888,7 @@ export default function HomeScreen() {
           saving={saving}
           saveState={saveButtonState}
           shutterScale={shutterScale}
-          isStillPhotoCaptureInProgress={isStillPhotoCaptureInProgress}
+          isStillPhotoCaptureInProgress={cameraCaptureInProgress}
           isLivePhotoCaptureInProgress={isLivePhotoCaptureInProgress}
           isLivePhotoCaptureSettling={isLivePhotoCaptureSettling}
           isLivePhotoSaveGuardActive={isLivePhotoSaveGuardActive}
@@ -2917,7 +2902,7 @@ export default function HomeScreen() {
           radius={radius}
           onChangeRadius={setRadius}
           shareTarget={captureTarget}
-          onChangeShareTarget={handleGuardedCaptureTargetChange}
+          onChangeShareTarget={handleShareTargetChange}
           onResetDualCaptureSequence={handleResetDualCaptureSequence}
           onDoodleModeChange={handleCaptureDecorateModeChange}
           onGestureActiveChange={handleCaptureGestureActiveChange}
@@ -2950,7 +2935,7 @@ export default function HomeScreen() {
       availableBackCameraLenses,
       backCameraLens,
       backCameraLensZoomConfig,
-      handleGuardedCaptureTargetChange,
+      handleShareTargetChange,
       handleChangeBackCameraLens,
       handleChangeNoteColor,
       handleChangeCameraSubmode,
@@ -2970,7 +2955,7 @@ export default function HomeScreen() {
       insets.top,
       isCameraPreviewActive,
       isCaptureScrollSettled,
-      isStillPhotoCaptureInProgress,
+      cameraCaptureInProgress,
       isLivePhotoCaptureInProgress,
       isLivePhotoCaptureSettling,
       isLivePhotoSaveGuardActive,

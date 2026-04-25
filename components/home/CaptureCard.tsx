@@ -530,7 +530,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
 
     if (!capturedPhoto) {
       setPendingPhotoReveal(false);
-    } else if (!previousCapturedPhoto) {
+    } else if (previousCapturedPhoto !== capturedPhoto) {
       setPendingPhotoReveal(true);
     }
 
@@ -805,7 +805,6 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
     shouldShowCameraCard,
     showCameraUnavailableState,
     showCameraZoomBadge,
-    shutterCaptureHaloAnimatedStyle,
     shutterInnerAnimatedStyle,
     shutterOuterAnimatedStyle,
   } = useCaptureCardCameraController({
@@ -1172,6 +1171,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
     (cameraUiStage === 'live' || cameraUiStage === 'capturing');
   const controlsUiStage: CameraUiStage =
     captureMode === 'camera' && shouldRenderCaptureCover ? 'capturing' : cameraUiStage;
+  const captureControlsDisabled = interactionsDisabled || isCameraUiCapturing;
   const liveAvailableBackCameraLenses =
     facing === 'back' ? availableBackCameraLenses : EMPTY_BACK_CAMERA_LENSES;
 
@@ -1438,7 +1438,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
               styles.belowCardSection,
               disableAndroidCaptureTransforms ? null : belowCardAnimatedStyle,
             ]}
-            pointerEvents={interactionsDisabled || isCameraUiCapturing ? 'none' : 'auto'}
+            pointerEvents={captureControlsDisabled ? 'none' : 'auto'}
           >
             <View style={styles.belowCardMetaRow} pointerEvents="box-none">
               {controlsUiStage === 'text' ? (
@@ -1530,6 +1530,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
               animatedSaveSuccessStyle={animatedSaveSuccessStyle}
               colors={colors}
               cameraUiStage={controlsUiStage}
+              controlsDisabled={captureControlsDisabled}
               handleSavePressIn={handleSavePressIn}
               handleSavePressOut={handleSavePressOut}
               handleShutterLongPress={handleShutterLongPress}
@@ -1553,7 +1554,6 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
               savePressAnimatedStyle={savePressAnimatedStyle}
               shareTarget={shareTarget}
               showCameraUnavailableState={showCameraUnavailableState}
-              shutterCaptureHaloAnimatedStyle={shutterCaptureHaloAnimatedStyle}
               shutterInnerAnimatedStyle={shutterInnerAnimatedStyle}
               shutterOuterAnimatedStyle={shutterOuterAnimatedStyle}
               t={t}

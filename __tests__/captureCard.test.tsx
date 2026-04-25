@@ -7,8 +7,17 @@ import { importStickerAsset } from '../services/noteStickers';
 import CaptureCard, { type CaptureCardHandle } from '../components/home/CaptureCard';
 import { getCaptureFooterCompactSnapHeightThreshold } from '../components/home/capture/captureCardLayout';
 import {
+  CAMERA_CHROME_SIDE_INSET,
+  CAMERA_BOTTOM_CHROME_HEIGHT,
+  CAMERA_BOTTOM_CHROME_INSET,
+  CAMERA_TOP_CHROME_HEIGHT,
+  CAMERA_TOP_CHROME_INSET,
+  CAMERA_TOP_CHROME_RADIUS,
   COMPACT_CAPTURE_FOOTER_TOP_PADDING,
   DEFAULT_CAPTURE_FOOTER_TOP_PADDING,
+  DUAL_CAPTURE_STEP_MIN_WIDTH,
+  DUAL_CAPTURE_STEP_PIP_SIZE,
+  styles as captureCardStyles,
 } from '../components/home/capture/captureCardStyles';
 
 const transparentPngBase64 =
@@ -663,6 +672,23 @@ describe('CaptureCard doodle handle', () => {
     expect(getByTestId('capture-library-button')).toBeTruthy();
   });
 
+  it('keeps the camera library action on the shared busy control style while importing', () => {
+    const ref = React.createRef<CaptureCardHandle>();
+    const view = renderCaptureCard(ref, {
+      captureMode: 'camera',
+      importingPhoto: true,
+    });
+    const libraryButton = view.getByTestId('capture-library-button');
+    const libraryButtonStyle = StyleSheet.flatten(libraryButton.props.style);
+
+    expect(libraryButton.props.accessibilityState).toMatchObject({
+      busy: true,
+      disabled: true,
+    });
+    expect(libraryButtonStyle?.backgroundColor).toBe('rgba(255, 193, 7, 0.2)');
+    expect(libraryButtonStyle?.borderColor).toBe('rgba(255,255,255,0.22)');
+  });
+
   it('renders direct-select back camera lens buttons only for supported lenses', () => {
     const ref = React.createRef<CaptureCardHandle>();
     const onChangeBackCameraLens = jest.fn();
@@ -699,6 +725,74 @@ describe('CaptureCard doodle handle', () => {
     expect(view.getByText('0.6x')).toBeTruthy();
     expect(view.getByText('1x')).toBeTruthy();
     expect(view.getByText('3x')).toBeTruthy();
+  });
+
+  it('aligns the live camera zoom container with the captured-photo caption inset', () => {
+    const ref = React.createRef<CaptureCardHandle>();
+    const view = renderCaptureCard(ref, {
+      captureMode: 'camera',
+      availableBackCameraLenses: ['wide', 'telephoto'],
+      backCameraLens: 'wide',
+    });
+
+    expect(
+      StyleSheet.flatten(view.getByTestId('capture-camera-zoom-container').props.style).bottom
+    ).toBe(CAMERA_BOTTOM_CHROME_INSET);
+  });
+
+  it('matches the captured-photo caption height to the live camera zoom pill', () => {
+    const ref = React.createRef<CaptureCardHandle>();
+    const view = renderCaptureCard(ref, {
+      captureMode: 'camera',
+      capturedPhoto: 'file:///captured-photo.jpg',
+    });
+
+    expect(
+      StyleSheet.flatten(view.getByTestId('capture-photo-caption-container').props.style).minHeight
+    ).toBe(CAMERA_BOTTOM_CHROME_HEIGHT);
+  });
+
+  it('uses shared camera top chrome metrics across camera badges', () => {
+    expect(StyleSheet.flatten(captureCardStyles.cameraZoomBadge)).toMatchObject({
+      top: CAMERA_TOP_CHROME_INSET,
+      right: CAMERA_CHROME_SIDE_INSET,
+      minHeight: CAMERA_TOP_CHROME_HEIGHT,
+      borderRadius: CAMERA_TOP_CHROME_RADIUS,
+    });
+    expect(StyleSheet.flatten(captureCardStyles.libraryBtn)).toMatchObject({
+      top: CAMERA_TOP_CHROME_INSET,
+      left: CAMERA_CHROME_SIDE_INSET,
+      minHeight: CAMERA_TOP_CHROME_HEIGHT,
+      borderRadius: CAMERA_TOP_CHROME_RADIUS,
+    });
+    expect(StyleSheet.flatten(captureCardStyles.cameraLivePhotoGuideOverlay)).toMatchObject({
+      top: CAMERA_TOP_CHROME_INSET,
+      left: CAMERA_CHROME_SIDE_INSET,
+      right: CAMERA_CHROME_SIDE_INSET,
+    });
+    expect(StyleSheet.flatten(captureCardStyles.cameraLivePhotoGuidePill)).toMatchObject({
+      minHeight: CAMERA_TOP_CHROME_HEIGHT,
+      borderRadius: CAMERA_TOP_CHROME_RADIUS,
+    });
+    expect(StyleSheet.flatten(captureCardStyles.dualCaptureStepIndicator)).toMatchObject({
+      minWidth: DUAL_CAPTURE_STEP_MIN_WIDTH,
+      minHeight: CAMERA_TOP_CHROME_HEIGHT,
+      borderRadius: CAMERA_TOP_CHROME_RADIUS,
+    });
+    expect(StyleSheet.flatten(captureCardStyles.dualCaptureStepPip)).toMatchObject({
+      width: DUAL_CAPTURE_STEP_PIP_SIZE,
+      height: DUAL_CAPTURE_STEP_PIP_SIZE,
+    });
+    expect(StyleSheet.flatten(captureCardStyles.dualCaptureStepPipActive)).not.toEqual(
+      expect.objectContaining({
+        width: expect.any(Number),
+        height: expect.any(Number),
+      })
+    );
+    expect(StyleSheet.flatten(captureCardStyles.cameraDualPreviewOnlyBadge)).toMatchObject({
+      minHeight: CAMERA_TOP_CHROME_HEIGHT,
+      borderRadius: CAMERA_TOP_CHROME_RADIUS,
+    });
   });
 
   it('keeps the active camera preview zoom steady until the new rear lens is active', () => {
@@ -1026,6 +1120,62 @@ describe('CaptureCard doodle handle', () => {
     expect(shutter.props.hitSlop).toBe(12);
   });
 
+  it('disables live camera controls while a capture operation is settling', () => {
+    const ref = React.createRef<CaptureCardHandle>();
+    const view = renderCaptureCard(ref, {
+      captureMode: 'camera',
+      isStillPhotoCaptureInProgress: true,
+      isCameraPreviewActive: true,
+    });
+
+    expect(view.getByTestId('capture-share-target-toggle').props.accessibilityState).toMatchObject({
+      disabled: true,
+    });
+    expect(view.getByTestId('capture-shutter-button').props.accessibilityState).toMatchObject({
+      disabled: true,
+    });
+    expect(view.getByTestId('capture-camera-switch-button').props.accessibilityState).toMatchObject({
+      disabled: true,
+    });
+  });
+
+  it('keeps the live shutter fill on the capture button color instead of flashing primary', () => {
+    const ref = React.createRef<CaptureCardHandle>();
+    const view = renderCaptureCard(ref, {
+      captureMode: 'camera',
+      isCameraPreviewActive: true,
+      remainingPhotoSlots: 4,
+      colors: {
+        ...createCaptureCardProps(ref).colors,
+        primary: '#FFC107',
+        captureButtonBg: '#1C1C1E',
+      },
+    });
+
+    const shutterInnerStyle = StyleSheet.flatten(view.getByTestId('capture-shutter-inner').props.style);
+
+    expect(shutterInnerStyle?.backgroundColor).toBe('#1C1C1E');
+    expect(shutterInnerStyle?.backgroundColor).not.toBe('#FFC107');
+  });
+
+  it('keeps live shutter text readable on light capture button themes', () => {
+    const ref = React.createRef<CaptureCardHandle>();
+    const view = renderCaptureCard(ref, {
+      captureMode: 'camera',
+      isCameraPreviewActive: true,
+      isLivePhotoCaptureInProgress: true,
+      colors: {
+        ...createCaptureCardProps(ref).colors,
+        captureButtonBg: '#FFF4F7',
+        text: '#2C2433',
+      },
+    });
+
+    const countdownStyle = StyleSheet.flatten(view.getByText('2s').props.style);
+
+    expect(countdownStyle?.color).toBe('#2C2433');
+  });
+
   it('mounts the camera as soon as Android permission is granted', () => {
     const ref = React.createRef<CaptureCardHandle>();
     const view = renderCaptureCard(ref, {
@@ -1215,6 +1365,28 @@ describe('CaptureCard doodle handle', () => {
     expect(view.getByTestId('capture-dual-step-indicator')).toBeTruthy();
     expect(view.getByText('1/2')).toBeTruthy();
     expect(view.queryByTestId('mock-dual-camera-view')).toBeNull();
+  });
+
+  it('themes the sequential dual capture step badge with the app accent', () => {
+    const ref = React.createRef<CaptureCardHandle>();
+    const view = renderCaptureCard(ref, {
+      captureMode: 'camera',
+      cameraSubmode: 'dual',
+      dualCaptureSupported: true,
+      dualCaptureUsesSequentialCapture: true,
+      isCameraPreviewActive: true,
+    });
+
+    expect(StyleSheet.flatten(view.getByTestId('capture-dual-step-pill').props.style)).toMatchObject({
+      backgroundColor: 'rgba(255, 193, 7, 0.2)',
+      borderColor: 'rgba(255,255,255,0.22)',
+    });
+    expect(StyleSheet.flatten(view.getByTestId('capture-dual-step-pip-1').props.style)).toMatchObject({
+      backgroundColor: '#FFC107',
+    });
+    expect(StyleSheet.flatten(view.getByText('1/2').props.style)).toMatchObject({
+      color: '#FFC107',
+    });
   });
 
   it('keeps the live camera primary while showing the first dual capture as an inset', () => {
@@ -1486,6 +1658,70 @@ describe('CaptureCard doodle handle', () => {
         { color: '#FFC107', points: [0.1, 0.1, 0.2, 0.2] },
         { color: '#FFC107', points: [0.3, 0.3, 0.4, 0.4] },
       ],
+    });
+  });
+
+  it('clears photo-only decoration state when the captured photo changes', async () => {
+    const ref = React.createRef<CaptureCardHandle>();
+    mockClipboardHasImageAsync.mockResolvedValue(true);
+    mockClipboardGetImageAsync.mockResolvedValue({
+      data: `data:image/png;base64,${transparentPngBase64}`,
+      size: { width: 120, height: 120 },
+    });
+    mockImportStickerAsset.mockResolvedValue({
+      id: 'asset-1',
+      ownerUid: '__local__',
+      localUri: 'file:///documents/stickers/asset-1.png',
+      remotePath: null,
+      mimeType: 'image/png',
+      width: 120,
+      height: 120,
+      createdAt: '2026-03-27T00:00:00.000Z',
+      updatedAt: null,
+      source: 'import',
+    } as any);
+
+    const view = renderCaptureCard(ref, {
+      captureMode: 'camera',
+      capturedPhoto: 'file:///photo-one.jpg',
+    });
+
+    act(() => {
+      fireEvent.press(view.getByTestId('capture-doodle-toggle'));
+    });
+    act(() => {
+      fireEvent.press(view.getByTestId('mock-doodle-commit'));
+    });
+    act(() => {
+      fireEvent.press(view.getByTestId('capture-doodle-toggle'));
+    });
+
+    await act(async () => {
+      fireEvent(view.getByTestId('capture-card-paste-surface'), 'longPress', {
+        nativeEvent: { locationX: 144, locationY: 212 },
+      });
+    });
+    await act(async () => {
+      fireEvent.press(view.getByTestId('capture-card-paste-action'));
+    });
+
+    await waitFor(() => {
+      expect(ref.current?.getDoodleSnapshot().strokes).toHaveLength(2);
+      expect(ref.current?.getStickerSnapshot().placements).toHaveLength(1);
+    });
+
+    view.rerender(
+      <CaptureCard
+        {...createCaptureCardProps(ref, {
+          captureMode: 'camera',
+          capturedPhoto: 'file:///photo-two.jpg',
+        })}
+      />
+    );
+
+    await waitFor(() => {
+      expect(ref.current?.getDoodleSnapshot()).toEqual({ enabled: false, strokes: [] });
+      expect(ref.current?.getStickerSnapshot()).toEqual({ enabled: false, placements: [] });
     });
   });
 

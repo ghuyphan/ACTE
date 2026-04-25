@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { DoodleStroke } from '../notes/NoteDoodleCanvas';
 import {
   appendStickerPlacement,
@@ -39,6 +39,7 @@ export function useCaptureCardDecorations({
   const [textSelectedStickerId, setTextSelectedStickerId] = useState<string | null>(null);
   const [photoSelectedStickerId, setPhotoSelectedStickerId] = useState<string | null>(null);
   const previousTextDoodleDefaultColorRef = useRef(captureCardTextColor);
+  const previousCapturedPhotoRef = useRef(capturedPhoto);
   const textStickerPlacementsRef = useRef<NoteStickerPlacement[]>([]);
   const photoStickerPlacementsRef = useRef<NoteStickerPlacement[]>([]);
 
@@ -65,6 +66,22 @@ export function useCaptureCardDecorations({
     ));
     previousTextDoodleDefaultColorRef.current = captureCardTextColor;
   }, [captureCardTextColor]);
+
+  useLayoutEffect(() => {
+    const previousCapturedPhoto = previousCapturedPhotoRef.current;
+    if (previousCapturedPhoto === capturedPhoto) {
+      return;
+    }
+
+    previousCapturedPhotoRef.current = capturedPhoto;
+    photoStickerPlacementsRef.current = [];
+    setPhotoDoodleStrokes([]);
+    setPhotoDoodleColor(photoDoodleDefaultColor);
+    setPhotoStickerPlacements([]);
+    setPhotoSelectedStickerId(null);
+    setDoodleModeEnabled(false);
+    setStickerModeEnabled(false);
+  }, [capturedPhoto, photoDoodleDefaultColor]);
 
   useEffect(() => {
     textStickerPlacementsRef.current = textStickerPlacements;

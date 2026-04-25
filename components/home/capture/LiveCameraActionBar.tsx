@@ -7,12 +7,16 @@ import { CaptureControlRail } from './CaptureControlRail';
 import { CaptureToggleIconButton } from './CaptureToggleIconButton';
 import { PhotoFilterPicker } from './PhotoFilterPicker';
 import { Ionicons } from '@expo/vector-icons';
-import { getGlassSurfacePalette } from '../../ui/glassTokens';
 import {
   DECORATE_OPTION_ACTIVE_SCALE,
   DECORATE_OPTION_CONTENT_SCALE,
   styles,
 } from './captureCardStyles';
+import {
+  getCaptureChromePalette,
+  getCaptureControlVisualState,
+  getCaptureGlassActionVisuals,
+} from './captureControlVisuals';
 
 interface LiveCameraActionBarProps {
   cameraSubmode: 'single' | 'dual';
@@ -55,12 +59,14 @@ export function LiveCameraActionBar({
 
   const dualModeEnabled = cameraSubmode === 'dual';
   const importDisabled = importingPhoto || dualModeEnabled;
-
-  const glassPalette = getGlassSurfacePalette({
-    isDark: colors.captureGlassColorScheme === 'dark',
-    borderColor: colors.captureCardBorder,
+  const glassPalette = getCaptureChromePalette(colors);
+  const importVisuals = getCaptureGlassActionVisuals(
     colors,
-  });
+    getCaptureControlVisualState({
+      busy: importingPhoto,
+      disabled: importDisabled && !importingPhoto,
+    })
+  );
 
   return (
     <View style={styles.captureActionBarWrap}>
@@ -154,16 +160,16 @@ export function LiveCameraActionBar({
             }}
             active={importingPhoto}
             disabled={importDisabled}
-            disabledOpacity={importingPhoto ? 1 : 0.55}
+            disabledOpacity={importVisuals.disabledOpacity}
             pressedScale={0.96}
             style={[
               styles.liveCameraImportButton,
               {
                 backgroundColor: importingPhoto
-                  ? glassPalette.activeControlBackgroundColor
+                  ? importVisuals.fallbackColor
                   : colors.captureGlassFill,
                 borderColor: importingPhoto
-                  ? glassPalette.controlBorderColor
+                  ? importVisuals.borderColor
                   : colors.captureGlassBorder,
               },
             ]}

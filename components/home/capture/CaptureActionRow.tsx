@@ -1,14 +1,19 @@
 import type { TFunction } from 'i18next';
 import { Text, View } from 'react-native';
 import Reanimated from 'react-native-reanimated';
-import { getGlassSurfacePalette } from '../../ui/glassTokens';
 import type { CaptureCardAnimatedStyle, CaptureCardColors, CameraUiStage } from './captureShared';
+import {
+  getCaptureControlVisualState,
+  getCaptureGlassActionVisuals,
+  getCaptureShutterVisuals,
+} from './captureControlVisuals';
 import { CaptureAnimatedPressable, CaptureGlassActionButton } from './CaptureControls';
 import { styles } from './captureCardStyles';
 import { CaptureSaveButton } from './CaptureSaveButton';
 
 interface CaptureShareTargetButtonProps {
   colors: CaptureCardColors;
+  disabled?: boolean;
   isSharedTarget: boolean;
   shareTarget: 'private' | 'shared';
   t: TFunction;
@@ -18,39 +23,38 @@ interface CaptureShareTargetButtonProps {
 
 function CaptureShareTargetButton({
   colors,
+  disabled = false,
   isSharedTarget,
   shareTarget,
   t,
   onChangeShareTarget,
   style,
 }: CaptureShareTargetButtonProps) {
-  const glassPalette = getGlassSurfacePalette({
-    isDark: colors.captureGlassColorScheme === 'dark',
-    borderColor: colors.captureCardBorder,
-    colors,
+  const visualState = getCaptureControlVisualState({
+    active: isSharedTarget,
+    disabled,
   });
+  const actionVisuals = getCaptureGlassActionVisuals(colors, visualState);
 
   return (
     <CaptureGlassActionButton
       testID="capture-share-target-toggle"
       accessibilityRole="button"
-      accessibilityState={{ selected: isSharedTarget }}
+      accessibilityState={{ selected: isSharedTarget, disabled }}
       accessibilityLabel={
         isSharedTarget
           ? t('shared.captureShared', 'Friends')
           : t('shared.capturePrivate', 'Just me')
       }
       onPress={() => onChangeShareTarget(shareTarget === 'private' ? 'shared' : 'private')}
+      disabled={disabled}
+      disabledOpacity={actionVisuals.disabledOpacity}
       iconName={isSharedTarget ? 'people' : 'lock-closed'}
-      iconColor={colors.captureGlassText}
-      active={isSharedTarget}
-      glassColorScheme={colors.captureGlassColorScheme}
-      fallbackColor={
-        isSharedTarget
-          ? glassPalette.activeControlBackgroundColor
-          : glassPalette.controlBackgroundColor
-      }
-      borderColor={glassPalette.controlBorderColor}
+      iconColor={actionVisuals.iconColor}
+      active={actionVisuals.active}
+      glassColorScheme={actionVisuals.glassColorScheme}
+      fallbackColor={actionVisuals.fallbackColor}
+      borderColor={actionVisuals.borderColor}
       style={style}
     />
   );
@@ -64,6 +68,7 @@ interface CaptureActionRowProps {
   animatedSaveSuccessStyle: CaptureCardAnimatedStyle;
   colors: CaptureCardColors;
   cameraUiStage: CameraUiStage;
+  controlsDisabled?: boolean;
   handleSavePressIn: () => void;
   handleSavePressOut: () => void;
   handleShutterLongPress: () => void;
@@ -87,7 +92,6 @@ interface CaptureActionRowProps {
   savePressAnimatedStyle: CaptureCardAnimatedStyle;
   shareTarget: 'private' | 'shared';
   showCameraUnavailableState: boolean;
-  shutterCaptureHaloAnimatedStyle: CaptureCardAnimatedStyle;
   shutterInnerAnimatedStyle: CaptureCardAnimatedStyle;
   shutterOuterAnimatedStyle: CaptureCardAnimatedStyle;
   t: TFunction;
@@ -101,6 +105,7 @@ export function CaptureActionRow({
   animatedSaveSuccessStyle,
   colors,
   cameraUiStage,
+  controlsDisabled = false,
   handleSavePressIn,
   handleSavePressOut,
   handleShutterLongPress,
@@ -124,16 +129,10 @@ export function CaptureActionRow({
   savePressAnimatedStyle,
   shareTarget,
   showCameraUnavailableState,
-  shutterCaptureHaloAnimatedStyle,
   shutterInnerAnimatedStyle,
   shutterOuterAnimatedStyle,
   t,
 }: CaptureActionRowProps) {
-  const glassPalette = getGlassSurfacePalette({
-    isDark: colors.captureGlassColorScheme === 'dark',
-    borderColor: colors.captureCardBorder,
-    colors,
-  });
   const remainingPhotoSlotsLabel =
     typeof remainingPhotoSlots === 'number' && remainingPhotoSlots > 0
       ? t('capture.photoSlotsRemainingCompact', '{{count}} left', { count: remainingPhotoSlots })
@@ -142,6 +141,21 @@ export function CaptureActionRow({
     typeof remainingPhotoSlots === 'number' && remainingPhotoSlots > 0
       ? t('capture.photoSlotsRemainingCompactSuffix', 'left today')
       : null;
+  const liveCameraControlsDisabled =
+    controlsDisabled || !permissionGranted || showCameraUnavailableState;
+  const saveControlsDisabled = controlsDisabled || isSaveDisabled;
+  const retakeControlsDisabled = controlsDisabled || isSaveBusy || isSaveSuccessful;
+  const shutterVisuals = getCaptureShutterVisuals(colors);
+  const trailingActionVisuals = getCaptureGlassActionVisuals(
+    colors,
+    getCaptureControlVisualState({ disabled: liveCameraControlsDisabled })
+  );
+  const retakeVisuals = getCaptureGlassActionVisuals(
+    colors,
+    getCaptureControlVisualState({
+      disabled: retakeControlsDisabled,
+    })
+  );
 
   if (cameraUiStage === 'live' || cameraUiStage === 'capturing') {
     return (
@@ -153,6 +167,7 @@ export function CaptureActionRow({
               isSharedTarget={isSharedTarget}
               shareTarget={shareTarget}
               t={t}
+              disabled={controlsDisabled}
               onChangeShareTarget={onChangeShareTarget}
               style={styles.belowCardLeadingAction}
             />
@@ -166,36 +181,41 @@ export function CaptureActionRow({
               onPressOut={handleShutterRelease}
               onPress={handleShutterPress}
               onLongPress={handleShutterLongPress}
+              disabled={liveCameraControlsDisabled}
+              accessibilityState={{ disabled: liveCameraControlsDisabled }}
               delayLongPress={380}
               hitSlop={12}
               pressRetentionOffset={{ top: 40, right: 40, bottom: 40, left: 40 }}
               hapticStyle={null}
-              pressedScale={0.985}
+              pressedScale={1}
               style={[styles.shutterOuter, shutterOuterAnimatedStyle as never]}
             >
               <Reanimated.View
-                pointerEvents="none"
-                style={[
-                  styles.shutterCaptureHalo,
-                  { backgroundColor: `${colors.primary}28` },
-                  shutterCaptureHaloAnimatedStyle,
-                ]}
-              />
-              <Reanimated.View
+                testID="capture-shutter-inner"
                 style={[
                   styles.shutterInner,
                   {
-                    backgroundColor: colors.primary,
+                    backgroundColor: shutterVisuals.fillColor,
                   },
                   shutterInnerAnimatedStyle,
                 ]}
               >
                 {isLivePhotoCaptureInProgress ? (
-                  <Text style={styles.shutterInnerCountText}>{livePhotoCountdownSeconds}s</Text>
+                  <Text
+                    style={[
+                      styles.shutterInnerCountText,
+                      { color: shutterVisuals.contentColor },
+                    ]}
+                  >
+                    {livePhotoCountdownSeconds}s
+                  </Text>
                 ) : remainingPhotoSlotsLabel ? (
                   <View style={styles.shutterInnerQuotaWrap}>
                     <Text
-                      style={styles.shutterInnerQuotaCountText}
+                      style={[
+                        styles.shutterInnerQuotaCountText,
+                        { color: shutterVisuals.contentColor },
+                      ]}
                       numberOfLines={1}
                       adjustsFontSizeToFit
                       minimumFontScale={0.8}
@@ -204,7 +224,10 @@ export function CaptureActionRow({
                     </Text>
                     {remainingPhotoSlotsCaption ? (
                       <Text
-                        style={styles.shutterInnerQuotaCaptionText}
+                        style={[
+                          styles.shutterInnerQuotaCaptionText,
+                          { color: shutterVisuals.contentColor },
+                        ]}
                         numberOfLines={1}
                         adjustsFontSizeToFit
                         minimumFontScale={0.75}
@@ -219,6 +242,11 @@ export function CaptureActionRow({
           ) : null}
           {!showCameraUnavailableState && permissionGranted ? (
             <CaptureGlassActionButton
+              testID={
+                dualCaptureAwaitingSecondShot
+                  ? 'capture-dual-reset-button'
+                  : 'capture-camera-switch-button'
+              }
               accessibilityLabel={
                 dualCaptureAwaitingSecondShot
                   ? t('capture.dualReset', 'Start over')
@@ -229,11 +257,14 @@ export function CaptureActionRow({
                   ? onResetDualCaptureSequence
                   : handleSwitchCameraPress
               }
+              disabled={liveCameraControlsDisabled}
+              disabledOpacity={trailingActionVisuals.disabledOpacity}
+              accessibilityState={{ disabled: liveCameraControlsDisabled }}
               iconName={dualCaptureAwaitingSecondShot ? 'refresh' : 'camera-reverse'}
-              iconColor={colors.captureGlassText}
-              glassColorScheme={colors.captureGlassColorScheme}
-              fallbackColor={glassPalette.controlBackgroundColor}
-              borderColor={glassPalette.controlBorderColor}
+              iconColor={trailingActionVisuals.iconColor}
+              glassColorScheme={trailingActionVisuals.glassColorScheme}
+              fallbackColor={trailingActionVisuals.fallbackColor}
+              borderColor={trailingActionVisuals.borderColor}
               style={styles.belowCardTrailingAction}
             />
           ) : (
@@ -256,6 +287,7 @@ export function CaptureActionRow({
         isSharedTarget={isSharedTarget}
         shareTarget={shareTarget}
         t={t}
+        disabled={controlsDisabled}
         onChangeShareTarget={onChangeShareTarget}
         style={styles.belowCardLeadingAction}
       />
@@ -275,7 +307,7 @@ export function CaptureActionRow({
         animatedSaveSuccessStyle={animatedSaveSuccessStyle}
         colors={colors}
         isSaveBusy={isSaveBusy}
-        isSaveDisabled={isSaveDisabled}
+        isSaveDisabled={saveControlsDisabled}
         isSaveSuccessful={isSaveSuccessful}
         onSaveNote={onSaveNote}
         onPressIn={handleSavePressIn}
@@ -287,13 +319,13 @@ export function CaptureActionRow({
           testID="capture-retake-button"
           accessibilityLabel={t('capture.retake', 'Retake')}
           onPress={onRetakePhoto}
-          disabled={isSaveBusy || isSaveSuccessful}
-          disabledOpacity={0.55}
+          disabled={retakeControlsDisabled}
+          disabledOpacity={retakeVisuals.disabledOpacity}
           iconName="refresh"
-          iconColor={colors.captureGlassText}
-          glassColorScheme={colors.captureGlassColorScheme}
-          fallbackColor={glassPalette.controlBackgroundColor}
-          borderColor={glassPalette.controlBorderColor}
+          iconColor={retakeVisuals.iconColor}
+          glassColorScheme={retakeVisuals.glassColorScheme}
+          fallbackColor={retakeVisuals.fallbackColor}
+          borderColor={retakeVisuals.borderColor}
           style={styles.belowCardTrailingAction}
         />
       ) : (

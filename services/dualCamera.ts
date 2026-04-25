@@ -13,6 +13,13 @@ export type DualCameraStillCapture = {
   height: number;
 };
 
+type SequentialDualCameraStillCaptureOptions = {
+  firstShotUri: string;
+  firstShotFacing: DualCameraFacing;
+  secondShotUri: string;
+  secondShotFacing: DualCameraFacing;
+};
+
 type DualCameraAvailability = {
   available?: boolean;
   supported?: boolean;
@@ -30,6 +37,22 @@ const nativeDualCameraModule =
 
 export function hasDualCameraNativeModule() {
   return Boolean(nativeDualCameraModule);
+}
+
+export function createSequentialDualCameraStillCapture({
+  firstShotUri,
+  firstShotFacing,
+  secondShotUri,
+  secondShotFacing,
+}: SequentialDualCameraStillCaptureOptions): DualCameraStillCapture {
+  return {
+    primaryUri: secondShotUri,
+    secondaryUri: firstShotUri,
+    primaryFacing: secondShotFacing,
+    secondaryFacing: firstShotFacing,
+    width: 0,
+    height: 0,
+  };
 }
 
 export async function getDualCameraAvailability() {

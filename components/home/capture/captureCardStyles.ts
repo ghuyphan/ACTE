@@ -1,7 +1,6 @@
 import { Dimensions, Platform, StyleSheet } from 'react-native';
 import { STICKER_ARTBOARD_FRAME } from '../../../constants/doodleLayout';
 import { Layout, Radii, Shadows, Sheet, Typography } from '../../../constants/theme';
-import { glassTokens } from '../../ui/glassTokens';
 import {
   DUAL_CAMERA_INSET_FRAME_COLOR,
   DUAL_CAMERA_INSET_FROST_COLOR,
@@ -28,8 +27,13 @@ export { DUAL_CAMERA_INSET_SIZE };
 export const TOP_CONTROL_INSET = 24;
 export const TOP_CONTROL_HEIGHT = 38;
 export const TOP_CONTROL_RADIUS = 19;
+export const CAMERA_TOP_CHROME_INSET = TOP_CONTROL_INSET;
+export const CAMERA_TOP_CHROME_HEIGHT = TOP_CONTROL_HEIGHT;
+export const CAMERA_TOP_CHROME_RADIUS = TOP_CONTROL_RADIUS;
+export const CAMERA_CHROME_SIDE_INSET = 16;
+export const DUAL_CAPTURE_STEP_MIN_WIDTH = 88;
+export const DUAL_CAPTURE_STEP_PIP_SIZE = 8;
 export const CARD_CONTENT_PADDING = 28;
-export const CARD_CHROME_SAFE_TOP = 30;
 export const AUTO_EMOJI_POP_TOP = 56;
 export const DECORATE_OPTION_ACTIVE_SCALE = 1;
 export const DECORATE_OPTION_CONTENT_SCALE = 1;
@@ -44,6 +48,9 @@ export const PHOTO_DOODLE_DEFAULT_COLOR = '#FFFFFF';
 export const PHOTO_CAPTION_MAX_LENGTH = 60;
 export const LIVE_PHOTO_RING_STROKE_WIDTH = 4;
 export const CAMERA_FOCUS_RING_SIZE = 64;
+export const CAMERA_BOTTOM_CHROME_INSET = 12;
+export const CAMERA_BOTTOM_CHROME_HEIGHT = 42;
+export const CAMERA_BOTTOM_CHROME_RADIUS = CAMERA_BOTTOM_CHROME_HEIGHT / 2;
 export const DOCKED_HEADER_CONTENT_OVERLAP = 8;
 export const CAMERA_ZOOM_BADGE_BACKGROUND = 'rgba(28,28,30,0.52)';
 export const BELOW_CARD_SECTION_HEIGHT = 204;
@@ -176,7 +183,7 @@ export const styles = StyleSheet.create({
     position: 'absolute',
     left: 12,
     right: 12,
-    bottom: 12,
+    bottom: CAMERA_BOTTOM_CHROME_INSET,
     alignItems: 'center',
     zIndex: 12,
   },
@@ -347,12 +354,12 @@ export const styles = StyleSheet.create({
   },
   cameraZoomBadge: {
     position: 'absolute',
-    top: CARD_CHROME_SAFE_TOP,
-    right: 16,
+    top: CAMERA_TOP_CHROME_INSET,
+    right: CAMERA_CHROME_SIDE_INSET,
     minWidth: 58,
-    minHeight: TOP_CONTROL_HEIGHT,
+    minHeight: CAMERA_TOP_CHROME_HEIGHT,
     paddingHorizontal: 12,
-    borderRadius: TOP_CONTROL_RADIUS,
+    borderRadius: CAMERA_TOP_CHROME_RADIUS,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: CAMERA_ZOOM_BADGE_BACKGROUND,
@@ -362,14 +369,14 @@ export const styles = StyleSheet.create({
   },
   cameraLensSelector: {
     position: 'absolute',
-    bottom: 16,
+    bottom: CAMERA_BOTTOM_CHROME_INSET,
     left: 0,
     right: 0,
     alignItems: 'center',
     zIndex: 10,
   },
   cameraLensSelectorPill: {
-    minHeight: 42,
+    minHeight: CAMERA_BOTTOM_CHROME_HEIGHT,
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 999,
@@ -400,27 +407,27 @@ export const styles = StyleSheet.create({
   },
   cameraLivePhotoGuideOverlay: {
     position: 'absolute',
-    top: CARD_CHROME_SAFE_TOP,
-    left: 16,
-    right: 16,
+    top: CAMERA_TOP_CHROME_INSET,
+    left: CAMERA_CHROME_SIDE_INSET,
+    right: CAMERA_CHROME_SIDE_INSET,
     alignItems: 'center',
     zIndex: 10,
   },
   cameraDualPreviewOnlyBadgeWrap: {
     position: 'absolute',
-    top: CARD_CHROME_SAFE_TOP,
-    left: 16,
-    right: 16,
+    top: CAMERA_TOP_CHROME_INSET,
+    left: CAMERA_CHROME_SIDE_INSET,
+    right: CAMERA_CHROME_SIDE_INSET,
     alignItems: 'center',
     zIndex: 10,
   },
   cameraDualPreviewOnlyBadge: {
-    minHeight: 26,
-    borderRadius: 13,
+    minHeight: CAMERA_TOP_CHROME_HEIGHT,
+    borderRadius: CAMERA_TOP_CHROME_RADIUS,
     borderCurve: 'continuous',
     borderWidth: StyleSheet.hairlineWidth,
     paddingHorizontal: 10,
-    paddingVertical: 4,
+    paddingVertical: 6,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -429,8 +436,10 @@ export const styles = StyleSheet.create({
   },
   cameraDualPreviewOnlyBadgeText: {
     fontSize: 11,
+    lineHeight: 14,
     fontWeight: '600',
     fontFamily: 'Noto Sans',
+    includeFontPadding: false,
     flexShrink: 1,
   },
   cameraDualPreviewInset: {
@@ -506,8 +515,8 @@ export const styles = StyleSheet.create({
     zIndex: 1,
   },
   cameraLivePhotoGuidePill: {
-    minHeight: 30,
-    borderRadius: 15,
+    minHeight: CAMERA_TOP_CHROME_HEIGHT,
+    borderRadius: CAMERA_TOP_CHROME_RADIUS,
     borderWidth: StyleSheet.hairlineWidth,
     paddingHorizontal: 12,
     paddingVertical: 6,
@@ -518,8 +527,11 @@ export const styles = StyleSheet.create({
   },
   cameraZoomBadgeText: {
     fontSize: 12,
+    lineHeight: 14,
     fontWeight: '700',
     fontFamily: 'Noto Sans',
+    includeFontPadding: false,
+    textAlign: 'center',
   },
   cameraUnavailableState: {
     ...StyleSheet.absoluteFill,
@@ -553,10 +565,10 @@ export const styles = StyleSheet.create({
   },
   libraryBtn: {
     position: 'absolute',
-    top: TOP_CONTROL_INSET,
-    left: 16,
-    minHeight: TOP_CONTROL_HEIGHT,
-    borderRadius: TOP_CONTROL_RADIUS,
+    top: CAMERA_TOP_CHROME_INSET,
+    left: CAMERA_CHROME_SIDE_INSET,
+    minHeight: CAMERA_TOP_CHROME_HEIGHT,
+    borderRadius: CAMERA_TOP_CHROME_RADIUS,
     paddingHorizontal: 12,
     flexDirection: 'row',
     alignItems: 'center',
@@ -567,6 +579,9 @@ export const styles = StyleSheet.create({
   libraryBtnText: {
     fontWeight: '600',
     fontSize: 13,
+    lineHeight: 16,
+    fontFamily: 'Noto Sans',
+    includeFontPadding: false,
   },
   permissionText: {
     ...Typography.body,
@@ -602,8 +617,8 @@ export const styles = StyleSheet.create({
   },
   photoCaptionOverlayField: {
     width: '84%',
-    minHeight: glassTokens.compactControlHeight,
-    borderRadius: glassTokens.compactControlRadius,
+    minHeight: CAMERA_BOTTOM_CHROME_HEIGHT,
+    borderRadius: CAMERA_BOTTOM_CHROME_RADIUS,
     borderWidth: StyleSheet.hairlineWidth,
     paddingHorizontal: 12,
     flexDirection: 'row',
@@ -813,8 +828,9 @@ export const styles = StyleSheet.create({
     alignItems: 'center',
   },
   dualCaptureStepIndicator: {
-    minHeight: 30,
-    borderRadius: 15,
+    minWidth: DUAL_CAPTURE_STEP_MIN_WIDTH,
+    minHeight: CAMERA_TOP_CHROME_HEIGHT,
+    borderRadius: CAMERA_TOP_CHROME_RADIUS,
     borderCurve: 'continuous',
     borderWidth: StyleSheet.hairlineWidth,
     paddingHorizontal: 12,
@@ -830,21 +846,20 @@ export const styles = StyleSheet.create({
     gap: 4,
   },
   dualCaptureStepPip: {
-    width: 7,
-    height: 7,
+    width: DUAL_CAPTURE_STEP_PIP_SIZE,
+    height: DUAL_CAPTURE_STEP_PIP_SIZE,
     borderRadius: 999,
     backgroundColor: 'rgba(255,255,255,0.26)',
   },
   dualCaptureStepPipActive: {
     backgroundColor: '#FFFFFF',
-    width: 8,
-    height: 8,
   },
   dualCaptureStepLabel: {
     fontSize: 12,
     lineHeight: 14,
     fontWeight: '800',
     fontFamily: 'Noto Sans',
+    includeFontPadding: false,
   },
   dualCaptureFacingWrap: {
     paddingLeft: 8,
@@ -857,6 +872,7 @@ export const styles = StyleSheet.create({
     lineHeight: 14,
     fontWeight: '700',
     fontFamily: 'Noto Sans',
+    includeFontPadding: false,
   },
   belowCardShutterRow: {
     flexDirection: 'row',
@@ -917,12 +933,6 @@ export const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     overflow: 'visible',
-  },
-  shutterCaptureHalo: {
-    position: 'absolute',
-    width: SHUTTER_OUTER_SIZE + 18,
-    height: SHUTTER_OUTER_SIZE + 18,
-    borderRadius: (SHUTTER_OUTER_SIZE + 18) / 2,
   },
   shutterInner: {
     width: SHUTTER_INNER_SIZE,

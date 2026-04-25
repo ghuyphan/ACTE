@@ -163,6 +163,70 @@ describe('useCaptureFlow', () => {
     expect(result.current.capturedPhoto).toBe('file:///tmp/captured-photo.jpg');
   });
 
+  it('ignores overlapping still photo captures', async () => {
+    let resolvePhoto: ((value: { path: string }) => void) | null = null;
+    mockTakePhoto.mockImplementationOnce(
+      () => new Promise((resolve) => {
+        resolvePhoto = resolve;
+      })
+    );
+    const { result } = renderHook(() => useCaptureFlow());
+
+    act(() => {
+      result.current.cameraRef.current = {
+        takePhoto: mockTakePhoto,
+        startRecording: mockStartRecording,
+        stopRecording: mockStopRecording,
+        cancelRecording: mockCancelRecording,
+      } as any;
+    });
+
+    let firstCapture: Promise<void> = Promise.resolve();
+    let secondCapture: Promise<void> = Promise.resolve();
+    await act(async () => {
+      firstCapture = result.current.takePicture();
+      secondCapture = result.current.takePicture();
+      expect(mockTakePhoto).toHaveBeenCalledTimes(1);
+      resolvePhoto?.({ path: '/tmp/captured-photo.jpg' });
+      await Promise.all([firstCapture, secondCapture]);
+    });
+
+    expect(result.current.capturedPhoto).toBe('file:///tmp/captured-photo.jpg');
+  });
+
+  it('ignores overlapping raw photo-file captures', async () => {
+    let resolvePhoto: ((value: { path: string }) => void) | null = null;
+    mockTakePhoto.mockImplementationOnce(
+      () => new Promise((resolve) => {
+        resolvePhoto = resolve;
+      })
+    );
+    const { result } = renderHook(() => useCaptureFlow());
+
+    act(() => {
+      result.current.cameraRef.current = {
+        takePhoto: mockTakePhoto,
+        startRecording: mockStartRecording,
+        stopRecording: mockStopRecording,
+        cancelRecording: mockCancelRecording,
+      } as any;
+    });
+
+    let firstCapture: Promise<string | null> = Promise.resolve(null);
+    let secondCapture: Promise<string | null> = Promise.resolve(null);
+    let capturedUris: Array<string | null> = [];
+    await act(async () => {
+      firstCapture = result.current.capturePhotoFile();
+      secondCapture = result.current.capturePhotoFile();
+      expect(mockTakePhoto).toHaveBeenCalledTimes(1);
+      resolvePhoto?.({ path: '/tmp/captured-photo.jpg' });
+      capturedUris = await Promise.all([firstCapture, secondCapture]);
+    });
+
+    expect(capturedUris).toEqual(['file:///tmp/captured-photo.jpg', null]);
+    expect(result.current.capturedPhoto).toBeNull();
+  });
+
   it('restores the active camera facing from a persisted draft', () => {
     const { result } = renderHook(() => useCaptureFlow());
 
