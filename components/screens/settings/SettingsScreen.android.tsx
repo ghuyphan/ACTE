@@ -95,8 +95,11 @@ function SettingRow({
   colors: ThemeColors;
   row: SettingsRowModel;
 }) {
-  const iconColor = row.destructive ? colors.danger : row.icon === 'plusUnavailable' ? colors.secondaryText : colors.primary;
-  const showChevron = row.external ? false : row.showChevron ?? Boolean(row.onPress);
+  const muted = row.disabled || row.icon === 'plusUnavailable';
+  const iconColor = row.destructive ? colors.danger : muted ? colors.secondaryText : colors.primary;
+  const activeOnPress = row.disabled ? undefined : row.onPress;
+  const showChevron = row.external ? false : row.showChevron ?? Boolean(activeOnPress);
+  const accessibilityLabel = [row.title, row.value, row.subtitle].filter(Boolean).join(', ');
   const content = (
     <>
       <View
@@ -106,7 +109,7 @@ function SettingRow({
             backgroundColor:
               row.destructive
                 ? `${colors.danger}12`
-                : row.icon === 'plusUnavailable'
+                : muted
                   ? `${colors.secondaryText}12`
                   : colors.primarySoft,
           },
@@ -115,7 +118,7 @@ function SettingRow({
         <Ionicons name={getAndroidIconName(row.icon)} size={18} color={iconColor} />
       </View>
       <View style={styles.rowCopy}>
-        <Text style={[styles.rowTitle, { color: row.destructive ? colors.danger : colors.text }]}>
+        <Text style={[styles.rowTitle, { color: row.destructive ? colors.danger : muted ? colors.secondaryText : colors.text }]}>
           {row.title}
         </Text>
         {row.subtitle ? (
@@ -130,16 +133,33 @@ function SettingRow({
     </>
   );
 
-  if (!row.onPress) {
-    return <View style={styles.row}>{content}</View>;
+  if (!activeOnPress) {
+    return (
+      <View
+        accessibilityHint={row.accessibilityHint}
+        accessibilityLabel={accessibilityLabel}
+        accessibilityState={{ disabled: row.disabled }}
+        style={[styles.row, row.disabled ? styles.rowDisabled : null]}
+      >
+        {content}
+      </View>
+    );
   }
 
   return (
     <Pressable
       accessibilityRole="button"
+      accessibilityHint={row.accessibilityHint}
+      accessibilityLabel={accessibilityLabel}
+      accessibilityState={{ disabled: row.disabled }}
       android_ripple={{ color: `${colors.text}10` }}
-      onPress={row.onPress}
-      style={({ pressed }) => [styles.row, pressed ? styles.rowPressed : null]}
+      disabled={row.disabled}
+      onPress={activeOnPress}
+      style={({ pressed }) => [
+        styles.row,
+        row.disabled ? styles.rowDisabled : null,
+        pressed ? styles.rowPressed : null,
+      ]}
     >
       {content}
     </Pressable>
@@ -297,6 +317,9 @@ const styles = StyleSheet.create({
   rowPressed: {
     opacity: 0.92,
   },
+  rowDisabled: {
+    opacity: 0.58,
+  },
   rowIcon: {
     width: 36,
     height: 36,
@@ -328,9 +351,10 @@ const styles = StyleSheet.create({
   rowValue: {
     fontSize: 14,
     fontWeight: '500',
-    maxWidth: 140,
+    maxWidth: 156,
     textAlign: 'right',
     fontFamily: 'Noto Sans',
+    flexShrink: 1,
   },
   cardDivider: {
     height: StyleSheet.hairlineWidth,

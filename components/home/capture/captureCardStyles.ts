@@ -46,9 +46,9 @@ export const LIVE_PHOTO_RING_STROKE_WIDTH = 4;
 export const CAMERA_FOCUS_RING_SIZE = 64;
 export const DOCKED_HEADER_CONTENT_OVERLAP = 8;
 export const CAMERA_ZOOM_BADGE_BACKGROUND = 'rgba(28,28,30,0.52)';
-export const BELOW_CARD_SECTION_HEIGHT = 162;
-export const COMPACT_CAPTURE_FOOTER_TOP_PADDING = 8;
-export const DEFAULT_CAPTURE_FOOTER_TOP_PADDING = 12;
+export const BELOW_CARD_SECTION_HEIGHT = 204;
+export const COMPACT_CAPTURE_FOOTER_TOP_PADDING = 4;
+export const DEFAULT_CAPTURE_FOOTER_TOP_PADDING = 8;
 const SHEET_HORIZONTAL_PADDING =
   Platform.OS === 'ios' ? Sheet.ios.horizontalPadding : Sheet.android.horizontalPadding;
 
@@ -369,7 +369,7 @@ export const styles = StyleSheet.create({
     zIndex: 10,
   },
   cameraLensSelectorPill: {
-    minHeight: 38,
+    minHeight: 42,
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 999,
@@ -384,8 +384,8 @@ export const styles = StyleSheet.create({
   },
   cameraLensOptionButton: {
     width: 34,
-    height: 30,
-    borderRadius: 15,
+    height: 34,
+    borderRadius: 17,
     borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
@@ -981,6 +981,7 @@ export const styles = StyleSheet.create({
   },
   footerSlot: {
     width: '100%',
+    minHeight: 66,
     paddingTop: DEFAULT_CAPTURE_FOOTER_TOP_PADDING,
   },
   noteColorSheet: {

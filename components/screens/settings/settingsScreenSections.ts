@@ -25,8 +25,10 @@ export type SettingsRowModel = {
   value?: string | null;
   onPress?: () => void;
   destructive?: boolean;
+  disabled?: boolean;
   external?: boolean;
   showChevron?: boolean;
+  accessibilityHint?: string;
 };
 
 export type SettingsSectionModel = {
@@ -71,6 +73,7 @@ export function buildSettingsSections(model: SettingsScreenModel): {
                 key: 'sync',
                 icon: 'sync',
                 title: model.t('settings.autoSync', 'Auto sync'),
+                subtitle: !model.user ? model.t('settings.syncSignedOutHint', 'Sign in to enable backup.') : null,
                 value: model.syncValue,
                 onPress: model.openSyncScreen,
               } satisfies SettingsRowModel,
@@ -82,7 +85,10 @@ export function buildSettingsSections(model: SettingsScreenModel): {
                 key: 'friend-activity-notifications',
                 icon: 'notifications',
                 title: model.t('settings.friendActivityNotifications', 'Friend activity notifications'),
-                subtitle: model.socialPushHint,
+                subtitle:
+                  model.socialPushValue === model.t('settings.friendActivityNotificationsNeedsSettings', 'Needs settings')
+                    ? model.t('settings.friendActivityNotificationsSettingsShortHint', 'Enable notifications in system settings.')
+                    : null,
                 value: model.socialPushValue,
                 onPress: model.openSocialPushSettings,
               } satisfies SettingsRowModel,
@@ -92,7 +98,7 @@ export function buildSettingsSections(model: SettingsScreenModel): {
           key: 'plus',
           icon: 'plus',
           title: model.t('settings.plusTitle', 'Noto Plus'),
-          subtitle: model.plusHint,
+          subtitle: model.isPurchaseAvailable ? model.plusHint : null,
           value:
             model.isPurchaseAvailable
               ? model.tier === 'plus'
@@ -118,7 +124,6 @@ export function buildSettingsSections(model: SettingsScreenModel): {
           key: 'app-theme',
           icon: 'palette',
           title: model.t('settings.appTheme', 'App Theme'),
-          subtitle: model.t('settings.appThemeHint', 'Choose the color personality for cards, tabs, and sheets.'),
           value: model.appThemeLabel,
           onPress: () => model.setShowAppTheme(true),
         },
@@ -146,18 +151,19 @@ export function buildSettingsSections(model: SettingsScreenModel): {
           key: 'notes-count',
           icon: 'notes',
           title: model.t('settings.noteCount', 'Saved Notes'),
-          value: `${model.notes.length}`,
+          value: model.noteCountLabel,
         },
         {
           key: 'clear-all',
           icon: 'trash',
           title: model.t('settings.clearAll', 'Clear All Notes'),
-          subtitle: model.t(
-            'settings.clearAllMsg',
-            'All your food notes will be permanently deleted. This action cannot be undone.'
-          ),
+          subtitle:
+            model.notes.length > 0
+              ? model.t('settings.clearAllShortHint', 'Deletes memories saved on this device.')
+              : model.t('settings.clearAllEmptyHint', 'Nothing to clear.'),
           onPress: model.promptClearAll,
-          destructive: true,
+          destructive: model.notes.length > 0,
+          disabled: model.notes.length === 0,
           showChevron: false,
         },
       ],
@@ -170,10 +176,6 @@ export function buildSettingsSections(model: SettingsScreenModel): {
       key: 'privacy-policy',
       icon: 'privacy',
       title: model.t('settings.privacyPolicy', 'Privacy Policy'),
-      subtitle: model.t(
-        'settings.privacyPolicyHint',
-        'Review how Noto handles your data and permissions.'
-      ),
       onPress: model.openPrivacyPolicyLink,
       external: true,
       showChevron: false,
@@ -185,10 +187,6 @@ export function buildSettingsSections(model: SettingsScreenModel): {
       key: 'support',
       icon: 'support',
       title: model.t('settings.support', 'Support'),
-      subtitle: model.t(
-        'settings.supportHint',
-        'Contact support if sign-in, sync, or account issues need a hand.'
-      ),
       onPress: model.openSupportLink,
       external: true,
       showChevron: false,
@@ -200,10 +198,6 @@ export function buildSettingsSections(model: SettingsScreenModel): {
       key: 'account-deletion',
       icon: 'accountDeletion',
       title: model.t('settings.accountDeletion', 'Account deletion help'),
-      subtitle: model.t(
-        'settings.accountDeletionHint',
-        'Open the external deletion page or support contact for your store listing.'
-      ),
       onPress: model.openAccountDeletionHelpLink,
       external: true,
       showChevron: false,
@@ -213,7 +207,7 @@ export function buildSettingsSections(model: SettingsScreenModel): {
   if (legalItems.length > 0) {
     sections.push({
       key: 'support',
-      title: model.t('settings.supportTitle', 'Support'),
+      title: model.t('settings.legal', 'Privacy & Support'),
       items: legalItems,
     });
   }

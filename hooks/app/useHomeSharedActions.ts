@@ -73,6 +73,7 @@ type UseHomeSharedActionsOptions = {
   openAuthForShare: () => void;
   showSharedUnavailableSheet: () => void;
   setCaptureTarget: (nextTarget: 'private' | 'shared') => void;
+  onAfterSharedFeedMutation?: () => void;
 };
 
 export function useHomeSharedActions({
@@ -89,6 +90,7 @@ export function useHomeSharedActions({
   openAuthForShare,
   showSharedUnavailableSheet,
   setCaptureTarget,
+  onAfterSharedFeedMutation,
 }: UseHomeSharedActionsOptions) {
   const { t } = useTranslation();
   const inviteActionInFlightRef = useRef<InviteAction | null>(null);
@@ -274,6 +276,7 @@ export function useHomeSharedActions({
               void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
               void removeFriend(friendUid)
                 .then(() => {
+                  onAfterSharedFeedMutation?.();
                   void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
                 })
                 .catch((error) => {
@@ -287,7 +290,7 @@ export function useHomeSharedActions({
         ]
       );
     },
-    [removeFriend, t]
+    [onAfterSharedFeedMutation, removeFriend, t]
   );
 
   return {

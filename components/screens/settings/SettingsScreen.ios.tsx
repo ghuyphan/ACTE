@@ -79,12 +79,14 @@ function SettingsRowIOS({
   isDark: boolean;
   row: SettingsRowModel;
 }) {
-  const iconColor = row.destructive ? colors.danger : row.icon === 'plusUnavailable' ? colors.secondaryText : colors.primary;
+  const muted = row.disabled || row.icon === 'plusUnavailable';
+  const iconColor = row.destructive ? colors.danger : muted ? colors.secondaryText : colors.primary;
   const iconBackgroundColor = row.destructive
     ? `${colors.danger}18`
-    : row.icon === 'plusUnavailable'
+    : muted
       ? `${colors.secondaryText}14`
       : `${colors.primary}18`;
+  const activeOnPress = row.disabled ? undefined : row.onPress;
   const content = (
     <HStack>
       <HStack
@@ -102,7 +104,7 @@ function SettingsRowIOS({
         modifiers={[
           padding({ trailing: 12 }),
           frame({
-            maxWidth: row.value || row.onPress || row.external ? 220 : 260,
+            maxWidth: row.value || activeOnPress || row.external ? 250 : 300,
             alignment: 'leading',
           }),
           layoutPriority(1),
@@ -110,7 +112,7 @@ function SettingsRowIOS({
       >
         <SwiftUIText
           modifiers={[
-            foregroundStyle(row.destructive ? colors.danger : row.icon === 'plusUnavailable' ? colors.secondaryText : colors.text),
+            foregroundStyle(row.destructive ? colors.danger : muted ? colors.secondaryText : colors.text),
             lineLimit(2),
             truncationMode('tail'),
           ]}
@@ -123,7 +125,7 @@ function SettingsRowIOS({
               foregroundStyle(colors.secondaryText),
               font({ size: 13 }),
               padding({ top: 2 }),
-              lineLimit(2),
+              lineLimit(3),
               truncationMode('tail'),
             ]}
           >
@@ -135,11 +137,11 @@ function SettingsRowIOS({
       {row.value ? (
         <SwiftUIText
           modifiers={[
-            foregroundStyle(row.destructive ? colors.danger : row.icon === 'plusUnavailable' ? colors.secondaryText : colors.primary),
-            frame({ maxWidth: 140, alignment: 'trailing' }),
-            lineLimit(1),
+            foregroundStyle(row.destructive ? colors.danger : muted ? colors.secondaryText : colors.primary),
+            frame({ maxWidth: 156, alignment: 'trailing' }),
+            lineLimit(2),
             truncationMode('tail'),
-            ...(row.onPress || row.external ? [padding({ trailing: 4 })] : []),
+            ...(activeOnPress || row.external ? [padding({ trailing: 4 })] : []),
           ]}
         >
           {row.value}
@@ -147,17 +149,17 @@ function SettingsRowIOS({
       ) : null}
       {row.external ? (
         <SwiftUIImage systemName="arrow.up.right" color={colors.secondaryText} size={14} />
-      ) : row.onPress && row.showChevron !== false ? (
+      ) : activeOnPress && row.showChevron !== false ? (
         <SwiftUIImage systemName="chevron.right" color={colors.secondaryText} size={14} />
       ) : null}
     </HStack>
   );
 
-  if (!row.onPress) {
+  if (!activeOnPress) {
     return content;
   }
 
-  return <Button onPress={row.onPress}>{content}</Button>;
+  return <Button onPress={activeOnPress}>{content}</Button>;
 }
 
 export default function SettingsScreenIOS() {

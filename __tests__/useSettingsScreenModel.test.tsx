@@ -17,6 +17,7 @@ const mockThemeState = {
     text: '#111111',
     secondaryText: '#666666',
     primary: '#f4b942',
+    primarySoft: '#fdf1d2',
     surface: '#f8f5ef',
     border: '#e5dccf',
     danger: '#ff3b30',
@@ -180,6 +181,7 @@ describe('useSettingsScreenModel', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockConnectivityState.isOnline = true;
+    mockNotesState.notes = [];
     mockAuthState.user = null;
     mockAuthState.isAuthAvailable = true;
     mockSharedFeedState.enabled = false;
@@ -200,7 +202,7 @@ describe('useSettingsScreenModel', () => {
   it('shows not signed in for cloud sync when there is no signed-in user', () => {
     const { result } = renderHook(() => useSettingsScreenModel());
 
-    expect(result.current.showSyncEntry).toBe(false);
+    expect(result.current.showSyncEntry).toBe(true);
     expect(result.current.syncValue).toBe('Not signed in');
     expect(result.current.accountHint).toBe(
       'Sign in to back up your notes and keep them synced across your devices.'
@@ -353,7 +355,7 @@ describe('useSettingsScreenModel', () => {
     expect(result.current.accountHint).toBeNull();
   });
 
-  it('shows a short synced status instead of the full last synced timestamp in the row', () => {
+  it('shows a compact synced status in the row once backup has completed', () => {
     mockAuthState.user = {
       id: 'user-1',
       uid: 'user-1',
@@ -396,7 +398,7 @@ describe('useSettingsScreenModel', () => {
 
     const unlimitedResult = renderHook(() => useSettingsScreenModel());
     expect(unlimitedResult.result.current.plusHint).toBe(
-      'Upgrade to Noto Plus to unlock unlimited photo notes, premium photo filters, interactive hologram cards, and premium finishes.'
+      'Upgrade for unlimited photo memories, better Live Photos, and premium styles.'
     );
 
     unlimitedResult.unmount();
@@ -404,8 +406,16 @@ describe('useSettingsScreenModel', () => {
 
     const cappedResult = renderHook(() => useSettingsScreenModel());
     expect(cappedResult.result.current.plusHint).toBe(
-      'Free plan includes 5 photo memories per day. Upgrade to Noto Plus for unlimited photo saves, premium photo filters, interactive hologram cards, and premium finishes.'
+      'Free includes 5 photo memories per day. Upgrade for unlimited saves and premium styles.'
     );
+  });
+
+  it('formats the note count for the settings row', () => {
+    mockNotesState.notes = [{ id: 'note-1' }, { id: 'note-2' }];
+
+    const { result } = renderHook(() => useSettingsScreenModel());
+
+    expect(result.current.noteCountLabel).toBe('2 memories');
   });
 
   it('normalizes the language label from regional locale variants', () => {
@@ -448,6 +458,8 @@ describe('useSettingsScreenModel', () => {
 
     const { result } = renderHook(() => useSettingsScreenModel());
 
+    expect(result.current.socialPushValue).toBe('Needs settings');
+
     await act(async () => {
       await result.current.openSocialPushSettings();
     });
@@ -474,5 +486,22 @@ describe('useSettingsScreenModel', () => {
 
     expect(mockSocialPushState.openSystemSettings).toHaveBeenCalled();
     expect(mockSocialPushState.enableFromPrompt).not.toHaveBeenCalled();
+  });
+
+  it('shows an informational alert instead of deleting when the journal is empty', () => {
+    mockNotesState.notes = [];
+
+    const { result } = renderHook(() => useSettingsScreenModel());
+
+    act(() => {
+      result.current.promptClearAll();
+    });
+
+    expect(mockShowAlert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: 'No memories to clear',
+      })
+    );
+    expect(mockNotesState.deleteAllNotes).not.toHaveBeenCalled();
   });
 });

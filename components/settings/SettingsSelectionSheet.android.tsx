@@ -8,6 +8,7 @@ import AppSheetScaffold from '../sheets/AppSheetScaffold';
 type SettingsSelectionOption = {
   key: string;
   label: string;
+  swatchColors?: readonly [string, string];
 };
 
 export default function SettingsSelectionSheetAndroid({
@@ -38,7 +39,9 @@ export default function SettingsSelectionSheetAndroid({
           return (
             <View key={option.key}>
               <Pressable
-                accessibilityRole="button"
+                accessibilityRole="radio"
+                accessibilityLabel={option.label}
+                accessibilityState={{ selected }}
                 android_ripple={{ color: `${colors.text}10` }}
                 style={({ pressed }) => [
                   styles.option,
@@ -50,7 +53,15 @@ export default function SettingsSelectionSheetAndroid({
                   onClose();
                 }}
               >
-                <Text style={[styles.optionLabel, { color: colors.text }]}>{option.label}</Text>
+                <View style={styles.optionCopy}>
+                  {option.swatchColors ? (
+                    <View style={[styles.swatchWrap, { borderColor: colors.border }]}>
+                      <View style={[styles.swatchHalf, { backgroundColor: option.swatchColors[0] }]} />
+                      <View style={[styles.swatchHalf, { backgroundColor: option.swatchColors[1] }]} />
+                    </View>
+                  ) : null}
+                  <Text style={[styles.optionLabel, { color: colors.text }]}>{option.label}</Text>
+                </View>
                 <Ionicons
                   name={selected ? 'radio-button-on' : 'radio-button-off-outline'}
                   size={20}
@@ -78,6 +89,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    gap: 16,
   },
   optionPressed: {
     opacity: 0.84,
@@ -86,6 +98,24 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     fontFamily: 'Noto Sans',
+    flexShrink: 1,
+  },
+  optionCopy: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  swatchWrap: {
+    width: 34,
+    height: 22,
+    borderRadius: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+    flexDirection: 'row',
+    overflow: 'hidden',
+  },
+  swatchHalf: {
+    flex: 1,
   },
   divider: {
     height: StyleSheet.hairlineWidth,

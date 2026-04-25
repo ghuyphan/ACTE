@@ -326,6 +326,55 @@ describe('NoteMemoryCard', () => {
     expect(getByTestId('note-memory-live-badge')).toBeTruthy();
   });
 
+  it('keeps the shared badge out of the top-left dual-capture inset area', () => {
+    const note = {
+      id: 'note-dual-shared',
+      type: 'photo',
+      content: '',
+      caption: null,
+      photoLocalUri: 'file:///photo.jpg',
+      photoSyncedLocalUri: null,
+      photoRemoteBase64: null,
+      isLivePhoto: false,
+      pairedVideoLocalUri: null,
+      pairedVideoSyncedLocalUri: null,
+      pairedVideoRemotePath: null,
+      captureVariant: 'dual',
+      dualComposedPhotoLocalUri: 'file:///dual-composed.jpg',
+      dualPrimaryPhotoLocalUri: 'file:///back.jpg',
+      dualSecondaryPhotoLocalUri: 'file:///front.jpg',
+      dualLayoutPreset: 'top-left',
+      locationName: 'District 1',
+      promptId: null,
+      promptTextSnapshot: null,
+      promptAnswer: null,
+      moodEmoji: null,
+      noteColor: null,
+      latitude: 10.77,
+      longitude: 106.69,
+      radius: 150,
+      isFavorite: false,
+      hasDoodle: false,
+      doodleStrokesJson: null,
+      hasStickers: false,
+      stickerPlacementsJson: null,
+      createdAt: '2026-04-10T02:00:00.000Z',
+      updatedAt: null,
+    } as any;
+
+    const { getByTestId, queryByTestId } = render(
+      <NoteMemoryCard
+        note={note}
+        colors={colors}
+        t={mockT}
+        isSharedByMe
+      />
+    );
+
+    expect(getByTestId('note-memory-shared-badge')).toBeTruthy();
+    expect(queryByTestId('note-memory-shared-badge-anchor')).toBeNull();
+  });
+
   it('expands only the tapped badge into a labeled chip', () => {
     const note = {
       id: 'note-legend-1',

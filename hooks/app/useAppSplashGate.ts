@@ -4,6 +4,7 @@ import { hasInitializedI18n, i18nReady } from '../../constants/i18n';
 
 interface UseAppSplashGateOptions {
   authReady: boolean;
+  homeInitialFeedReady?: boolean;
   isDatabaseReady: boolean;
   isStartupRouteReady: boolean;
   notesReady: boolean;
@@ -13,6 +14,7 @@ interface UseAppSplashGateOptions {
 
 export function useAppSplashGate({
   authReady,
+  homeInitialFeedReady = true,
   isDatabaseReady,
   isStartupRouteReady,
   notesReady,
@@ -52,6 +54,7 @@ export function useAppSplashGate({
       Boolean(startupError) ||
       (
         isDatabaseReady &&
+        homeInitialFeedReady &&
         notesReady
       )
     );

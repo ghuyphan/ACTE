@@ -1,11 +1,7 @@
 import { FlashList } from '@shopify/flash-list';
 import { TFunction } from 'i18next';
 import { ReactElement, RefObject, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import Animated, {
-  Extrapolation,
-  interpolate,
-  type SharedValue,
-  useAnimatedStyle,
+import {
   useSharedValue,
 } from 'react-native-reanimated';
 import {
@@ -26,9 +22,6 @@ const DOCKED_HEADER_CONTENT_OVERLAP = 22;
 const SCROLL_SNAP_EPSILON = 2;
 const REFRESH_PULL_THRESHOLD = -6;
 const HOME_PAGE_VISUAL_BOTTOM_INSET = 90;
-const INACTIVE_CARD_SCALE = 0.968;
-const INACTIVE_CARD_OPACITY = 0.78;
-const INACTIVE_CARD_TRANSLATE_Y = 24;
 const ANDROID_CAPTURE_STICKY_RELEASE_DISTANCE_RATIO = 0.2;
 const ANDROID_CAPTURE_STICKY_RELEASE_MIN_DISTANCE = 84;
 const ANDROID_CAPTURE_STICKY_RELEASE_MAX_DISTANCE = 140;
@@ -81,6 +74,8 @@ const AnimatedNoteCard = memo(function AnimatedNoteCard({
   prevProps.item.photoLocalUri === nextProps.item.photoLocalUri &&
   prevProps.item.isLivePhoto === nextProps.item.isLivePhoto &&
   prevProps.item.pairedVideoLocalUri === nextProps.item.pairedVideoLocalUri &&
+  prevProps.item.captureVariant === nextProps.item.captureVariant &&
+  prevProps.item.dualComposedPhotoLocalUri === nextProps.item.dualComposedPhotoLocalUri &&
   prevProps.item.locationName === nextProps.item.locationName &&
   prevProps.item.createdAt === nextProps.item.createdAt &&
   prevProps.item.isFavorite === nextProps.item.isFavorite &&
@@ -101,9 +96,6 @@ const AnimatedSharedPostCard = memo(function AnimatedSharedPostCard({
   t,
   onOpenSharedPost,
   isActive,
-  pageOffset,
-  scrollOffsetY,
-  snapHeight,
 }: {
   item: SharedPost;
   index: number;
@@ -118,52 +110,17 @@ const AnimatedSharedPostCard = memo(function AnimatedSharedPostCard({
   };
   t: TFunction;
   isActive: boolean;
-  pageOffset: number;
-  scrollOffsetY: SharedValue<number>;
-  snapHeight: number;
 }) {
-  const scale = useSharedValue(1);
-  const translateY = useSharedValue(0);
-
-  const animatedCardStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: translateY.value }, { scale: scale.value }],
-  }));
-  const pageAnimatedStyle = useAnimatedStyle(() => {
-    const distanceFromFocus = Math.min(
-      Math.abs(Math.max(0, scrollOffsetY.value) - pageOffset) / Math.max(snapHeight, 1),
-      1
-    );
-
-    return {
-      opacity: interpolate(distanceFromFocus, [0, 1], [1, INACTIVE_CARD_OPACITY], Extrapolation.CLAMP),
-      transform: [
-        {
-          translateY: interpolate(
-            distanceFromFocus,
-            [0, 1],
-            [0, INACTIVE_CARD_TRANSLATE_Y],
-            Extrapolation.CLAMP
-          ),
-        },
-        {
-          scale: interpolate(distanceFromFocus, [0, 1], [1, INACTIVE_CARD_SCALE], Extrapolation.CLAMP),
-        },
-      ],
-    };
-  }, [pageOffset, scrollOffsetY, snapHeight]);
-
   return (
-    <Animated.View style={pageAnimatedStyle}>
-      <Animated.View style={animatedCardStyle}>
-        <SharedPostMemoryCard
-          post={item}
-          onPress={onOpenSharedPost ? () => onOpenSharedPost(item.id) : undefined}
-          colors={colors}
-          t={t}
-          isActive={isActive}
-        />
-      </Animated.View>
-    </Animated.View>
+    <View>
+      <SharedPostMemoryCard
+        post={item}
+        onPress={onOpenSharedPost ? () => onOpenSharedPost(item.id) : undefined}
+        colors={colors}
+        t={t}
+        isActive={isActive}
+      />
+    </View>
   );
 }, (prevProps, nextProps) => (
   prevProps.index === nextProps.index &&
@@ -186,10 +143,7 @@ const AnimatedSharedPostCard = memo(function AnimatedSharedPostCard({
   prevProps.item.createdAt === nextProps.item.createdAt &&
   prevProps.item.authorDisplayName === nextProps.item.authorDisplayName &&
   prevProps.item.authorPhotoURLSnapshot === nextProps.item.authorPhotoURLSnapshot &&
-  prevProps.isActive === nextProps.isActive &&
-  prevProps.pageOffset === nextProps.pageOffset &&
-  prevProps.snapHeight === nextProps.snapHeight &&
-  prevProps.scrollOffsetY === nextProps.scrollOffsetY
+  prevProps.isActive === nextProps.isActive
 ));
 
 interface NotesFeedProps {
@@ -532,12 +486,6 @@ export default function NotesFeed({
   );
 
   useLayoutEffect(() => {
-    if (Platform.OS !== 'android') {
-      previousItemKeysRef.current = itemKeys;
-      previousHasEmptyStatePageRef.current = hasEmptyStatePage;
-      return;
-    }
-
     const previousItemKeys = previousItemKeysRef.current;
     const previousHasEmptyStatePage = previousHasEmptyStatePageRef.current;
     previousItemKeysRef.current = itemKeys;
@@ -548,6 +496,29 @@ export default function NotesFeed({
     }
 
     if (capturePageLocked) {
+      return;
+    }
+
+    if (itemKeys.length > previousItemKeys.length && settledPageIndexRef.current > 0) {
+      const previousVisibleItemKey = previousItemKeys[settledPageIndexRef.current - 1] ?? null;
+
+      if (previousVisibleItemKey) {
+        const nextVisibleItemIndex = itemKeys.indexOf(previousVisibleItemKey);
+
+        if (nextVisibleItemIndex < 0) {
+          return;
+        }
+
+        const nextOffset = (nextVisibleItemIndex + 1) * snapHeight;
+        if (Math.abs(nextOffset - settledOffsetYRef.current) >= SCROLL_SNAP_EPSILON) {
+          flatListRef.current?.scrollToOffset({ offset: nextOffset, animated: false });
+          applySettledOffset(nextOffset);
+        }
+        return;
+      }
+    }
+
+    if (Platform.OS !== 'android') {
       return;
     }
 
@@ -589,8 +560,11 @@ export default function NotesFeed({
     itemKeys,
     hasEmptyStatePage,
     capturePageLocked,
+    applySettledOffset,
+    flatListRef,
     getNearestSnapOffset,
     maybeCorrectSnapOffset,
+    snapHeight,
     syncNearestSnapOffset,
   ]);
 
@@ -645,9 +619,6 @@ export default function NotesFeed({
                 colors={colors}
                 t={t}
                 isActive={isActive}
-                pageOffset={(index + 1) * snapHeight}
-                scrollOffsetY={scrollOffsetY}
-                snapHeight={snapHeight}
               />
             </View>
           </View>
@@ -687,7 +658,6 @@ export default function NotesFeed({
       ownedSharedNoteIdSet,
       screenActive,
       snapHeight,
-      scrollOffsetY,
       t,
       topInset,
       pageBottomInset,

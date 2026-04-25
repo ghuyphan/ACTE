@@ -1,92 +1,71 @@
 import { Ionicons } from '@expo/vector-icons';
 import { memo } from 'react';
 import { Pressable, StyleSheet, Text } from 'react-native';
-import Reanimated, {
-  FadeInDown,
-  FadeOutUp,
-  useAnimatedStyle,
-  useSharedValue,
-  withSpring,
-} from 'react-native-reanimated';
-import { useReducedMotion } from '../../hooks/useReducedMotion';
 import { useTheme } from '../../hooks/useTheme';
+import CaptureFooterFrame from './CaptureFooterFrame';
 
 interface PlacePulseStripProps {
   label: string;
+  accessibilityLabel?: string;
+  iconName?: keyof typeof Ionicons.glyphMap;
   onPress?: () => void;
 }
 
-function PlacePulseStrip({ label, onPress }: PlacePulseStripProps) {
+function PlacePulseStrip({
+  label,
+  accessibilityLabel,
+  iconName = 'chevron-down',
+  onPress,
+}: PlacePulseStripProps) {
   const { colors } = useTheme();
-  const reduceMotionEnabled = useReducedMotion();
-  const pressScale = useSharedValue(1);
-
-  const animatedButtonStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: pressScale.value }],
-  }));
 
   return (
-    <Reanimated.View
-      entering={reduceMotionEnabled ? undefined : FadeInDown.duration(200)}
-      exiting={reduceMotionEnabled ? undefined : FadeOutUp.duration(120)}
-      style={styles.container}
-    >
-      <Reanimated.View style={[styles.buttonShell, animatedButtonStyle]}>
-        <Pressable
-          accessibilityRole={onPress ? 'button' : undefined}
-          disabled={!onPress}
-          onPress={onPress}
-          onPressIn={() => {
-            pressScale.value = withSpring(0.95, {
-              damping: 20,
-              stiffness: 320,
-              mass: 0.5,
-            });
-          }}
-          onPressOut={() => {
-            pressScale.value = withSpring(1, {
-              damping: 20,
-              stiffness: 320,
-              mass: 0.5,
-            });
-          }}
-          style={styles.button}
-        >
-          <Ionicons
-            name="chevron-down"
-            size={14}
-            color={colors.captureGlassPlaceholder}
-          />
+    <CaptureFooterFrame>
+      <Pressable
+        accessibilityRole={onPress ? 'button' : undefined}
+        accessibilityLabel={accessibilityLabel ?? label}
+        disabled={!onPress}
+        hitSlop={10}
+        onPress={onPress}
+        style={({ pressed }) => [
+          styles.button,
+          {
+            opacity: pressed ? 0.72 : 1,
+            transform: [{ scale: pressed ? 0.98 : 1 }],
+          },
+        ]}
+      >
+        <Ionicons
+          name={iconName}
+          size={14}
+          color={colors.captureGlassPlaceholder}
+        />
 
-          <Text
-            numberOfLines={1}
-            style={[styles.label, { color: colors.captureGlassPlaceholder }]}
-          >
-            {label}
-          </Text>
-        </Pressable>
-      </Reanimated.View>
-    </Reanimated.View>
+        <Text
+          numberOfLines={1}
+          style={[styles.label, { color: colors.captureGlassPlaceholder }]}
+        >
+          {label}
+        </Text>
+      </Pressable>
+    </CaptureFooterFrame>
   );
 }
 
 export default memo(PlacePulseStrip);
 
 const styles = StyleSheet.create({
-  container: {
-    width: '100%',
-    alignItems: 'center',
-  },
-  buttonShell: {
-    maxWidth: '88%',
-  },
   button: {
+    maxWidth: '88%',
+    minHeight: 36,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
+    paddingHorizontal: 6,
   },
   label: {
+    flexShrink: 1,
     fontSize: 12,
     lineHeight: 14,
     fontWeight: '700',

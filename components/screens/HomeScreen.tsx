@@ -39,6 +39,7 @@ import SharedManageSheet from '../home/SharedManageSheet';
 import { useHomeFeedViewModel } from '../../hooks/app/useHomeFeedViewModel';
 import { useHomeRefresh } from '../../hooks/app/useHomeRefresh';
 import { useHomeSharedActions } from '../../hooks/app/useHomeSharedActions';
+import { useStableHomeSharedFeedSnapshot } from '../../hooks/app/useStableHomeSharedFeedSnapshot';
 import { useAppSheetAlert } from '../../hooks/useAppSheetAlert';
 import { useActiveFeedTarget } from '../../hooks/useActiveFeedTarget';
 import { useAuth } from '../../hooks/useAuth';
@@ -109,6 +110,8 @@ const REMINDER_RECOVERY_PROMPT_KEY_PREFIX = 'noto.home.reminder-recovery-prompt.
 const PLACE_PULSE_RADIUS_METERS = 500;
 const SHARED_PLACE_PULSE_MAX_AVATARS = 3;
 const SHARED_PLACE_PULSE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+const CAPTURE_FOOTER_TRANSITION_GUARD_MS = 220;
+const EMPTY_SHARED_PLACE_PULSE_AVATARS: SharedPlacePulseAvatar[] = [];
 type SaveButtonState = 'idle' | 'saving' | 'success';
 type HomeFeedSurfaceProps = {
   blurBackgroundColor: string;
@@ -324,7 +327,7 @@ export default function HomeScreen() {
   } = useGeofence();
   const { alertProps, showAlert } = useAppSheetAlert();
   const { setActiveFeedTarget, clearActiveFeedTarget } = useActiveFeedTarget();
-  const { markHomeFeedReady, resetHomeFeedReady } = useHomeStartupReady();
+  const { homeFeedReady, markHomeFeedReady, resetHomeFeedReady } = useHomeStartupReady();
   const {
     clearFeedFocus,
     pendingFeedFocusRequest,
@@ -350,6 +353,8 @@ export default function HomeScreen() {
   const [settledSharedButtonMode, setSettledSharedButtonMode] = useState<'manage' | 'filter'>('manage');
   const [isFriendsFilterEnabled, setIsFriendsFilterEnabled] = useState(false);
   const [captureTarget, setCaptureTarget] = useState<'private' | 'shared'>('private');
+  const captureTargetTransitionLockedRef = useRef(false);
+  const captureTargetTransitionUnlockTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [selectedSharedAudienceUserId, setSelectedSharedAudienceUserId] = useState<string | null>(null);
   const [noteColor, setNoteColor] = useState<string | null>(null);
   const [showSharedManageSheet, setShowSharedManageSheet] = useState(false);
@@ -678,6 +683,18 @@ export default function HomeScreen() {
     permission?.granted === false &&
     permission.canAskAgain === false;
   const {
+    presentedSharedPosts,
+    requestPromoteSharedPosts,
+  } = useStableHomeSharedFeedSnapshot({
+    userUid: user?.uid,
+    notesPhase,
+    sharedEnabled,
+    sharedPhase,
+    sharedPosts,
+    startupInteractive: homeFeedReady,
+    presentationScope: isFriendsFilterEnabled ? 'friends' : 'all',
+  });
+  const {
     feedMode,
     bootstrapState,
     visibleFeedItems,
@@ -689,7 +706,7 @@ export default function HomeScreen() {
     notesPhase,
     sharedEnabled,
     sharedPhase,
-    sharedPosts,
+    sharedPosts: presentedSharedPosts,
     ownedSharedNoteIds: sharedOwnedNoteIds,
     syncBootstrapState,
     isFriendsFilterEnabled,
@@ -1253,6 +1270,14 @@ export default function HomeScreen() {
   }, []);
 
   useEffect(() => {
+    return () => {
+      if (captureTargetTransitionUnlockTimeoutRef.current) {
+        clearTimeout(captureTargetTransitionUnlockTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
     if (!user) {
       setCaptureTarget('private');
       setSelectedSharedAudienceUserId(null);
@@ -1329,6 +1354,11 @@ export default function HomeScreen() {
         return;
       }
 
+      if (target.kind === 'shared-post' && targetExistsInHomeData) {
+        requestPromoteSharedPosts();
+        return;
+      }
+
       if (targetExistsInHomeData) {
         return;
       }
@@ -1362,6 +1392,7 @@ export default function HomeScreen() {
     notesInitialLoadComplete,
     pendingFeedFocusRequestId,
     pendingFeedFocusTarget,
+    requestPromoteSharedPosts,
     sharedEnabled,
     sharedLoading,
     sharedPosts,
@@ -1377,6 +1408,7 @@ export default function HomeScreen() {
     onAfterLocalRefresh: () => {
       setSuppressedHomeNoteIds([]);
     },
+    onAfterNetworkRefresh: requestPromoteSharedPosts,
   });
   const handleRefreshHome = useCallback(() => {
     void refreshHome();
@@ -1589,7 +1621,7 @@ export default function HomeScreen() {
       return {
         nearbySharedPostCount: 0,
         targetPostId: null as string | null,
-        avatars: [] as SharedPlacePulseAvatar[],
+        avatars: EMPTY_SHARED_PLACE_PULSE_AVATARS,
         overflowCount: 0,
       };
     }
@@ -1713,7 +1745,28 @@ export default function HomeScreen() {
     openAuthForShare,
     showSharedUnavailableSheet,
     setCaptureTarget,
+    onAfterSharedFeedMutation: requestPromoteSharedPosts,
   });
+
+  const handleGuardedCaptureTargetChange = useCallback(
+    (nextTarget: 'private' | 'shared') => {
+      if (nextTarget === captureTarget || captureTargetTransitionLockedRef.current) {
+        return;
+      }
+
+      captureTargetTransitionLockedRef.current = true;
+      if (captureTargetTransitionUnlockTimeoutRef.current) {
+        clearTimeout(captureTargetTransitionUnlockTimeoutRef.current);
+      }
+      captureTargetTransitionUnlockTimeoutRef.current = setTimeout(() => {
+        captureTargetTransitionLockedRef.current = false;
+        captureTargetTransitionUnlockTimeoutRef.current = null;
+      }, CAPTURE_FOOTER_TRANSITION_GUARD_MS);
+
+      handleCaptureTargetChange(nextTarget);
+    },
+    [captureTarget, handleCaptureTargetChange]
+  );
 
   const captureFooterContent = useMemo(() => {
     if (captureTarget === 'shared' && captureAudienceFriends.length > 0) {
@@ -2849,7 +2902,7 @@ export default function HomeScreen() {
           radius={radius}
           onChangeRadius={setRadius}
           shareTarget={captureTarget}
-          onChangeShareTarget={handleCaptureTargetChange}
+          onChangeShareTarget={handleGuardedCaptureTargetChange}
           onResetDualCaptureSequence={handleResetDualCaptureSequence}
           onDoodleModeChange={handleCaptureDecorateModeChange}
           onGestureActiveChange={handleCaptureGestureActiveChange}
@@ -2882,7 +2935,7 @@ export default function HomeScreen() {
       availableBackCameraLenses,
       backCameraLens,
       backCameraLensZoomConfig,
-      handleCaptureTargetChange,
+      handleGuardedCaptureTargetChange,
       handleChangeBackCameraLens,
       handleChangeNoteColor,
       handleChangeCameraSubmode,

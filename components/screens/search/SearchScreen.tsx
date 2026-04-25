@@ -3,7 +3,7 @@ import { FlashList } from '@shopify/flash-list';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Href, Stack, useRouter } from 'expo-router';
-import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, useTransition } from 'react';
+import { useCallback, useDeferredValue, useEffect, useRef, useState, useTransition } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   ActivityIndicator,
@@ -34,10 +34,6 @@ function getPreviewText(note: Note, photoLabel: string, emptyLabel: string) {
   });
 }
 
-function sortNotesByCreatedAt(left: Note, right: Note) {
-  return new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime();
-}
-
 export default function SearchScreen() {
   const { t } = useTranslation();
   const { colors, isDark } = useTheme();
@@ -60,13 +56,6 @@ export default function SearchScreen() {
   const trimmedDeferredQuery = deferredQuery.trim();
   const hasQuery = trimmedActiveQuery.length > 0;
   const hasDeferredQuery = trimmedDeferredQuery.length > 0;
-  const discoveryNotes = useMemo(() => {
-    const favoriteNotes = notes.filter((note) => note.isFavorite).sort(sortNotesByCreatedAt);
-    const recentNotes = notes.filter((note) => !note.isFavorite).sort(sortNotesByCreatedAt);
-
-    return [...favoriteNotes, ...recentNotes].slice(0, 12);
-  }, [notes]);
-
   useEffect(() => {
     if (!hasQuery) {
       setFilteredNotes([]);
@@ -126,7 +115,7 @@ export default function SearchScreen() {
       ? resolvedQuery === trimmedActiveQuery
         ? filteredNotes
         : []
-      : discoveryNotes;
+      : [];
   const shouldShowSearchingState =
     hasQuery &&
     !searchFailed &&

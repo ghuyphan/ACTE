@@ -5,6 +5,7 @@ interface UseHomeRefreshParams {
   refreshNotes: (showLoading?: boolean) => Promise<void>;
   refreshSharedFeed?: () => Promise<void>;
   onAfterLocalRefresh?: () => void;
+  onAfterNetworkRefresh?: () => void;
 }
 
 export function useHomeRefresh({
@@ -12,6 +13,7 @@ export function useHomeRefresh({
   refreshNotes,
   refreshSharedFeed,
   onAfterLocalRefresh,
+  onAfterNetworkRefresh,
 }: UseHomeRefreshParams) {
   const [refreshing, setRefreshing] = useState(false);
 
@@ -28,6 +30,7 @@ export function useHomeRefresh({
       if (refreshSharedFeed) {
         try {
           await refreshSharedFeed();
+          onAfterNetworkRefresh?.();
         } catch (error) {
           console.warn('Shared feed refresh failed:', error);
         }
@@ -35,7 +38,13 @@ export function useHomeRefresh({
     } finally {
       setRefreshing(false);
     }
-  }, [hasNetworkRefreshWork, onAfterLocalRefresh, refreshNotes, refreshSharedFeed]);
+  }, [
+    hasNetworkRefreshWork,
+    onAfterLocalRefresh,
+    onAfterNetworkRefresh,
+    refreshNotes,
+    refreshSharedFeed,
+  ]);
 
   return {
     refreshing,

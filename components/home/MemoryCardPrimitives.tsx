@@ -157,21 +157,6 @@ function MetadataSurface({
   );
 }
 
-function MetadataAction({
-  color,
-  label,
-}: {
-  color: string;
-  label: string;
-}) {
-  return (
-    <View style={styles.metadataPillAction}>
-      <Text style={[styles.metadataActionText, { color }]}>{label}</Text>
-      <Ionicons name="chevron-forward" size={14} color={color} />
-    </View>
-  );
-}
-
 function MetadataIconButton({
   accessibilityLabel,
   children,
@@ -218,7 +203,6 @@ function estimateBadgeLabelWidth(label: string) {
 function ExpandableStatusBadge({
   accessibilityHint,
   accessibilityLabel,
-  backgroundColor,
   expanded,
   icon,
   label,
@@ -229,7 +213,6 @@ function ExpandableStatusBadge({
 }: {
   accessibilityHint: string;
   accessibilityLabel: string;
-  backgroundColor: string;
   expanded: boolean;
   icon: ReactNode;
   label: string;
@@ -238,6 +221,12 @@ function ExpandableStatusBadge({
   side: 'left' | 'right';
   testID: string;
 }) {
+  const { colors, isDark } = useTheme();
+  const glassPalette = getGlassSurfacePalette({
+    isDark,
+    borderColor: colors.border,
+    colors,
+  });
   const progress = useSharedValue(expanded ? 1 : 0);
   const labelWidth = useMemo(() => estimateBadgeLabelWidth(label), [label]);
 
@@ -292,9 +281,21 @@ function ExpandableStatusBadge({
               : styles.leftExpandableBadgeExpanded
             : null,
           animatedContainerStyle,
-          { backgroundColor },
+          {
+            borderColor: glassPalette.controlBorderColor,
+            backgroundColor: Platform.OS === 'android' ? glassPalette.controlBackgroundColor : 'transparent',
+          },
         ]}
       >
+        {Platform.OS !== 'android' ? (
+          <GlassView
+            pointerEvents="none"
+            style={StyleSheet.absoluteFill}
+            glassEffectStyle="regular"
+            colorScheme={isDark ? 'dark' : 'light'}
+            fallbackColor={glassPalette.fallbackControlBackgroundColor}
+          />
+        ) : null}
         {side === 'right' ? (
           <>
             <Animated.View style={[styles.badgeLabelWrap, animatedLabelStyle]}>
@@ -586,13 +587,12 @@ export function NoteMemoryCard({
           )}
         </View>
 
-        {note.isFavorite || note.isLivePhoto ? (
+        {note.isFavorite || note.isLivePhoto || isSharedByMe ? (
           <View style={styles.badgeStack}>
             {note.isFavorite ? (
               <ExpandableStatusBadge
                 accessibilityHint={statusDisclosureHint}
                 accessibilityLabel={favoriteStatusA11yLabel}
-                backgroundColor={colors.card}
                 expanded={expandedBadgeKey === 'favorite'}
                 icon={<Ionicons name="heart" size={16} color={colors.danger} />}
                 label={favoriteStatusLabel}
@@ -606,7 +606,6 @@ export function NoteMemoryCard({
               <ExpandableStatusBadge
                 accessibilityHint={statusDisclosureHint}
                 accessibilityLabel={livePhotoStatusA11yLabel}
-                backgroundColor={colors.card}
                 expanded={expandedBadgeKey === 'live-photo'}
                 icon={<LivePhotoIcon size={16} color={colors.primary} />}
                 label={livePhotoPreviewHintLabel}
@@ -616,22 +615,19 @@ export function NoteMemoryCard({
                 testID="note-memory-live-badge"
               />
             ) : null}
-          </View>
-        ) : null}
-        {isSharedByMe ? (
-          <View style={styles.leftBadge}>
-            <ExpandableStatusBadge
-              accessibilityHint={statusDisclosureHint}
-              accessibilityLabel={sharedStatusA11yLabel}
-              backgroundColor={colors.card}
-              expanded={expandedBadgeKey === 'shared'}
-              icon={<Ionicons name="people-outline" size={16} color={colors.secondaryText} />}
-              label={sharedStatusLabel}
-              labelColor={colors.secondaryText}
-              onPress={() => toggleExpandedBadge('shared')}
-              side="left"
-              testID="note-memory-shared-badge"
-            />
+            {isSharedByMe ? (
+              <ExpandableStatusBadge
+                accessibilityHint={statusDisclosureHint}
+                accessibilityLabel={sharedStatusA11yLabel}
+                expanded={expandedBadgeKey === 'shared'}
+                icon={<Ionicons name="people-outline" size={16} color={colors.secondaryText} />}
+                label={sharedStatusLabel}
+                labelColor={colors.secondaryText}
+                onPress={() => toggleExpandedBadge('shared')}
+                side="right"
+                testID="note-memory-shared-badge"
+              />
+            ) : null}
           </View>
         ) : null}
       </View>
@@ -743,12 +739,6 @@ export function SharedPostMemoryCard({
         <View style={[styles.metadataPillDot, { backgroundColor: colors.secondaryText }]} />
         <Text style={[styles.metadataPillDate, { color: colors.secondaryText }]}>{dateStr}</Text>
       </View>
-      {onPress ? (
-        <MetadataAction
-          color={colors.primary}
-          label={t('home.openDetails', 'Details')}
-        />
-      ) : null}
     </View>
   );
 
@@ -757,6 +747,9 @@ export function SharedPostMemoryCard({
         defaultValue: 'Open shared post details for {{location}}',
         location: placeLabel,
       })
+    : undefined;
+  const sharedCardIconAccessibilityLabel = onPress
+    ? t('shared.openSharedDetailsButtonA11y', 'Open shared details')
     : undefined;
 
   const sharedCardBody = (
@@ -790,31 +783,37 @@ export function SharedPostMemoryCard({
       </View>
 
       <View style={[styles.metaContainer, { width: resolvedCardSize }]}>
-        <MetadataContainer>
-          {sharedMetadata}
-        </MetadataContainer>
+        {onPress ? (
+          <View style={styles.noteMetaRow}>
+            <MetadataContainer
+              accessibilityLabel={sharedCardAccessibilityLabel}
+              onPress={onPress}
+              containerStyle={styles.noteMetaPrimaryAction}
+              pillStyle={styles.noteMetadataPill}
+            >
+              {sharedMetadata}
+            </MetadataContainer>
+            {sharedCardIconAccessibilityLabel ? (
+              <MetadataIconButton
+                accessibilityLabel={sharedCardIconAccessibilityLabel}
+                onPress={onPress}
+              >
+                <Ionicons name="chevron-forward" size={16} color={colors.primary} />
+              </MetadataIconButton>
+            ) : null}
+          </View>
+        ) : (
+          <MetadataContainer>
+            {sharedMetadata}
+          </MetadataContainer>
+        )}
       </View>
     </View>
   );
 
   const content = (
     <View style={[styles.cardRoot, containerStyle, { width: resolvedCardSize }]}>
-      {onPress ? (
-        <Pressable
-          accessibilityLabel={sharedCardAccessibilityLabel}
-          accessibilityRole="button"
-          hitSlop={8}
-          onPress={onPress}
-          style={({ pressed }) => [
-            styles.sharedCardPressable,
-            pressed ? styles.sharedCardPressablePressed : null,
-          ]}
-        >
-          {sharedCardBody}
-        </Pressable>
-      ) : (
-        sharedCardBody
-      )}
+      {sharedCardBody}
     </View>
   );
   return content;
@@ -836,14 +835,10 @@ const styles = StyleSheet.create({
     height: 36,
     minWidth: 36,
     borderRadius: 18,
+    borderWidth: glassTokens.borderWidth,
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 4,
-    elevation: 3,
-    backgroundColor: '#fff',
+    overflow: 'hidden',
   },
   badgePressable: {
     borderRadius: 18,
@@ -859,11 +854,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row-reverse',
     alignItems: 'center',
     gap: 8,
-  },
-  leftBadge: {
-    position: 'absolute',
-    top: 18,
-    left: 24,
   },
   metaContainer: {
     alignSelf: 'center',
@@ -930,13 +920,6 @@ const styles = StyleSheet.create({
   },
   sharedCardWrap: {
     alignSelf: 'center',
-  },
-  sharedCardPressable: {
-    alignSelf: 'center',
-  },
-  sharedCardPressablePressed: {
-    opacity: 0.92,
-    transform: [{ scale: 0.992 }],
   },
   sharedBadge: {
     position: 'absolute',
@@ -1055,17 +1038,5 @@ const styles = StyleSheet.create({
     gap: 7,
     minWidth: 0,
     flexShrink: 1,
-  },
-  metadataPillAction: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    flexShrink: 0,
-    marginLeft: 10,
-  },
-  metadataActionText: {
-    fontSize: 13,
-    fontWeight: '700',
-    fontFamily: 'Noto Sans',
   },
 });

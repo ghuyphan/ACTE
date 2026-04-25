@@ -91,8 +91,19 @@ jest.mock('expo-router', () => {
 
 jest.mock('react-i18next', () => ({
   useTranslation: () => ({
-    t: (key: string, fallback?: string, options?: { count?: number }) =>
-      fallback?.replace('{{count}}', String(options?.count ?? '')) ?? fallback ?? key,
+    t: (
+      key: string,
+      fallback?: string | { defaultValue?: string; count?: number; location?: string },
+      options?: { count?: number }
+    ) => {
+      const defaultValue = typeof fallback === 'string' ? fallback : fallback?.defaultValue;
+      const count = options?.count ?? (typeof fallback === 'object' ? fallback.count : undefined);
+      const location = typeof fallback === 'object' ? fallback.location : undefined;
+
+      return (defaultValue ?? key)
+        .replace('{{count}}', String(count ?? ''))
+        .replace('{{location}}', String(location ?? ''));
+    },
   }),
 }));
 
@@ -178,7 +189,7 @@ describe('SearchScreen', () => {
     mockStackScreenOptions.length = 0;
   });
 
-  it('shows the search header and discovery notes before a query is entered', () => {
+  it('shows the search header and an empty prompt before a query is entered', () => {
     const { getByTestId, getByText, queryByTestId } = render(
       <FeedFocusProvider>
         <SearchScreen />
@@ -194,8 +205,9 @@ describe('SearchScreen', () => {
       })
     );
     expect(queryByTestId('search-discovery-header')).toBeNull();
-    expect(getByText('District 3')).toBeTruthy();
-    expect(getByText('District 1')).toBeTruthy();
+    expect(getByText('Search notes...')).toBeTruthy();
+    expect(getByText('2 notes saved')).toBeTruthy();
+    expect(mockSearchNotes).not.toHaveBeenCalled();
   });
 
   it('does not match photo file uris when searching', async () => {

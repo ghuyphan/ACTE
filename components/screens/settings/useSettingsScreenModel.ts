@@ -189,20 +189,20 @@ export function useSettingsScreenModel() {
     if (tier === 'plus') {
       return t(
         'settings.plusActiveHint',
-        'Noto Plus is active. Unlimited photo notes, premium photo filters, interactive hologram cards, and premium finishes are unlocked.'
+        'Plus is active. Unlimited photo memories and premium styles are unlocked.'
       );
     }
 
     if (photoNoteLimit === null) {
       return t(
         'settings.plusHint',
-        'Upgrade to Noto Plus to unlock unlimited photo notes, premium photo filters, interactive hologram cards, and premium finishes.'
+        'Upgrade for unlimited photo memories, better Live Photos, and premium styles.'
       );
     }
 
     return t(
       'settings.plusHintWithLimit',
-      'Free plan includes {{count}} photo memories per day. Upgrade to Noto Plus for unlimited photo saves, premium photo filters, interactive hologram cards, and premium finishes.',
+      'Free includes {{count}} photo memories per day. Upgrade for unlimited saves and premium styles.',
       { count: photoNoteLimit }
     );
   }, [photoNoteLimit, t, tier]);
@@ -210,6 +210,10 @@ export function useSettingsScreenModel() {
   const socialPushValue = useMemo(() => {
     if (socialPushStatus === 'granted') {
       return t('settings.friendActivityNotificationsOn', 'On');
+    }
+
+    if (socialPushStatus === 'blocked') {
+      return t('settings.friendActivityNotificationsNeedsSettings', 'Needs settings');
     }
 
     return t('settings.friendActivityNotificationsOff', 'Off');
@@ -262,6 +266,20 @@ export function useSettingsScreenModel() {
   }, [isAuthAvailable, t, user]);
 
   const promptClearAll = () => {
+    if (notes.length === 0) {
+      showAlert({
+        title: t('settings.clearAllEmptyTitle', 'No memories to clear'),
+        message: t(
+          'settings.clearAllEmptyMsg',
+          'Your journal is already empty on this device.'
+        ),
+        primaryAction: {
+          label: t('common.done', 'Done'),
+        },
+      });
+      return;
+    }
+
     showAlert({
       variant: 'error',
       title: t('settings.clearAllTitle', 'Clear All Notes'),
@@ -318,6 +336,9 @@ export function useSettingsScreenModel() {
     isDark,
     isPurchaseAvailable,
     languageLabel,
+    noteCountLabel: t('settings.noteCountValue', '{{count}} memories', {
+      count: notes.length,
+    }),
     notes,
     openAccountScreen,
     openPlusScreen,
@@ -338,7 +359,7 @@ export function useSettingsScreenModel() {
       user &&
       sharedFeedEnabled
     ),
-    showSyncEntry: Boolean(user),
+    showSyncEntry: Boolean(isAuthAvailable),
     showSync,
     showTheme,
     socialPushHint,

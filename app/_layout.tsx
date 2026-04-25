@@ -16,8 +16,10 @@ import {
 } from '../components/app/rootStackOptions';
 import { useNotesStore } from '../hooks/useNotes';
 import { useAuth } from '../hooks/useAuth';
+import { useSharedFeedStore } from '../hooks/useSharedFeed';
 import { useTheme } from '../hooks/useTheme';
 import { useAppSplashGate } from '../hooks/app/useAppSplashGate';
+import { useHomeInitialFeedGate } from '../hooks/app/useHomeInitialFeedGate';
 import { useAppNotificationRouting } from '../hooks/app/useAppNotificationRouting';
 import { useStartupInteraction } from '../hooks/app/useHomeStartupReady';
 import { useAppStartupBootstrap } from '../hooks/app/useAppStartupBootstrap';
@@ -34,9 +36,13 @@ SplashScreen.preventAutoHideAsync();
 
 function AppContent() {
   const { colors, isDark, themeReady } = useTheme();
-  const { isReady: authReady } = useAuth();
+  const { isReady: authReady, user } = useAuth();
   const { startupInteractive, markStartupInteractive, resetStartupInteraction } = useStartupInteraction();
   const { phase: notesPhase } = useNotesStore();
+  const {
+    enabled: sharedEnabled,
+    phase: sharedPhase,
+  } = useSharedFeedStore();
   const { t } = useTranslation();
   const {
     isDatabaseReady,
@@ -49,8 +55,15 @@ function AppContent() {
   useAppWidgetRefresh({ enabled: isDatabaseReady });
   useAppNotificationRouting();
   useSocialPushRegistration();
+  const { ready: homeInitialFeedReady } = useHomeInitialFeedGate({
+    userUid: user?.uid,
+    notesPhase,
+    sharedEnabled,
+    sharedPhase,
+  });
   const { startupGateReady } = useAppSplashGate({
     authReady,
+    homeInitialFeedReady,
     isDatabaseReady,
     isStartupRouteReady,
     notesReady: notesPhase !== 'bootstrapping',

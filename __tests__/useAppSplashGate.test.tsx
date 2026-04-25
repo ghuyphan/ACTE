@@ -49,6 +49,41 @@ describe('useAppSplashGate', () => {
 
     rerender({
       authReady: true,
+      homeInitialFeedReady: true,
+      isDatabaseReady: true,
+      isStartupRouteReady: true,
+      notesReady: true,
+      startupError: null,
+      themeReady: true,
+    });
+
+    await waitFor(() => {
+      expect(mockHideAsync).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it('keeps the splash up until the initial Home feed gate is released', async () => {
+    const { rerender } = renderHook(
+      (props: Parameters<typeof useAppSplashGate>[0]) => useAppSplashGate(props),
+      {
+        initialProps: {
+          authReady: true,
+          homeInitialFeedReady: false,
+          isDatabaseReady: true,
+          isStartupRouteReady: true,
+          notesReady: true,
+          startupError: null,
+          themeReady: true,
+        },
+      }
+    );
+
+    await act(async () => undefined);
+    expect(mockHideAsync).not.toHaveBeenCalled();
+
+    rerender({
+      authReady: true,
+      homeInitialFeedReady: true,
       isDatabaseReady: true,
       isStartupRouteReady: true,
       notesReady: true,
@@ -65,6 +100,7 @@ describe('useAppSplashGate', () => {
     renderHook(() =>
       useAppSplashGate({
         authReady: true,
+        homeInitialFeedReady: false,
         isDatabaseReady: false,
         isStartupRouteReady: true,
         notesReady: false,

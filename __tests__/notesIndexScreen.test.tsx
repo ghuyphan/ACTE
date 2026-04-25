@@ -391,6 +391,18 @@ describe('NotesIndexScreen', () => {
         isFavorite: false,
         createdAt: '2026-03-07T00:00:00.000Z',
         updatedAt: null,
+      },
+      {
+        id: 'text-2',
+        type: 'text',
+        content: 'Another text-only memory',
+        locationName: 'District 3',
+        latitude: 10.7,
+        longitude: 106.6,
+        radius: 150,
+        isFavorite: false,
+        createdAt: '2026-03-07T08:00:00.000Z',
+        updatedAt: null,
       }
     );
 
@@ -405,6 +417,7 @@ describe('NotesIndexScreen', () => {
     );
     expect(getByTestId('notes-recap-day-secondary-photo-2026-03-11')).toBeTruthy();
     expect(getByTestId('notes-recap-day-text-body-2026-03-07')).toBeTruthy();
+    expect(getByTestId('notes-recap-day-overflow-2026-03-07')).toBeTruthy();
   });
 
   it('renders the active mode pill with width immediately', () => {

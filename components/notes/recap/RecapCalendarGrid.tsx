@@ -121,6 +121,8 @@ const RecapCalendarDayCell = memo(function RecapCalendarDayCell({
         style={mergeStyles(
           styles.dayOverflowBadge,
           compact ? styles.dayOverflowBadgeCompact : null,
+          contentMode === 'text' ? styles.dayOverflowBadgeTextTile : null,
+          contentMode === 'text' && compact ? styles.dayOverflowBadgeTextTileCompact : null,
           {
             backgroundColor: palette.primary,
             borderColor: palette.card,
@@ -130,7 +132,9 @@ const RecapCalendarDayCell = memo(function RecapCalendarDayCell({
         <Text
           style={mergeStyles(
             styles.dayOverflowBadgeText,
-            compact ? styles.dayOverflowBadgeTextCompact : null
+            compact ? styles.dayOverflowBadgeTextCompact : null,
+            contentMode === 'text' ? styles.dayOverflowBadgeTextTileLabel : null,
+            contentMode === 'text' && compact ? styles.dayOverflowBadgeTextTileLabelCompact : null
           )}
           adjustsFontSizeToFit
           minimumFontScale={0.82}
@@ -581,6 +585,7 @@ const styles = StyleSheet.create({
   },
   dayTileText: {
     padding: 0,
+    overflow: 'visible',
   },
   dayTileMarker: {
     paddingHorizontal: 6,
@@ -701,6 +706,22 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     paddingHorizontal: 3,
   },
+  dayOverflowBadgeTextTile: {
+    top: -8,
+    right: -8,
+    minWidth: 20,
+    maxWidth: 30,
+    height: 20,
+    borderRadius: 10,
+  },
+  dayOverflowBadgeTextTileCompact: {
+    top: -7,
+    right: -6,
+    minWidth: 18,
+    maxWidth: 26,
+    height: 18,
+    borderRadius: 9,
+  },
   dayOverflowBadgeText: {
     ...Typography.pill,
     fontSize: 8,
@@ -713,6 +734,14 @@ const styles = StyleSheet.create({
   dayOverflowBadgeTextCompact: {
     fontSize: 7,
     lineHeight: 8,
+  },
+  dayOverflowBadgeTextTileLabel: {
+    fontSize: 9,
+    lineHeight: 10,
+  },
+  dayOverflowBadgeTextTileLabelCompact: {
+    fontSize: 8,
+    lineHeight: 9,
   },
   markerRow: {
     flexDirection: 'row',

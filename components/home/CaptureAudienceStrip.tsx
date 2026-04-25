@@ -1,20 +1,11 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import type { TFunction } from 'i18next';
-import { memo, useEffect, useMemo } from 'react';
-import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
-import Reanimated, {
-  FadeInDown,
-  FadeOutUp,
-  interpolateColor,
-  useAnimatedStyle,
-  useSharedValue,
-  withSpring,
-  withTiming,
-} from 'react-native-reanimated';
-import { useReducedMotion } from '../../hooks/useReducedMotion';
+import { memo, useCallback, useMemo } from 'react';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useTheme } from '../../hooks/useTheme';
 import type { FriendConnection } from '../../services/sharedFeedService';
+import CaptureFooterFrame from './CaptureFooterFrame';
 
 interface CaptureAudienceStripProps {
   friends: FriendConnection[];
@@ -34,16 +25,15 @@ type AudienceItem = {
 };
 
 interface AudienceChipProps {
+  id: string;
   label: string;
   selected: boolean;
   accessibilityLabel: string;
   avatarPhotoUrl?: string | null;
   avatarLabel?: string;
   isAllChip?: boolean;
-  onPress: () => void;
+  onSelectFriendUid: (friendUid: string | null) => void;
 }
-
-const AnimatedText = Reanimated.createAnimatedComponent(Text);
 
 function getFriendLabel(friend: FriendConnection, fallback: string) {
   const username = friend.username?.trim();
@@ -60,139 +50,98 @@ function getFriendLabel(friend: FriendConnection, fallback: string) {
 }
 
 const AudienceChip = memo(function AudienceChip({
+  id,
   label,
   selected,
   accessibilityLabel,
   avatarPhotoUrl = null,
   avatarLabel = '',
   isAllChip = false,
-  onPress,
+  onSelectFriendUid,
 }: AudienceChipProps) {
   const { colors, isDark } = useTheme();
-  const reduceMotionEnabled = useReducedMotion();
-  const activeProgress = useSharedValue(selected ? 1 : 0);
-  const pressScale = useSharedValue(1);
-
-  useEffect(() => {
-    activeProgress.value = withTiming(selected ? 1 : 0, {
-      duration: reduceMotionEnabled ? 0 : 180,
-    });
-  }, [activeProgress, reduceMotionEnabled, selected]);
-
-  const animatedChipStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: pressScale.value }],
-  }));
-
-  const animatedAvatarWrapStyle = useAnimatedStyle(() => ({
-    backgroundColor: interpolateColor(
-      activeProgress.value,
-      [0, 1],
-      [
-        isDark ? colors.chromeSurface : colors.glassBackdrop,
-        `${colors.primary}1A`,
-      ]
-    ),
-    borderColor: interpolateColor(
-      activeProgress.value,
-      [0, 1],
-      [
-        isDark ? colors.chromeBorder : colors.border,
-        colors.primary,
-      ]
-    ),
-    transform: [
-      {
-        scale: reduceMotionEnabled
-          ? 1
-          : activeProgress.value > 0.5
-            ? 1.04
-            : 1,
-      },
-    ],
-  }));
-
-  const animatedLabelStyle = useAnimatedStyle(() => ({
-    color: interpolateColor(
-      activeProgress.value,
-      [0, 1],
-      [colors.captureGlassText, colors.primary]
-    ),
-    opacity: withTiming(activeProgress.value > 0 ? 1 : 0.82, {
-      duration: reduceMotionEnabled ? 0 : 140,
-    }),
-  }));
+  const inactiveAvatarBackground = isDark ? colors.chromeSurface : colors.glassBackdrop;
+  const inactiveAvatarBorder = isDark ? colors.chromeBorder : colors.border;
+  const handlePress = useCallback(() => {
+    onSelectFriendUid(isAllChip ? null : id);
+  }, [id, isAllChip, onSelectFriendUid]);
 
   return (
-    <View style={styles.chipShell}>
-      <Reanimated.View style={[styles.chip, animatedChipStyle]}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityState={{ selected }}
-          accessibilityLabel={accessibilityLabel}
-          onPress={onPress}
-          onPressIn={() => {
-            pressScale.value = withSpring(0.95, {
-              damping: 20,
-              stiffness: 320,
-              mass: 0.5,
-            });
-          }}
-          onPressOut={() => {
-            pressScale.value = withSpring(1, {
-              damping: 20,
-              stiffness: 320,
-              mass: 0.5,
-            });
-          }}
-          style={styles.pressable}
-        >
-          <Reanimated.View style={[styles.avatarWrap, animatedAvatarWrapStyle]}>
-            {isAllChip ? (
-              <View
-                style={[
-                  styles.allChipAvatar,
-                  {
-                    backgroundColor: selected ? colors.primary : 'transparent',
-                    borderColor: selected ? `${colors.primary}66` : 'transparent',
-                  },
-                ]}
-              >
-                <Ionicons
-                  name="people"
-                  size={14}
-                  color={selected ? '#1C1C1E' : colors.captureGlassText}
-                />
-              </View>
-            ) : avatarPhotoUrl ? (
-              <Image source={{ uri: avatarPhotoUrl }} style={styles.friendAvatar} contentFit="cover" />
-            ) : (
-              <View
-                style={[
-                  styles.friendAvatar,
-                  {
-                    backgroundColor: selected ? colors.primarySoft : 'rgba(255,255,255,0.08)',
-                  },
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.friendAvatarLabel,
-                    {
-                      color: selected ? colors.primary : colors.captureGlassText,
-                    },
-                  ]}
-                >
-                  {avatarLabel}
-                </Text>
-              </View>
-            )}
-          </Reanimated.View>
-          <AnimatedText numberOfLines={1} style={[styles.chipLabel, animatedLabelStyle]}>
-            {label}
-          </AnimatedText>
-        </Pressable>
-      </Reanimated.View>
-    </View>
+    <Pressable
+      accessibilityRole="button"
+      accessibilityState={{ selected }}
+      accessibilityLabel={accessibilityLabel}
+      onPress={handlePress}
+      style={({ pressed }) => [
+        styles.chip,
+        {
+          opacity: pressed ? 0.72 : 1,
+          transform: [{ scale: pressed ? 0.98 : 1 }],
+        },
+      ]}
+    >
+      <View
+        style={[
+          styles.avatarWrap,
+          {
+            backgroundColor: selected ? `${colors.primary}1A` : inactiveAvatarBackground,
+            borderColor: selected ? colors.primary : inactiveAvatarBorder,
+          },
+        ]}
+      >
+        {isAllChip ? (
+          <View
+            style={[
+              styles.allChipAvatar,
+              {
+                backgroundColor: selected ? colors.primary : 'transparent',
+                borderColor: selected ? `${colors.primary}66` : 'transparent',
+              },
+            ]}
+          >
+            <Ionicons
+              name="people"
+              size={14}
+              color={selected ? '#1C1C1E' : colors.captureGlassText}
+            />
+          </View>
+        ) : avatarPhotoUrl ? (
+          <Image source={{ uri: avatarPhotoUrl }} style={styles.friendAvatar} contentFit="cover" />
+        ) : (
+          <View
+            style={[
+              styles.friendAvatar,
+              {
+                backgroundColor: selected ? colors.primarySoft : 'rgba(255,255,255,0.08)',
+              },
+            ]}
+          >
+            <Text
+              style={[
+                styles.friendAvatarLabel,
+                {
+                  color: selected ? colors.primary : colors.captureGlassText,
+                },
+              ]}
+            >
+              {avatarLabel}
+            </Text>
+          </View>
+        )}
+      </View>
+      <Text
+        numberOfLines={1}
+        style={[
+          styles.chipLabel,
+          {
+            color: selected ? colors.primary : colors.captureGlassText,
+            opacity: selected ? 1 : 0.82,
+          },
+        ]}
+      >
+        {label}
+      </Text>
+    </Pressable>
   );
 });
 
@@ -202,8 +151,6 @@ function CaptureAudienceStrip({
   onSelectFriendUid,
   t,
 }: CaptureAudienceStripProps) {
-  const { colors } = useTheme();
-  const reduceMotionEnabled = useReducedMotion();
   const friendFallback = t('shared.friendFallback', 'Friend');
   const audienceItems = useMemo<AudienceItem[]>(
     () => [
@@ -233,33 +180,31 @@ function CaptureAudienceStrip({
   );
 
   return (
-    <Reanimated.View
-      entering={reduceMotionEnabled ? undefined : FadeInDown.duration(200)}
-      exiting={reduceMotionEnabled ? undefined : FadeOutUp.duration(120)}
-      style={styles.container}
-    >
-      <Text style={[styles.label, { color: colors.captureGlassPlaceholder }]}>
-        {t('capture.shareAudienceLabel', 'Share with')}
-      </Text>
-      <FlatList
-        horizontal
-        data={audienceItems}
-        keyExtractor={(item) => item.id}
-        renderItem={({ item }) => (
-          <AudienceChip
-            label={item.label}
-            selected={item.selected}
-            accessibilityLabel={item.accessibilityLabel}
-            avatarPhotoUrl={item.isAllChip ? null : item.avatarPhotoUrl}
-            avatarLabel={item.isAllChip ? undefined : item.avatarLabel}
-            isAllChip={item.isAllChip}
-            onPress={() => onSelectFriendUid(item.isAllChip ? null : item.id)}
-          />
-        )}
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.row}
-      />
-    </Reanimated.View>
+    <CaptureFooterFrame>
+      <View style={styles.container}>
+        <ScrollView
+          horizontal
+          style={styles.audienceScroll}
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.row}
+          keyboardShouldPersistTaps="handled"
+        >
+          {audienceItems.map((item) => (
+            <AudienceChip
+              id={item.id}
+              key={item.id}
+              label={item.label}
+              selected={item.selected}
+              accessibilityLabel={item.accessibilityLabel}
+              avatarPhotoUrl={item.isAllChip ? null : item.avatarPhotoUrl}
+              avatarLabel={item.isAllChip ? undefined : item.avatarLabel}
+              isAllChip={item.isAllChip}
+              onSelectFriendUid={onSelectFriendUid}
+            />
+          ))}
+        </ScrollView>
+      </View>
+    </CaptureFooterFrame>
   );
 }
 
@@ -268,57 +213,53 @@ export default memo(CaptureAudienceStrip);
 const styles = StyleSheet.create({
   container: {
     width: '100%',
+    height: 58,
+    flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    justifyContent: 'center',
   },
-  label: {
-    fontSize: 11,
-    lineHeight: 13,
-    fontWeight: '700',
-    fontFamily: 'Noto Sans',
+  audienceScroll: {
+    flexGrow: 0,
+    flexShrink: 1,
+    maxWidth: '88%',
   },
   row: {
-    paddingHorizontal: 10,
-    paddingVertical: 3,
-    gap: 8,
-  },
-  chipShell: {
-    width: 52,
+    alignItems: 'center',
+    paddingRight: 12,
+    gap: 10,
   },
   chip: {
-    width: 52,
-  },
-  pressable: {
+    width: 58,
     alignItems: 'center',
-    gap: 4,
+    gap: 5,
   },
   avatarWrap: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
     padding: 2,
   },
   allChipAvatar: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
   friendAvatar: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
   },
   friendAvatarLabel: {
-    fontSize: 14,
-    lineHeight: 16,
+    fontSize: 13,
+    lineHeight: 15,
     fontWeight: '800',
     fontFamily: 'Noto Sans',
   },

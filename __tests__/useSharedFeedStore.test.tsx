@@ -66,7 +66,7 @@ const mockDownloadPhotoFromStorage = jest.fn();
 const mockDownloadPairedVideoFromStorage = jest.fn();
 let latestSharedFeedSubscriptionHandlers:
   | {
-      onSnapshot: (snapshot: { friends: any[]; sharedPosts: any[]; activeInvite: any }) => void;
+      onSnapshot: (snapshot: { friends: any[]; sharedPosts: any[]; activeInvite: any }) => void | Promise<void>;
       onError?: (error: unknown) => void;
     }
   | null = null;
@@ -221,8 +221,14 @@ describe('useSharedFeedStore', () => {
     };
     mockGetCachedSharedFeedSnapshot.mockImplementation(async () => mockCachedSnapshot);
     mockRefreshSharedFeed.mockImplementation(async () => mockRefreshSnapshot);
-    mockDownloadPhotoFromStorage.mockResolvedValue('file:///shared/friend-photo-1.jpg');
-    mockDownloadPairedVideoFromStorage.mockResolvedValue('file:///shared/friend-photo-1.mov');
+    mockDownloadPhotoFromStorage.mockImplementation(
+      async (_bucket: string, _path: string, _localId: string, options?: { preferCachedOnly?: boolean }) =>
+        options?.preferCachedOnly ? null : 'file:///shared/friend-photo-1.jpg'
+    );
+    mockDownloadPairedVideoFromStorage.mockImplementation(
+      async (_bucket: string, _path: string, _localId: string, options?: { preferCachedOnly?: boolean }) =>
+        options?.preferCachedOnly ? null : 'file:///shared/friend-photo-1.mov'
+    );
     latestSharedFeedSubscriptionHandlers = null;
     mockSubscribeToSharedFeed.mockImplementation((_user: unknown, handlers: any) => {
       latestSharedFeedSubscriptionHandlers = handlers;
@@ -358,7 +364,7 @@ describe('useSharedFeedStore', () => {
     });
 
     await act(async () => {
-      latestSharedFeedSubscriptionHandlers?.onSnapshot({
+      await latestSharedFeedSubscriptionHandlers?.onSnapshot({
         friends: [
           {
             userId: 'friend-1',
@@ -436,7 +442,7 @@ describe('useSharedFeedStore', () => {
     });
 
     await act(async () => {
-      latestSharedFeedSubscriptionHandlers?.onSnapshot({
+      await latestSharedFeedSubscriptionHandlers?.onSnapshot({
         friends: [],
         sharedPosts: [createSharedPost({ id: 'fresh-live-post', sourceNoteId: 'fresh-note' })],
         activeInvite: null,
@@ -474,7 +480,7 @@ describe('useSharedFeedStore', () => {
     });
 
     await act(async () => {
-      latestSharedFeedSubscriptionHandlers?.onSnapshot({
+      await latestSharedFeedSubscriptionHandlers?.onSnapshot({
         friends: [],
         sharedPosts: [
           createSharedPost({
@@ -491,7 +497,7 @@ describe('useSharedFeedStore', () => {
     expect(result.current.ownedSharedNoteIds).toEqual(['note-1']);
   });
 
-  it('hydrates shared photo media into local state and patches the cached media fields', async () => {
+  it('hydrates cached shared photo media into local state and patches the cached media fields', async () => {
     mockCachedSnapshot = {
       friends: [],
       sharedPosts: [
@@ -532,12 +538,19 @@ describe('useSharedFeedStore', () => {
     expect(mockDownloadPhotoFromStorage).toHaveBeenCalledWith(
       'shared-post-media',
       'friend-1/friend-photo-1.jpg',
-      'friend-photo-1'
+      'friend-photo-1',
+      { preferCachedOnly: true }
     );
     expect(mockDownloadPairedVideoFromStorage).toHaveBeenCalledWith(
       'shared-post-media',
       'friend-1/friend-photo-1.mov',
-      'friend-photo-1-motion'
+      'friend-photo-1-motion',
+      { preferCachedOnly: true }
+    );
+    expect(mockDownloadPhotoFromStorage).not.toHaveBeenCalledWith(
+      'shared-post-media',
+      'friend-1/friend-photo-1.jpg',
+      'friend-photo-1'
     );
     expect(mockPatchCachedSharedPostMedia).toHaveBeenCalledWith(
       'me',
@@ -636,7 +649,8 @@ describe('useSharedFeedStore', () => {
       lastUpdatedAt: '2026-03-24T00:00:00.000Z',
     };
     mockDownloadPhotoFromStorage.mockImplementation(
-      async (_bucket: string, path: string) => `file:///shared/${path}`
+      async (_bucket: string, path: string, _localId: string, options?: { preferCachedOnly?: boolean }) =>
+        options?.preferCachedOnly ? null : `file:///shared/${path}`
     );
 
     const { result } = renderHook(() => useSharedFeedStore(), { wrapper });
@@ -677,7 +691,7 @@ describe('useSharedFeedStore', () => {
     );
   });
 
-  it('defers shared photo media hydration until the home feed is ready', async () => {
+  it('hydrates cached shared photo media before the home feed is interactive', async () => {
     mockStartupInteractionState.startupInteractive = false;
     mockCachedSnapshot = {
       friends: [],
@@ -700,6 +714,64 @@ describe('useSharedFeedStore', () => {
     mockDownloadPhotoFromStorage.mockResolvedValue('file:///shared/friend-photo-1.jpg');
     mockDownloadPairedVideoFromStorage.mockResolvedValue('file:///shared/friend-photo-1.mov');
 
+    const { result } = renderHook(({ marker }: { marker: number }) => {
+      void marker;
+      return useSharedFeedStore();
+    }, { wrapper, initialProps: { marker: 0 } });
+
+    await waitFor(() => {
+      expect(result.current.ready).toBe(true);
+      expect(result.current.sharedPosts).toEqual([
+        expect.objectContaining({
+          id: 'friend-photo-1',
+          photoLocalUri: 'file:///shared/friend-photo-1.jpg',
+          pairedVideoLocalUri: 'file:///shared/friend-photo-1.mov',
+        }),
+      ]);
+    });
+
+    expect(mockDownloadPhotoFromStorage).toHaveBeenCalledWith(
+      'shared-post-media',
+      'friend-1/friend-photo-1.jpg',
+      'friend-photo-1',
+      { preferCachedOnly: true }
+    );
+    expect(mockDownloadPhotoFromStorage).not.toHaveBeenCalledWith(
+      'shared-post-media',
+      'friend-1/friend-photo-1.jpg',
+      'friend-photo-1'
+    );
+  });
+
+  it('defers remote shared photo media hydration while the home feed is not ready when cache misses', async () => {
+    mockStartupInteractionState.startupInteractive = false;
+    mockCachedSnapshot = {
+      friends: [],
+      sharedPosts: [
+        createSharedPost({
+          id: 'friend-photo-1',
+          authorUid: 'friend-1',
+          type: 'photo',
+          text: '',
+          photoPath: 'friend-1/friend-photo-1.jpg',
+          photoLocalUri: null,
+          isLivePhoto: true,
+          pairedVideoPath: 'friend-1/friend-photo-1.mov',
+          pairedVideoLocalUri: null,
+        }),
+      ],
+      activeInvite: null,
+      lastUpdatedAt: '2026-03-24T00:00:00.000Z',
+    };
+    mockDownloadPhotoFromStorage.mockImplementation(
+      async (_bucket: string, _path: string, _localId: string, options?: { preferCachedOnly?: boolean }) =>
+        options?.preferCachedOnly ? null : 'file:///shared/friend-photo-1.jpg'
+    );
+    mockDownloadPairedVideoFromStorage.mockImplementation(
+      async (_bucket: string, _path: string, _localId: string, options?: { preferCachedOnly?: boolean }) =>
+        options?.preferCachedOnly ? null : 'file:///shared/friend-photo-1.mov'
+    );
+
     const { result, rerender } = renderHook(({ marker }: { marker: number }) => {
       void marker;
       return useSharedFeedStore();
@@ -716,21 +788,26 @@ describe('useSharedFeedStore', () => {
       ]);
     });
 
-    expect(mockDownloadPhotoFromStorage).not.toHaveBeenCalled();
-    expect(mockDownloadPairedVideoFromStorage).not.toHaveBeenCalled();
+    expect(mockDownloadPhotoFromStorage).toHaveBeenCalledWith(
+      'shared-post-media',
+      'friend-1/friend-photo-1.jpg',
+      'friend-photo-1',
+      { preferCachedOnly: true }
+    );
+    expect(mockDownloadPhotoFromStorage).not.toHaveBeenCalledWith(
+      'shared-post-media',
+      'friend-1/friend-photo-1.jpg',
+      'friend-photo-1'
+    );
 
-    mockStartupInteractionState.startupInteractive = true;
     rerender({ marker: 1 });
-
-    await waitFor(() => {
-      expect(result.current.sharedPosts).toEqual([
-        expect.objectContaining({
-          id: 'friend-photo-1',
-          photoLocalUri: 'file:///shared/friend-photo-1.jpg',
-          pairedVideoLocalUri: 'file:///shared/friend-photo-1.mov',
-        }),
-      ]);
-    });
+    expect(result.current.sharedPosts).toEqual([
+      expect.objectContaining({
+        id: 'friend-photo-1',
+        photoLocalUri: null,
+        pairedVideoLocalUri: null,
+      }),
+    ]);
   });
 
   it('prunes authored shared projections when local notes are deleted', async () => {
@@ -904,8 +981,8 @@ describe('useSharedFeedStore', () => {
 
     expect(result.current.activeInvite).toBeNull();
 
-    act(() => {
-      latestSharedFeedSubscriptionHandlers?.onSnapshot({
+    await act(async () => {
+      await latestSharedFeedSubscriptionHandlers?.onSnapshot({
         friends: [],
         sharedPosts: [],
         activeInvite: {
@@ -1535,7 +1612,7 @@ describe('useSharedFeedStore', () => {
     });
 
     await act(async () => {
-      latestSharedFeedSubscriptionHandlers?.onSnapshot({
+      await latestSharedFeedSubscriptionHandlers?.onSnapshot({
         friends: [],
         sharedPosts: [createSharedPost({ id: 'live-post-1' })],
         activeInvite: null,

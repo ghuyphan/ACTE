@@ -4,7 +4,7 @@ import {
   getStoredActiveInvite,
   setStoredActiveInvite,
 } from './activeInviteStorage';
-import { getDB, withDatabaseTransaction } from './database';
+import { getDB, withDatabaseTransaction, type SQLiteTransactionExecutor } from './database';
 import { resolveSavedTextNoteColor } from './noteAppearance';
 import { hasStoredStickerPayload } from './noteStickers';
 import {
@@ -59,6 +59,39 @@ interface MetaRow {
   owned_shared_note_ids: string | null;
 }
 
+const SHARED_POST_CACHE_COLUMNS = [
+  'user_uid',
+  'id',
+  'author_uid',
+  'author_display_name',
+  'author_photo_url_snapshot',
+  'audience_user_ids',
+  'type',
+  'text',
+  'photo_path',
+  'photo_local_uri',
+  'capture_variant',
+  'dual_primary_photo_path',
+  'dual_secondary_photo_path',
+  'dual_primary_photo_local_uri',
+  'dual_secondary_photo_local_uri',
+  'is_live_photo',
+  'paired_video_path',
+  'paired_video_local_uri',
+  'dual_primary_facing',
+  'dual_secondary_facing',
+  'dual_layout_preset',
+  'doodle_strokes_json',
+  'sticker_placements_json',
+  'note_color',
+  'place_name',
+  'source_note_id',
+  'latitude',
+  'longitude',
+  'created_at',
+  'updated_at',
+] as const;
+
 function parseOwnedSharedNoteIds(rawValue: string | null | undefined, fallbackNoteIds: string[]) {
   if (!rawValue) {
     return fallbackNoteIds;
@@ -73,6 +106,57 @@ function parseOwnedSharedNoteIds(rawValue: string | null | undefined, fallbackNo
   } catch {
     return fallbackNoteIds;
   }
+}
+
+function getSharedPostInsertValues(userUid: string, post: SharedPost) {
+  return [
+    userUid,
+    post.id,
+    post.authorUid,
+    post.authorDisplayName,
+    post.authorPhotoURLSnapshot,
+    JSON.stringify(post.audienceUserIds),
+    post.type,
+    post.text,
+    post.photoPath,
+    post.photoLocalUri,
+    post.captureVariant ?? null,
+    post.dualPrimaryPhotoPath ?? null,
+    post.dualSecondaryPhotoPath ?? null,
+    post.dualPrimaryPhotoLocalUri ?? null,
+    post.dualSecondaryPhotoLocalUri ?? null,
+    post.isLivePhoto ? 1 : 0,
+    post.pairedVideoPath ?? null,
+    post.pairedVideoLocalUri ?? null,
+    post.dualPrimaryFacing ?? null,
+    post.dualSecondaryFacing ?? null,
+    post.dualLayoutPreset ?? null,
+    post.doodleStrokesJson ?? null,
+    post.stickerPlacementsJson ?? null,
+    post.noteColor ?? null,
+    post.placeName,
+    post.sourceNoteId,
+    post.latitude ?? null,
+    post.longitude ?? null,
+    post.createdAt,
+    post.updatedAt,
+  ] as const;
+}
+
+async function insertCachedSharedPost(
+  tx: SQLiteTransactionExecutor,
+  userUid: string,
+  post: SharedPost
+) {
+  const values = getSharedPostInsertValues(userUid, post);
+
+  await tx.runAsync(
+    `INSERT INTO shared_posts_cache (
+      ${SHARED_POST_CACHE_COLUMNS.join(',\n      ')}
+    )
+    VALUES (${values.map(() => '?').join(', ')})`,
+    ...values
+  );
 }
 
 function rowToFriend(row: FriendRow): FriendConnection {
@@ -255,75 +339,7 @@ export async function replaceCachedSharedPosts(userUid: string, posts: SharedPos
     await tx.runAsync('DELETE FROM shared_posts_cache WHERE user_uid = ?', userUid);
 
     for (const post of posts) {
-      const sharedPostInsertValues = [
-        userUid,
-        post.id,
-        post.authorUid,
-        post.authorDisplayName,
-        post.authorPhotoURLSnapshot,
-        JSON.stringify(post.audienceUserIds),
-        post.type,
-        post.text,
-        post.photoPath,
-        post.photoLocalUri,
-        post.captureVariant ?? null,
-        post.dualPrimaryPhotoPath ?? null,
-        post.dualSecondaryPhotoPath ?? null,
-        post.dualPrimaryPhotoLocalUri ?? null,
-        post.dualSecondaryPhotoLocalUri ?? null,
-        post.isLivePhoto ? 1 : 0,
-        post.pairedVideoPath ?? null,
-        post.pairedVideoLocalUri ?? null,
-        post.dualPrimaryFacing ?? null,
-        post.dualSecondaryFacing ?? null,
-        post.dualLayoutPreset ?? null,
-        post.doodleStrokesJson ?? null,
-        post.stickerPlacementsJson ?? null,
-        post.noteColor ?? null,
-        post.placeName,
-        post.sourceNoteId,
-        post.latitude ?? null,
-        post.longitude ?? null,
-        post.createdAt,
-        post.updatedAt,
-      ] as const;
-
-      await tx.runAsync(
-        `INSERT INTO shared_posts_cache (
-          user_uid,
-          id,
-          author_uid,
-          author_display_name,
-          author_photo_url_snapshot,
-          audience_user_ids,
-          type,
-          text,
-          photo_path,
-          photo_local_uri,
-          capture_variant,
-          dual_primary_photo_path,
-          dual_secondary_photo_path,
-          dual_primary_photo_local_uri,
-          dual_secondary_photo_local_uri,
-          is_live_photo,
-          paired_video_path,
-          paired_video_local_uri,
-          dual_primary_facing,
-          dual_secondary_facing,
-          dual_layout_preset,
-          doodle_strokes_json,
-          sticker_placements_json,
-          note_color,
-          place_name,
-          source_note_id,
-          latitude,
-          longitude,
-          created_at,
-          updated_at
-        )
-        VALUES (${sharedPostInsertValues.map(() => '?').join(', ')})`,
-        ...sharedPostInsertValues
-      );
+      await insertCachedSharedPost(tx, userUid, post);
     }
 
     await tx.runAsync(
@@ -482,75 +498,7 @@ export async function cacheSharedFeedSnapshot(
     }
 
     for (const post of snapshot.sharedPosts) {
-      const sharedPostInsertValues = [
-        userUid,
-        post.id,
-        post.authorUid,
-        post.authorDisplayName,
-        post.authorPhotoURLSnapshot,
-        JSON.stringify(post.audienceUserIds),
-        post.type,
-        post.text,
-        post.photoPath,
-        post.photoLocalUri,
-        post.captureVariant ?? null,
-        post.dualPrimaryPhotoPath ?? null,
-        post.dualSecondaryPhotoPath ?? null,
-        post.dualPrimaryPhotoLocalUri ?? null,
-        post.dualSecondaryPhotoLocalUri ?? null,
-        post.isLivePhoto ? 1 : 0,
-        post.pairedVideoPath ?? null,
-        post.pairedVideoLocalUri ?? null,
-        post.dualPrimaryFacing ?? null,
-        post.dualSecondaryFacing ?? null,
-        post.dualLayoutPreset ?? null,
-        post.doodleStrokesJson ?? null,
-        post.stickerPlacementsJson ?? null,
-        post.noteColor ?? null,
-        post.placeName,
-        post.sourceNoteId,
-        post.latitude ?? null,
-        post.longitude ?? null,
-        post.createdAt,
-        post.updatedAt,
-      ] as const;
-
-      await tx.runAsync(
-        `INSERT INTO shared_posts_cache (
-          user_uid,
-          id,
-          author_uid,
-          author_display_name,
-          author_photo_url_snapshot,
-          audience_user_ids,
-          type,
-          text,
-          photo_path,
-          photo_local_uri,
-          capture_variant,
-          dual_primary_photo_path,
-          dual_secondary_photo_path,
-          dual_primary_photo_local_uri,
-          dual_secondary_photo_local_uri,
-          is_live_photo,
-          paired_video_path,
-          paired_video_local_uri,
-          dual_primary_facing,
-          dual_secondary_facing,
-          dual_layout_preset,
-          doodle_strokes_json,
-          sticker_placements_json,
-          note_color,
-          place_name,
-          source_note_id,
-          latitude,
-          longitude,
-          created_at,
-          updated_at
-        )
-        VALUES (${sharedPostInsertValues.map(() => '?').join(', ')})`,
-        ...sharedPostInsertValues
-      );
+      await insertCachedSharedPost(tx, userUid, post);
     }
 
     await tx.runAsync(

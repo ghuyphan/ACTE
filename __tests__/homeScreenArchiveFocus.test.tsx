@@ -61,25 +61,6 @@ const mockSharedFeedState = {
 let latestNotesFeedProps: any = null;
 let latestHomeHeaderSearchProps: any = null;
 
-function mockBuildHomeFeedItems() {
-  const friendPosts = mockSharedFeedState.sharedPosts.filter((post) => post.authorUid !== 'me');
-
-  return [
-    ...mockNotesState.map((note) => ({
-      id: note.id,
-      kind: 'note' as const,
-      note,
-      createdAt: note.createdAt,
-    })),
-    ...friendPosts.map((post) => ({
-      id: post.id,
-      kind: 'shared-post' as const,
-      post,
-      createdAt: post.createdAt,
-    })),
-  ].sort((left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime());
-}
-
 function renderHomeScreen() {
   return render(
     <ActiveFeedTargetProvider>
@@ -516,12 +497,13 @@ describe('HomeScreen archive focus', () => {
     });
   });
 
-  it('keeps the currently viewed card anchored when a friend shared post is inserted above it', async () => {
+  it('keeps the currently viewed card anchored by holding live shared inserts pending', async () => {
     const { rerender } = renderHomeScreen();
 
     act(() => {
       latestNotesFeedProps?.onSettledArchiveItemChange?.({ kind: 'note', id: 'note-old' });
     });
+    mockScrollToOffset.mockClear();
 
     mockSharedFeedState.sharedPosts = [
       {
@@ -546,12 +528,12 @@ describe('HomeScreen archive focus', () => {
       jest.runAllTimers();
     });
 
-    await waitFor(() => {
-      expect(mockScrollToOffset).toHaveBeenCalledWith({
-        offset: snapHeight * 4,
-        animated: false,
-      });
-    });
+    expect(latestNotesFeedProps?.items.map((item: any) => item.id)).toEqual([
+      'shared-friend',
+      'note-new',
+      'note-old',
+    ]);
+    expect(mockScrollToOffset).not.toHaveBeenCalled();
   });
 
   it('keeps the currently viewed card anchored when a newer note is inserted above it', async () => {

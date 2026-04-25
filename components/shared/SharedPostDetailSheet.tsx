@@ -19,6 +19,11 @@ interface SharedPostDetailSheetProps {
   onClosed?: () => void;
 }
 
+function formatAuthorHandle(displayName: string | null | undefined, fallback: string) {
+  const label = displayName?.trim() || fallback;
+  return label.startsWith('@') ? label : `@${label}`;
+}
+
 export default function SharedPostDetailSheet({
   postId,
   visible,
@@ -123,7 +128,7 @@ export default function SharedPostDetailSheet({
           <View style={styles.infoRow}>
             <Ionicons name="person-outline" size={18} color={colors.primary} />
             <Text style={[styles.infoText, { color: colors.text }]}>
-              {post.authorDisplayName ?? t('shared.someone', 'Someone')}
+              {formatAuthorHandle(post.authorDisplayName, t('shared.someone', 'Someone'))}
             </Text>
           </View>
 

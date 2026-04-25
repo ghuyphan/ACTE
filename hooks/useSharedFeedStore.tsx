@@ -82,6 +82,23 @@ interface SharedFeedStoreValue {
 }
 
 const SharedFeedStoreContext = createContext<SharedFeedStoreValue | undefined>(undefined);
+const INITIAL_SHARED_MEDIA_HYDRATION_LIMIT = 12;
+const SHARED_MEDIA_HYDRATION_CONCURRENCY = 3;
+
+type SharedFeedSnapshotState = {
+  friends: FriendConnection[];
+  sharedPosts: SharedPost[];
+  activeInvite: FriendInvite | null;
+  ownedSharedNoteIds?: string[];
+};
+
+type SharedMediaPatch = {
+  postId: string;
+  photoLocalUri: string | null;
+  dualPrimaryPhotoLocalUri: string | null;
+  dualSecondaryPhotoLocalUri: string | null;
+  pairedVideoLocalUri: string | null;
+};
 
 function sortFriendsByFriendedAt(friends: FriendConnection[]) {
   return [...friends].sort(
@@ -124,6 +141,102 @@ function buildSharedMediaHydrationKey(
     updatedAt ?? 'unknown',
     ...posts.map((post) => `${post.id}:${post.photoPath ?? ''}:${post.pairedVideoPath ?? ''}`),
   ].join('|');
+}
+
+function shouldHydrateSharedPostMedia(post: SharedPost) {
+  if (post.type !== 'photo') {
+    return false;
+  }
+
+  if (post.photoPath && !post.photoLocalUri) {
+    return true;
+  }
+
+  if (
+    post.captureVariant === 'dual' &&
+    (
+      (post.dualPrimaryPhotoPath && !post.dualPrimaryPhotoLocalUri) ||
+      (post.dualSecondaryPhotoPath && !post.dualSecondaryPhotoLocalUri)
+    )
+  ) {
+    return true;
+  }
+
+  return Boolean(post.isLivePhoto && post.pairedVideoPath && !post.pairedVideoLocalUri);
+}
+
+function getSharedMediaHydrationCandidates(posts: SharedPost[], limit?: number) {
+  const candidates = posts.filter(shouldHydrateSharedPostMedia);
+  return typeof limit === 'number' && Number.isFinite(limit)
+    ? candidates.slice(0, Math.max(0, limit))
+    : candidates;
+}
+
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  concurrency: number,
+  mapper: (item: T) => Promise<R>
+) {
+  if (items.length === 0) {
+    return [];
+  }
+
+  const results = new Array<R>(items.length);
+  let nextIndex = 0;
+  const workerCount = Math.min(Math.max(1, concurrency), items.length);
+
+  await Promise.all(
+    Array.from({ length: workerCount }, async () => {
+      while (nextIndex < items.length) {
+        const currentIndex = nextIndex;
+        nextIndex += 1;
+        results[currentIndex] = await mapper(items[currentIndex]);
+      }
+    })
+  );
+
+  return results;
+}
+
+function getSharedMediaPatches(
+  previousPosts: SharedPost[],
+  nextPosts: SharedPost[]
+): SharedMediaPatch[] {
+  const previousPostMap = new Map(previousPosts.map((post) => [post.id, post]));
+  const patches: SharedMediaPatch[] = [];
+
+  for (const nextPost of nextPosts) {
+    const previousPost = previousPostMap.get(nextPost.id);
+    if (!previousPost || nextPost.type !== 'photo') {
+      continue;
+    }
+
+    const photoLocalUri = nextPost.photoLocalUri ?? null;
+    const dualPrimaryPhotoLocalUri =
+      nextPost.captureVariant === 'dual' ? nextPost.dualPrimaryPhotoLocalUri ?? null : null;
+    const dualSecondaryPhotoLocalUri =
+      nextPost.captureVariant === 'dual' ? nextPost.dualSecondaryPhotoLocalUri ?? null : null;
+    const pairedVideoLocalUri = nextPost.pairedVideoLocalUri ?? null;
+
+    if (
+      photoLocalUri === (previousPost.photoLocalUri ?? null) &&
+      dualPrimaryPhotoLocalUri === (previousPost.dualPrimaryPhotoLocalUri ?? null) &&
+      dualSecondaryPhotoLocalUri === (previousPost.dualSecondaryPhotoLocalUri ?? null) &&
+      pairedVideoLocalUri === (previousPost.pairedVideoLocalUri ?? null)
+    ) {
+      continue;
+    }
+
+    patches.push({
+      postId: nextPost.id,
+      photoLocalUri,
+      dualPrimaryPhotoLocalUri,
+      dualSecondaryPhotoLocalUri,
+      pairedVideoLocalUri,
+    });
+  }
+
+  return patches;
 }
 
 function useSharedFeedStoreValue(): SharedFeedStoreValue {
@@ -284,58 +397,65 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
     );
   }, []);
 
-  const hydrateSharedPostMedia = useCallback(
+  const hydrateSharedMediaPosts = useCallback(
     async (
-      userUid: string,
-      sessionId: number,
-      source: 'live' | 'cache',
-      updatedAt: string | null,
-      posts: SharedPost[]
+      posts: SharedPost[],
+      options?: {
+        cachedOnly?: boolean;
+        limit?: number;
+      }
     ) => {
-      if (!isCurrentSharedFeedSession(sessionId, userUid) || posts.length === 0) {
-        return;
+      const candidates = getSharedMediaHydrationCandidates(posts, options?.limit);
+      if (candidates.length === 0) {
+        return posts;
       }
 
-      const hydratedPosts = await Promise.all(
-        posts.map(async (post) => {
-          if (post.type !== 'photo') {
-            return post;
-          }
+      const downloadOptions =
+        options?.cachedOnly || !isOnline
+          ? { preferCachedOnly: true }
+          : undefined;
+      const downloadSharedPhoto = (
+        path: string | null | undefined,
+        localId: string
+      ) =>
+        downloadOptions
+          ? downloadPhotoFromStorage(
+              SHARED_POST_MEDIA_BUCKET,
+              path,
+              localId,
+              downloadOptions
+            )
+          : downloadPhotoFromStorage(SHARED_POST_MEDIA_BUCKET, path, localId);
+      const downloadSharedPairedVideo = (
+        path: string | null | undefined,
+        localId: string
+      ) =>
+        downloadOptions
+          ? downloadPairedVideoFromStorage(
+              SHARED_POST_MEDIA_BUCKET,
+              path,
+              localId,
+              downloadOptions
+            )
+          : downloadPairedVideoFromStorage(SHARED_POST_MEDIA_BUCKET, path, localId);
 
+      const hydratedCandidates = await mapWithConcurrency(
+        candidates,
+        SHARED_MEDIA_HYDRATION_CONCURRENCY,
+        async (post) => {
           const nextPhotoLocalUri =
             post.photoLocalUri ??
             (post.photoPath
-              ? await (isOnline
-                  ? downloadPhotoFromStorage(
-                      SHARED_POST_MEDIA_BUCKET,
-                      post.photoPath,
-                      post.id
-                    )
-                  : downloadPhotoFromStorage(
-                      SHARED_POST_MEDIA_BUCKET,
-                      post.photoPath,
-                      post.id,
-                      { preferCachedOnly: true }
-                    )
-                ).catch(() => null)
+              ? await downloadSharedPhoto(post.photoPath, post.id).catch(() => null)
               : null);
 
           const nextDualPrimaryPhotoLocalUri =
             post.captureVariant === 'dual'
               ? post.dualPrimaryPhotoLocalUri ??
                 (post.dualPrimaryPhotoPath
-                  ? await (isOnline
-                      ? downloadPhotoFromStorage(
-                          SHARED_POST_MEDIA_BUCKET,
-                          post.dualPrimaryPhotoPath,
-                          `shared-post-${post.id}-primary`
-                        )
-                      : downloadPhotoFromStorage(
-                          SHARED_POST_MEDIA_BUCKET,
-                          post.dualPrimaryPhotoPath,
-                          `shared-post-${post.id}-primary`,
-                          { preferCachedOnly: true }
-                        )
+                  ? await downloadSharedPhoto(
+                      post.dualPrimaryPhotoPath,
+                      `shared-post-${post.id}-primary`
                     ).catch(() => null)
                   : null)
               : null;
@@ -344,18 +464,9 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
             post.captureVariant === 'dual'
               ? post.dualSecondaryPhotoLocalUri ??
                 (post.dualSecondaryPhotoPath
-                  ? await (isOnline
-                      ? downloadPhotoFromStorage(
-                          SHARED_POST_MEDIA_BUCKET,
-                          post.dualSecondaryPhotoPath,
-                          `shared-post-${post.id}-secondary`
-                        )
-                      : downloadPhotoFromStorage(
-                          SHARED_POST_MEDIA_BUCKET,
-                          post.dualSecondaryPhotoPath,
-                          `shared-post-${post.id}-secondary`,
-                          { preferCachedOnly: true }
-                        )
+                  ? await downloadSharedPhoto(
+                      post.dualSecondaryPhotoPath,
+                      `shared-post-${post.id}-secondary`
                     ).catch(() => null)
                   : null)
               : null;
@@ -363,23 +474,14 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
           const nextPairedVideoLocalUri =
             post.pairedVideoLocalUri ??
             (post.isLivePhoto && post.pairedVideoPath
-              ? await (isOnline
-                  ? downloadPairedVideoFromStorage(
-                      SHARED_POST_MEDIA_BUCKET,
-                      post.pairedVideoPath,
-                      `${post.id}-motion`
-                    )
-                  : downloadPairedVideoFromStorage(
-                      SHARED_POST_MEDIA_BUCKET,
-                      post.pairedVideoPath,
-                      `${post.id}-motion`,
-                      { preferCachedOnly: true }
-                    )
+              ? await downloadSharedPairedVideo(
+                  post.pairedVideoPath,
+                  `${post.id}-motion`
                 ).catch(() => null)
               : null);
 
           if (
-            nextPhotoLocalUri === post.photoLocalUri &&
+            nextPhotoLocalUri === (post.photoLocalUri ?? null) &&
             nextDualPrimaryPhotoLocalUri === (post.dualPrimaryPhotoLocalUri ?? null) &&
             nextDualSecondaryPhotoLocalUri === (post.dualSecondaryPhotoLocalUri ?? null) &&
             nextPairedVideoLocalUri === (post.pairedVideoLocalUri ?? null)
@@ -394,8 +496,79 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
             dualSecondaryPhotoLocalUri: nextDualSecondaryPhotoLocalUri,
             pairedVideoLocalUri: nextPairedVideoLocalUri,
           };
-        })
+        }
       );
+
+      const hydratedCandidateMap = new Map(
+        hydratedCandidates.map((post) => [post.id, post])
+      );
+      return posts.map((post) => hydratedCandidateMap.get(post.id) ?? post);
+    },
+    [isOnline]
+  );
+
+  const hydrateSnapshotFromCachedMedia = useCallback(
+    async (
+      userUid: string,
+      sessionId: number,
+      source: 'live' | 'cache',
+      snapshot: SharedFeedSnapshotState,
+      limit = INITIAL_SHARED_MEDIA_HYDRATION_LIMIT
+    ): Promise<SharedFeedSnapshotState> => {
+      if (
+        !isCurrentSharedFeedSession(sessionId, userUid) ||
+        snapshot.sharedPosts.length === 0
+      ) {
+        return snapshot;
+      }
+
+      const sharedPosts = await traceStartupAsync(
+        'shared-feed.cached-media-hydration',
+        () =>
+          hydrateSharedMediaPosts(snapshot.sharedPosts, {
+            cachedOnly: true,
+            limit,
+          }),
+        {
+          limit,
+          postCount: snapshot.sharedPosts.length,
+          source,
+          userUid,
+        }
+      );
+
+      if (!isCurrentSharedFeedSession(sessionId, userUid)) {
+        return snapshot;
+      }
+
+      const mediaPatches = getSharedMediaPatches(snapshot.sharedPosts, sharedPosts);
+      if (mediaPatches.length > 0) {
+        void patchCachedSharedPostMedia(userUid, mediaPatches).catch((error) => {
+          console.warn('Failed to patch cached shared media before startup:', error);
+        });
+      }
+
+      return {
+        ...snapshot,
+        sharedPosts,
+      };
+    },
+    [hydrateSharedMediaPosts, isCurrentSharedFeedSession]
+  );
+
+  const hydrateSharedPostMedia = useCallback(
+    async (
+      userUid: string,
+      sessionId: number,
+      source: 'live' | 'cache',
+      updatedAt: string | null,
+      posts: SharedPost[]
+    ) => {
+      if (!isCurrentSharedFeedSession(sessionId, userUid) || posts.length === 0) {
+        return;
+      }
+
+      const hydratedPosts = await hydrateSharedMediaPosts(posts);
 
       if (!isCurrentSharedFeedSession(sessionId, userUid)) {
         return;
@@ -403,13 +576,7 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
 
       const hydratedPostMap = new Map(hydratedPosts.map((post) => [post.id, post]));
       let didChange = false;
-      const mediaPatches: Array<{
-        postId: string;
-        photoLocalUri: string | null;
-        dualPrimaryPhotoLocalUri: string | null;
-        dualSecondaryPhotoLocalUri: string | null;
-        pairedVideoLocalUri: string | null;
-      }> = [];
+      const mediaPatches: SharedMediaPatch[] = [];
 
       const mergedSharedPosts = sharedPostsRef.current.map((post) => {
         const hydratedPost = hydratedPostMap.get(post.id);
@@ -472,6 +639,7 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
     },
     [
       commitSnapshot,
+      hydrateSharedMediaPosts,
       isCurrentSharedFeedSession,
       scheduleSharedFeedWidgetRefresh,
     ]
@@ -612,17 +780,28 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
     if (liveSnapshotSessionRef.current === sessionId) {
       return false;
     }
-    applySnapshot(snapshot, 'cache', snapshot.lastUpdatedAt);
+    const hydratedSnapshot = await hydrateSnapshotFromCachedMedia(
+      userUid,
+      sessionId,
+      'cache',
+      snapshot
+    );
+    applySnapshot(hydratedSnapshot, 'cache', snapshot.lastUpdatedAt);
     setReady(true);
     void hydrateSharedPostMediaWhenReady(
       userUid,
       sessionId,
       'cache',
       snapshot.lastUpdatedAt,
-      snapshot.sharedPosts
+      hydratedSnapshot.sharedPosts
     );
     return true;
-  }, [applySnapshot, hydrateSharedPostMediaWhenReady, isCurrentSharedFeedSession]);
+  }, [
+    applySnapshot,
+    hydrateSharedPostMediaWhenReady,
+    hydrateSnapshotFromCachedMedia,
+    isCurrentSharedFeedSession,
+  ]);
 
   const refreshAll = useCallback(async (options?: { force?: boolean }) => {
     if (!enabled || !user) {
@@ -681,8 +860,14 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
 
         liveSnapshotSessionRef.current = sessionId;
         const updatedAt = new Date().toISOString();
-        commitSnapshotAndPersist(userUid, snapshot, updatedAt);
-        void hydrateSharedPostMediaWhenReady(userUid, sessionId, 'live', updatedAt, snapshot.sharedPosts);
+        const hydratedSnapshot = await hydrateSnapshotFromCachedMedia(
+          userUid,
+          sessionId,
+          'live',
+          snapshot
+        );
+        commitSnapshotAndPersist(userUid, hydratedSnapshot, updatedAt);
+        void hydrateSharedPostMediaWhenReady(userUid, sessionId, 'live', updatedAt, hydratedSnapshot.sharedPosts);
       } finally {
         if (
           isCurrentSharedFeedSession(sessionId, userUid) &&
@@ -715,6 +900,7 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
     commitSnapshotAndPersist,
     enabled,
     hydrateSharedPostMediaWhenReady,
+    hydrateSnapshotFromCachedMedia,
     isCurrentSharedFeedSession,
     isOnline,
     user,
@@ -813,7 +999,14 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
     refreshInFlightRef.current = null;
     suppressedActiveInviteIdRef.current = null;
     void hydrateFromCache(user.uid, sessionId)
-      .catch(() => undefined)
+      .catch((error) => {
+        if (sharedFeedSessionRef.current !== sessionId || previousUserUidRef.current !== user.uid) {
+          return;
+        }
+
+        console.warn('Shared feed cache hydration failed:', getSharedFeedErrorMessage(error));
+        setReady(true);
+      })
       .finally(() => {
         if (sharedFeedSessionRef.current === sessionId && !isOnline) {
           setLoading(false);
@@ -831,24 +1024,53 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
         if (sharedFeedSessionRef.current !== sessionId || previousUserUidRef.current !== user.uid) {
           return;
         }
-        sharedFeedSubscriptionHealthyRef.current = true;
-        liveSnapshotSessionRef.current = sessionId;
-        const updatedAt = new Date().toISOString();
-        commitSnapshotAndPersist(user.uid, snapshot, updatedAt);
-        logStartupEvent('shared-feed.subscription-snapshot', {
-          postCount: snapshot.sharedPosts.length,
-          userUid: user.uid,
+        return (async () => {
+          sharedFeedSubscriptionHealthyRef.current = true;
+          liveSnapshotSessionRef.current = sessionId;
+          const updatedAt = new Date().toISOString();
+          const hydratedSnapshot = await hydrateSnapshotFromCachedMedia(
+            user.uid,
+            sessionId,
+            'live',
+            snapshot
+          );
+
+          if (
+            sharedFeedSessionRef.current !== sessionId ||
+            previousUserUidRef.current !== user.uid
+          ) {
+            return;
+          }
+
+          commitSnapshotAndPersist(user.uid, hydratedSnapshot, updatedAt);
+          logStartupEvent('shared-feed.subscription-snapshot', {
+            postCount: hydratedSnapshot.sharedPosts.length,
+            userUid: user.uid,
+          });
+          void hydrateSharedPostMediaWhenReady(
+            user.uid,
+            sessionId,
+            'live',
+            updatedAt,
+            hydratedSnapshot.sharedPosts
+          );
+          setLoading(false);
+          setReady(true);
+          setInitialLoadComplete(true);
+        })().catch((error) => {
+          if (
+            sharedFeedSessionRef.current !== sessionId ||
+            previousUserUidRef.current !== user.uid
+          ) {
+            return;
+          }
+
+          sharedFeedSubscriptionHealthyRef.current = false;
+          console.warn('Shared feed subscription snapshot failed:', getSharedFeedErrorMessage(error));
+          setLoading(false);
+          setReady(true);
+          setInitialLoadComplete(true);
         });
-        void hydrateSharedPostMediaWhenReady(
-          user.uid,
-          sessionId,
-          'live',
-          updatedAt,
-          snapshot.sharedPosts
-        );
-        setLoading(false);
-        setReady(true);
-        setInitialLoadComplete(true);
       },
       onError: (error) => {
         if (sharedFeedSessionRef.current !== sessionId || previousUserUidRef.current !== user.uid) {
@@ -863,7 +1085,17 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
     });
 
     return unsubscribe;
-  }, [commitSnapshotAndPersist, enabled, hydrateFromCache, hydrateSharedPostMediaWhenReady, isOnline, isReady, user]);
+  }, [
+    commitSnapshot,
+    commitSnapshotAndPersist,
+    enabled,
+    hydrateFromCache,
+    hydrateSharedPostMediaWhenReady,
+    hydrateSnapshotFromCachedMedia,
+    isOnline,
+    isReady,
+    user,
+  ]);
 
   useEffect(() => {
     if (!enabled || !user || !ready || !startupInteractive || sharedPosts.length === 0) {
