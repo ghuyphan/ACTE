@@ -75,7 +75,7 @@ interface UseCaptureCardCameraControllerOptions {
   interactionsDisabled: boolean;
   reduceMotionEnabled: boolean;
   shutterScale: SharedValue<number>;
-  colors: Pick<ThemeColors, 'border'>;
+  colors: Pick<ThemeColors, 'primary' | 'border'>;
   t: TFunction;
   cardSize: number;
   livePhotoRingStrokeWidth: number;

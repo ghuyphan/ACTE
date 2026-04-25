@@ -195,6 +195,9 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
   const snapshotHydratedRef = useRef(false);
   const isMountedRef = useRef(true);
   const [isSnapshotHydrated, setIsSnapshotHydrated] = useState(false);
+  const purchaseActionInFlightRef = useRef<Promise<SubscriptionActionResult> | null>(null);
+  const paywallInFlightRef = useRef<Promise<PAYWALL_RESULT | null> | null>(null);
+  const customerCenterInFlightRef = useRef<Promise<void> | null>(null);
   const userId = user?.id ?? null;
   const snapshotStorageKey = `${SUBSCRIPTION_SNAPSHOT_KEY_PREFIX}${user?.uid ?? 'anonymous'}`;
   const availablePackages = useMemo(
@@ -588,21 +591,33 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
         return { status: 'unavailable' };
       }
 
-      setIsPurchaseInFlight(true);
-      try {
-        const result = await Purchases.purchasePackage(pkg);
-        setCustomerInfo(result.customerInfo);
-        return { status: 'success', customerInfo: result.customerInfo };
-      } catch (error) {
-        if (isPurchaseCancelled(error)) {
-          return { status: 'cancelled' };
-        }
-
-        console.warn('[subscription] Purchase failed:', error);
-        return { status: 'error', message: getPurchaseErrorMessage(error) };
-      } finally {
-        setIsPurchaseInFlight(false);
+      if (purchaseActionInFlightRef.current) {
+        return purchaseActionInFlightRef.current;
       }
+
+      let purchasePromise: Promise<SubscriptionActionResult> | null = null;
+      purchasePromise = (async () => {
+        setIsPurchaseInFlight(true);
+        try {
+          const result = await Purchases.purchasePackage(pkg);
+          setCustomerInfo(result.customerInfo);
+          return { status: 'success' as const, customerInfo: result.customerInfo };
+        } catch (error) {
+          if (isPurchaseCancelled(error)) {
+            return { status: 'cancelled' as const };
+          }
+
+          console.warn('[subscription] Purchase failed:', error);
+          return { status: 'error' as const, message: getPurchaseErrorMessage(error) };
+        } finally {
+          if (purchasePromise && purchaseActionInFlightRef.current === purchasePromise) {
+            purchaseActionInFlightRef.current = null;
+            setIsPurchaseInFlight(false);
+          }
+        }
+      })();
+      purchaseActionInFlightRef.current = purchasePromise;
+      return purchasePromise;
     },
     [isConfigured, isOnline]
   );
@@ -644,63 +659,99 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
           return { status: 'unavailable' };
         }
 
-        setIsPurchaseInFlight(true);
-        try {
-          const customerInfo = await Purchases.restorePurchases();
-          setCustomerInfo(customerInfo);
-          if (!hasActiveProEntitlement(customerInfo)) {
-            return {
-              status: 'inactive',
-              customerInfo,
-              message: 'No active Noto Plus purchase was found to restore.',
-            };
-          }
-
-          return { status: 'success', customerInfo };
-        } catch (error) {
-          console.warn('[subscription] Restore failed:', error);
-          return { status: 'error', message: getPurchaseErrorMessage(error) };
-        } finally {
-          setIsPurchaseInFlight(false);
+        if (purchaseActionInFlightRef.current) {
+          return purchaseActionInFlightRef.current;
         }
+
+        let restorePromise: Promise<SubscriptionActionResult> | null = null;
+        restorePromise = (async () => {
+          setIsPurchaseInFlight(true);
+          try {
+            const customerInfo = await Purchases.restorePurchases();
+            setCustomerInfo(customerInfo);
+            if (!hasActiveProEntitlement(customerInfo)) {
+              return {
+                status: 'inactive' as const,
+                customerInfo,
+                message: 'No active Noto Plus purchase was found to restore.',
+              };
+            }
+
+            return { status: 'success' as const, customerInfo };
+          } catch (error) {
+            console.warn('[subscription] Restore failed:', error);
+            return { status: 'error' as const, message: getPurchaseErrorMessage(error) };
+          } finally {
+            if (restorePromise && purchaseActionInFlightRef.current === restorePromise) {
+              purchaseActionInFlightRef.current = null;
+              setIsPurchaseInFlight(false);
+            }
+          }
+        })();
+        purchaseActionInFlightRef.current = restorePromise;
+        return restorePromise;
       },
       presentPaywall: async () => {
         if ((Platform.OS !== 'ios' && Platform.OS !== 'android') || !isConfigured || !isOnline) {
           return null;
         }
 
-        try {
-          return await RevenueCatUI.presentPaywall({
-            offering: currentOffering ?? undefined,
-            displayCloseButton: true,
-          });
-        } catch (error) {
-          console.warn('[subscription] Paywall presentation failed:', error);
-          return null;
+        if (paywallInFlightRef.current) {
+          return paywallInFlightRef.current;
         }
+
+        const paywallPromise = RevenueCatUI.presentPaywall({
+          offering: currentOffering ?? undefined,
+          displayCloseButton: true,
+        })
+          .catch((error) => {
+            console.warn('[subscription] Paywall presentation failed:', error);
+            return null;
+          })
+          .finally(() => {
+            if (paywallInFlightRef.current === paywallPromise) {
+              paywallInFlightRef.current = null;
+            }
+          });
+        paywallInFlightRef.current = paywallPromise;
+        return paywallPromise;
       },
       presentPaywallIfNeeded: async () => {
         if ((Platform.OS !== 'ios' && Platform.OS !== 'android') || !isConfigured || !isOnline) {
           return null;
         }
 
-        try {
-          return await RevenueCatUI.presentPaywallIfNeeded({
-            requiredEntitlementIdentifier: REVENUECAT_PRO_ENTITLEMENT_ID,
-            offering: currentOffering ?? undefined,
-            displayCloseButton: true,
-          });
-        } catch (error) {
-          console.warn('[subscription] Conditional paywall presentation failed:', error);
-          return null;
+        if (paywallInFlightRef.current) {
+          return paywallInFlightRef.current;
         }
+
+        const paywallPromise = RevenueCatUI.presentPaywallIfNeeded({
+          requiredEntitlementIdentifier: REVENUECAT_PRO_ENTITLEMENT_ID,
+          offering: currentOffering ?? undefined,
+          displayCloseButton: true,
+        })
+          .catch((error) => {
+            console.warn('[subscription] Conditional paywall presentation failed:', error);
+            return null;
+          })
+          .finally(() => {
+            if (paywallInFlightRef.current === paywallPromise) {
+              paywallInFlightRef.current = null;
+            }
+          });
+        paywallInFlightRef.current = paywallPromise;
+        return paywallPromise;
       },
       presentCustomerCenter: async () => {
         if ((Platform.OS !== 'ios' && Platform.OS !== 'android') || !isConfigured || !isOnline) {
           return;
         }
 
-        try {
+        if (customerCenterInFlightRef.current) {
+          return customerCenterInFlightRef.current;
+        }
+
+        const customerCenterPromise = (async () => {
           await RevenueCatUI.presentCustomerCenter({
             callbacks: {
               onRestoreCompleted: ({ customerInfo }) => {
@@ -711,9 +762,17 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
               },
             },
           });
-        } catch (error) {
-          console.warn('[subscription] Customer Center presentation failed:', error);
-        }
+        })()
+          .catch((error) => {
+            console.warn('[subscription] Customer Center presentation failed:', error);
+          })
+          .finally(() => {
+            if (customerCenterInFlightRef.current === customerCenterPromise) {
+              customerCenterInFlightRef.current = null;
+            }
+          });
+        customerCenterInFlightRef.current = customerCenterPromise;
+        return customerCenterPromise;
       },
       refreshSubscription: async () => {
         if (!isConfigured || !isOnline) {

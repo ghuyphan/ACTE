@@ -12,6 +12,7 @@ type NoteDetailActionSectionProps = {
     isDeleting: boolean;
     isDownloadingPolaroid: boolean;
     isEditing: boolean;
+    isSavingEdit: boolean;
     onDownloadPolaroid: () => void;
     onPrimaryPress: () => void;
     saveIconAnimatedStyle: any;
@@ -23,6 +24,7 @@ export default function NoteDetailActionSection({
     isDeleting,
     isDownloadingPolaroid,
     isEditing,
+    isSavingEdit,
     onDownloadPolaroid,
     onPrimaryPress,
     saveIconAnimatedStyle,
@@ -43,7 +45,7 @@ export default function NoteDetailActionSection({
                     },
                 ]}
                 delay={100}
-                disabled={isDeleting}
+                disabled={isDeleting || isSavingEdit}
             >
                 <View style={styles.editIconStack}>
                     <Animated.View style={[styles.editIconLayer, editIconAnimatedStyle]}>

@@ -42,6 +42,7 @@ export function AppAlertProvider({ children }: { children?: ReactNode }) {
   };
 
   const handleDismiss = () => {
+    dismissButton?.onPress?.();
     setAlertState(null);
   };
 

@@ -18,6 +18,7 @@ import { Layout, Typography } from '../../../constants/theme';
 import { useConnectivity } from '../../../hooks/useConnectivity';
 import { useSubscription } from '../../../hooks/useSubscription';
 import { useTheme } from '../../../hooks/useTheme';
+import { useSingleFlightAction } from '../../../hooks/ui/useSingleFlightAction';
 
 const APP_ICON_LIGHT_SOURCE = require('../../../assets/images/icon/icon-default.png');
 const APP_ICON_DARK_SOURCE = require('../../../assets/images/icon/icon-dark.png');
@@ -69,7 +70,7 @@ export default function PlusScreen() {
     : [colors.background, colors.surface, '#ECE2D7'];
   const appIconSource = isDark ? APP_ICON_DARK_SOURCE : APP_ICON_LIGHT_SOURCE;
 
-  const handlePresentPaywall = async () => {
+  const handlePresentPaywall = useSingleFlightAction(async () => {
     const result = await presentPaywall();
     if (result === PAYWALL_RESULT.PURCHASED || result === PAYWALL_RESULT.RESTORED) {
       showAppAlert(
@@ -80,9 +81,9 @@ export default function PlusScreen() {
         )
       );
     }
-  };
+  });
 
-  const handleRestorePurchases = async () => {
+  const handleRestorePurchases = useSingleFlightAction(async () => {
     if (isPurchaseInFlight) {
       return;
     }
@@ -101,7 +102,11 @@ export default function PlusScreen() {
       result.message ??
         t('plus.restoreFailedMessage', "Couldn't restore purchases right now.")
     );
-  };
+  });
+
+  const handlePresentCustomerCenter = useSingleFlightAction(async () => {
+    await presentCustomerCenter();
+  });
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -220,7 +225,7 @@ export default function PlusScreen() {
             <PrimaryButton
               label={t('plus.customerCenter', 'Manage subscription')}
               onPress={() => {
-                void presentCustomerCenter();
+                void handlePresentCustomerCenter();
               }}
               variant="secondary"
               disabled={isPurchaseInFlight || !isOnline}

@@ -1,5 +1,5 @@
 import * as Haptics from './useHaptics';
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { showAppAlert } from '../utils/alert';
 import { useAuth } from './useAuth';
@@ -23,9 +23,16 @@ export function useFriendInviteJoin({
   const { user } = useAuth();
   const { acceptFriendInvite } = useSharedFeedStore();
   const [joining, setJoining] = useState(false);
+  const joinInFlightRef = useRef(false);
+  const joinConfirmationInFlightRef = useRef(false);
 
   const performJoin = useCallback(
     async (normalizedValue: string) => {
+      if (joinInFlightRef.current) {
+        return false;
+      }
+
+      joinInFlightRef.current = true;
       setJoining(true);
       void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
@@ -43,6 +50,7 @@ export function useFriendInviteJoin({
         showAppAlert(t('shared.joinFailedTitle', 'Could not join'), getSharedFeedErrorMessage(error));
         return false;
       } finally {
+        joinInFlightRef.current = false;
         setJoining(false);
       }
     },
@@ -50,6 +58,8 @@ export function useFriendInviteJoin({
   );
 
   const resetJoinState = useCallback(() => {
+    joinInFlightRef.current = false;
+    joinConfirmationInFlightRef.current = false;
     setJoining(false);
   }, []);
 
@@ -65,12 +75,22 @@ export function useFriendInviteJoin({
         return false;
       }
 
+      if (joinInFlightRef.current || joinConfirmationInFlightRef.current) {
+        return false;
+      }
+
       if (!user) {
         onRequireAuth();
         return false;
       }
 
+      joinConfirmationInFlightRef.current = true;
       return new Promise<boolean>((resolve) => {
+        const resolveOnce = (result: boolean) => {
+          joinConfirmationInFlightRef.current = false;
+          resolve(result);
+        };
+
         showAppAlert(
           t('shared.joinConfirmTitle', 'Accept this friend invite?'),
           t(
@@ -81,12 +101,12 @@ export function useFriendInviteJoin({
             {
               text: t('common.cancel', 'Cancel'),
               style: 'cancel',
-              onPress: () => resolve(false),
+              onPress: () => resolveOnce(false),
             },
             {
               text: t('shared.joinConfirmButton', 'Accept invite'),
               onPress: () => {
-                void performJoin(normalizedValue).then(resolve);
+                void performJoin(normalizedValue).then(resolveOnce);
               },
             },
           ]

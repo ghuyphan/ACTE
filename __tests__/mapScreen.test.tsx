@@ -1728,12 +1728,57 @@ describe('MapScreen', () => {
     expect(within(friendPreview).getByText('District 3')).toBeTruthy();
     expect(within(friendPreview).getByText('Shared coffee memory')).toBeTruthy();
     expect(queryByTestId('map-friends-preview-item-shared-owned-1')).toBeNull();
+
+    act(() => {
+      getByTestId('map-canvas').props.onRegionChangeComplete({
+        latitude: 10.803,
+        longitude: 106.701,
+        latitudeDelta: 0.025,
+        longitudeDelta: 0.025,
+      });
+    });
+
     expect(getByText('Open shared')).toBeTruthy();
 
     fireEvent.press(getByTestId('map-friends-preview-open'));
 
     await waitFor(() => {
       expect(mockRouterPush).toHaveBeenCalledWith('/shared/shared-friend-1');
+    });
+  });
+
+  it('recenters an off-center active friend preview before opening it', async () => {
+    const { getByTestId, getByText } = render(<MapScreen />);
+
+    fireEvent.press(getByTestId('map-friends-chip'));
+
+    await waitFor(() => {
+      expect(getByTestId('map-friends-preview-shell')).toBeTruthy();
+      expect(getByText('View on map')).toBeTruthy();
+    });
+
+    fireEvent.press(getByTestId('map-friends-preview-item-shared-friend-1'));
+
+    await waitFor(() => {
+      const lastCall = mockAnimateToRegion.mock.calls[mockAnimateToRegion.mock.calls.length - 1];
+      expect(lastCall?.[0]).toMatchObject({
+        latitude: 10.803,
+        longitude: 106.701,
+      });
+      expect(mockRouterPush).not.toHaveBeenCalled();
+    });
+
+    act(() => {
+      getByTestId('map-canvas').props.onRegionChangeComplete({
+        latitude: 10.803,
+        longitude: 106.701,
+        latitudeDelta: 0.025,
+        longitudeDelta: 0.025,
+      });
+    });
+
+    await waitFor(() => {
+      expect(getByText('Open shared')).toBeTruthy();
     });
   });
 
@@ -1783,6 +1828,24 @@ describe('MapScreen', () => {
     await waitFor(() => {
       expect(getByTestId('map-friends-preview-shell')).toBeTruthy();
       expect(getByTestId('map-friends-preview-item-shared-friend-1')).toBeTruthy();
+    });
+  });
+
+  it('deselects a selected friend callout when tapping the empty map', async () => {
+    const { getByTestId, queryByTestId } = render(<MapScreen />);
+
+    fireEvent.press(getByTestId('friend-marker-shared-friend-1'));
+
+    await waitFor(() => {
+      expect(getByTestId('map-friends-preview-shell')).toBeTruthy();
+      expect(getByTestId('shared-post-callout-shared-friend-1')).toBeTruthy();
+    });
+
+    fireEvent.press(getByTestId('mock-map-press'));
+
+    await waitFor(() => {
+      expect(queryByTestId('map-friends-preview-shell')).toBeNull();
+      expect(queryByTestId('shared-post-callout-shared-friend-1')).toBeNull();
     });
   });
 });

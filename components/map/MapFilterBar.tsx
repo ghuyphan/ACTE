@@ -283,7 +283,7 @@ export default function MapFilterBar({
                 ]}
               >
                 <Ionicons
-                  name="sparkles-outline"
+                  name="people-outline"
                   size={13}
                   color={friendsChip.active ? colors.primary : colors.secondaryText}
                 />

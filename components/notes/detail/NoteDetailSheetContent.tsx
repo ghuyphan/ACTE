@@ -120,6 +120,7 @@ type NoteDetailSheetContentProps = {
     isDark: boolean;
     isDeleting: boolean;
     isEditing: boolean;
+    isSavingEdit: boolean;
     isSharedByMe: boolean;
     loading: boolean;
     locationInputRef: any;
@@ -215,6 +216,7 @@ export default function NoteDetailSheetContent({
     isDark,
     isDeleting,
     isEditing,
+    isSavingEdit,
     isSharedByMe,
     loading,
     locationInputRef,
@@ -352,10 +354,10 @@ export default function NoteDetailSheetContent({
     const photoCaptionBlurTargetRef = useRef<View | null>(null);
 
     useEffect(() => {
-        if (isEditing || isDeleting || loading || !note) {
+        if (isEditing || isDeleting || isSavingEdit || loading || !note) {
             setDeleteConfirmVisible(false);
         }
-    }, [isDeleting, isEditing, loading, note]);
+    }, [isDeleting, isEditing, isSavingEdit, loading, note]);
 
     if (loading) {
         return (
@@ -752,6 +754,7 @@ export default function NoteDetailSheetContent({
                 isDeleting={isDeleting}
                 isDownloadingPolaroid={polaroidExporting}
                 isEditing={isEditing}
+                isSavingEdit={isSavingEdit}
                 onDownloadPolaroid={onDownloadPolaroid}
                 onPrimaryPress={isEditing ? onSaveEdit : onStartEditing}
                 saveIconAnimatedStyle={saveIconAnimatedStyle}
@@ -835,7 +838,7 @@ export default function NoteDetailSheetContent({
                                         testID="note-detail-delete-confirm-action"
                                         accessibilityRole="button"
                                         onPress={onDelete}
-                                        disabled={isDeleting}
+                                        disabled={isDeleting || isSavingEdit}
                                         style={[
                                             styles.deleteConfirmAction,
                                             styles.deleteConfirmDestructiveAction,
@@ -843,7 +846,7 @@ export default function NoteDetailSheetContent({
                                                 backgroundColor: noteDetailTheme.destructiveSurface,
                                                 borderColor: colors.danger,
                                             },
-                                            isDeleting ? styles.deleteButtonDisabled : null,
+                                            isDeleting || isSavingEdit ? styles.deleteButtonDisabled : null,
                                         ]}
                                     >
                                         <Text style={[styles.deleteConfirmActionLabel, { color: colors.danger }]}>
@@ -864,14 +867,14 @@ export default function NoteDetailSheetContent({
                                 accessibilityRole="button"
                                 accessibilityLabel={t('noteDetail.deleteTitle', 'Delete Note')}
                                 onPress={() => setDeleteConfirmVisible(true)}
-                                disabled={isDeleting}
+                                disabled={isDeleting || isSavingEdit}
                                 style={[
                                 styles.deleteButton,
                                 {
                                     backgroundColor: noteDetailTheme.actionSurface,
                                     borderColor: noteDetailTheme.actionBorder,
                                 },
-                                isDeleting ? styles.deleteButtonDisabled : null,
+                                isDeleting || isSavingEdit ? styles.deleteButtonDisabled : null,
                                 ]}
                             >
                                 <Ionicons name="trash-outline" size={18} color={colors.danger} />

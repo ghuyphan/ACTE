@@ -227,6 +227,7 @@ export default function MapScreenIOS() {
   const {
     activeFriendPostId,
     activeNearbyNoteId,
+    clearFriendsPreview,
     closeFriendsPreview,
     collapseNotesPreview,
     nearbyPreviewItems,
@@ -272,6 +273,22 @@ export default function MapScreenIOS() {
     [activePreviewNote, initialRegion, settledRegion]
   );
   const activePreviewNoteId = activePreviewNote?.id ?? null;
+  const activeFriendPost = useMemo(
+    () => friendPosts.find((post) => post.id === activeFriendPostId) ?? null,
+    [activeFriendPostId, friendPosts]
+  );
+  const activeFriendPostReadyToOpen = useMemo(
+    () =>
+      activeFriendPost != null &&
+      typeof activeFriendPost.latitude === 'number' &&
+      typeof activeFriendPost.longitude === 'number' &&
+      isCoordinateCenteredInRegion(
+        settledRegion ?? initialRegion,
+        activeFriendPost.latitude,
+        activeFriendPost.longitude
+      ),
+    [activeFriendPost, initialRegion, settledRegion]
+  );
   const friendsPreviewVisible = showFriendsPreview && friendPosts.length > 0;
   const hasFriendLayer = sharedEnabled && friendPosts.length > 0;
   const hasOwnNotes = notes.length > 0;
@@ -484,8 +501,9 @@ export default function MapScreenIOS() {
   const handleMapCanvasPress = useCallback(() => {
     nearbyPreviewFocusGuardUntilRef.current = 0;
     resetToNearbyPreview();
+    clearFriendsPreview();
     handleMapPress();
-  }, [handleMapPress, resetToNearbyPreview]);
+  }, [clearFriendsPreview, handleMapPress, resetToNearbyPreview]);
 
   const handleChangeFilterType = useCallback(
     (nextType: Parameters<typeof setFilterType>[0]) => {
@@ -1240,6 +1258,7 @@ export default function MapScreenIOS() {
           visible={friendsPreviewVisible}
           posts={friendPosts}
           activePostId={activeFriendPostId}
+          activePostReadyToOpen={activeFriendPostReadyToOpen}
           bottomOffset={previewBottomOffset}
           onOpen={handleOpenSharedPost}
           onDismiss={handleDismissFriendsPreview}

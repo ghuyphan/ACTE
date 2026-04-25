@@ -33,6 +33,7 @@ export function useProfileScreenModel() {
   const [usernameErrorMessage, setUsernameErrorMessage] = useState<string | null>(null);
   const [transitionUser, setTransitionUser] = useState(user);
   const usernameCopiedResetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const deleteAccountInFlightRef = useRef(false);
   const isTransitioningAccount = isSigningOut || isDeletingAccount;
   const isProfileOffline = isAuthAvailable && !isOnline;
   const offlineActionTitle = t('auth.offlineTitle', 'You are offline');
@@ -287,7 +288,7 @@ export function useProfileScreenModel() {
   };
 
   const handleDeleteAccount = () => {
-    if (!user || isDeletingAccount) {
+    if (!user || isDeletingAccount || deleteAccountInFlightRef.current) {
       return;
     }
 
@@ -297,7 +298,12 @@ export function useProfileScreenModel() {
     }
 
     const performDeleteAccount = async () => {
+      if (deleteAccountInFlightRef.current) {
+        return;
+      }
+
       try {
+        deleteAccountInFlightRef.current = true;
         setIsDeletingAccount(true);
         setTransitionUser(user);
         const result = await deleteAccount();
@@ -341,6 +347,7 @@ export function useProfileScreenModel() {
           )
         );
       } finally {
+        deleteAccountInFlightRef.current = false;
         setIsDeletingAccount(false);
       }
     };

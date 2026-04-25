@@ -21,6 +21,7 @@ import { SharedPost } from '../../services/sharedFeedService';
 import { isOlderIOS } from '../../utils/platform';
 import { MapPreviewPositionPill } from './MapPreviewFooterControls';
 import MapPreviewSheet from './MapPreviewSheet';
+import { formatSharedPostAuthorHandle } from './mapSharedPostPresentation';
 import {
   getOverlayBorderColor,
   getOverlayFallbackColor,
@@ -29,7 +30,7 @@ import {
 } from './overlayTokens';
 
 const PREVIEW_HORIZONTAL_INSET = 14;
-const PREVIEW_MEDIA_SIZE = 64;
+const PREVIEW_MEDIA_SIZE = 56;
 const PREVIEW_ROW_GAP = 12;
 
 function getPreviewText(post: SharedPost, photoLabel: string, noContentLabel: string) {
@@ -57,6 +58,7 @@ interface MapFriendsPreviewCardProps {
   visible: boolean;
   posts: SharedPost[];
   activePostId: string | null;
+  activePostReadyToOpen: boolean;
   bottomOffset: number;
   onOpen: (postId?: string) => void;
   onDismiss: () => void;
@@ -70,6 +72,7 @@ export default function MapFriendsPreviewCard({
   visible,
   posts,
   activePostId,
+  activePostReadyToOpen,
   bottomOffset,
   onOpen,
   onDismiss,
@@ -176,9 +179,14 @@ export default function MapFriendsPreviewCard({
         return;
       }
 
+      if (!activePostReadyToOpen) {
+        onFocusPost(postId);
+        return;
+      }
+
       onOpen(postId);
     },
-    [activePostId, onFocusPost, onInteraction, onOpen]
+    [activePostId, activePostReadyToOpen, onFocusPost, onInteraction, onOpen]
   );
 
   if (!isMounted && !visible) {
@@ -196,6 +204,10 @@ export default function MapFriendsPreviewCard({
   } = renderData;
   const showPreviewCount = renderPosts.length > 1;
   const previewPosition = Math.max(renderIndex, 0) + 1;
+  const previewActionLabel = activePostReadyToOpen
+    ? t('map.openShared', 'Open shared')
+    : t('map.centerOnMapAction', 'View on map');
+  const previewActionIcon = activePostReadyToOpen ? 'arrow-forward-circle' : 'locate';
 
   return (
     <MapPreviewSheet
@@ -265,6 +277,10 @@ export default function MapFriendsPreviewCard({
               drawDistance={pageWidth * 2}
               renderItem={({ item }) => {
                 const authorLabel = item.authorDisplayName?.trim() || t('shared.someone', 'Someone');
+                const authorHandle = formatSharedPostAuthorHandle(
+                  item.authorDisplayName ?? '',
+                  t('shared.someone', 'Someone')
+                );
                 const photoUri = getPostPhotoUri(item);
                 const previewText = getPreviewText(
                   item,
@@ -315,6 +331,17 @@ export default function MapFriendsPreviewCard({
                       )}
 
                       <View style={styles.copyWrap}>
+                        <View style={styles.eyebrowRow}>
+                          <Text
+                            style={[
+                              styles.eyebrow,
+                              { color: isActive ? colors.primary : colors.secondaryText },
+                            ]}
+                            numberOfLines={1}
+                          >
+                            {authorHandle}
+                          </Text>
+                        </View>
                         <Text
                           style={[styles.title, { color: isActive ? colors.primary : colors.text }]}
                           numberOfLines={1}
@@ -324,12 +351,6 @@ export default function MapFriendsPreviewCard({
                         <Text style={[styles.content, { color: colors.secondaryText }]} numberOfLines={2}>
                           {previewText}
                         </Text>
-                        <View style={styles.metaRow}>
-                          <Ionicons name="sparkles-outline" size={12} color={colors.primary} />
-                          <Text style={[styles.metaText, { color: colors.primary }]} numberOfLines={1}>
-                            {t('map.friendFrom', 'From {{name}}', { name: authorLabel })}
-                          </Text>
-                        </View>
                       </View>
                     </View>
                   </Pressable>
@@ -369,12 +390,17 @@ export default function MapFriendsPreviewCard({
                 ]}
                 onPress={() => {
                   onInteraction?.();
-                  onOpen(renderPost.id);
+                  if (activePostReadyToOpen) {
+                    onOpen(renderPost.id);
+                    return;
+                  }
+
+                  onFocusPost(renderPost.id);
                 }}
               >
-                <Ionicons name="arrow-forward-circle" size={14} color={colors.primary} />
+                <Ionicons name={previewActionIcon} size={14} color={colors.primary} />
                 <Text style={[styles.actionText, { color: colors.primary }]}>
-                  {t('map.openShared', 'Open shared')}
+                  {previewActionLabel}
                 </Text>
               </Pressable>
             </View>
@@ -395,43 +421,43 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   cardContent: {
-    paddingHorizontal: mapOverlayTokens.overlayPadding,
-    paddingTop: 14,
-    paddingBottom: 12,
+    paddingHorizontal: 12,
+    paddingTop: 12,
+    paddingBottom: 9,
   },
   previewList: {
-    marginBottom: 10,
+    marginBottom: 6,
   },
   previewListContent: {
     gap: 0,
   },
   previewPage: {
-    minHeight: 82,
+    minHeight: 68,
   },
   previewPageInner: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     gap: PREVIEW_ROW_GAP,
-    minHeight: 82,
+    minHeight: 68,
   },
   avatar: {
     width: PREVIEW_MEDIA_SIZE,
     height: PREVIEW_MEDIA_SIZE,
-    borderRadius: 18,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
   },
   previewMediaWrap: {
     width: PREVIEW_MEDIA_SIZE,
     height: PREVIEW_MEDIA_SIZE,
-    borderRadius: 18,
+    borderRadius: 16,
     overflow: 'hidden',
     position: 'relative',
   },
   previewPhoto: {
     width: '100%',
     height: '100%',
-    borderRadius: 18,
+    borderRadius: 16,
   },
   previewAvatarBadgeWrap: {
     position: 'absolute',
@@ -450,23 +476,24 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
   avatarLabel: {
-    fontSize: 17,
+    fontSize: 15,
     fontWeight: '800',
   },
   copyWrap: {
     flex: 1,
     minWidth: 0,
-    paddingTop: 2,
+    justifyContent: 'center',
   },
-  metaRow: {
-    marginTop: 8,
+  eyebrowRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
+    gap: 4,
+    marginBottom: 1,
   },
-  metaText: {
-    fontSize: 12,
-    fontWeight: '500',
+  eyebrow: {
+    fontSize: 11,
+    lineHeight: 14,
+    fontWeight: '700',
     fontFamily: 'Noto Sans',
     flex: 1,
   },
@@ -475,15 +502,15 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   title: {
-    fontSize: 16,
-    lineHeight: 20,
-    fontWeight: '700',
-    marginBottom: 6,
+    fontSize: 14,
+    lineHeight: 18,
+    fontWeight: '800',
+    marginBottom: 2,
     fontFamily: 'Noto Sans',
   },
   content: {
-    fontSize: 13,
-    lineHeight: 18,
+    fontSize: 12,
+    lineHeight: 16,
     fontFamily: 'Noto Sans',
   },
   footer: {

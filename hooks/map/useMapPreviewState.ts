@@ -182,6 +182,13 @@ export function useMapPreviewState({
       return;
     }
 
+    if (!showFriendsPreview) {
+      if (activeFriendPostId !== null) {
+        setActiveFriendPostId(null);
+      }
+      return;
+    }
+
     if (activeFriendPostId && friendPosts.some((post) => post.id === activeFriendPostId)) {
       return;
     }
@@ -210,6 +217,11 @@ export function useMapPreviewState({
 
   const closeFriendsPreview = useCallback(() => {
     setShowFriendsPreview(false);
+  }, []);
+
+  const clearFriendsPreview = useCallback(() => {
+    setShowFriendsPreview(false);
+    setActiveFriendPostId(null);
   }, []);
 
   const openFriendsPreview = useCallback(() => {
@@ -252,6 +264,7 @@ export function useMapPreviewState({
 
   return {
     activeFriendPostId,
+    clearFriendsPreview,
     activeNearbyNoteId,
     closeFriendsPreview,
     collapseNotesPreview,

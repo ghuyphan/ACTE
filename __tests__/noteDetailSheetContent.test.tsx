@@ -64,6 +64,7 @@ const baseProps = {
   isDark: false,
   isDeleting: false,
   isEditing: false,
+  isSavingEdit: false,
   isSharedByMe: false,
   loading: true,
   locationInputRef: { current: null },

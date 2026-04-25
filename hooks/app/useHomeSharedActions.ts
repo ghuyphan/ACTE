@@ -94,6 +94,7 @@ export function useHomeSharedActions({
 }: UseHomeSharedActionsOptions) {
   const { t } = useTranslation();
   const inviteActionInFlightRef = useRef<InviteAction | null>(null);
+  const removingFriendIdsRef = useRef<Set<string>>(new Set());
   const [inviteActionInFlight, setInviteActionInFlight] = useState<InviteAction | null>(null);
 
   const handleOpenSharedAuth = useCallback(() => {
@@ -258,6 +259,10 @@ export function useHomeSharedActions({
 
   const handleRemoveFriend = useCallback(
     (friendUid: string) => {
+      if (removingFriendIdsRef.current.has(friendUid)) {
+        return;
+      }
+
       showAppAlert(
         t('shared.removeFriendTitle', 'Remove friend'),
         t(
@@ -273,6 +278,11 @@ export function useHomeSharedActions({
             text: t('shared.removeFriendConfirm', 'Remove'),
             style: 'destructive',
             onPress: () => {
+              if (removingFriendIdsRef.current.has(friendUid)) {
+                return;
+              }
+
+              removingFriendIdsRef.current.add(friendUid);
               void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
               void removeFriend(friendUid)
                 .then(() => {
@@ -284,6 +294,9 @@ export function useHomeSharedActions({
                     t('shared.removeFriendTitle', 'Remove friend'),
                     getSharedFeedErrorMessage(error)
                   );
+                })
+                .finally(() => {
+                  removingFriendIdsRef.current.delete(friendUid);
                 });
             },
           },

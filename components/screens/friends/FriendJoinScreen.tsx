@@ -82,6 +82,8 @@ export default function FriendJoinScreen() {
   const dismissTargetRef = useRef<'tabs' | 'auth'>('tabs');
   const autoAttemptedRef = useRef(false);
   const autoJoinInviteValueRef = useRef<string | null>(null);
+  const searchInFlightRef = useRef(false);
+  const addFriendInFlightRef = useRef(false);
   const dismissTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const didFinishDismissRef = useRef(false);
 
@@ -256,6 +258,10 @@ export default function FriendJoinScreen() {
   }, []);
 
   const handleSearchByUsername = useCallback(async () => {
+    if (searchInFlightRef.current) {
+      return;
+    }
+
     const normalizedUsername = normalizeUsernameInput(usernameValue);
 
     if (!normalizedUsername) {
@@ -286,6 +292,7 @@ export default function FriendJoinScreen() {
       return;
     }
 
+    searchInFlightRef.current = true;
     setSearching(true);
     setSearchResult(null);
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -300,12 +307,13 @@ export default function FriendJoinScreen() {
         getSharedFeedErrorMessage(error)
       );
     } finally {
+      searchInFlightRef.current = false;
       setSearching(false);
     }
   }, [authReady, dismissTo, findFriendByUsername, isOnline, t, user, usernameValue]);
 
   const handleAddFriend = useCallback(async () => {
-    if (!searchResult) {
+    if (!searchResult || addFriendInFlightRef.current) {
       return;
     }
 
@@ -333,6 +341,7 @@ export default function FriendJoinScreen() {
       return;
     }
 
+    addFriendInFlightRef.current = true;
     setAddingFriend(true);
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
@@ -355,6 +364,7 @@ export default function FriendJoinScreen() {
         getSharedFeedErrorMessage(error)
       );
     } finally {
+      addFriendInFlightRef.current = false;
       setAddingFriend(false);
     }
   }, [addFriendByUsername, authReady, dismissTo, isOnline, router, searchResult, t, user]);

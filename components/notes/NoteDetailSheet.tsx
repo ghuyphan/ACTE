@@ -242,6 +242,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
     const [richDecorationsReady, setRichDecorationsReady] = useState(false);
     const [isEditing, setIsEditing] = useState(false);
     const [isDeleting, setIsDeleting] = useState(false);
+    const [isSavingEdit, setIsSavingEdit] = useState(false);
     const [editContent, setEditContent] = useState('');
     const [editLocation, setEditLocation] = useState('');
     const [editRadius, setEditRadius] = useState(150);
@@ -290,6 +291,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
     const scrollContainerRef = useRef<any>(null);
     const feedbackTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const pastePromptTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const saveEditInFlightRef = useRef(false);
     const closeCompletionHandledRef = useRef(false);
     const missingNoteCloseRequestedRef = useRef(false);
     const isMountedRef = useRef(true);
@@ -1446,7 +1448,11 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
     };
 
     const handleSaveEdit = async () => {
-        if (!note || isDeleting) return;
+        if (!note || isDeleting || saveEditInFlightRef.current) return;
+        saveEditInFlightRef.current = true;
+        setIsSavingEdit(true);
+
+        try {
         const updates: Partial<Pick<Note, 'content' | 'caption' | 'locationName' | 'moodEmoji' | 'noteColor' | 'radius'>> = {};
         const currentNoteColor =
             note.type === 'text' ? getEditableTextNoteColor(note.noteColor) : null;
@@ -1644,6 +1650,10 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
         setDoodleModeEnabled(false);
         setStickerModeEnabled(false);
         setIsEditing(false);
+        } finally {
+            saveEditInFlightRef.current = false;
+            setIsSavingEdit(false);
+        }
     };
 
     const handleDownloadPolaroid = useCallback(async () => {
@@ -1735,6 +1745,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
             richDecorationsReady={richDecorationsReady}
             isEditing={isEditing}
             isDeleting={isDeleting}
+            isSavingEdit={isSavingEdit}
             editContent={editContent}
             setEditContent={setEditContent}
             editLocation={editLocation}

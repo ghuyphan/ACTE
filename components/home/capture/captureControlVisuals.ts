@@ -61,25 +61,8 @@ export function getCaptureGlassActionVisuals(
 
 export function getCaptureShutterVisuals(colors: CaptureCardColors) {
   return {
-    fillColor: colors.captureButtonBg,
+    fillColor: colors.primary,
     ringColor: colors.border,
-    contentColor: getReadableOnColor(colors.captureButtonBg, colors.text),
+    contentColor: '#FFFFFF',
   } as const;
-}
-
-function getReadableOnColor(backgroundColor: string, fallbackTextColor: string) {
-  const match = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(backgroundColor.trim());
-  if (!match) {
-    return '#FFFFFF';
-  }
-
-  const hex = match[1].length === 3
-    ? match[1].split('').map((char) => `${char}${char}`).join('')
-    : match[1];
-  const red = parseInt(hex.slice(0, 2), 16) / 255;
-  const green = parseInt(hex.slice(2, 4), 16) / 255;
-  const blue = parseInt(hex.slice(4, 6), 16) / 255;
-  const luminance = 0.2126 * red + 0.7152 * green + 0.0722 * blue;
-
-  return luminance > 0.72 ? fallbackTextColor : '#FFFFFF';
 }

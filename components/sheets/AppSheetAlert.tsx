@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import { useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { useTheme } from '../../hooks/useTheme';
 import AppSheet from './AppSheet';
@@ -50,18 +51,36 @@ function AlertSheetBody({
   onClose,
 }: Omit<AppSheetAlertProps, 'visible'>) {
   const { colors } = useTheme();
+  const actionInFlightRef = useRef(false);
+  const [busyActionIndex, setBusyActionIndex] = useState<number | null>(null);
   const meta = getVariantMeta(
     variant,
     variant === 'error' ? colors.danger : variant === 'success' ? colors.success : colors.primary
   );
 
-  const runAction = async (action?: AppSheetAlertAction) => {
+  const runAction = async (action?: AppSheetAlertAction, index?: number) => {
+    if (actionInFlightRef.current) {
+      return;
+    }
+
+    actionInFlightRef.current = true;
+    const shouldShowBusy = !closeOnAction;
+    if (shouldShowBusy) {
+      setBusyActionIndex(index ?? null);
+    }
     if (closeOnAction) {
       onClose();
     }
 
-    if (action?.onPress) {
-      await action.onPress();
+    try {
+      if (action?.onPress) {
+        await action.onPress();
+      }
+    } finally {
+      actionInFlightRef.current = false;
+      if (shouldShowBusy) {
+        setBusyActionIndex(null);
+      }
     }
   };
   const resolvedActions =
@@ -87,8 +106,10 @@ function AlertSheetBody({
             label={action.label}
             variant={action.variant ?? 'primary'}
             onPress={() => {
-              void runAction(action);
+              void runAction(action, index);
             }}
+            loading={busyActionIndex === index}
+            disabled={busyActionIndex !== null}
             style={styles.actionButton}
           />
         ))}

@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import type { ThemeColors } from '../../hooks/useTheme';
 import { getSharedPostPreviewText } from '../../services/noteTextPresentation';
 import type { SharedPost } from '../../services/sharedFeedService';
+import { formatSharedPostAuthorHandle } from './mapSharedPostPresentation';
 
 interface MapSharedPostCalloutProps {
   post: SharedPost;
@@ -19,6 +20,10 @@ function MapSharedPostCallout({
 }: MapSharedPostCalloutProps) {
   const { t } = useTranslation();
   const authorLabel = post.authorDisplayName?.trim() || t('shared.someone', 'Someone');
+  const authorHandle = formatSharedPostAuthorHandle(
+    post.authorDisplayName ?? '',
+    t('shared.someone', 'Someone')
+  );
   const placeLabel = post.placeName?.trim() || t('shared.sharedNow', 'Shared now');
   const previewText = getSharedPostPreviewText(
     post,
@@ -84,7 +89,7 @@ function MapSharedPostCallout({
             {previewText}
           </Text>
           <Text style={[styles.meta, { color: colors.primary }]} numberOfLines={1}>
-            {t('map.friendFrom', 'From {{name}}', { name: authorLabel })}
+            {authorHandle}
           </Text>
         </View>
 

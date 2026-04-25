@@ -1139,7 +1139,7 @@ describe('CaptureCard doodle handle', () => {
     });
   });
 
-  it('keeps the live shutter fill on the capture button color instead of flashing primary', () => {
+  it('uses the same primary fill as the text-note save button for the live shutter', () => {
     const ref = React.createRef<CaptureCardHandle>();
     const view = renderCaptureCard(ref, {
       captureMode: 'camera',
@@ -1154,11 +1154,10 @@ describe('CaptureCard doodle handle', () => {
 
     const shutterInnerStyle = StyleSheet.flatten(view.getByTestId('capture-shutter-inner').props.style);
 
-    expect(shutterInnerStyle?.backgroundColor).toBe('#1C1C1E');
-    expect(shutterInnerStyle?.backgroundColor).not.toBe('#FFC107');
+    expect(shutterInnerStyle?.backgroundColor).toBe('#FFC107');
   });
 
-  it('keeps live shutter text readable on light capture button themes', () => {
+  it('keeps the shutter active when a theme exposes a light capture button token', () => {
     const ref = React.createRef<CaptureCardHandle>();
     const view = renderCaptureCard(ref, {
       captureMode: 'camera',
@@ -1171,9 +1170,12 @@ describe('CaptureCard doodle handle', () => {
       },
     });
 
+    const shutterInnerStyle = StyleSheet.flatten(view.getByTestId('capture-shutter-inner').props.style);
     const countdownStyle = StyleSheet.flatten(view.getByText('2s').props.style);
 
-    expect(countdownStyle?.color).toBe('#2C2433');
+    expect(shutterInnerStyle?.backgroundColor).toBe('#FFC107');
+    expect(shutterInnerStyle?.backgroundColor).not.toBe('#FFF4F7');
+    expect(countdownStyle?.color).toBe('#FFFFFF');
   });
 
   it('mounts the camera as soon as Android permission is granted', () => {

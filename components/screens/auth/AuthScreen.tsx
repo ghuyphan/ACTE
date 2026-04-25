@@ -179,6 +179,7 @@ export default function LoginScreen() {
   const [authMessage, setAuthMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [activeAction, setActiveAction] = useState<'google' | 'signIn' | 'register' | 'reset' | null>(null);
+  const activeActionRef = useRef<typeof activeAction>(null);
   const [isLeavingFormFlow, setIsLeavingFormFlow] = useState(false);
   const [formContentHeight, setFormContentHeight] = useState(0);
   const [previousFormContentHeight, setPreviousFormContentHeight] = useState(0);
@@ -204,6 +205,11 @@ export default function LoginScreen() {
   const resetMessages = useCallback(() => {
     setAuthMessage(null);
     setSuccessMessage(null);
+  }, []);
+
+  const setActiveAuthAction = useCallback((nextAction: typeof activeAction) => {
+    activeActionRef.current = nextAction;
+    setActiveAction(nextAction);
   }, []);
 
   const showLandingAuthMessage = useCallback(
@@ -363,6 +369,10 @@ export default function LoginScreen() {
   };
 
   const handleGoogleSignIn = async () => {
+    if (activeActionRef.current) {
+      return;
+    }
+
     if (!hasAcceptedPolicyConsent && (canOpenPrivacyPolicy || canOpenSupport)) {
       showLandingAuthMessage(
         t('auth.validationLandingPolicy', 'Accept the privacy policy before continuing.')
@@ -371,18 +381,18 @@ export default function LoginScreen() {
     }
 
     resetMessages();
-    setActiveAction('google');
+    setActiveAuthAction('google');
     const result = await signInWithGoogle();
 
     if (result.status === 'success') {
       const completed = await handleAuthSuccess();
       if (!completed) {
-        setActiveAction(null);
+        setActiveAuthAction(null);
       }
       return;
     }
 
-    setActiveAction(null);
+    setActiveAuthAction(null);
 
     if (result.status === 'cancelled') {
       return;
@@ -394,6 +404,10 @@ export default function LoginScreen() {
   };
 
   const handleEmailSignIn = async () => {
+    if (activeActionRef.current) {
+      return;
+    }
+
     const trimmedEmail = email.trim();
     if (!trimmedEmail) {
       setAuthMessage(t('auth.validationEmail', 'Enter your email address.'));
@@ -411,18 +425,18 @@ export default function LoginScreen() {
     }
 
     resetMessages();
-    setActiveAction('signIn');
+    setActiveAuthAction('signIn');
     const result = await signInWithEmail(trimmedEmail, password);
 
     if (result.status === 'success') {
       const completed = await handleAuthSuccess();
       if (!completed) {
-        setActiveAction(null);
+        setActiveAuthAction(null);
       }
       return;
     }
 
-    setActiveAction(null);
+    setActiveAuthAction(null);
 
     setAuthMessage(
       result.message ?? t('auth.signInFailed', 'Unable to sign in right now. Please try again later.')
@@ -430,6 +444,10 @@ export default function LoginScreen() {
   };
 
   const handleRegister = async () => {
+    if (activeActionRef.current) {
+      return;
+    }
+
     const trimmedEmail = email.trim();
     const trimmedName = displayName.trim();
     if (!trimmedEmail) {
@@ -477,7 +495,7 @@ export default function LoginScreen() {
     }
 
     resetMessages();
-    setActiveAction('register');
+    setActiveAuthAction('register');
     const input: EmailRegistrationInput = {
       email: trimmedEmail,
       password,
@@ -487,7 +505,7 @@ export default function LoginScreen() {
 
     if (result.status === 'success') {
       if (result.requiresEmailConfirmation) {
-        setActiveAction(null);
+        setActiveAuthAction(null);
         setScreenMode('signIn');
         setSuccessMessage(
           result.message ??
@@ -501,12 +519,12 @@ export default function LoginScreen() {
 
       const completed = await handleAuthSuccess();
       if (!completed) {
-        setActiveAction(null);
+        setActiveAuthAction(null);
       }
       return;
     }
 
-    setActiveAction(null);
+    setActiveAuthAction(null);
 
     setAuthMessage(
       result.message ?? t('auth.signUpFailed', 'Unable to create your account right now. Please try again later.')
@@ -514,6 +532,10 @@ export default function LoginScreen() {
   };
 
   const handlePasswordReset = async () => {
+    if (activeActionRef.current) {
+      return;
+    }
+
     const trimmedEmail = email.trim();
     if (!trimmedEmail) {
       setAuthMessage(t('auth.validationEmail', 'Enter your email address.'));
@@ -526,9 +548,9 @@ export default function LoginScreen() {
     }
 
     resetMessages();
-    setActiveAction('reset');
+    setActiveAuthAction('reset');
     const result = await sendPasswordReset(trimmedEmail);
-    setActiveAction(null);
+    setActiveAuthAction(null);
 
     if (result.status === 'success') {
       setScreenMode('signIn');
