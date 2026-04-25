@@ -44,10 +44,9 @@ interface WidgetFrameMetrics {
     footerHorizontal: number;
     footerVertical: number;
     headerBottomPadding: number;
-    authorChipHorizontal: number;
-    authorChipVertical: number;
+    authorAvatarSize: number;
+    authorBadgePadding: number;
     authorChipFontSize: number;
-    authorChipSpacing: number;
 }
 
 const WIDGET_FRAME_METRICS: Record<WidgetSizeName, WidgetFrameMetrics> = {
@@ -63,10 +62,9 @@ const WIDGET_FRAME_METRICS: Record<WidgetSizeName, WidgetFrameMetrics> = {
         footerHorizontal: 16,
         footerVertical: 10,
         headerBottomPadding: 4,
-        authorChipHorizontal: 8,
-        authorChipVertical: 5,
+        authorAvatarSize: 20,
+        authorBadgePadding: 3.5,
         authorChipFontSize: 10,
-        authorChipSpacing: 5,
     },
     medium: {
         compactPad: 16,
@@ -80,10 +78,9 @@ const WIDGET_FRAME_METRICS: Record<WidgetSizeName, WidgetFrameMetrics> = {
         footerHorizontal: 18,
         footerVertical: 11,
         headerBottomPadding: 6,
-        authorChipHorizontal: 9,
-        authorChipVertical: 5.5,
+        authorAvatarSize: 22,
+        authorBadgePadding: 3.5,
         authorChipFontSize: 10,
-        authorChipSpacing: 5,
     },
     large: {
         compactPad: 20,
@@ -97,10 +94,9 @@ const WIDGET_FRAME_METRICS: Record<WidgetSizeName, WidgetFrameMetrics> = {
         footerHorizontal: 20,
         footerVertical: 12,
         headerBottomPadding: 8,
-        authorChipHorizontal: 10,
-        authorChipVertical: 6,
+        authorAvatarSize: 24,
+        authorBadgePadding: 3,
         authorChipFontSize: 10.5,
-        authorChipSpacing: 6,
     },
 };
 
@@ -172,7 +168,6 @@ const LocketWidget = (props: { props: WidgetViewProps }) => {
         isLivePhoto,
         livePhotoBadgeText,
         isSharedContent,
-        authorDisplayName,
         authorInitials,
         family,
     } = props.props ?? {};
@@ -243,10 +238,8 @@ const LocketWidget = (props: { props: WidgetViewProps }) => {
         : showIdle
             ? asString(accessorySavedLabelText) || i18n.t('widget.accessorySavedLabel', 'Saved')
             : asString(accessoryNearLabelText) || i18n.t('widget.accessoryNearLabel', 'Near');
-    const safeAuthorName = asString(authorDisplayName);
     const safeAuthorInitials = asString(authorInitials);
-    const compactAuthorName = safeAuthorName.split(/\s+/)[0]?.trim() ?? safeAuthorName;
-    const showAuthorChip = Boolean(!showIdle && size !== 'small' && isSharedContent && (safeAuthorInitials || compactAuthorName));
+    const showAuthorChip = Boolean(!showIdle && isSharedContent && safeAuthorInitials);
     const authorChipBackground = hasImage ? 'rgba(16,12,10,0.32)' : 'rgba(255,249,243,0.82)';
     const authorChipForeground = hasImage ? '#FFF8F0' : '#2A1A11';
     const livePhotoText = asString(livePhotoBadgeText) || i18n.t('widget.livePhotoBadge', 'Live');
@@ -431,7 +424,7 @@ const LocketWidget = (props: { props: WidgetViewProps }) => {
                                 modifiers={[
                                     backgroundOverlay({ color: authorChipBackground }),
                                     cornerRadius(999),
-                                    padding({ horizontal: frameMetrics.authorChipHorizontal, vertical: frameMetrics.authorChipVertical }),
+                                    padding({ all: frameMetrics.authorBadgePadding }),
                                 ]}
                             >
                                 <Text
@@ -439,22 +432,15 @@ const LocketWidget = (props: { props: WidgetViewProps }) => {
                                         font({ weight: 'bold', size: frameMetrics.authorChipFontSize, design: 'rounded' }),
                                         foregroundStyle(authorChipForeground),
                                         lineLimit(1),
+                                        frame({
+                                            width: frameMetrics.authorAvatarSize,
+                                            height: frameMetrics.authorAvatarSize,
+                                            alignment: 'center',
+                                        }),
                                     ]}
                                 >
                                     {safeAuthorInitials}
                                 </Text>
-                                {compactAuthorName ? (
-                                    <Text
-                                        modifiers={[
-                                            font({ weight: 'medium', size: frameMetrics.authorChipFontSize, design: 'default' }),
-                                            foregroundStyle(authorChipForeground),
-                                            lineLimit(1),
-                                            padding({ leading: frameMetrics.authorChipSpacing }),
-                                        ]}
-                                    >
-                                        {compactAuthorName}
-                                    </Text>
-                                ) : null}
                             </HStack>
                         ) : null}
                         <Spacer />
@@ -463,7 +449,7 @@ const LocketWidget = (props: { props: WidgetViewProps }) => {
                                 modifiers={[
                                     backgroundOverlay({ color: authorChipBackground }),
                                     cornerRadius(999),
-                                    padding({ horizontal: frameMetrics.authorChipHorizontal, vertical: frameMetrics.authorChipVertical }),
+                                    padding({ horizontal: 9, vertical: 5.5 }),
                                 ]}
                             >
                                 <SwiftUIImage systemName="livephoto" color={authorChipForeground} size={11} />
@@ -472,7 +458,7 @@ const LocketWidget = (props: { props: WidgetViewProps }) => {
                                         font({ weight: 'medium', size: frameMetrics.authorChipFontSize, design: 'default' }),
                                         foregroundStyle(authorChipForeground),
                                         lineLimit(1),
-                                        padding({ leading: frameMetrics.authorChipSpacing }),
+                                        padding({ leading: 5 }),
                                     ]}
                                 >
                                     {livePhotoText}

@@ -8,9 +8,7 @@ import {
 interface UseCaptureCardDecorationsOptions {
   captureMode: 'text' | 'camera';
   capturedPhoto: string | null;
-  captureCardTextColor: string;
   photoDoodleDefaultColor: string;
-  primaryColor: string;
   dismissCaptureInputs: () => void;
   enablePhotoStickers: boolean;
 }
@@ -19,12 +17,28 @@ function getUniqueColors(colors: string[]) {
   return colors.filter((color, index) => colors.indexOf(color) === index);
 }
 
+const TEXT_DOODLE_DEFAULT_COLOR = '#1C1C1E';
+const TEXT_DOODLE_COLOR_OPTIONS = [
+  TEXT_DOODLE_DEFAULT_COLOR,
+  '#FFFFFF',
+  '#FF6B6B',
+  '#2F80ED',
+  '#34C759',
+  '#A855F7',
+];
+const PHOTO_DOODLE_COLOR_OPTIONS = [
+  '#FFFFFF',
+  '#1C1C1E',
+  '#FF6B6B',
+  '#2F80ED',
+  '#34C759',
+  '#A855F7',
+];
+
 export function useCaptureCardDecorations({
   captureMode,
   capturedPhoto,
-  captureCardTextColor,
   photoDoodleDefaultColor,
-  primaryColor,
   dismissCaptureInputs,
   enablePhotoStickers,
 }: UseCaptureCardDecorationsOptions) {
@@ -32,13 +46,12 @@ export function useCaptureCardDecorations({
   const [stickerModeEnabled, setStickerModeEnabled] = useState(false);
   const [textDoodleStrokes, setTextDoodleStrokes] = useState<DoodleStroke[]>([]);
   const [photoDoodleStrokes, setPhotoDoodleStrokes] = useState<DoodleStroke[]>([]);
-  const [textDoodleColor, setTextDoodleColor] = useState(captureCardTextColor);
+  const [textDoodleColor, setTextDoodleColor] = useState(TEXT_DOODLE_DEFAULT_COLOR);
   const [photoDoodleColor, setPhotoDoodleColor] = useState(photoDoodleDefaultColor);
   const [textStickerPlacements, setTextStickerPlacements] = useState<NoteStickerPlacement[]>([]);
   const [photoStickerPlacements, setPhotoStickerPlacements] = useState<NoteStickerPlacement[]>([]);
   const [textSelectedStickerId, setTextSelectedStickerId] = useState<string | null>(null);
   const [photoSelectedStickerId, setPhotoSelectedStickerId] = useState<string | null>(null);
-  const previousTextDoodleDefaultColorRef = useRef(captureCardTextColor);
   const previousCapturedPhotoRef = useRef(capturedPhoto);
   const textStickerPlacementsRef = useRef<NoteStickerPlacement[]>([]);
   const photoStickerPlacementsRef = useRef<NoteStickerPlacement[]>([]);
@@ -50,22 +63,14 @@ export function useCaptureCardDecorations({
   const stickerPlacements = isCameraCaptureSurface ? photoStickerPlacements : textStickerPlacements;
   const selectedStickerId = isCameraCaptureSurface ? photoSelectedStickerId : textSelectedStickerId;
   const textDoodleColors = useMemo(
-    () => getUniqueColors([captureCardTextColor, photoDoodleDefaultColor, primaryColor]),
-    [captureCardTextColor, photoDoodleDefaultColor, primaryColor]
+    () => getUniqueColors(TEXT_DOODLE_COLOR_OPTIONS),
+    []
   );
   const photoDoodleColors = useMemo(
-    () => getUniqueColors([photoDoodleDefaultColor, '#1C1C1E', primaryColor]),
-    [photoDoodleDefaultColor, primaryColor]
+    () => getUniqueColors([photoDoodleDefaultColor, ...PHOTO_DOODLE_COLOR_OPTIONS]),
+    [photoDoodleDefaultColor]
   );
   const doodleColorOptions = isCameraCaptureSurface ? photoDoodleColors : textDoodleColors;
-
-  useEffect(() => {
-    const previousDefaultColor = previousTextDoodleDefaultColorRef.current;
-    setTextDoodleColor((current) => (
-      current === previousDefaultColor ? captureCardTextColor : current
-    ));
-    previousTextDoodleDefaultColorRef.current = captureCardTextColor;
-  }, [captureCardTextColor]);
 
   useLayoutEffect(() => {
     const previousCapturedPhoto = previousCapturedPhotoRef.current;
@@ -104,9 +109,9 @@ export function useCaptureCardDecorations({
     }
     setTextDoodleStrokes([]);
     setPhotoDoodleStrokes([]);
-    setTextDoodleColor(captureCardTextColor);
+    setTextDoodleColor(TEXT_DOODLE_DEFAULT_COLOR);
     setPhotoDoodleColor(photoDoodleDefaultColor);
-  }, [captureCardTextColor, doodleModeEnabled, photoDoodleDefaultColor]);
+  }, [doodleModeEnabled, photoDoodleDefaultColor]);
 
   const resetStickers = useCallback(() => {
     if (stickerModeEnabled) {

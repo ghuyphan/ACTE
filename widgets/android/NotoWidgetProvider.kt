@@ -184,10 +184,7 @@ private data class WidgetDecorationArtboard(
 private data class WidgetAuthorChipLayoutMetrics(
   val horizontalPaddingPx: Int,
   val verticalPaddingPx: Int,
-  val nameStartPaddingPx: Int,
-  val nameMaxWidthPx: Int,
-  val initialsTextSizeSp: Float,
-  val nameTextSizeSp: Float
+  val initialsTextSizeSp: Float
 )
 
 private data class WidgetStageMetrics(
@@ -197,12 +194,11 @@ private data class WidgetStageMetrics(
   val locationMaxLength: Int,
   val authorAvatarSizeDp: Float,
   val authorInitialsTextSizeSp: Float,
-  val authorNameTextSizeSp: Float,
   val baseTopInsetDp: Float,
   val baseBottomInsetDp: Float,
   val centeredLocationTopInsetDp: Float,
   val edgeLocationTopInsetDp: Float,
-  val authorChipBottomInsetDp: Float,
+  val authorChipTopInsetDp: Float,
   val photoTitleBottomInsetDp: Float,
   val idleTopInsetDp: Float,
   val blankBodyTextSizeSp: Float,
@@ -245,14 +241,13 @@ private fun resolveWidgetStageMetrics(layoutStage: WidgetLayoutStage): WidgetSta
       cardInsetDp = 0f,
       innerCornerRadiusDp = 20f,
       locationMaxLength = 18,
-      authorAvatarSizeDp = 18f,
+      authorAvatarSizeDp = 20f,
       authorInitialsTextSizeSp = 9f,
-      authorNameTextSizeSp = 10f,
       baseTopInsetDp = 14f,
       baseBottomInsetDp = 14f,
       centeredLocationTopInsetDp = 16f,
       edgeLocationTopInsetDp = 20f,
-      authorChipBottomInsetDp = 0f,
+      authorChipTopInsetDp = 30f,
       photoTitleBottomInsetDp = 46f,
       idleTopInsetDp = 3f,
       blankBodyTextSizeSp = 15f,
@@ -272,14 +267,13 @@ private fun resolveWidgetStageMetrics(layoutStage: WidgetLayoutStage): WidgetSta
       cardInsetDp = 6f,
       innerCornerRadiusDp = 24f,
       locationMaxLength = 24,
-      authorAvatarSizeDp = 18f,
+      authorAvatarSizeDp = 22f,
       authorInitialsTextSizeSp = 9f,
-      authorNameTextSizeSp = 10f,
       baseTopInsetDp = 18f,
       baseBottomInsetDp = 18f,
       centeredLocationTopInsetDp = 20f,
       edgeLocationTopInsetDp = 24f,
-      authorChipBottomInsetDp = 32f,
+      authorChipTopInsetDp = 32f,
       photoTitleBottomInsetDp = 52f,
       idleTopInsetDp = 4f,
       blankBodyTextSizeSp = 21f,
@@ -299,14 +293,13 @@ private fun resolveWidgetStageMetrics(layoutStage: WidgetLayoutStage): WidgetSta
       cardInsetDp = 8f,
       innerCornerRadiusDp = 28f,
       locationMaxLength = 30,
-      authorAvatarSizeDp = 20f,
+      authorAvatarSizeDp = 24f,
       authorInitialsTextSizeSp = 9.5f,
-      authorNameTextSizeSp = 10.5f,
       baseTopInsetDp = 22f,
       baseBottomInsetDp = 24f,
       centeredLocationTopInsetDp = 22f,
       edgeLocationTopInsetDp = 28f,
-      authorChipBottomInsetDp = 36f,
+      authorChipTopInsetDp = 36f,
       photoTitleBottomInsetDp = 62f,
       idleTopInsetDp = 5f,
       blankBodyTextSizeSp = 24f,
@@ -588,29 +581,15 @@ private fun resolveAuthorChipLayoutMetrics(
   val textScale = resolveWidgetResponsiveTextScale(context, geometry, layoutStage)
   val stageMetrics = resolveWidgetStageMetrics(layoutStage)
   val baseHorizontalPaddingDp = when (layoutStage) {
-    WidgetLayoutStage.SMALL -> 7f
-    WidgetLayoutStage.MEDIUM -> 7.5f
-    WidgetLayoutStage.LARGE -> 8.5f
+    WidgetLayoutStage.SMALL -> 3.5f
+    WidgetLayoutStage.MEDIUM -> 3.5f
+    WidgetLayoutStage.LARGE -> 3f
   }
-  val baseVerticalPaddingDp = 5f
-  val baseNameGapDp = when (layoutStage) {
-    WidgetLayoutStage.SMALL -> 6f
-    WidgetLayoutStage.MEDIUM -> 6f
-    WidgetLayoutStage.LARGE -> 7f
-  }
-  val baseNameMaxWidthDp = when (layoutStage) {
-    WidgetLayoutStage.SMALL -> 96f
-    WidgetLayoutStage.MEDIUM -> 132f
-    WidgetLayoutStage.LARGE -> 156f
-  }
-
+  val baseVerticalPaddingDp = baseHorizontalPaddingDp
   return WidgetAuthorChipLayoutMetrics(
     horizontalPaddingPx = context.widgetHelperDpToPx(baseHorizontalPaddingDp * scale),
     verticalPaddingPx = context.widgetHelperDpToPx(baseVerticalPaddingDp * scale),
-    nameStartPaddingPx = context.widgetHelperDpToPx(baseNameGapDp * scale),
-    nameMaxWidthPx = context.widgetHelperDpToPx(baseNameMaxWidthDp * clampWidgetScalar(scale, 0.94f, 1.08f)),
-    initialsTextSizeSp = scaleWidgetSp(stageMetrics.authorInitialsTextSizeSp) * textScale,
-    nameTextSizeSp = scaleWidgetSp(stageMetrics.authorNameTextSizeSp) * textScale
+    initialsTextSizeSp = scaleWidgetSp(stageMetrics.authorInitialsTextSizeSp) * textScale
   )
 }
 
@@ -1016,7 +995,7 @@ class NotoWidgetProvider : AppWidgetProvider() {
       bindStickerState(context, views, snapshot, options, layoutStage, geometry, showIdle)
       bindDoodleState(context, views, snapshot, options, layoutStage, geometry, usesTextSurface, showIdle)
       val showAuthorChip = bindAuthorState(context, views, snapshot, showIdle, usesTextSurface, layoutStage, geometry)
-      bindLivePhotoBadge(context, views, showLivePhotoBadge, layoutStage, geometry)
+      bindLivePhotoBadge(context, views, showLivePhotoBadge && !showAuthorChip, layoutStage, geometry)
 
       val idleBodyLayoutMetrics = resolveIdleBodyLayoutMetrics(context, geometry, layoutStage)
       views.setViewPadding(
@@ -1634,8 +1613,7 @@ class NotoWidgetProvider : AppWidgetProvider() {
     ): Boolean {
       val stageMetrics = resolveWidgetStageMetrics(layoutStage)
       val authorChipLayoutMetrics = resolveAuthorChipLayoutMetrics(context, geometry, layoutStage)
-      val compactAuthorName = getCompactAuthorName(snapshot)
-      val showAuthorChip = shouldShowAuthorChip(snapshot, showIdle, layoutStage)
+      val showAuthorChip = shouldShowAuthorChip(snapshot, showIdle)
 
       if (!showAuthorChip) {
         views.setViewVisibility(R.id.widget_author_chip, View.GONE)
@@ -1666,6 +1644,14 @@ class NotoWidgetProvider : AppWidgetProvider() {
         context.dpToPx(stageMetrics.authorAvatarSizeDp)
       )
 
+      if (avatarBitmap == null && snapshot.authorInitials.isBlank()) {
+        views.setViewVisibility(R.id.widget_author_chip, View.GONE)
+        views.setViewVisibility(R.id.widget_author_avatar, View.GONE)
+        views.setViewVisibility(R.id.widget_author_initials, View.GONE)
+        views.setViewVisibility(R.id.widget_author_name, View.GONE)
+        return false
+      }
+
       if (avatarBitmap != null) {
         views.setViewVisibility(R.id.widget_author_avatar, View.VISIBLE)
         views.setImageViewBitmap(R.id.widget_author_avatar, avatarBitmap)
@@ -1685,26 +1671,7 @@ class NotoWidgetProvider : AppWidgetProvider() {
         views.setViewVisibility(R.id.widget_author_initials, View.GONE)
       }
 
-      if (compactAuthorName.isNotBlank()) {
-        views.setViewVisibility(R.id.widget_author_name, View.VISIBLE)
-        views.setTextViewText(R.id.widget_author_name, compactAuthorName)
-        views.setViewPadding(
-          R.id.widget_author_name,
-          authorChipLayoutMetrics.nameStartPaddingPx,
-          0,
-          0,
-          0
-        )
-        views.setInt(R.id.widget_author_name, "setMaxWidth", authorChipLayoutMetrics.nameMaxWidthPx)
-        views.setTextColor(R.id.widget_author_name, foregroundColor)
-        views.setTextViewTextSize(
-          R.id.widget_author_name,
-          TypedValue.COMPLEX_UNIT_SP,
-          authorChipLayoutMetrics.nameTextSizeSp
-        )
-      } else {
-        views.setViewVisibility(R.id.widget_author_name, View.GONE)
-      }
+      views.setViewVisibility(R.id.widget_author_name, View.GONE)
 
       return true
     }
@@ -1762,18 +1729,21 @@ class NotoWidgetProvider : AppWidgetProvider() {
       val responsiveScale = resolveWidgetResponsiveScale(context, geometry, layoutStage)
       var topInsetDp = stageMetrics.baseTopInsetDp * responsiveScale
       var bottomInsetDp = stageMetrics.baseBottomInsetDp * responsiveScale
+      var topChromeInsetDp = 0f
 
       if (showLocationChip) {
-        topInsetDp += if (showCenteredTextLocationChip) {
+        topChromeInsetDp = max(topChromeInsetDp, if (showCenteredTextLocationChip) {
           stageMetrics.centeredLocationTopInsetDp * responsiveScale
         } else {
           stageMetrics.edgeLocationTopInsetDp * responsiveScale
-        }
+        })
       }
 
       if (showAuthorChip) {
-        bottomInsetDp += stageMetrics.authorChipBottomInsetDp * responsiveScale
+        topChromeInsetDp = max(topChromeInsetDp, stageMetrics.authorChipTopInsetDp * responsiveScale)
       }
+
+      topInsetDp += topChromeInsetDp
 
       if (showPhotoTitle) {
         bottomInsetDp += stageMetrics.photoTitleBottomInsetDp * responsiveScale
@@ -2187,23 +2157,12 @@ class NotoWidgetProvider : AppWidgetProvider() {
       }
     }
 
-    private fun getCompactAuthorName(snapshot: NotoWidgetSnapshot): String {
-      return snapshot.authorDisplayName
-        .trim()
-        .split(Regex("\\s+"))
-        .firstOrNull()
-        ?.trim()
-        .orEmpty()
-    }
-
-    private fun shouldShowAuthorChip(snapshot: NotoWidgetSnapshot, showIdle: Boolean, layoutStage: WidgetLayoutStage): Boolean {
-      if (showIdle || !snapshot.isSharedContent || layoutStage == WidgetLayoutStage.SMALL) {
+    private fun shouldShowAuthorChip(snapshot: NotoWidgetSnapshot, showIdle: Boolean): Boolean {
+      if (showIdle || !snapshot.isSharedContent) {
         return false
       }
 
-      val compactAuthorName = getCompactAuthorName(snapshot)
-      return compactAuthorName.isNotBlank() ||
-        snapshot.authorInitials.isNotBlank() ||
+      return snapshot.authorInitials.isNotBlank() ||
         !snapshot.authorAvatarImageUrl.isNullOrBlank() ||
         !snapshot.authorAvatarImageBase64.isNullOrBlank()
     }

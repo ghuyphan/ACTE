@@ -825,13 +825,13 @@
         "signInFailed": "Unable to sign in right now. Please try again later."
     },
     "onboarding": {
-        "title1": "She doesn't like onions? 🧅",
+        "title1": "She doesn't like onions?",
         "subtitle1": "Write it down before you forget!\nNoto helps you remember her food preferences at every restaurant.",
-        "title2": "We'll remind you 💛",
+        "title2": "We'll remind you",
         "subtitle2": "Next time you return to that restaurant, you'll get a reminder with your notes right on time.",
-        "title3": "Small things matter 🫶",
+        "title3": "Small things matter",
         "subtitle3": "Because remembering no onions in her phở is how you say \"I love you\".",
-        "notificationsTitle": "Stay in the loop 🔔",
+        "notificationsTitle": "Stay in the loop",
         "notificationsSubtitle": "Turn on notifications so Noto can alert you about nearby reminders and friend activity when it matters.",
         "allowNotifications": "Allow notifications",
         "next": "Next",

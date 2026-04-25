@@ -1610,7 +1610,7 @@ describe('CaptureCard doodle handle', () => {
       fireEvent.press(getByTestId('capture-doodle-color-2'));
     });
 
-    expect(getByTestId('mock-doodle-active-color')).toHaveTextContent('#FFC107');
+    expect(getByTestId('mock-doodle-active-color')).toHaveTextContent('#FF6B6B');
     expect(getByTestId('capture-doodle-color-0').props.accessibilityState).toEqual({
       selected: false,
     });
@@ -1625,8 +1625,8 @@ describe('CaptureCard doodle handle', () => {
     expect(ref.current?.getDoodleSnapshot()).toEqual({
       enabled: true,
       strokes: [
-        { color: '#FFC107', points: [0.1, 0.1, 0.2, 0.2] },
-        { color: '#FFC107', points: [0.3, 0.3, 0.4, 0.4] },
+        { color: '#FF6B6B', points: [0.1, 0.1, 0.2, 0.2] },
+        { color: '#FF6B6B', points: [0.3, 0.3, 0.4, 0.4] },
       ],
     });
   });
@@ -1648,7 +1648,7 @@ describe('CaptureCard doodle handle', () => {
       fireEvent.press(getByTestId('capture-doodle-color-2'));
     });
 
-    expect(getByTestId('mock-doodle-active-color')).toHaveTextContent('#FFC107');
+    expect(getByTestId('mock-doodle-active-color')).toHaveTextContent('#FF6B6B');
 
     act(() => {
       fireEvent.press(getByTestId('mock-doodle-commit'));
@@ -1657,10 +1657,38 @@ describe('CaptureCard doodle handle', () => {
     expect(ref.current?.getDoodleSnapshot()).toEqual({
       enabled: true,
       strokes: [
-        { color: '#FFC107', points: [0.1, 0.1, 0.2, 0.2] },
-        { color: '#FFC107', points: [0.3, 0.3, 0.4, 0.4] },
+        { color: '#FF6B6B', points: [0.1, 0.1, 0.2, 0.2] },
+        { color: '#FF6B6B', points: [0.3, 0.3, 0.4, 0.4] },
       ],
     });
+  });
+
+  it('keeps the active text-card doodle color stable when app theme colors change', () => {
+    const ref = React.createRef<CaptureCardHandle>();
+    const view = renderCaptureCard(ref, {
+      noteText: '',
+    });
+
+    act(() => {
+      fireEvent.press(view.getByTestId('capture-doodle-toggle'));
+    });
+    expect(view.getByTestId('mock-doodle-active-color')).toHaveTextContent('#1C1C1E');
+
+    view.rerender(
+      <CaptureCard
+        {...createCaptureCardProps(ref, {
+          noteText: '',
+          colors: {
+            ...createCaptureCardProps(ref).colors,
+            primary: '#A855F7',
+            primarySoft: 'rgba(168, 85, 247, 0.2)',
+            captureCardText: '#544F69',
+          },
+        })}
+      />
+    );
+
+    expect(view.getByTestId('mock-doodle-active-color')).toHaveTextContent('#1C1C1E');
   });
 
   it('clears photo-only decoration state when the captured photo changes', async () => {

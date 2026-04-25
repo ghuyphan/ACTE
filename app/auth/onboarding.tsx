@@ -1,9 +1,8 @@
-import { GlassView } from '../../components/ui/GlassView';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect, useRouter } from 'expo-router';
 import React, { useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Image, type ImageSourcePropType, Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, {
     FadeInDown,
     FadeOutDown,
@@ -22,23 +21,35 @@ import {
 } from '../../services/socialPushService';
 import { completeOnboardingAndEnterApp } from '../../services/startupRouting';
 import { getPersistentItem } from '../../utils/appStorage';
-import { isOlderIOS } from '../../utils/platform';
 
 const HAS_LAUNCHED_KEY = 'settings.hasLaunched';
 
+const ONBOARDING_ART = {
+    memory: require('../../assets/images/onboarding/memory-photo.png'),
+    notification: require('../../assets/images/onboarding/notification-bell.png'),
+    note: require('../../assets/images/onboarding/note-onion.png'),
+    place: require('../../assets/images/onboarding/place-pin.png'),
+} satisfies Record<string, ImageSourcePropType>;
+
 const SLIDES = [
-    { emoji: '🧅', titleKey: 'onboarding.title1', subtitleKey: 'onboarding.subtitle1' },
-    { emoji: '📍', titleKey: 'onboarding.title2', subtitleKey: 'onboarding.subtitle2' },
-    { emoji: '💛', titleKey: 'onboarding.title3', subtitleKey: 'onboarding.subtitle3' },
+    { scene: 'note', titleKey: 'onboarding.title1', subtitleKey: 'onboarding.subtitle1' },
+    { scene: 'place', titleKey: 'onboarding.title2', subtitleKey: 'onboarding.subtitle2' },
+    { scene: 'memory', titleKey: 'onboarding.title3', subtitleKey: 'onboarding.subtitle3' },
     {
-        emoji: '🔔',
+        scene: 'notification',
         titleKey: 'onboarding.notificationsTitle',
         subtitleKey: 'onboarding.notificationsSubtitle',
     },
-];
+] as const;
 
 const DOT_SIZE = 8;
 const ACTIVE_DOT_WIDTH = 28;
+
+type OnboardingSceneKind = (typeof SLIDES)[number]['scene'];
+
+type OnboardingSceneProps = {
+    kind: OnboardingSceneKind;
+};
 
 type PaginationDotProps = {
     activeColor: string;
@@ -72,6 +83,14 @@ function PaginationDot({ activeColor, inactiveColor, isActive }: PaginationDotPr
     return <Animated.View style={[styles.dot, animatedStyle]} />;
 }
 
+function OnboardingScene({ kind }: OnboardingSceneProps) {
+    return (
+        <View style={styles.artFrame}>
+            <Image source={ONBOARDING_ART[kind]} style={styles.artImage} resizeMode="contain" />
+        </View>
+    );
+}
+
 export default function OnboardingScreen() {
     const { t } = useTranslation();
     const { colors, isDark } = useTheme();
@@ -79,6 +98,7 @@ export default function OnboardingScreen() {
     const router = useRouter();
     const [step, setStep] = useState(0);
     const [isCompleting, setIsCompleting] = useState(false);
+    const [isSecondaryCompleting, setIsSecondaryCompleting] = useState(false);
     const isNotificationStep = step === SLIDES.length - 1;
 
     useFocusEffect(
@@ -175,6 +195,20 @@ export default function OnboardingScreen() {
         await completeOnboarding({ allowWhileCompleting: true, keepLoadingState: true });
     };
 
+    const completeOnboardingWithoutNotifications = async () => {
+        if (isCompleting) {
+            return;
+        }
+
+        setIsSecondaryCompleting(true);
+
+        try {
+            await completeOnboarding();
+        } finally {
+            setIsSecondaryCompleting(false);
+        }
+    };
+
     const nextStep = () => {
         if (isCompleting) {
             return;
@@ -205,15 +239,9 @@ export default function OnboardingScreen() {
                     key={'icon-' + step}
                     entering={FadeInDown.springify().mass(0.8)}
                     exiting={FadeOutDown.duration(200)}
-                    style={[styles.emojiContainer, { overflow: 'hidden' }]}
+                    style={styles.sceneContainer}
                 >
-                    <View style={[StyleSheet.absoluteFill, isOlderIOS && { backgroundColor: isDark ? 'rgba(0,0,0,0.5)' : 'rgba(255,255,255,0.5)' }]} />
-                    <GlassView
-                        style={StyleSheet.absoluteFill}
-                        colorScheme={isDark ? 'dark' : 'light'}
-                        fallbackColor={colors.glassBackdrop}
-                    />
-                    <Text style={styles.emoji}>{slide.emoji}</Text>
+                    <OnboardingScene kind={slide.scene} />
                 </Animated.View>
 
                 <Animated.Text
@@ -234,7 +262,6 @@ export default function OnboardingScreen() {
             </View>
 
             <View style={styles.bottom}>
-                {/* Dots */}
                 <View style={styles.dots}>
                     {SLIDES.map((_, index) => (
                         <PaginationDot
@@ -246,7 +273,6 @@ export default function OnboardingScreen() {
                     ))}
                 </View>
 
-                {/* Next Button */}
                 <PrimaryButton
                     label={
                         isNotificationStep
@@ -254,7 +280,7 @@ export default function OnboardingScreen() {
                             : t('onboarding.next', 'Next')
                     }
                     disabled={isCompleting}
-                    loading={isCompleting}
+                    loading={isCompleting && !isSecondaryCompleting}
                     onPress={
                         isNotificationStep
                             ? () => {
@@ -264,20 +290,23 @@ export default function OnboardingScreen() {
                     }
                 />
 
-                {/* Skip */}
                 <View style={styles.skipContainer}>
                     <Pressable disabled={isCompleting} onPress={() => {
-                        void completeOnboarding();
+                        void completeOnboardingWithoutNotifications();
                     }} style={({ pressed }) => [
                         styles.skipButton,
-                        isCompleting && { opacity: 0.5 },
+                        isCompleting && !isSecondaryCompleting && { opacity: 0.5 },
                         pressed && !isCompleting && { opacity: 0.7 }
                     ]}>
-                        <Text style={[styles.skipText, { color: colors.secondaryText }]}>
-                            {isNotificationStep
-                                ? t('onboarding.notNow', 'Not now')
-                                : t('onboarding.skip', 'Skip')}
-                        </Text>
+                        {isSecondaryCompleting ? (
+                            <ActivityIndicator color={colors.secondaryText} size="small" />
+                        ) : (
+                            <Text style={[styles.skipText, { color: colors.secondaryText }]}>
+                                {isNotificationStep
+                                    ? t('onboarding.notNow', 'Not now')
+                                    : t('onboarding.skip', 'Skip')}
+                            </Text>
+                        )}
                     </Pressable>
                 </View>
             </View>
@@ -297,30 +326,37 @@ const styles = StyleSheet.create({
         paddingHorizontal: 32,
         paddingTop: 80,
     },
-    emojiContainer: {
-        width: 140,
-        height: 140,
-        borderRadius: 44,
+    sceneContainer: {
+        width: 300,
+        height: 300,
         justifyContent: 'center',
         alignItems: 'center',
-        marginBottom: 40,
+        marginBottom: 20,
     },
-    emoji: {
-        fontSize: 72,
+    artFrame: {
+        width: '100%',
+        height: '100%',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    artImage: {
+        width: 292,
+        height: 292,
     },
     title: {
         ...Typography.screenTitle,
-        fontSize: 34,
+        fontSize: 32,
         fontWeight: '800',
         textAlign: 'center',
         marginBottom: 16,
-        letterSpacing: -0.5,
+        maxWidth: 320,
     },
     subtitle: {
         ...Typography.heroSubtitle,
         textAlign: 'center',
         lineHeight: 28,
         fontWeight: '500',
+        maxWidth: 320,
     },
     bottom: {
         alignItems: 'center',

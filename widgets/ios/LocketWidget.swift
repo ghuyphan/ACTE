@@ -1312,14 +1312,11 @@ private struct LocketWidgetEntryView: View {
 
     private var shouldShowAuthorChip: Bool {
         !isAccessoryFamily &&
-        !isSmall &&
         !payload.isIdleState &&
         payload.isSharedContent &&
         (
-            !compactAuthorName.isEmpty ||
             !payload.authorInitials.isEmpty ||
-            payload.authorAvatarImageUrl != nil ||
-            payload.authorAvatarImageBase64 != nil
+            resolvedAuthorAvatar != nil
         )
     }
 
@@ -1533,20 +1530,6 @@ private struct LocketWidgetEntryView: View {
 
         let firstSegment = trimmed
             .split(separator: ",", maxSplits: 1, omittingEmptySubsequences: true)
-            .first?
-            .trimmingCharacters(in: .whitespacesAndNewlines) ?? trimmed
-
-        return firstSegment
-    }
-
-    private var compactAuthorName: String {
-        let trimmed = payload.authorDisplayName.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else {
-            return ""
-        }
-
-        let firstSegment = trimmed
-            .split(separator: " ", maxSplits: 1, omittingEmptySubsequences: true)
             .first?
             .trimmingCharacters(in: .whitespacesAndNewlines) ?? trimmed
 
@@ -1860,38 +1843,33 @@ private struct LocketWidgetEntryView: View {
     }
 
     private var authorChip: some View {
-        let metrics = compactChromePillMetrics
+        let avatarSize: CGFloat = isLarge ? 24 : (isMedium ? 22 : 20)
+        let badgePadding: CGFloat = hasPhotoBackground ? 3 : 3.5
 
-        HStack(spacing: 6) {
+        return ZStack {
             if let authorAvatar = resolvedAuthorAvatar {
                 Image(uiImage: authorAvatar)
                     .resizable()
                     .scaledToFill()
-                    .frame(width: isLarge ? 20 : 18, height: isLarge ? 20 : 18)
+                    .frame(width: avatarSize, height: avatarSize)
                     .clipShape(Circle())
             } else if !payload.authorInitials.isEmpty {
                 Text(payload.authorInitials)
-                    .font(.custom("Noto Sans Bold", size: scaledWidgetFontSize(isLarge ? 9.5 : 9)))
+                    .font(.custom("Noto Sans Bold", size: scaledWidgetFontSize(isLarge ? 10.2 : 9.4)))
                     .foregroundStyle(authorChipForegroundColor)
-                    .frame(width: isLarge ? 20 : 18, height: isLarge ? 20 : 18)
+                    .frame(width: avatarSize, height: avatarSize)
                     .background(authorChipForegroundColor.opacity(hasPhotoBackground ? 0.16 : 0.10))
                     .clipShape(Circle())
             }
-
-            if !compactAuthorName.isEmpty {
-                Text(compactAuthorName)
-                    .font(.custom("Noto Sans Medium", size: scaledWidgetFontSize(isLarge ? 10.5 : 10)))
-                    .foregroundStyle(authorChipForegroundColor)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.84)
-                    .frame(maxWidth: isLarge ? 118 : 92, alignment: .leading)
-            }
         }
-        .padding(.horizontal, metrics.horizontalPadding)
-        .padding(.vertical, metrics.verticalPadding)
+        .padding(badgePadding)
         .background(authorChipBackgroundColor)
-        .clipShape(Capsule())
-        .shadow(color: Color.black.opacity(metrics.shadowOpacity), radius: 10, x: 0, y: 4)
+        .clipShape(Circle())
+        .overlay(
+            Circle()
+                .stroke(Color.white.opacity(hasPhotoBackground ? 0.30 : 0.46), lineWidth: 1)
+        )
+        .shadow(color: Color.black.opacity(hasPhotoBackground ? 0.20 : 0.10), radius: 10, x: 0, y: 4)
     }
 
     private var livePhotoBadge: some View {
@@ -1970,7 +1948,7 @@ private struct LocketWidgetEntryView: View {
     }
 
     private var shouldShowBottomMetaChip: Bool {
-        !payload.isIdleState && shouldShowAuthorChip
+        false
     }
 
     private var textBodyLineLimit: Int {
@@ -2279,7 +2257,14 @@ private struct LocketWidgetEntryView: View {
 
             VStack(spacing: 0) {
                 HStack(alignment: .top) {
-                    if shouldShowLivePhotoBadge {
+                    if shouldShowAuthorChip {
+                        authorChip
+
+                        if shouldShowLivePhotoBadge {
+                            livePhotoBadge
+                                .padding(.leading, 6)
+                        }
+                    } else if shouldShowLivePhotoBadge {
                         livePhotoBadge
                     }
 

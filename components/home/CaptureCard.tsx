@@ -629,9 +629,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   } = useCaptureCardDecorations({
     captureMode,
     capturedPhoto,
-    captureCardTextColor: colors.captureCardText,
     photoDoodleDefaultColor: PHOTO_DOODLE_DEFAULT_COLOR,
-    primaryColor: colors.primary,
     dismissCaptureInputs,
     enablePhotoStickers: ENABLE_PHOTO_STICKERS,
   });

@@ -825,13 +825,13 @@
         "signInFailed": "Hiện chưa thể đăng nhập. Vui lòng thử lại sau."
     },
     "onboarding": {
-        "title1": "Lỡ quên người ấy không ăn hành? 🧅",
+        "title1": "Lỡ quên người ấy không ăn hành?",
         "subtitle1": "Ghi lại trước khi quên.\nNoto giúp bạn nhớ những điều nhỏ người ấy thích ở mỗi quán.",
-        "title2": "Noto sẽ nhắc bạn 💛",
+        "title2": "Noto sẽ nhắc bạn",
         "subtitle2": "Lần sau quay lại quán đó, bạn sẽ nhận được lời nhắc đúng lúc về những điều đã lưu cho người ấy.",
-        "title3": "Những điều nhỏ cũng đáng nhớ 💛",
+        "title3": "Những điều nhỏ cũng đáng nhớ",
         "subtitle3": "Vì đôi khi nhớ rằng người ấy không ăn hành trong tô phở cũng là một cách để thể hiện sự quan tâm.",
-        "notificationsTitle": "Đừng bỏ lỡ lời nhắc 🔔",
+        "notificationsTitle": "Đừng bỏ lỡ lời nhắc",
         "notificationsSubtitle": "Bật thông báo để Noto có thể báo cho bạn về lời nhắc theo vị trí và hoạt động của bạn bè đúng lúc cần thiết.",
         "allowNotifications": "Bật thông báo",
         "next": "Tiếp theo",
