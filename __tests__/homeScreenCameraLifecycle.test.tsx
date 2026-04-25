@@ -15,10 +15,15 @@ const mockOpenAppSettings = jest.fn(async () => undefined);
 const mockRequestPermission = jest.fn(async () => ({ granted: true, canAskAgain: true }));
 const mockShowAlert = jest.fn();
 const mockUseCaptureFlow = jest.fn();
-const mockGetPersistentItem = jest.fn(async (_key: string) => null);
+const mockGetPersistentItem = jest.fn<Promise<string | null>, [string]>(async (_key: string) => null);
 const mockRemovePersistentItem = jest.fn(async (_key: string) => undefined);
 const mockSetPersistentItem = jest.fn(async (_key: string, _value: string) => undefined);
 const mockScrollToOffset = jest.fn();
+const mockCaptureCardResetStickers = jest.fn();
+const mockCaptureCardRestoreStickers = jest.fn();
+const mockCaptureCardGetStickerSnapshot = jest.fn<{ enabled: boolean; placements: any[] }, []>(
+  () => ({ enabled: false, placements: [] })
+);
 let mockSyncBootstrapState:
   | 'complete'
   | 'preparing'
@@ -249,9 +254,10 @@ jest.mock('../components/home/CaptureCard', () => {
       mockCaptureCardProps = props;
       mockCaptureCardHandle = {
         getDoodleSnapshot: jest.fn(() => ({ enabled: false, strokes: [] })),
-        getStickerSnapshot: jest.fn(() => ({ enabled: false, placements: [] })),
+        getStickerSnapshot: mockCaptureCardGetStickerSnapshot,
         resetDoodle: jest.fn(),
-        resetStickers: jest.fn(),
+        resetStickers: mockCaptureCardResetStickers,
+        restoreStickers: mockCaptureCardRestoreStickers,
         closeDecorateControls: jest.fn(() => {
           props.onTextEntryFocusChange?.(false);
           props.onDoodleModeChange?.(false);
@@ -365,6 +371,10 @@ describe('HomeScreen camera lifecycle', () => {
     mockRemovePersistentItem.mockClear();
     mockSetPersistentItem.mockClear();
     mockScrollToOffset.mockClear();
+    mockCaptureCardResetStickers.mockClear();
+    mockCaptureCardRestoreStickers.mockClear();
+    mockCaptureCardGetStickerSnapshot.mockReset();
+    mockCaptureCardGetStickerSnapshot.mockReturnValue({ enabled: false, placements: [] });
     mockSyncBootstrapState = 'complete';
     mockRequestPermission.mockResolvedValue({ granted: true, canAskAgain: true });
     mockGetPersistentItem.mockResolvedValue(null);
@@ -882,5 +892,74 @@ describe('HomeScreen camera lifecycle', () => {
     });
 
     jest.useRealTimers();
+  });
+
+  it('restores a sticker-only capture draft once without replaying over later sticker edits', async () => {
+    const persistedSticker = {
+      id: 'placement-1',
+      assetId: 'asset-1',
+      x: 0.5,
+      y: 0.5,
+      scale: 1,
+      rotation: 0,
+      zIndex: 1,
+      opacity: 1,
+      outlineEnabled: true,
+      motionLocked: false,
+      renderMode: 'default',
+      asset: {
+        id: 'asset-1',
+        localUri: 'file:///sticker.png',
+        mimeType: 'image/png',
+      },
+    };
+    const persistedDraft = {
+      version: 1,
+      captureMode: 'text',
+      cameraSubmode: 'single',
+      noteText: '',
+      capturedPhoto: null,
+      capturedPairedVideo: null,
+      dualPrimaryPhoto: null,
+      dualSecondaryPhoto: null,
+      dualPrimaryFacing: null,
+      dualSecondaryFacing: null,
+      facing: 'back',
+      radius: 150,
+      selectedPhotoFilterId: 'original',
+      noteColor: null,
+      captureTarget: 'private',
+      selectedSharedAudienceUserId: null,
+      stickerPlacements: [persistedSticker],
+    };
+
+    mockGetPersistentItem.mockImplementation(async (key: string) => (
+      key === 'noto.capture.home-draft.v1' ? JSON.stringify(persistedDraft) : null
+    ));
+    mockCaptureCardGetStickerSnapshot.mockReturnValue({
+      enabled: true,
+      placements: [persistedSticker],
+    });
+
+    render(<HomeScreen />);
+
+    await waitFor(() => {
+      expect(mockCaptureCardRestoreStickers).toHaveBeenCalledTimes(1);
+    });
+    expect(mockCaptureCardResetStickers).toHaveBeenCalledTimes(1);
+    expect(mockCaptureCardRestoreStickers).toHaveBeenCalledWith([persistedSticker]);
+
+    act(() => {
+      mockCaptureCardProps?.onDraftChange?.();
+    });
+
+    await waitFor(() => {
+      expect(mockSetPersistentItem).toHaveBeenCalledWith(
+        'noto.capture.home-draft.v1',
+        expect.any(String)
+      );
+    });
+    expect(mockCaptureCardResetStickers).toHaveBeenCalledTimes(1);
+    expect(mockCaptureCardRestoreStickers).toHaveBeenCalledTimes(1);
   });
 });

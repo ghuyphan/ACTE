@@ -131,6 +131,7 @@ export interface CaptureCardHandle {
   getStickerSnapshot: () => { enabled: boolean; placements: NoteStickerPlacement[] };
   resetDoodle: () => void;
   resetStickers: () => void;
+  restoreStickers: (placements: NoteStickerPlacement[]) => void;
   closeDecorateControls: () => void;
   dismissInputs: () => void;
 }
@@ -207,6 +208,8 @@ interface CaptureCardProps {
   onResetDualCaptureSequence?: () => void;
   onDoodleModeChange?: (enabled: boolean) => void;
   onGestureActiveChange?: (active: boolean) => void;
+  onDraftChange?: () => void;
+  onBeforeNativeStickerPicker?: () => void | Promise<void>;
   onTextEntryFocusChange?: (focused: boolean) => void;
   footerContent?: ReactNode;
 }
@@ -283,6 +286,8 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   onResetDualCaptureSequence = noop,
   onDoodleModeChange,
   onGestureActiveChange,
+  onDraftChange,
+  onBeforeNativeStickerPicker,
   onTextEntryFocusChange,
   footerContent,
 }, ref) {
@@ -315,6 +320,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   const previousCapturedPhotoRef = useRef(capturedPhoto);
   const previousTextDraftEmptyRef = useRef(noteText.length === 0);
   const previousCaptureModeRef = useRef(captureMode);
+  const onDraftChangeRef = useRef(onDraftChange);
   const noteInputRef = useRef<TextInput | null>(null);
   const canvasGestureActiveRef = useRef(false);
   const cameraGestureActiveRef = useRef(false);
@@ -681,6 +687,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
     applyImportedSticker,
     dismissOverlay: dismissCaptureInputs,
     onChangeStickerPlacements: handleChangeStickerPlacements,
+    onBeforeNativePicker: onBeforeNativeStickerPicker,
     selectSticker: selectStickerPlacement,
     toggleStickerMode: toggleStickerModeInternal,
   });
@@ -694,6 +701,14 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
       setStickerEntryAnimation(null);
     }
   }, [stickerEntryAnimation, stickerPlacements]);
+
+  useEffect(() => {
+    onDraftChangeRef.current = onDraftChange;
+  }, [onDraftChange]);
+
+  useEffect(() => {
+    onDraftChangeRef.current?.();
+  }, [stickerPlacements]);
 
   useEffect(() => {
     if (captureMode !== 'camera' || Boolean(capturedPhoto)) {
@@ -1035,6 +1050,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
       }),
       resetDoodle,
       resetStickers,
+      restoreStickers: handleChangeStickerPlacements,
       closeDecorateControls: handleCloseDecorateControls,
       dismissInputs: dismissCaptureInputs,
     }),
@@ -1043,6 +1059,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
       doodleModeEnabled,
       doodleStrokes,
       handleCloseDecorateControls,
+      handleChangeStickerPlacements,
       resetDoodle,
       resetStickers,
       stickerModeEnabled,

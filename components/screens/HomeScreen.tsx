@@ -82,7 +82,11 @@ import {
   persistLivePhotoVideo,
 } from '../../services/livePhotoProcessing';
 import { resolveLocationNameFromCoordinates } from '../../services/locationLookup';
-import { saveNoteStickerPlacementsWithAssets } from '../../services/noteStickers';
+import {
+  parseNoteStickerPlacements,
+  saveNoteStickerPlacementsWithAssets,
+  type NoteStickerPlacement,
+} from '../../services/noteStickers';
 import {
   getPhotoLibraryImportPickerOptions,
   type PhotoLibraryImportIntent,
@@ -127,9 +131,16 @@ type PersistedCaptureDraft = CaptureDraftState & {
   noteColor: string | null;
   captureTarget: 'private' | 'shared';
   selectedSharedAudienceUserId: string | null;
+  stickerPlacements: NoteStickerPlacement[];
 };
 
-function isPersistableCaptureDraft(draft: CaptureDraftState) {
+function isPersistableCaptureDraft(
+  draft: CaptureDraftState & { stickerPlacements?: readonly NoteStickerPlacement[] }
+) {
+  if ((draft.stickerPlacements?.length ?? 0) > 0) {
+    return true;
+  }
+
   if (draft.captureMode !== 'camera') {
     return draft.noteText.trim().length > 0;
   }
@@ -232,6 +243,11 @@ function parsePersistedCaptureDraft(rawValue: string | null): PersistedCaptureDr
       parsed.selectedSharedAudienceUserId.trim().length > 0
         ? parsed.selectedSharedAudienceUserId
         : null;
+    const stickerPlacements = parseNoteStickerPlacements(
+      Array.isArray(parsed.stickerPlacements)
+        ? JSON.stringify(parsed.stickerPlacements)
+        : null
+    );
 
     const normalizedDraft: PersistedCaptureDraft = {
       version: 1,
@@ -250,6 +266,7 @@ function parsePersistedCaptureDraft(rawValue: string | null): PersistedCaptureDr
       noteColor,
       captureTarget,
       selectedSharedAudienceUserId,
+      stickerPlacements,
     };
 
     return isPersistableCaptureDraft(normalizedDraft) ? normalizedDraft : null;
@@ -370,6 +387,7 @@ export default function HomeScreen() {
   const searchAnim = useSharedValue(0);
   const flatListRef = useRef<any>(null);
   const captureCardRef = useRef<CaptureCardHandle | null>(null);
+  const pendingRestoredStickerPlacementsRef = useRef<NoteStickerPlacement[] | null>(null);
   const dualCameraPreviewRef = useRef<DualCameraPreviewHandle | null>(null);
   const dualCaptureComposeResolverRef = useRef<((uri: string | null) => void) | null>(null);
   const dualCaptureComposeRequestIdRef = useRef(0);
@@ -377,6 +395,8 @@ export default function HomeScreen() {
   const finalizeInlineSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const resetSaveStateTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const persistCaptureDraftTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const captureDraftRestoreStartedRef = useRef(false);
+  const captureDraftMountedRef = useRef(true);
   const saveInFlightRef = useRef(false);
   const settledArchiveItemRef = useRef<{ id: string; kind: 'note' | 'shared-post' } | null>(null);
   const previousVisibleFeedItemKeysRef = useRef<string[] | null>(null);
@@ -754,11 +774,36 @@ export default function HomeScreen() {
     await removePersistentItem(CAPTURE_DRAFT_STORAGE_KEY).catch(() => undefined);
   }, []);
 
+  const applyRestoredCaptureStickers = useCallback((placements: NoteStickerPlacement[]) => {
+    const captureCard = captureCardRef.current;
+    if (!captureCard) {
+      pendingRestoredStickerPlacementsRef.current = placements;
+      return;
+    }
+
+    pendingRestoredStickerPlacementsRef.current = null;
+    captureCard.resetStickers();
+    captureCard.restoreStickers(placements);
+  }, []);
+
+  const handleCaptureCardRef = useCallback((handle: CaptureCardHandle | null) => {
+    captureCardRef.current = handle;
+    if (!handle || !pendingRestoredStickerPlacementsRef.current) {
+      return;
+    }
+
+    const placements = pendingRestoredStickerPlacementsRef.current;
+    pendingRestoredStickerPlacementsRef.current = null;
+    handle.resetStickers();
+    handle.restoreStickers(placements);
+  }, []);
+
   const resetCaptureDraft = useCallback(() => {
     captureCardRef.current?.dismissInputs?.();
     resetCapture();
     captureCardRef.current?.resetDoodle();
     captureCardRef.current?.resetStickers();
+    pendingRestoredStickerPlacementsRef.current = null;
   }, [resetCapture]);
 
   const finalizeSavedCapture = useCallback(() => {
@@ -778,13 +823,21 @@ export default function HomeScreen() {
     }
   }, []);
 
+  useEffect(() => () => {
+    captureDraftMountedRef.current = false;
+  }, []);
+
   useEffect(() => {
-    let cancelled = false;
+    if (captureDraftReady || captureDraftRestoreStartedRef.current) {
+      return undefined;
+    }
+
+    captureDraftRestoreStartedRef.current = true;
 
     void getPersistentItem(CAPTURE_DRAFT_STORAGE_KEY).then(async (storedValue) => {
       const persistedDraft = parsePersistedCaptureDraft(storedValue);
       if (!persistedDraft) {
-        if (!cancelled) {
+        if (captureDraftMountedRef.current) {
           setCaptureDraftReady(true);
         }
         return;
@@ -799,7 +852,7 @@ export default function HomeScreen() {
 
         if (missingPhoto) {
           await clearPersistedCaptureDraft();
-          if (!cancelled) {
+          if (captureDraftMountedRef.current) {
             setCaptureDraftReady(true);
           }
           return;
@@ -816,7 +869,7 @@ export default function HomeScreen() {
         }
       }
 
-      if (cancelled) {
+      if (!captureDraftMountedRef.current) {
         return;
       }
 
@@ -835,7 +888,7 @@ export default function HomeScreen() {
         selectedPhotoFilterId: persistedDraft.selectedPhotoFilterId,
       });
       captureCardRef.current?.resetDoodle();
-      captureCardRef.current?.resetStickers();
+      applyRestoredCaptureStickers(persistedDraft.stickerPlacements);
       handleChangeNoteColor(persistedDraft.noteColor);
       setCaptureTarget(
         persistedDraft.captureTarget === 'shared' && sharedEnabled && user ? 'shared' : 'private'
@@ -845,16 +898,13 @@ export default function HomeScreen() {
       );
       setCaptureDraftReady(true);
     }).catch(() => {
-      if (!cancelled) {
+      if (captureDraftMountedRef.current) {
         setCaptureDraftReady(true);
       }
     });
-
-    return () => {
-      cancelled = true;
-    };
   }, [
     captureDraftReady,
+    applyRestoredCaptureStickers,
     clearPersistedCaptureDraft,
     handleChangeNoteColor,
     restoreCaptureState,
@@ -862,53 +912,8 @@ export default function HomeScreen() {
     user,
   ]);
 
-  useEffect(() => {
-    if (!captureDraftReady) {
-      return;
-    }
-
-    if (persistCaptureDraftTimeoutRef.current) {
-      clearTimeout(persistCaptureDraftTimeoutRef.current);
-    }
-
-    const nextDraft: PersistedCaptureDraft = {
-      version: 1,
-      captureMode,
-      cameraSubmode,
-      noteText,
-      capturedPhoto,
-      capturedPairedVideo,
-      dualPrimaryPhoto,
-      dualSecondaryPhoto,
-      dualPrimaryFacing,
-      dualSecondaryFacing,
-      facing,
-      radius,
-      selectedPhotoFilterId,
-      noteColor,
-      captureTarget,
-      selectedSharedAudienceUserId,
-    };
-
-    persistCaptureDraftTimeoutRef.current = setTimeout(() => {
-      persistCaptureDraftTimeoutRef.current = null;
-
-      if (!isPersistableCaptureDraft(nextDraft)) {
-        void clearPersistedCaptureDraft();
-        return;
-      }
-
-      void setPersistentItem(CAPTURE_DRAFT_STORAGE_KEY, JSON.stringify(nextDraft)).catch(() => undefined);
-    }, 240);
-
-    return () => {
-      if (persistCaptureDraftTimeoutRef.current) {
-        clearTimeout(persistCaptureDraftTimeoutRef.current);
-        persistCaptureDraftTimeoutRef.current = null;
-      }
-    };
-  }, [
-    captureDraftReady,
+  const buildPersistedCaptureDraft = useCallback((): PersistedCaptureDraft => ({
+    version: 1,
     captureMode,
     cameraSubmode,
     noteText,
@@ -924,8 +929,69 @@ export default function HomeScreen() {
     noteColor,
     captureTarget,
     selectedSharedAudienceUserId,
-    clearPersistedCaptureDraft,
-  ]);
+    stickerPlacements: captureCardRef.current?.getStickerSnapshot().placements ?? [],
+  }), [
+      captureMode,
+      cameraSubmode,
+      noteText,
+      capturedPhoto,
+      capturedPairedVideo,
+      dualPrimaryPhoto,
+      dualSecondaryPhoto,
+      dualPrimaryFacing,
+      dualSecondaryFacing,
+      facing,
+      radius,
+      selectedPhotoFilterId,
+      noteColor,
+      captureTarget,
+      selectedSharedAudienceUserId,
+    ]);
+
+  const persistCaptureDraftNow = useCallback(async () => {
+    if (!captureDraftReady) {
+      return;
+    }
+
+    if (persistCaptureDraftTimeoutRef.current) {
+      clearTimeout(persistCaptureDraftTimeoutRef.current);
+      persistCaptureDraftTimeoutRef.current = null;
+    }
+
+    const nextDraft = buildPersistedCaptureDraft();
+
+    if (!isPersistableCaptureDraft(nextDraft)) {
+      await removePersistentItem(CAPTURE_DRAFT_STORAGE_KEY).catch(() => undefined);
+      return;
+    }
+
+    await setPersistentItem(CAPTURE_DRAFT_STORAGE_KEY, JSON.stringify(nextDraft)).catch(() => undefined);
+  }, [buildPersistedCaptureDraft, captureDraftReady]);
+
+  const schedulePersistCaptureDraft = useCallback(() => {
+    if (!captureDraftReady) {
+      return;
+    }
+
+    if (persistCaptureDraftTimeoutRef.current) {
+      clearTimeout(persistCaptureDraftTimeoutRef.current);
+    }
+
+    persistCaptureDraftTimeoutRef.current = setTimeout(() => {
+      persistCaptureDraftTimeoutRef.current = null;
+      void persistCaptureDraftNow();
+    }, 240);
+  }, [captureDraftReady, persistCaptureDraftNow]);
+
+  useEffect(() => {
+    schedulePersistCaptureDraft();
+    return () => {
+      if (persistCaptureDraftTimeoutRef.current) {
+        clearTimeout(persistCaptureDraftTimeoutRef.current);
+        persistCaptureDraftTimeoutRef.current = null;
+      }
+    };
+  }, [schedulePersistCaptureDraft]);
 
   const composeDualCapturePhoto = useCallback(
     async (capture: DualCameraStillCapture) => {
@@ -2803,7 +2869,7 @@ export default function HomeScreen() {
     () => (
       <View style={styles.captureItemWrapper}>
         <CaptureCard
-          ref={captureCardRef}
+          ref={handleCaptureCardRef}
           snapHeight={snapHeight}
           topInset={insets.top}
           isSearching={false}
@@ -2896,6 +2962,8 @@ export default function HomeScreen() {
           onResetDualCaptureSequence={handleResetDualCaptureSequence}
           onDoodleModeChange={handleCaptureDecorateModeChange}
           onGestureActiveChange={handleCaptureGestureActiveChange}
+          onDraftChange={schedulePersistCaptureDraft}
+          onBeforeNativeStickerPicker={persistCaptureDraftNow}
           onTextEntryFocusChange={handleCaptureTextEntryFocusChange}
           footerContent={captureFooterContent}
         />
@@ -2926,6 +2994,7 @@ export default function HomeScreen() {
       backCameraLens,
       backCameraLensZoomConfig,
       handleShareTargetChange,
+      handleCaptureCardRef,
       handleChangeBackCameraLens,
       handleChangeNoteColor,
       handleChangeCameraSubmode,
@@ -2959,9 +3028,11 @@ export default function HomeScreen() {
       previewOnlyNoteColorIds,
       radius,
       remainingPhotoSlots,
+      schedulePersistCaptureDraft,
       saveButtonState,
       saving,
       selectedPhotoFilterId,
+      persistCaptureDraftNow,
       setCapturedPairedVideo,
       setCapturedPhoto,
       setNoteText,

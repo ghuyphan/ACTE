@@ -51,20 +51,7 @@ export default function AppBottomSheet({
       : Math.min(Math.max(androidInitialIndex, -1), maxSnapPointIndex);
   const initialIndexProps = resolvedInitialIndex === 0 ? {} : { index: resolvedInitialIndex };
 
-  const handleDismiss = useCallback(() => {
-    if (skipNextDismissCallbackRef.current) {
-      skipNextDismissCallbackRef.current = false;
-      return;
-    }
-
-    onClose();
-  }, [onClose]);
-
-  useEffect(() => {
-    if (Platform.OS !== 'android') {
-      return;
-    }
-
+  const syncPresentationToVisible = useCallback(() => {
     if (visible) {
       skipNextDismissCallbackRef.current = false;
       modalRef.current?.present();
@@ -74,6 +61,28 @@ export default function AppBottomSheet({
     skipNextDismissCallbackRef.current = true;
     modalRef.current?.dismiss();
   }, [visible]);
+
+  const handleDismiss = useCallback(() => {
+    if (skipNextDismissCallbackRef.current) {
+      skipNextDismissCallbackRef.current = false;
+      return;
+    }
+
+    if (!dismissible) {
+      syncPresentationToVisible();
+      return;
+    }
+
+    onClose();
+  }, [dismissible, onClose, syncPresentationToVisible]);
+
+  useEffect(() => {
+    if (Platform.OS !== 'android') {
+      return;
+    }
+
+    syncPresentationToVisible();
+  }, [syncPresentationToVisible]);
 
   useEffect(() => {
     if (Platform.OS !== 'android' || !visible || !dismissible) {

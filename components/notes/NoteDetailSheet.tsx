@@ -107,6 +107,54 @@ const NOTE_DETAIL_ANDROID_SNAP_POINTS = [NOTE_DETAIL_ANDROID_SHEET_HEIGHT];
 const NOTE_DETAIL_ANDROID_CONTENT_CONTAINER_STYLE = {
     height: NOTE_DETAIL_ANDROID_SHEET_HEIGHT,
 };
+const NOTE_DETAIL_STICKER_PICKER_DRAFT_TTL_MS = 5 * 60 * 1000;
+
+type NoteDetailStickerPickerDraft = {
+    placements: NoteStickerPlacement[];
+    selectedStickerId: string | null;
+    stickerModeEnabled: boolean;
+    expiresAt: number;
+};
+
+const noteDetailStickerPickerDrafts = new Map<string, NoteDetailStickerPickerDraft>();
+
+function cloneStickerPlacements(placements: NoteStickerPlacement[]) {
+    return placements.map((placement) => ({ ...placement }));
+}
+
+function cacheNoteDetailStickerPickerDraft(
+    noteId: string,
+    draft: Omit<NoteDetailStickerPickerDraft, 'expiresAt'>
+) {
+    noteDetailStickerPickerDrafts.set(noteId, {
+        ...draft,
+        placements: cloneStickerPlacements(draft.placements),
+        expiresAt: Date.now() + NOTE_DETAIL_STICKER_PICKER_DRAFT_TTL_MS,
+    });
+}
+
+function takeNoteDetailStickerPickerDraft(noteId: string) {
+    const draft = noteDetailStickerPickerDrafts.get(noteId);
+    if (!draft) {
+        return null;
+    }
+
+    noteDetailStickerPickerDrafts.delete(noteId);
+    if (draft.expiresAt < Date.now()) {
+        return null;
+    }
+
+    return {
+        ...draft,
+        placements: cloneStickerPlacements(draft.placements),
+    };
+}
+
+function clearNoteDetailStickerPickerDraft(noteId: string | null | undefined) {
+    if (noteId) {
+        noteDetailStickerPickerDrafts.delete(noteId);
+    }
+}
 
 type StickerPastePromptState = {
     visible: boolean;
@@ -301,6 +349,12 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
     const polaroidCaptureRef = useRef<any>(null);
     const polaroidTempUriRef = useRef<string | null>(null);
     const polaroidReadyResolverRef = useRef<(() => void) | null>(null);
+    const noteRef = useRef<Note | null>(null);
+    const noteIdRef = useRef(noteId);
+    const isEditingRef = useRef(false);
+    const selectedStickerIdRef = useRef<string | null>(null);
+    const stickerModeEnabledRef = useRef(false);
+    const stickerPickerInFlightRef = useRef(false);
     const lockedPremiumNoteColorIds = useMemo(
         () => (tier === 'plus' ? [] : PREMIUM_NOTE_COLOR_IDS),
         [tier]
@@ -362,6 +416,26 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
         editStickerPlacementsRef.current = nextPlacements;
         setEditStickerPlacements(nextPlacements);
     }, []);
+
+    useEffect(() => {
+        noteRef.current = note;
+    }, [note]);
+
+    useEffect(() => {
+        noteIdRef.current = noteId;
+    }, [noteId]);
+
+    useEffect(() => {
+        isEditingRef.current = isEditing;
+    }, [isEditing]);
+
+    useEffect(() => {
+        selectedStickerIdRef.current = selectedStickerId;
+    }, [selectedStickerId]);
+
+    useEffect(() => {
+        stickerModeEnabledRef.current = stickerModeEnabled;
+    }, [stickerModeEnabled]);
 
     const waitForPolaroidRenderReady = useCallback(() => {
         return new Promise<void>((resolve) => {
@@ -696,11 +770,17 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                     if (nextNote.type === 'text' && !isPreviewablePremiumNoteColor(nextNote.noteColor)) {
                         lastFreeEditNoteColorRef.current = getEditableTextNoteColor(nextNote.noteColor);
                     }
+                    const stickerPickerDraft = takeNoteDetailStickerPickerDraft(nextNote.id);
                     setEditDoodleStrokes(parseNoteDoodleStrokes(nextNote.doodleStrokesJson));
-                    handleChangeStickerPlacements(parseNoteStickerPlacements(nextNote.stickerPlacementsJson));
+                    handleChangeStickerPlacements(
+                        stickerPickerDraft?.placements ?? parseNoteStickerPlacements(nextNote.stickerPlacementsJson)
+                    );
                     setDoodleModeEnabled(false);
-                    setStickerModeEnabled(false);
-                    setSelectedStickerId(null);
+                    setStickerModeEnabled(stickerPickerDraft?.stickerModeEnabled ?? false);
+                    setSelectedStickerId(stickerPickerDraft?.selectedStickerId ?? null);
+                    if (stickerPickerDraft) {
+                        setIsEditing(true);
+                    }
                 }
                 setLoading(false);
 
@@ -1030,12 +1110,18 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
             return null;
         }
 
-        const result = await ImagePicker.launchImageLibraryAsync({
-            mediaTypes: ['images'],
-            allowsEditing: false,
-            quality: 1,
-            selectionLimit: 1,
-        });
+        stickerPickerInFlightRef.current = true;
+        let result: ImagePicker.ImagePickerResult;
+        try {
+            result = await ImagePicker.launchImageLibraryAsync({
+                mediaTypes: ['images'],
+                allowsEditing: false,
+                quality: 1,
+                selectionLimit: 1,
+            });
+        } finally {
+            stickerPickerInFlightRef.current = false;
+        }
 
         if (result.canceled || !result.assets?.[0]?.uri) {
             return null;
@@ -1344,6 +1430,16 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
         isMountedRef.current = true;
 
         return () => {
+            if (stickerPickerInFlightRef.current && isEditingRef.current) {
+                const activeNoteId = noteRef.current?.id ?? noteIdRef.current;
+                if (activeNoteId) {
+                    cacheNoteDetailStickerPickerDraft(activeNoteId, {
+                        placements: editStickerPlacementsRef.current,
+                        selectedStickerId: selectedStickerIdRef.current,
+                        stickerModeEnabled: stickerModeEnabledRef.current,
+                    });
+                }
+            }
             isMountedRef.current = false;
         };
     }, []);
@@ -1420,6 +1516,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
 
         const targetNoteId = note.id;
         setIsDeleting(true);
+        clearNoteDetailStickerPickerDraft(targetNoteId);
         onClose();
         void performDelete(targetNoteId);
     };
@@ -1615,6 +1712,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
             setNote(nextNote);
             setEditDoodleStrokes(parseNoteDoodleStrokes(nextDoodleStrokesJson));
             handleChangeStickerPlacements(parseNoteStickerPlacements(nextStickerPlacementsJson));
+            clearNoteDetailStickerPickerDraft(note.id);
             setEditContent(nextNote.type === 'photo' ? nextNote.caption ?? '' : nextNote.content);
             setEditLocation(nextNote.locationName || '');
             setEditRadius(nextNote.radius);
@@ -1649,6 +1747,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
         blurEditorInputs();
         setDoodleModeEnabled(false);
         setStickerModeEnabled(false);
+        clearNoteDetailStickerPickerDraft(note.id);
         setIsEditing(false);
         } finally {
             saveEditInFlightRef.current = false;

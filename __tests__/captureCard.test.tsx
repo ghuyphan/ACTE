@@ -2514,6 +2514,59 @@ describe('CaptureCard doodle handle', () => {
     expect(getByTestId('sticker-source-option-create-stamp')).toBeTruthy();
   });
 
+  it('keeps existing stickers when the photo sticker picker is cancelled', async () => {
+    const ref = React.createRef<CaptureCardHandle>();
+    mockClipboardHasImageAsync.mockResolvedValue(true);
+    mockClipboardGetImageAsync.mockResolvedValue({
+      data: `data:image/png;base64,${transparentPngBase64}`,
+      size: { width: 120, height: 120 },
+    } as any);
+    mockImagePicker.launchImageLibraryAsync.mockResolvedValue({
+      canceled: true,
+      assets: [],
+    });
+
+    const { getByTestId } = renderCaptureCard(ref, {
+      noteText: '',
+    });
+
+    await waitFor(() => {
+      expect(getByTestId('capture-inline-paste-sticker')).toBeTruthy();
+    });
+
+    await act(async () => {
+      fireEvent.press(getByTestId('capture-inline-paste-sticker'));
+    });
+
+    await waitFor(() => {
+      expect(ref.current?.getStickerSnapshot().placements).toHaveLength(1);
+    });
+
+    await act(async () => {
+      fireEvent.press(getByTestId('capture-sticker-import'));
+    });
+    await act(async () => {
+      fireEvent.press(getByTestId('sticker-source-option-create-sticker'));
+    });
+
+    await waitFor(() => {
+      expect(mockImagePicker.launchImageLibraryAsync).toHaveBeenCalled();
+    });
+    expect(ref.current?.getStickerSnapshot().placements).toHaveLength(1);
+
+    await act(async () => {
+      fireEvent.press(getByTestId('capture-sticker-import'));
+    });
+    await act(async () => {
+      fireEvent.press(getByTestId('sticker-source-option-create-sticker'));
+    });
+
+    await waitFor(() => {
+      expect(mockImagePicker.launchImageLibraryAsync).toHaveBeenCalledTimes(2);
+    });
+    expect(ref.current?.getStickerSnapshot().placements).toHaveLength(1);
+  });
+
   it('shows a loading indicator while pasting a sticker from the source sheet clipboard action', async () => {
     const ref = React.createRef<CaptureCardHandle>();
     let resolveImport: ((asset: any) => void) | undefined;

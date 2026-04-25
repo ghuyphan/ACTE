@@ -106,7 +106,7 @@ export default function AppSheet({
         <BottomSheet
           isPresented={visible}
           onIsPresentedChange={(nextVisible) => {
-            if (!nextVisible) {
+            if (!nextVisible && dismissible) {
               onClose();
             }
           }}

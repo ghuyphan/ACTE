@@ -127,4 +127,18 @@ describe('AppBottomSheet', () => {
     (latestBottomSheetModalProps?.onDismiss as (() => void) | undefined)?.();
     expect(onClose).not.toHaveBeenCalled();
   });
+
+  it('re-presents itself after dismiss callbacks while non-dismissible and still visible', () => {
+    const onClose = jest.fn();
+    render(
+      <AppBottomSheet visible dismissible={false} onClose={onClose}>
+        <View />
+      </AppBottomSheet>
+    );
+
+    (latestBottomSheetModalProps?.onDismiss as (() => void) | undefined)?.();
+
+    expect(onClose).not.toHaveBeenCalled();
+    expect(mockBottomSheetModalMethods?.present).toHaveBeenCalledTimes(2);
+  });
 });

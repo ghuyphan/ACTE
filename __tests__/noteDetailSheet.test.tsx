@@ -52,6 +52,7 @@ const mockDeleteSharedNote = jest.fn(async () => undefined);
 const mockUpdateSharedNote = jest.fn(async () => undefined);
 let mockSharedPosts: any[] = [];
 let latestAppBottomSheetProps: any = null;
+let mockSwiftBottomSheetPropsLog: any[] = [];
 const mockNotesStore = {
   getNoteById: (noteId: string) => mockGetNoteById(noteId),
   deleteNote: (noteId: string) => mockDeleteNote(noteId),
@@ -64,7 +65,8 @@ jest.mock('@expo/ui/swift-ui', () => {
   const React = require('react');
   const { View } = require('react-native');
   return {
-    BottomSheet: ({ children, isPresented, onIsPresentedChange }: any) => {
+    BottomSheet: ({ children, isPresented, onIsPresentedChange, ...props }: any) => {
+      mockSwiftBottomSheetPropsLog.push({ isPresented, onIsPresentedChange, ...props });
       const wasPresentedRef = React.useRef(isPresented);
 
       React.useEffect(() => {
@@ -516,6 +518,7 @@ beforeEach(() => {
   mockUpdateSharedNote.mockClear();
   mockSharedPosts = [];
   latestAppBottomSheetProps = null;
+  mockSwiftBottomSheetPropsLog = [];
   mockHasClipboardStickerImage.mockResolvedValue(false);
   mockGetNoteById.mockResolvedValue({
     id: 'note-1',
@@ -819,6 +822,46 @@ describe('NoteDetailSheet', () => {
     });
   });
 
+  it('ignores transient iOS sheet dismissal callbacks while editing', async () => {
+    mockHasClipboardStickerImage.mockResolvedValue(true);
+    const onClose = jest.fn();
+
+    const { getByTestId } = render(
+      <NoteDetailSheet noteId="note-1" visible onClose={onClose} />
+    );
+
+    await waitFor(() => {
+      expect(getByTestId('note-detail-edit')).toBeTruthy();
+    });
+
+    fireEvent.press(getByTestId('note-detail-edit'));
+
+    await act(async () => {
+      fireEvent(getByTestId('note-detail-card-paste-surface'), 'longPress', {
+        nativeEvent: { locationX: 150, locationY: 210 },
+      });
+    });
+
+    await act(async () => {
+      fireEvent.press(getByTestId('note-detail-card-paste-action'));
+    });
+
+    await waitFor(() => {
+      expect(getByTestId('mock-note-sticker-count')).toHaveTextContent('1');
+    });
+
+    const presentedSheetProps = [...mockSwiftBottomSheetPropsLog]
+      .reverse()
+      .find((props) => props.isPresented);
+
+    await act(async () => {
+      presentedSheetProps?.onIsPresentedChange?.(false);
+    });
+
+    expect(onClose).not.toHaveBeenCalled();
+    expect(getByTestId('mock-note-sticker-count')).toHaveTextContent('1');
+  });
+
   it('dismisses the keyboard when the sheet closes', async () => {
     const dismissSpy = jest.spyOn(Keyboard, 'dismiss');
     const onClose = jest.fn();
@@ -863,6 +906,109 @@ describe('NoteDetailSheet', () => {
     } finally {
       Platform.OS = originalPlatform;
     }
+  });
+
+  it('keeps unsaved stickers when Android emits a non-dismissible sheet dismiss while editing', async () => {
+    const originalPlatform = Platform.OS;
+    Platform.OS = 'android';
+    mockHasClipboardStickerImage.mockResolvedValue(true);
+    const onClose = jest.fn();
+
+    try {
+      const { getByTestId } = render(
+        <NoteDetailSheet noteId="note-1" visible onClose={onClose} />
+      );
+
+      await waitFor(() => {
+        expect(getByTestId('note-detail-edit')).toBeTruthy();
+      });
+
+      fireEvent.press(getByTestId('note-detail-edit'));
+
+      await act(async () => {
+        fireEvent(getByTestId('note-detail-card-paste-surface'), 'longPress', {
+          nativeEvent: { locationX: 120, locationY: 180 },
+        });
+      });
+
+      await act(async () => {
+        fireEvent.press(getByTestId('note-detail-card-paste-action'));
+      });
+
+      await waitFor(() => {
+        expect(getByTestId('mock-note-sticker-count')).toHaveTextContent('1');
+      });
+
+      expect(latestAppBottomSheetProps?.dismissible).toBe(false);
+      if (latestAppBottomSheetProps?.dismissible !== false) {
+        latestAppBottomSheetProps?.onClose?.();
+      }
+
+      expect(onClose).not.toHaveBeenCalled();
+      expect(getByTestId('mock-note-sticker-count')).toHaveTextContent('1');
+    } finally {
+      Platform.OS = originalPlatform;
+    }
+  });
+
+  it('restores unsaved stickers if the detail sheet remounts while the photo picker is open', async () => {
+    mockHasClipboardStickerImage.mockResolvedValue(true);
+    const mockImagePicker = jest.requireMock('expo-image-picker') as {
+      getMediaLibraryPermissionsAsync: jest.Mock;
+      requestMediaLibraryPermissionsAsync: jest.Mock;
+      launchImageLibraryAsync: jest.Mock;
+    };
+    mockImagePicker.getMediaLibraryPermissionsAsync.mockResolvedValue({
+      status: 'granted',
+      canAskAgain: true,
+    });
+    mockImagePicker.launchImageLibraryAsync.mockReturnValue(new Promise(() => undefined));
+
+    const firstRender = render(
+      <NoteDetailSheet noteId="note-1" visible onClose={() => undefined} />
+    );
+
+    await waitFor(() => {
+      expect(firstRender.getByTestId('note-detail-edit')).toBeTruthy();
+    });
+
+    fireEvent.press(firstRender.getByTestId('note-detail-edit'));
+
+    await act(async () => {
+      fireEvent(firstRender.getByTestId('note-detail-card-paste-surface'), 'longPress', {
+        nativeEvent: { locationX: 120, locationY: 180 },
+      });
+    });
+
+    await act(async () => {
+      fireEvent.press(firstRender.getByTestId('note-detail-card-paste-action'));
+    });
+
+    await waitFor(() => {
+      expect(firstRender.getByTestId('mock-note-sticker-count')).toHaveTextContent('1');
+    });
+
+    await act(async () => {
+      fireEvent.press(firstRender.getByTestId('note-detail-sticker-import'));
+    });
+    await act(async () => {
+      fireEvent.press(firstRender.getByTestId('sticker-source-option-create-sticker'));
+    });
+
+    await waitFor(() => {
+      expect(mockImagePicker.launchImageLibraryAsync).toHaveBeenCalled();
+    });
+
+    firstRender.unmount();
+
+    const secondRender = render(
+      <NoteDetailSheet noteId="note-1" visible onClose={() => undefined} />
+    );
+
+    await waitFor(() => {
+      expect(secondRender.getByTestId('mock-note-sticker-count')).toHaveTextContent('1');
+      expect(secondRender.getByTestId('mock-note-sticker-editable')).toHaveTextContent('true');
+    });
   });
 
   it('shows a paste popover on card long press in edit mode and pastes a sticker', async () => {

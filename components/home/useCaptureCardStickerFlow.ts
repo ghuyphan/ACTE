@@ -56,6 +56,7 @@ interface UseCaptureCardStickerFlowOptions {
   selectSticker: (nextId: string | null) => void;
   enablePhotoStickers: boolean;
   onChangeStickerPlacements?: (nextPlacements: NoteStickerPlacement[]) => void;
+  onBeforeNativePicker?: () => void | Promise<void>;
   cardSize?: number;
 }
 
@@ -162,6 +163,7 @@ export function useCaptureCardStickerFlow({
   selectSticker,
   enablePhotoStickers,
   onChangeStickerPlacements,
+  onBeforeNativePicker,
   cardSize = 0,
 }: UseCaptureCardStickerFlowOptions) {
   const [importingSticker, setImportingSticker] = useState(false);
@@ -289,6 +291,8 @@ export function useCaptureCardStickerFlow({
         return null;
       }
 
+      await onBeforeNativePicker?.();
+
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ['images'],
         allowsEditing: false,
@@ -311,7 +315,7 @@ export function useCaptureCardStickerFlow({
         height: typeof selectedAsset.height === 'number' ? selectedAsset.height : null,
       };
     },
-    [t]
+    [onBeforeNativePicker, t]
   );
 
   const {
