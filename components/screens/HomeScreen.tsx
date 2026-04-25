@@ -2169,6 +2169,13 @@ export default function HomeScreen() {
 
   const getLocationUnavailableMessage = useCallback(
     (locationResult: Pick<ForegroundLocationRequestResult, 'reason' | 'requiresSettings'>) => {
+      if (locationResult.reason === 'services_disabled') {
+        return t(
+          'capture.noLocationServices',
+          'Turn on Location Services/GPS, then try saving your memory again.'
+        );
+      }
+
       if (locationResult.requiresSettings) {
         return t(
           'capture.noLocationSettings',
@@ -2334,7 +2341,16 @@ export default function HomeScreen() {
       };
 
       if (!currentLocation) {
-        locationResult = await requestForegroundLocation();
+        try {
+          locationResult = await requestForegroundLocation();
+        } catch (error) {
+          console.warn('Location request failed while saving note:', error);
+          locationResult = {
+            location: null,
+            requiresSettings: false,
+            reason: 'unavailable',
+          };
+        }
         currentLocation = locationResult.location;
       }
 
@@ -2545,10 +2561,9 @@ export default function HomeScreen() {
           t('capture.error', 'Error'),
           t('capture.saveFailed', 'Something went wrong')
         );
-      } finally {
-        setSaving(false);
       }
     } finally {
+      setSaving(false);
       saveInFlightRef.current = false;
     }
   }, [

@@ -58,6 +58,30 @@ interface ForegroundPermissionRequestResult {
     requiresSettings: boolean;
 }
 
+function getForegroundLocationFailureFromError(error: unknown): ForegroundLocationRequestResult {
+    const errorMessage = getLocationErrorMessage(error);
+    const servicesDisabled =
+        errorMessage.includes('location services are disabled') ||
+        errorMessage.includes('provider is unavailable');
+    const permissionDenied =
+        errorMessage.includes('permission') &&
+        (
+            errorMessage.includes('denied') ||
+            errorMessage.includes('unauthorized') ||
+            errorMessage.includes('not authorized')
+        );
+
+    return {
+        location: null,
+        requiresSettings: servicesDisabled,
+        reason: servicesDisabled
+            ? 'services_disabled'
+            : permissionDenied
+                ? 'permission_denied'
+                : 'unavailable',
+    };
+}
+
 function isRecentLocation(location: Location.LocationObject | null | undefined) {
     if (!location) {
         return false;
@@ -241,18 +265,7 @@ export function useGeofence() {
                 reason: currentLocation ? null : 'unavailable',
             };
         } catch (error) {
-            const errorMessage = getLocationErrorMessage(error);
-            return {
-                location: null,
-                requiresSettings:
-                    errorMessage.includes('location services are disabled') ||
-                    errorMessage.includes('provider is unavailable'),
-                reason:
-                    errorMessage.includes('location services are disabled') ||
-                    errorMessage.includes('provider is unavailable')
-                        ? 'services_disabled'
-                        : 'unavailable',
-            };
+            return getForegroundLocationFailureFromError(error);
         }
     }, [commitLocation, resolveCurrentPosition]);
 
@@ -350,6 +363,8 @@ export function useGeofence() {
 
         try {
             return await requestPromise;
+        } catch (error) {
+            return getForegroundLocationFailureFromError(error);
         } finally {
             if (foregroundLocationRequestRef.current === requestPromise) {
                 foregroundLocationRequestRef.current = null;

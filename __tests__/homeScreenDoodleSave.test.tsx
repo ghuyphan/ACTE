@@ -752,5 +752,61 @@ describe('HomeScreen doodle save flow', () => {
         })
       );
     });
+    await waitFor(() => {
+      expect(latestCaptureCardProps?.saving).toBe(false);
+      expect(latestCaptureCardProps?.saveState).toBe('idle');
+    });
+    expect(mockCreateNote).not.toHaveBeenCalled();
+  });
+
+  it('resets save progress when the location request rejects', async () => {
+    jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    mockLocation = null;
+    mockRequestForegroundLocation.mockRejectedValueOnce(new Error('Location services are unavailable'));
+
+    const { getByTestId } = renderHomeScreen();
+
+    fireEvent.press(getByTestId('capture-save-button'));
+
+    await waitFor(() => {
+      expect(mockShowAlert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          variant: 'error',
+          title: 'Location unavailable',
+          message:
+            'Noto could not get your current location yet. Please try again in a moment.',
+        })
+      );
+    });
+
+    await waitFor(() => {
+      expect(latestCaptureCardProps?.saving).toBe(false);
+      expect(latestCaptureCardProps?.saveState).toBe('idle');
+    });
+
+    expect(mockCreateNote).not.toHaveBeenCalled();
+  });
+
+  it('asks users to turn on GPS when location services are disabled', async () => {
+    mockLocation = null;
+    mockRequestForegroundLocation.mockResolvedValueOnce({
+      location: null,
+      requiresSettings: true,
+      reason: 'services_disabled',
+    });
+
+    const { getByTestId } = renderHomeScreen();
+
+    fireEvent.press(getByTestId('capture-save-button'));
+
+    await waitFor(() => {
+      expect(mockShowAlert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          variant: 'error',
+          title: 'Location unavailable',
+          message: 'Turn on Location Services/GPS, then try saving your memory again.',
+        })
+      );
+    });
   });
 });

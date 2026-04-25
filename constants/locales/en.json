@@ -106,6 +106,7 @@
         "locationReadyBody": "Noto can now link your next note to this place.",
         "noLocation": "Noto could not get your current location yet. Please try again in a moment.",
         "noLocationPermission": "Noto needs your location to save a memory here. Allow location access and try again.",
+        "noLocationServices": "Turn on Location Services/GPS, then try saving your memory again.",
         "noLocationSettings": "Noto needs location access to save a memory here. Open Settings to turn location access back on.",
         "noLocationTimeout": "Noto is still waiting for a GPS fix. Move to a clearer spot and try again in a moment.",
         "noText": "Leave a few words or a tiny doodle.",

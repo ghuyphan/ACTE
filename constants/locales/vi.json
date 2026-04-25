@@ -106,6 +106,7 @@
         "locationReadyBody": "Noto giờ có thể gắn trang nhật ký tiếp theo với nơi này.",
         "noLocation": "Noto chưa lấy được vị trí hiện tại của bạn. Thử lại sau giây lát nhé.",
         "noLocationPermission": "Noto cần vị trí của bạn để lưu vào nhật ký tại đây. Hãy cấp quyền vị trí rồi thử lại nhé.",
+        "noLocationServices": "Hãy bật Dịch vụ định vị/GPS rồi thử lưu trang nhật ký lại nhé.",
         "noLocationSettings": "Noto cần quyền vị trí để lưu vào nhật ký tại nơi này. Mở Cài đặt để bật lại quyền vị trí nhé.",
         "noLocationTimeout": "Noto vẫn đang chờ GPS định vị xong. Bạn thử ra chỗ thoáng hơn rồi thử lại sau giây lát nhé.",
         "noText": "Bạn để lại vài dòng chữ hoặc làm một nét vẽ nhỏ nhé.",

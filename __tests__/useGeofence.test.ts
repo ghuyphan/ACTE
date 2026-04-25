@@ -132,6 +132,22 @@ describe('useGeofence', () => {
     expect(mockGetCurrentPositionAsync).not.toHaveBeenCalled();
   });
 
+  it('returns a typed failure when the foreground permission request throws', async () => {
+    mockGetForegroundPermissionsAsync.mockResolvedValue({ status: 'denied', canAskAgain: true });
+    mockRequestForegroundPermissionsAsync.mockRejectedValue(new Error('Native location module failed'));
+
+    const { result } = renderHook(() => useGeofence());
+
+    await act(async () => {
+      const response = await result.current.requestForegroundLocation();
+      expect(response).toEqual({
+        location: null,
+        requiresSettings: false,
+        reason: 'unavailable',
+      });
+    });
+  });
+
   it('falls back to the last known position when a fresh GPS fix is unavailable', async () => {
     const location = {
       coords: { latitude: 10.7626, longitude: 106.6601 },
