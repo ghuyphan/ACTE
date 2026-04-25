@@ -11,6 +11,7 @@ import { showAppAlert } from '../../utils/alert';
 import { formatDate } from '../../utils/dateUtils';
 import { SharedPostMemoryCard } from '../home/MemoryCardPrimitives';
 import AppSheet from '../sheets/AppSheet';
+import { getGlassSurfacePalette } from '../ui/glassTokens';
 
 interface SharedPostDetailSheetProps {
   postId: string;
@@ -36,6 +37,11 @@ export default function SharedPostDetailSheet({
   const { user } = useAuth();
   const { sharedPosts, deleteSharedPostById } = useSharedFeedStore();
   const closeHandledRef = useRef(false);
+  const glassPalette = getGlassSurfacePalette({
+    isDark,
+    borderColor: colors.border,
+    colors,
+  });
 
   const post = sharedPosts.find((item) => item.id === postId) ?? null;
   const isOwnedPost = Boolean(post && user?.uid === post.authorUid);
@@ -114,14 +120,20 @@ export default function SharedPostDetailSheet({
         }}
         showsVerticalScrollIndicator={false}
       >
-        <SharedPostMemoryCard post={post} colors={colors} t={t} showSharedBadge={isOwnedPost} />
+        <SharedPostMemoryCard
+          post={post}
+          colors={colors}
+          t={t}
+          showSharedBadge={isOwnedPost}
+          metadataFullWidth
+        />
 
         <View
           style={[
             styles.infoCard,
             {
-              backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.8)',
-              borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
+              backgroundColor: glassPalette.controlBackgroundColor,
+              borderColor: glassPalette.controlBorderColor,
             },
           ]}
         >
@@ -202,6 +214,7 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     padding: 18,
     gap: 14,
+    overflow: 'hidden',
   },
   infoRow: {
     flexDirection: 'row',

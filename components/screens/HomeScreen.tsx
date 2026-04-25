@@ -280,7 +280,6 @@ export default function HomeScreen() {
   const { user, isAuthAvailable } = useAuth();
   const {
     enabled: sharedEnabled,
-    phase: sharedPhaseFromStore,
     loading: sharedLoading,
     ready: sharedReady,
     initialLoadComplete: sharedInitialLoadComplete = true,
@@ -298,15 +297,6 @@ export default function HomeScreen() {
     () => friends.filter((friend) => friend.userId !== user?.uid),
     [friends, user?.uid]
   );
-  const sharedPhase =
-    sharedPhaseFromStore ??
-    (sharedLoading
-      ? 'refreshing'
-      : sharedInitialLoadComplete
-        ? 'ready'
-        : sharedReady
-          ? 'cache-ready'
-          : 'bootstrapping');
   const {
     bootstrapState: syncBootstrapState,
     requestSync,
@@ -693,7 +683,6 @@ export default function HomeScreen() {
     userUid: user?.uid,
     notesPhase,
     sharedEnabled,
-    sharedPhase,
     sharedPosts,
     startupInteractive: homeFeedReady,
     presentationScope: isFriendsFilterEnabled ? 'friends' : 'all',
@@ -709,7 +698,8 @@ export default function HomeScreen() {
     notes,
     notesPhase,
     sharedEnabled,
-    sharedPhase,
+    sharedLoading,
+    sharedInitialLoadComplete,
     sharedPosts: presentedSharedPosts,
     ownedSharedNoteIds: sharedOwnedNoteIds,
     syncBootstrapState,

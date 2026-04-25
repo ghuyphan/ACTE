@@ -38,7 +38,8 @@ function createParams(overrides: Partial<Parameters<typeof useHomeFeedViewModel>
     notes: [],
     notesPhase: 'ready' as const,
     sharedEnabled: true,
-    sharedPhase: 'ready' as const,
+    sharedLoading: false,
+    sharedInitialLoadComplete: true,
     sharedPosts: [],
     syncBootstrapState: 'complete' as const,
     isFriendsFilterEnabled: false,
@@ -62,7 +63,6 @@ describe('useHomeFeedViewModel', () => {
   it('returns the syncing-empty mode while the initial signed-in sync is still running', () => {
     const params = createParams({
       syncBootstrapState: 'syncing',
-      sharedPhase: 'cache-ready',
     });
     const { result } = renderHook(() => useHomeFeedViewModel(params));
 
@@ -78,6 +78,43 @@ describe('useHomeFeedViewModel', () => {
 
     expect(result.current.feedMode).toBe('syncing-empty');
     expect(result.current.isFeedBootstrapPending).toBe(true);
+  });
+
+  it('shows a local loading state while an empty staged notes page is still hydrating', () => {
+    const params = createParams({
+      notesPhase: 'hydrating',
+      syncBootstrapState: 'complete',
+    });
+    const { result } = renderHook(() => useHomeFeedViewModel(params));
+
+    expect(result.current.feedMode).toBe('syncing-empty');
+    expect(result.current.bootstrapState).toBe('loading-notes');
+    expect(result.current.visibleFeedItems).toEqual([]);
+  });
+
+  it('keeps importing copy visible during the first shared snapshot when there is no cache', () => {
+    const params = createParams({
+      sharedLoading: true,
+      sharedInitialLoadComplete: false,
+      syncBootstrapState: 'complete',
+    });
+    const { result } = renderHook(() => useHomeFeedViewModel(params));
+
+    expect(result.current.feedMode).toBe('syncing-empty');
+    expect(result.current.bootstrapState).toBe('syncing');
+  });
+
+  it('allows staged notes to render while the rest of the journal hydrates', () => {
+    const note = buildNote();
+    const params = createParams({
+      notes: [note],
+      notesPhase: 'hydrating',
+      syncBootstrapState: 'complete',
+    });
+    const { result } = renderHook(() => useHomeFeedViewModel(params));
+
+    expect(result.current.feedMode).toBe('content');
+    expect(result.current.visibleFeedItems).toHaveLength(1);
   });
 
   it('falls back to the empty state when feed items are hidden but no saved-note reveal is active', () => {

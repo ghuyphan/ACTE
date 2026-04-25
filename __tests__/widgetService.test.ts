@@ -705,6 +705,42 @@ describe('widgetService', () => {
     );
   });
 
+  it('passes inline shared author avatars to the widget payload', async () => {
+    mockCurrentUser = { id: 'me', uid: 'me' };
+    mockGetAllNotes.mockResolvedValue([]);
+    mockRefreshSharedFeed.mockResolvedValue({
+      friends: [],
+      sharedPosts: [
+        buildSharedPost({
+          id: 'shared-avatar',
+          authorUid: 'friend-2',
+          authorDisplayName: 'Shorkyyy',
+          authorPhotoURLSnapshot: 'data:image/jpeg;base64,YXZhdGFyLWJhc2U2NC1kYXRh',
+          text: 'Shared hello',
+          placeName: 'Friend Cafe',
+          createdAt: '2026-03-10T12:00:00.000Z',
+        }),
+      ],
+      activeInvite: null,
+    });
+
+    await updateWidgetData({
+      referenceDate: new Date('2026-03-10T12:00:00.000Z'),
+      includeSharedRefresh: true,
+    });
+
+    const entries = getLastTimelineEntries();
+    expect(entries[0]?.props.props).toEqual(
+      expect.objectContaining({
+        isSharedContent: true,
+        authorDisplayName: 'Shorkyyy',
+        authorInitials: 'S',
+        authorAvatarImageBase64: 'YXZhdGFyLWJhc2U2NC1kYXRh',
+      })
+    );
+    expect(entries[0]?.props.props.authorAvatarImageUrl).toBeUndefined();
+  });
+
   it('uses explicit shared posts from a background refresh before reading the shared cache', async () => {
     mockCurrentUser = { id: 'me', uid: 'me' };
     mockGetAllNotes.mockResolvedValue([]);

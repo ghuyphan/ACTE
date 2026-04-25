@@ -16,7 +16,6 @@ import {
 } from '../components/app/rootStackOptions';
 import { useNotesStore } from '../hooks/useNotes';
 import { useAuth } from '../hooks/useAuth';
-import { useSharedFeedStore } from '../hooks/useSharedFeed';
 import { useTheme } from '../hooks/useTheme';
 import { useAppSplashGate } from '../hooks/app/useAppSplashGate';
 import { useHomeInitialFeedGate } from '../hooks/app/useHomeInitialFeedGate';
@@ -38,11 +37,7 @@ function AppContent() {
   const { colors, isDark, themeReady } = useTheme();
   const { isReady: authReady, user } = useAuth();
   const { startupInteractive, markStartupInteractive, resetStartupInteraction } = useStartupInteraction();
-  const { phase: notesPhase } = useNotesStore();
-  const {
-    enabled: sharedEnabled,
-    phase: sharedPhase,
-  } = useSharedFeedStore();
+  const { notes, phase: notesPhase } = useNotesStore();
   const { t } = useTranslation();
   const {
     isDatabaseReady,
@@ -57,9 +52,8 @@ function AppContent() {
   useSocialPushRegistration();
   const { ready: homeInitialFeedReady } = useHomeInitialFeedGate({
     userUid: user?.uid,
+    notesCount: notes.length,
     notesPhase,
-    sharedEnabled,
-    sharedPhase,
   });
   const { startupGateReady } = useAppSplashGate({
     authReady,

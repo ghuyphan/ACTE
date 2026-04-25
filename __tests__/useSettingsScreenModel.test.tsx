@@ -504,4 +504,48 @@ describe('useSettingsScreenModel', () => {
     );
     expect(mockNotesState.deleteAllNotes).not.toHaveBeenCalled();
   });
+
+  it('requires a second confirmation before clearing saved notes', async () => {
+    mockNotesState.notes = [{ id: 'note-1' }, { id: 'note-2' }];
+
+    const { result } = renderHook(() => useSettingsScreenModel());
+
+    act(() => {
+      result.current.promptClearAll();
+    });
+
+    expect(mockShowAlert).toHaveBeenCalledTimes(1);
+    expect(mockShowAlert).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        title: 'Clear All Notes',
+        primaryAction: expect.objectContaining({
+          label: 'Review deletion',
+        }),
+      })
+    );
+    expect(mockNotesState.deleteAllNotes).not.toHaveBeenCalled();
+
+    const reviewAction = mockShowAlert.mock.calls[0][0].primaryAction;
+    act(() => {
+      reviewAction.onPress();
+    });
+
+    expect(mockShowAlert).toHaveBeenCalledTimes(2);
+    expect(mockShowAlert).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        title: 'Delete 2 memories?',
+        primaryAction: expect.objectContaining({
+          label: 'Delete forever',
+        }),
+      })
+    );
+    expect(mockNotesState.deleteAllNotes).not.toHaveBeenCalled();
+
+    const deleteAction = mockShowAlert.mock.calls[1][0].primaryAction;
+    await act(async () => {
+      await deleteAction.onPress();
+    });
+
+    expect(mockNotesState.deleteAllNotes).toHaveBeenCalledTimes(1);
+  });
 });

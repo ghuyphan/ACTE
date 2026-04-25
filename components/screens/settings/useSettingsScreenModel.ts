@@ -280,38 +280,63 @@ export function useSettingsScreenModel() {
       return;
     }
 
+    const deleteAllSavedNotes = async () => {
+      const noteIdsToDelete = notes.map((note) => note.id);
+      await deleteAllNotes();
+
+      if (user && isOnline && noteIdsToDelete.length > 0) {
+        try {
+          await deleteSharedNotes(noteIdsToDelete);
+        } catch (error) {
+          console.error('Shared bulk delete failed:', error);
+          showAlert({
+            variant: 'error',
+            title: t('settings.clearAllWarningTitle', 'Deleted locally'),
+            message: t(
+              'settings.clearAllWarningMsg',
+              'Your notes were removed from this device, but some shared posts could not be removed yet.'
+            ),
+            primaryAction: {
+              label: t('common.done', 'Done'),
+            },
+          });
+        }
+      }
+    };
+
     showAlert({
       variant: 'error',
       title: t('settings.clearAllTitle', 'Clear All Notes'),
       message: t(
         'settings.clearAllMsg',
-        'All your food notes will be permanently deleted. This action cannot be undone.'
+        'Everything you saved will be permanently deleted. This action cannot be undone.'
       ),
       primaryAction: {
-        label: t('common.delete', 'Delete'),
+        label: t('settings.clearAllReviewAction', 'Review deletion'),
         variant: 'destructive',
-        onPress: async () => {
-          const noteIdsToDelete = notes.map((note) => note.id);
-          await deleteAllNotes();
-
-          if (user && isOnline && noteIdsToDelete.length > 0) {
-            try {
-              await deleteSharedNotes(noteIdsToDelete);
-            } catch (error) {
-              console.error('Shared bulk delete failed:', error);
-              showAlert({
-                variant: 'error',
-                title: t('settings.clearAllWarningTitle', 'Deleted locally'),
-                message: t(
-                  'settings.clearAllWarningMsg',
-                  'Your notes were removed from this device, but some shared posts could not be removed yet.'
-                ),
-                primaryAction: {
-                  label: t('common.done', 'Done'),
-                },
-              });
-            }
-          }
+        onPress: () => {
+          showAlert({
+            variant: 'error',
+            title: t('settings.clearAllFinalTitle', 'Delete {{count}} memories?', {
+              count: notes.length,
+            }),
+            message: t(
+              'settings.clearAllFinalMsg',
+              'This is the final confirmation. Your memories, photos, stickers, and shared copies will be permanently removed where possible.',
+              {
+                count: notes.length,
+              }
+            ),
+            primaryAction: {
+              label: t('settings.clearAllFinalAction', 'Delete forever'),
+              variant: 'destructive',
+              onPress: deleteAllSavedNotes,
+            },
+            secondaryAction: {
+              label: t('common.cancel', 'Cancel'),
+              variant: 'secondary',
+            },
+          });
         },
       },
       secondaryAction: {

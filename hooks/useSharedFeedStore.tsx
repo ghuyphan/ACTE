@@ -280,9 +280,9 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
     ? 'bootstrapping'
     : loading
       ? 'refreshing'
-      : initialLoadComplete
-        ? 'ready'
-        : 'cache-ready';
+      : dataSource === 'cache'
+        ? 'cache-ready'
+        : 'ready';
 
   const commitSnapshot = useCallback(
     (
@@ -787,7 +787,14 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
       snapshot
     );
     applySnapshot(hydratedSnapshot, 'cache', snapshot.lastUpdatedAt);
+    const hasCachedSnapshot =
+      Boolean(snapshot.lastUpdatedAt) ||
+      hydratedSnapshot.friends.length > 0 ||
+      hydratedSnapshot.sharedPosts.length > 0 ||
+      Boolean(hydratedSnapshot.activeInvite);
+    setLoading(!hasCachedSnapshot && isOnline);
     setReady(true);
+    setInitialLoadComplete(hasCachedSnapshot || !isOnline);
     void hydrateSharedPostMediaWhenReady(
       userUid,
       sessionId,
@@ -800,6 +807,7 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
     applySnapshot,
     hydrateSharedPostMediaWhenReady,
     hydrateSnapshotFromCachedMedia,
+    isOnline,
     isCurrentSharedFeedSession,
   ]);
 
@@ -992,7 +1000,7 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
       'cache',
       null
     );
-    setLoading(true);
+    setLoading(false);
     setReady(false);
     setInitialLoadComplete(false);
     pendingForcedRefreshRef.current = false;
@@ -1005,7 +1013,9 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
         }
 
         console.warn('Shared feed cache hydration failed:', getSharedFeedErrorMessage(error));
+        setLoading(false);
         setReady(true);
+        setInitialLoadComplete(true);
       })
       .finally(() => {
         if (sharedFeedSessionRef.current === sessionId && !isOnline) {

@@ -37,6 +37,12 @@ function getWidgetFileExtensionFromUri(uri: string) {
   return sanitizeWidgetFileExtension(match?.[1] ?? null);
 }
 
+function getBase64ImageDataFromDataUri(value: string) {
+  const normalizedValue = typeof value === 'string' ? value.trim() : '';
+  const match = normalizedValue.match(/^data:image\/[a-zA-Z0-9.+-]+;base64,([a-zA-Z0-9+/=\s]+)$/);
+  return match?.[1]?.replace(/\s/g, '') || null;
+}
+
 function sanitizeStorageTokenSegment(value: string) {
   return value.replace(/[^a-zA-Z0-9_-]/g, '_');
 }
@@ -560,6 +566,13 @@ export async function resolveWidgetStickerPlacementsJson(candidate: WidgetCandid
 export async function resolveWidgetAuthorAvatarProps(candidate: WidgetCandidate) {
   if (candidate.source !== 'shared' || !candidate.authorPhotoURLSnapshot?.trim()) {
     return {};
+  }
+
+  const inlineAvatarBase64 = getBase64ImageDataFromDataUri(candidate.authorPhotoURLSnapshot);
+  if (inlineAvatarBase64) {
+    return {
+      authorAvatarImageBase64: inlineAvatarBase64,
+    };
   }
 
   const readableAvatarUri = await getReadablePhotoUri(candidate.authorPhotoURLSnapshot);

@@ -755,12 +755,13 @@ describe('HomeScreen camera lifecycle', () => {
     expect(mockRequestPermission).not.toHaveBeenCalled();
   });
 
-  it('keeps the home feed mounted without a bootstrap empty state while loading', () => {
+  it('shows a stable loading empty state while the first notes load is empty', () => {
     mockNotesLoading = true;
 
-    const { getByTestId } = render(<HomeScreen />);
+    const { getByTestId, getByText } = render(<HomeScreen />);
 
-    expect(getByTestId('notes-feed-has-empty-state')).toHaveTextContent('false');
+    expect(getByTestId('notes-feed-has-empty-state')).toHaveTextContent('true');
+    expect(getByText('Loading your notes')).toBeTruthy();
   });
 
   it('shows a polished first-note empty state once loading finishes with no content', () => {

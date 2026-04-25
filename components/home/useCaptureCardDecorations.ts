@@ -22,17 +22,31 @@ const TEXT_DOODLE_COLOR_OPTIONS = [
   TEXT_DOODLE_DEFAULT_COLOR,
   '#FFFFFF',
   '#FF6B6B',
+  '#FF8CC6',
+  '#FFB86B',
+  '#FFE66D',
   '#2F80ED',
+  '#8ED1FF',
   '#34C759',
+  '#7BE495',
   '#A855F7',
+  '#C084FC',
+  '#B8F7D4',
 ];
 const PHOTO_DOODLE_COLOR_OPTIONS = [
   '#FFFFFF',
   '#1C1C1E',
   '#FF6B6B',
+  '#FF8CC6',
+  '#FFB86B',
+  '#FFE66D',
   '#2F80ED',
+  '#8ED1FF',
   '#34C759',
+  '#7BE495',
   '#A855F7',
+  '#C084FC',
+  '#B8F7D4',
 ];
 
 export function useCaptureCardDecorations({

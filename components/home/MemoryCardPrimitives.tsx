@@ -72,6 +72,7 @@ interface SharedPostMemoryCardProps {
   containerStyle?: StyleProp<ViewStyle>;
   isActive?: boolean;
   showSharedBadge?: boolean;
+  metadataFullWidth?: boolean;
 }
 
 function delay(ms: number) {
@@ -704,6 +705,7 @@ export function SharedPostMemoryCard({
   containerStyle,
   isActive = false,
   showSharedBadge = false,
+  metadataFullWidth = false,
 }: SharedPostMemoryCardProps) {
   const { width } = useWindowDimensions();
   const now = useRelativeTimeNow();
@@ -732,7 +734,7 @@ export function SharedPostMemoryCard({
         <View style={[styles.metadataPillDot, { backgroundColor: colors.secondaryText }]} />
         <View style={styles.metadataLocationGroup}>
           <Ionicons name="location" size={14} color={colors.secondaryText} />
-          <Text style={[styles.metadataPillText, { color: colors.text }]} numberOfLines={1}>
+          <Text style={[styles.metadataPillText, { color: colors.secondaryText }]} numberOfLines={1}>
             {placeLabel}
           </Text>
         </View>
@@ -788,8 +790,14 @@ export function SharedPostMemoryCard({
             <MetadataContainer
               accessibilityLabel={sharedCardAccessibilityLabel}
               onPress={onPress}
-              containerStyle={styles.noteMetaPrimaryAction}
-              pillStyle={styles.noteMetadataPill}
+              containerStyle={[
+                styles.noteMetaPrimaryAction,
+                metadataFullWidth ? styles.metadataFullWidth : null,
+              ]}
+              pillStyle={[
+                styles.noteMetadataPill,
+                metadataFullWidth ? styles.metadataFullWidth : null,
+              ]}
             >
               {sharedMetadata}
             </MetadataContainer>
@@ -803,7 +811,7 @@ export function SharedPostMemoryCard({
             ) : null}
           </View>
         ) : (
-          <MetadataContainer>
+          <MetadataContainer pillStyle={metadataFullWidth ? styles.metadataFullWidth : null}>
             {sharedMetadata}
           </MetadataContainer>
         )}
@@ -967,6 +975,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 0,
     borderRadius: glassTokens.pillControlRadius,
+  },
+  metadataFullWidth: {
+    width: '100%',
+    maxWidth: '100%',
   },
   metadataPillShell: {
     borderWidth: glassTokens.borderWidth,

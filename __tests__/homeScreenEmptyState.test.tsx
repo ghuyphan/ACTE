@@ -420,6 +420,19 @@ describe('HomeScreen empty state', () => {
     expect(screen.queryByText('Importing your cloud notes')).toBeNull();
   });
 
+  it('keeps importing copy visible during the first shared snapshot when there is no cache', async () => {
+    mockSharedFeedStoreState = {
+      ...mockSharedFeedStoreState,
+      loading: true,
+      initialLoadComplete: false,
+    };
+
+    const screen = await renderHomeScreen();
+
+    expect(screen.getByText('Importing your cloud notes')).toBeTruthy();
+    expect(screen.queryByText('Your journal is waiting')).toBeNull();
+  });
+
   it('still shows the syncing state while the initial sync is actively running', async () => {
     mockSyncStatusState = {
       bootstrapState: 'syncing',
@@ -448,9 +461,9 @@ describe('HomeScreen empty state', () => {
 
     const screen = await renderHomeScreen();
 
-    expect(screen.getByText('Importing your cloud notes')).toBeTruthy();
+    expect(screen.getByText('You are offline right now')).toBeTruthy();
     expect(screen.queryByText('Cloud sync is turned off')).toBeNull();
-    expect(screen.queryByText('You are offline right now')).toBeNull();
+    expect(screen.queryByText('Loading shared memories')).toBeNull();
     expect(screen.queryByText('Your journal is waiting')).toBeNull();
   });
 
@@ -471,6 +484,19 @@ describe('HomeScreen empty state', () => {
 
     expect(screen.getByText('Importing your cloud notes')).toBeTruthy();
     expect(screen.queryByText('Loading your notes')).toBeNull();
+  });
+
+  it('shows a loading state instead of a blank feed while an empty journal hydrates', async () => {
+    mockNotesStoreState = {
+      ...mockNotesStoreState,
+      loading: true,
+      initialLoadComplete: false,
+    };
+
+    const screen = await renderHomeScreen();
+
+    expect(screen.getByText('Loading your notes')).toBeTruthy();
+    expect(screen.queryByText('Your journal is waiting')).toBeNull();
   });
 
   it('shows an explicit blocked state when the first cloud sync cannot run offline', async () => {

@@ -1,13 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { NotesLoadPhase } from '../state/useNotesStore';
-import type { SharedFeedLoadPhase } from '../useSharedFeedStore';
 import type { SharedPost } from '../../services/sharedFeedService';
 
 interface UseStableHomeSharedFeedSnapshotParams {
   userUid: string | null | undefined;
   notesPhase: NotesLoadPhase;
   sharedEnabled: boolean;
-  sharedPhase: SharedFeedLoadPhase;
   sharedPosts: SharedPost[];
   startupInteractive: boolean;
   presentationScope?: string;
@@ -47,27 +45,14 @@ function getSharedPostsPresentationSignature(posts: SharedPost[]) {
   return posts.map(getSharedPostPresentationSignature).join('\u001e');
 }
 
-function isInitialHomeSnapshotReady({
-  notesPhase,
-  sharedEnabled,
-  sharedPhase,
-  startupInteractive,
-}: Pick<
-  UseStableHomeSharedFeedSnapshotParams,
-  'notesPhase' | 'sharedEnabled' | 'sharedPhase' | 'startupInteractive'
->) {
-  if (startupInteractive) {
-    return true;
-  }
-
-  return notesPhase !== 'bootstrapping' && (!sharedEnabled || sharedPhase !== 'bootstrapping');
+function canFreezeInitialSharedSnapshot(notesPhase: NotesLoadPhase, startupInteractive: boolean) {
+  return startupInteractive || notesPhase !== 'bootstrapping';
 }
 
 export function useStableHomeSharedFeedSnapshot({
   userUid,
   notesPhase,
   sharedEnabled,
-  sharedPhase,
   sharedPosts,
   startupInteractive,
   presentationScope = 'default',
@@ -77,12 +62,7 @@ export function useStableHomeSharedFeedSnapshot({
     () => getSharedPostsPresentationSignature(sharedPosts),
     [sharedPosts]
   );
-  const canFreezeInitialSnapshot = isInitialHomeSnapshotReady({
-    notesPhase,
-    sharedEnabled,
-    sharedPhase,
-    startupInteractive,
-  });
+  const canFreezeInitialSnapshot = canFreezeInitialSharedSnapshot(notesPhase, startupInteractive);
   const [presentedSharedPosts, setPresentedSharedPosts] = useState(sharedPosts);
   const [pendingSharedPosts, setPendingSharedPosts] = useState<SharedPost[] | null>(null);
   const resetKeyRef = useRef(resetKey);
@@ -90,18 +70,7 @@ export function useStableHomeSharedFeedSnapshot({
   const presentedSignatureRef = useRef(sharedPostsSignature);
   const latestSharedPostsRef = useRef(sharedPosts);
   const latestSignatureRef = useRef(sharedPostsSignature);
-  const pendingSharedPostsRef = useRef<SharedPost[] | null>(null);
-  const promoteRequestIdRef = useRef(0);
   const [promoteRequestId, setPromoteRequestId] = useState(0);
-
-  const clearPendingSharedPosts = useCallback(() => {
-    if (pendingSharedPostsRef.current === null) {
-      return;
-    }
-
-    pendingSharedPostsRef.current = null;
-    setPendingSharedPosts(null);
-  }, []);
 
   useEffect(() => {
     latestSharedPostsRef.current = sharedPosts;
@@ -110,10 +79,10 @@ export function useStableHomeSharedFeedSnapshot({
 
   const commitPresentedSnapshot = useCallback((nextSharedPosts: SharedPost[], nextSignature: string) => {
     presentedSignatureRef.current = nextSignature;
-    clearPendingSharedPosts();
     frozenRef.current = true;
+    setPendingSharedPosts(null);
     setPresentedSharedPosts(nextSharedPosts);
-  }, [clearPendingSharedPosts]);
+  }, []);
 
   useEffect(() => {
     const resetChanged = resetKeyRef.current !== resetKey;
@@ -121,14 +90,14 @@ export function useStableHomeSharedFeedSnapshot({
       resetKeyRef.current = resetKey;
       frozenRef.current = canFreezeInitialSnapshot;
       presentedSignatureRef.current = sharedPostsSignature;
-      clearPendingSharedPosts();
+      setPendingSharedPosts(null);
       setPresentedSharedPosts(sharedPosts);
       return;
     }
 
     if (!frozenRef.current) {
       presentedSignatureRef.current = sharedPostsSignature;
-      clearPendingSharedPosts();
+      setPendingSharedPosts(null);
       setPresentedSharedPosts(sharedPosts);
       if (canFreezeInitialSnapshot) {
         frozenRef.current = true;
@@ -137,23 +106,27 @@ export function useStableHomeSharedFeedSnapshot({
     }
 
     if (sharedPostsSignature === presentedSignatureRef.current) {
-      clearPendingSharedPosts();
+      setPendingSharedPosts(null);
       return;
     }
 
-    pendingSharedPostsRef.current = sharedPosts;
+    if (presentedSharedPosts.length === 0 && sharedPosts.length > 0) {
+      commitPresentedSnapshot(sharedPosts, sharedPostsSignature);
+      return;
+    }
+
     setPendingSharedPosts(sharedPosts);
   }, [
     canFreezeInitialSnapshot,
-    clearPendingSharedPosts,
+    commitPresentedSnapshot,
+    presentedSharedPosts.length,
     resetKey,
     sharedPosts,
     sharedPostsSignature,
   ]);
 
   const requestPromoteSharedPosts = useCallback(() => {
-    promoteRequestIdRef.current += 1;
-    setPromoteRequestId(promoteRequestIdRef.current);
+    setPromoteRequestId((current) => current + 1);
   }, []);
 
   useEffect(() => {

@@ -311,6 +311,42 @@ describe('useSharedFeedStore', () => {
     });
   });
 
+  it('marks cached friend data usable without waiting for a live network snapshot', async () => {
+    mockCachedSnapshot = {
+      friends: [
+        {
+          userId: 'friend-1',
+          displayNameSnapshot: 'Lan',
+          photoURLSnapshot: null,
+          friendedAt: '2026-03-21T00:00:00.000Z',
+          lastSharedAt: null,
+          createdByInviteId: 'invite-1',
+        },
+      ],
+      sharedPosts: [createSharedPost({ id: 'cached-friend-post', authorUid: 'friend-1' })],
+      activeInvite: null,
+      lastUpdatedAt: '2026-03-23T00:00:00.000Z',
+    };
+
+    const { result } = renderHook(() => useSharedFeedStore(), { wrapper });
+
+    await waitFor(() => {
+      expect(result.current.ready).toBe(true);
+      expect(result.current.loading).toBe(false);
+      expect(result.current.initialLoadComplete).toBe(true);
+      expect(result.current.phase).toBe('cache-ready');
+      expect(result.current.dataSource).toBe('cache');
+      expect(result.current.friends).toEqual([
+        expect.objectContaining({ userId: 'friend-1' }),
+      ]);
+      expect(result.current.sharedPosts).toEqual([
+        expect.objectContaining({ id: 'cached-friend-post' }),
+      ]);
+    });
+
+    expect(mockRefreshSharedFeed).not.toHaveBeenCalled();
+  });
+
   it('reuses a cached active invite while offline without hitting the network', async () => {
     mockConnectivityState.isOnline = false;
     mockCachedSnapshot = {

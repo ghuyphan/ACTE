@@ -39,11 +39,27 @@ function HomeFeedEmptyState({
   const isSyncingEmpty = mode === 'syncing-empty';
   const isBootstrapBlocked = mode === 'bootstrap-blocked-empty';
   const isFriendsEmpty = mode === 'friends-empty';
-  const syncingTitle = t('home.syncingEmptyTitle', 'Importing your cloud notes');
-  const syncingBody = t(
-    'home.syncingEmptyBody',
-    'We are pulling in your notes and shared memories from the cloud now. This usually takes just a moment.'
-  );
+  const syncingTitle =
+    bootstrapState === 'switching-account'
+      ? t('home.bootstrapSwitchingTitle', 'Opening your account')
+      : bootstrapState === 'loading-notes'
+        ? t('home.bootstrapLoadingNotesTitle', 'Loading your notes')
+        : t('home.syncingEmptyTitle', 'Importing your cloud notes');
+  const syncingBody =
+    bootstrapState === 'switching-account'
+      ? t(
+          'home.bootstrapSwitchingBody',
+          'We are switching from local notes to your signed-in account now.'
+        )
+      : bootstrapState === 'loading-notes'
+        ? t(
+            'home.bootstrapLoadingNotesBody',
+            'Noto is checking this journal before showing the first card.'
+          )
+        : t(
+            'home.syncingEmptyBody',
+            'We are pulling in your notes and shared memories from the cloud now. This usually takes just a moment.'
+          );
   const blockedTitle =
     bootstrapState === 'disabled'
       ? t('home.bootstrapDisabledTitle', 'Cloud sync is turned off')
