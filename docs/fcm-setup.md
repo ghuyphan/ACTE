@@ -36,7 +36,7 @@ but those native folders are generated and git-ignored here, so repo-root files 
 ## Expo And Supabase Setup
 
 1. Set `EXPO_PUBLIC_EAS_PROJECT_ID` in your app environment.
-2. Apply the `20260329100000_add_social_push_tokens.sql` migration.
+2. Confirm the applied Supabase schema includes `device_push_tokens` and the push token RPCs.
 3. Deploy the `send-social-notifications` Supabase edge function.
 4. Set `SUPABASE_SERVICE_ROLE_KEY` for the function environment.
 5. Set `EXPO_ACCESS_TOKEN` on the function if your Expo push project requires authenticated sends.

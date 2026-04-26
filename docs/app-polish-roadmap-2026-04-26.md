@@ -23,7 +23,7 @@ Noto has a strong local-first shape and a lot of recent hardening work is visibl
 **Area:** Supabase storage, RLS, account deletion, sharing  
 **Evidence:**
 
-- `supabase/migrations/20260424143000_extend_shared_post_media_visibility.sql:3` allows `shared-post-media` reads when a visible `shared_posts` row references `storage.objects.name`.
+- The previously applied shared-post media visibility policy allowed `shared-post-media` reads when a visible `shared_posts` row referenced `storage.objects.name`.
 - Older migrations had the same general model for shared post visibility, where row references could imply storage access unless path ownership was checked.
 - `supabase/functions/delete-account/index.ts:136` collects path values from user-owned rows and deletes them with a service-role client.
 
@@ -174,7 +174,7 @@ Noto has a strong local-first shape and a lot of recent hardening work is visibl
 ### 9. Revoke direct client writes to `user_usage`
 
 **Area:** billing, quota enforcement  
-**Evidence:** `supabase/migrations/20260321113000_noto_initial.sql:236` lets users update their own `user_usage`; `services/syncService.ts:2985` writes client-computed usage.
+**Evidence:** The applied Supabase schema allows users to update their own `user_usage`; `services/syncService.ts:2985` writes client-computed usage.
 
 **Risk:** A modified client can reset counters and bypass free photo limits. RevenueCat/Plus UI state is also client-observed.
 
@@ -443,7 +443,7 @@ These older concerns look partially or fully addressed in the current tree:
 - Shared post deletion cleanup now includes dual media in `services/sharedFeedService.ts`.
 - Sync cursor clearing appears to distinguish explicit null from omitted fields in `services/syncService.ts`.
 - iOS dual-camera capture setup is now serialized through the session queue in `modules/noto-dual-camera/ios/NotoDualCameraModule.swift`.
-- Sticker asset storage paths now have owner/path validation in `supabase/migrations/20260424120000_harden_sticker_asset_storage_paths.sql`.
+- Sticker asset storage paths have owner/path validation in the applied Supabase schema.
 - Note/shared-post media paths now have owner validation in `supabase/migrations/20260426120000_harden_media_path_ownership.sql`.
 - Android release signing, EAS update project configuration, widget image decoding, and release plugin failure behavior have local hardening patches.
 - `docs/supabase-schema.md` captures the current app-facing Supabase schema for future implementation and review work.

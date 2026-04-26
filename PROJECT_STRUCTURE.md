@@ -109,7 +109,7 @@
 - `services/photoStorage.ts`: Local photo persistence and URI resolution.
 - `services/livePhotoProcessing.ts`: Live photo pairing and processing helpers.
 - `services/remoteMedia.ts`: Supabase Storage upload, signed URL, and download helpers.
-- `supabase/migrations/`: SQL history for notes, sharing, push tokens, live photo columns, sticker assets, and policy hardening.
+- `supabase/migrations/`: Current Supabase follow-up migrations for media path hardening and legacy schema cleanup.
 - `supabase/functions/`: Edge functions for delete-account, sticker asset cleanup, and social push delivery.
 - `docs/supabase-schema.md`: Human-readable Supabase table and storage bucket reference for app/edge work.
 - `widgets/LocketWidget.tsx`: Expo widget registration and JS fallback view.

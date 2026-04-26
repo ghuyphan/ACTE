@@ -36,18 +36,12 @@ In Google Cloud:
 
 ## 3. Database, Storage, And Migrations
 
-Apply every migration under `supabase/migrations/` in order.
+The old Supabase migration history has already been applied to the project and is intentionally not kept in this repo. Apply the current follow-up migrations under `supabase/migrations/` in order when updating an existing project.
 
 For a readable snapshot of the app-facing Supabase tables and storage buckets, see `docs/supabase-schema.md`.
 
-The migration history currently covers:
+The current checked-in migrations cover:
 
-- base auth-linked profiles, `user_usage` including daily photo usage, and notes sync primitives
-- friendships, friend invites, shared posts, and shared-post coordinates
-- note length constraints, note colors, live photo columns, and sync tombstones
-- sticker sync columns, sticker asset GC indexes, and the sticker asset registry
-- profile visibility hardening, invite-token hardening, and the remove-friend fix
-- social push token support through the `device_push_tokens` migration
 - media path ownership hardening for note and shared-post storage policies
 - legacy room schema cleanup through `20260426123000_drop_legacy_room_schema.sql`
 
@@ -61,7 +55,7 @@ Storage cleanup is handled by edge functions and app/server workflows. The old S
 
 ## 4. Realtime And Push
 
-The initial migration adds these tables to the `supabase_realtime` publication:
+The applied Supabase schema publishes these tables to Realtime:
 
 - `user_usage`
 - `friendships`
