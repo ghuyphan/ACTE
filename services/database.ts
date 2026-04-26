@@ -329,13 +329,6 @@ interface NoteDecorationState {
     stickerPlacementsJson: string | null;
 }
 
-interface ExistingSyncQueueRow {
-    id: number;
-    operation: 'create' | 'update' | 'delete' | 'deleteAll';
-    status: 'pending' | 'processing' | 'failed';
-    created_at: string;
-}
-
 interface ReminderSelectionRow {
     id: string;
     type: NoteType;
@@ -427,48 +420,6 @@ async function enqueueSyncChange(
 
     if (change.type === 'deleteAll') {
         await executor.runAsync('DELETE FROM sync_queue WHERE owner_uid = ?', ownerScope);
-    } else if (coalesceKey) {
-        const existing = await executor.getFirstAsync<ExistingSyncQueueRow>(
-            `SELECT id, operation, status, created_at
-             FROM sync_queue
-             WHERE owner_uid = ? AND coalesce_key = ?
-             ORDER BY created_at ASC
-             LIMIT 1`,
-            ownerScope,
-            coalesceKey
-        );
-
-        if (existing) {
-            const nextOperation =
-                change.type === 'delete'
-                    ? 'delete'
-                    : existing.operation === 'create' || change.type === 'create'
-                        ? 'create'
-                        : 'update';
-
-            await executor.runAsync(
-                `UPDATE sync_queue
-                 SET entity = ?,
-                     entity_id = ?,
-                     operation = ?,
-                     payload = ?,
-                     status = 'pending',
-                     last_error = NULL,
-                     next_retry_at = NULL,
-                     terminal = 0,
-                     blocked_reason = NULL,
-                     lease_token = NULL,
-                     created_at = ?
-                 WHERE id = ?`,
-                change.entity,
-                entityId,
-                nextOperation,
-                serializedPayload,
-                change.timestamp,
-                existing.id
-            );
-            return;
-        }
     }
 
     await executor.runAsync(
@@ -488,7 +439,23 @@ async function enqueueSyncChange(
             lease_token,
             created_at
         )
-         VALUES (?, ?, ?, ?, ?, ?, 'pending', 0, NULL, NULL, 0, NULL, NULL, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?, 'pending', 0, NULL, NULL, 0, NULL, NULL, ?)
+         ON CONFLICT(owner_uid, coalesce_key) WHERE coalesce_key IS NOT NULL DO UPDATE SET
+            entity = excluded.entity,
+            entity_id = excluded.entity_id,
+            operation = CASE
+                WHEN excluded.operation = 'delete' THEN 'delete'
+                WHEN sync_queue.operation = 'create' OR excluded.operation = 'create' THEN 'create'
+                ELSE 'update'
+            END,
+            payload = excluded.payload,
+            status = 'pending',
+            last_error = NULL,
+            next_retry_at = NULL,
+            terminal = 0,
+            blocked_reason = NULL,
+            lease_token = NULL,
+            created_at = excluded.created_at`,
         ownerScope,
         change.entity,
         entityId,
@@ -657,6 +624,7 @@ export async function getDB(): Promise<SQLite.SQLiteDatabase> {
                     : undefined
             );
             await database.execAsync(`
+      PRAGMA foreign_keys = ON;
       PRAGMA journal_mode = WAL;
       CREATE TABLE IF NOT EXISTS notes (
         id TEXT PRIMARY KEY NOT NULL,
@@ -1072,6 +1040,21 @@ export async function getDB(): Promise<SQLite.SQLiteDatabase> {
                 `CREATE INDEX IF NOT EXISTS idx_sync_queue_owner_coalesce ON sync_queue(owner_uid, coalesce_key)`
             );
             await database.execAsync(
+                `DELETE FROM sync_queue
+                 WHERE coalesce_key IS NOT NULL
+                   AND id NOT IN (
+                     SELECT MAX(id)
+                     FROM sync_queue
+                     WHERE coalesce_key IS NOT NULL
+                     GROUP BY owner_uid, coalesce_key
+                   )`
+            );
+            await database.execAsync(
+                `CREATE UNIQUE INDEX IF NOT EXISTS idx_sync_queue_owner_coalesce_unique
+                 ON sync_queue(owner_uid, coalesce_key)
+                 WHERE coalesce_key IS NOT NULL`
+            );
+            await database.execAsync(
                 `CREATE INDEX IF NOT EXISTS idx_sync_queue_owner_created ON sync_queue(owner_uid, created_at DESC)`
             );
             await database.execAsync(
@@ -1399,6 +1382,20 @@ function buildSearchText(input: {
         promptTextSnapshot: input.promptTextSnapshot,
         promptAnswer: input.promptAnswer,
     });
+}
+
+function isIncomingNoteSnapshotOlder(inputUpdatedAt: string | null | undefined, existingUpdatedAt: string | null | undefined) {
+    if (!inputUpdatedAt || !existingUpdatedAt) {
+        return false;
+    }
+
+    const inputTime = new Date(inputUpdatedAt).getTime();
+    const existingTime = new Date(existingUpdatedAt).getTime();
+    if (!Number.isFinite(inputTime) || !Number.isFinite(existingTime)) {
+        return inputUpdatedAt < existingUpdatedAt;
+    }
+
+    return inputTime < existingTime;
 }
 
 function buildFtsMatchExpression(query: string) {
@@ -2442,15 +2439,20 @@ export async function upsertNoteForScope(input: UpsertNoteInput, scope: string):
         input.updatedAt ?? null,
     ] as const;
 
+    let skippedStaleUpsert = false;
     await withDatabaseTransaction(async (txn) => {
-        const existingRow = await txn.getFirstAsync<{ owner_uid: string }>(
-            `SELECT owner_uid FROM notes WHERE id = ?`,
+        const existingRow = await txn.getFirstAsync<{ owner_uid: string; updated_at: string | null }>(
+            `SELECT owner_uid, updated_at FROM notes WHERE id = ?`,
             input.id
         );
         if (existingRow && existingRow.owner_uid !== scope) {
             throw new Error(
                 `Refusing to overwrite note ${input.id} from scope ${existingRow.owner_uid} with scope ${scope}.`
             );
+        }
+        if (existingRow && isIncomingNoteSnapshotOlder(input.updatedAt, existingRow.updated_at)) {
+            skippedStaleUpsert = true;
+            return;
         }
 
         await txn.runAsync(
@@ -2526,6 +2528,13 @@ export async function upsertNoteForScope(input: UpsertNoteInput, scope: string):
         await upsertNoteSearchDocument(txn, input.id, scope, searchText);
         await persistNoteDecorationRows(txn, input.id, noteDecorations, updatedAt);
     });
+
+    if (skippedStaleUpsert) {
+        const currentNote = await getNoteByIdForScope(input.id, scope);
+        if (currentNote) {
+            return currentNote;
+        }
+    }
 
     const upsertedNote = {
         id: input.id,

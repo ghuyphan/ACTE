@@ -111,6 +111,7 @@
 - `services/remoteMedia.ts`: Supabase Storage upload, signed URL, and download helpers.
 - `supabase/migrations/`: SQL history for notes, sharing, push tokens, live photo columns, sticker assets, and policy hardening.
 - `supabase/functions/`: Edge functions for delete-account, sticker asset cleanup, and social push delivery.
+- `docs/supabase-schema.md`: Human-readable Supabase table and storage bucket reference for app/edge work.
 - `widgets/LocketWidget.tsx`: Expo widget registration and JS fallback view.
 - `widgets/ios/LocketWidget.swift`: Source of truth for the iOS widget UI.
 - `widgets/android/NotoWidgetProvider.kt`: Source of truth for the Android widget rendering and snapshot binding.

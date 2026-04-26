@@ -38,6 +38,8 @@ In Google Cloud:
 
 Apply every migration under `supabase/migrations/` in order.
 
+For a readable snapshot of the app-facing Supabase tables and storage buckets, see `docs/supabase-schema.md`.
+
 The migration history currently covers:
 
 - base auth-linked profiles, `user_usage` including daily photo usage, and notes sync primitives
@@ -46,15 +48,16 @@ The migration history currently covers:
 - sticker sync columns, sticker asset GC indexes, and the sticker asset registry
 - profile visibility hardening, invite-token hardening, and the remove-friend fix
 - social push token support through the `device_push_tokens` migration
+- media path ownership hardening for note and shared-post storage policies
+- legacy room schema cleanup through `20260426123000_drop_legacy_room_schema.sql`
 
 The backend storage surface now includes media and cleanup concerns for:
 
 - `note-media`
 - `shared-post-media`
-- `room-post-media`
 - sticker asset buckets referenced by the registry tables
 
-Note: the `20260327133000_remove_storage_cleanup_triggers.sql` migration removes the earlier SQL storage cleanup trigger approach. Storage cleanup is now handled by edge functions and app/server workflows.
+Storage cleanup is handled by edge functions and app/server workflows. The old SQL storage cleanup trigger migrations were removed from the repo because they are no longer part of the current schema history.
 
 ## 4. Realtime And Push
 

@@ -115,6 +115,36 @@ function createDeferred<T>() {
 const mockRunAsync = jest.fn(async (sql: string, ...args: any[]) => {
   if (sql.includes('INSERT INTO sync_queue')) {
     const [ownerUid, entity, entityId, coalesceKey, operation, payload, createdAt] = args;
+    const existingIndex =
+      coalesceKey === null || coalesceKey === undefined
+        ? -1
+        : queueRows.findIndex(
+            (row) => row.owner_uid === ownerUid && row.coalesce_key === coalesceKey
+          );
+    if (existingIndex >= 0) {
+      const existing = queueRows[existingIndex];
+      queueRows[existingIndex] = {
+        ...existing,
+        entity,
+        entity_id: entityId,
+        operation:
+          operation === 'delete'
+            ? 'delete'
+            : existing.operation === 'create' || operation === 'create'
+              ? 'create'
+              : 'update',
+        payload,
+        status: 'pending',
+        last_error: null,
+        next_retry_at: null,
+        terminal: 0,
+        blocked_reason: null,
+        lease_token: null,
+        created_at: createdAt,
+      };
+      return;
+    }
+
     queueRows.push({
       id: queueId++,
       owner_uid: ownerUid,

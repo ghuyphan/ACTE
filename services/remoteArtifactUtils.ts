@@ -1,6 +1,13 @@
 import { getPairedVideoFileExtension } from './livePhotoStorage';
 import { parseNoteStickerPlacements } from './noteStickers';
 import { getUniqueNormalizedStrings, normalizeOptionalString } from './normalizedStrings';
+export {
+  buildDualPhotoRemotePath,
+  buildUserMediaBasePath,
+  filterUserOwnedRemoteMediaPaths,
+  isUserOwnedRemoteMediaPath,
+  type DualMediaSlot,
+} from './remoteMediaPaths';
 
 export interface RemoteArtifactSnapshot {
   photoPath?: string | null;

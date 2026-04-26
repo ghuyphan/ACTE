@@ -45,7 +45,7 @@ function withWidgetBuildConfigurations(project, mutateBuildSettings) {
       continue;
     }
 
-    mutateBuildSettings(buildSettings);
+    mutateBuildSettings(buildSettings, configuration.name);
     updated += 1;
   }
 
@@ -53,8 +53,12 @@ function withWidgetBuildConfigurations(project, mutateBuildSettings) {
 }
 
 function enableWidgetEntitlementsModification(project) {
-  return withWidgetBuildConfigurations(project, (buildSettings) => {
-    buildSettings.CODE_SIGN_ALLOW_ENTITLEMENTS_MODIFICATION = 'YES';
+  return withWidgetBuildConfigurations(project, (buildSettings, configName) => {
+    if (String(configName).toLowerCase().includes('debug')) {
+      buildSettings.CODE_SIGN_ALLOW_ENTITLEMENTS_MODIFICATION = 'YES';
+    } else {
+      delete buildSettings.CODE_SIGN_ALLOW_ENTITLEMENTS_MODIFICATION;
+    }
   });
 }
 

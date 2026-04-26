@@ -4,6 +4,7 @@ import UIKit
 import ImageIO
 
 private let widgetFontScale: CGFloat = 0.92
+private let widgetImageMaxPixelSize: CGFloat = 2048
 
 private func scaledWidgetFontSize(_ size: CGFloat) -> CGFloat {
     size * widgetFontScale
@@ -1024,18 +1025,27 @@ private func loadWidgetImageFromPath(_ path: String) -> UIImage? {
         return nil
     }
 
-    if normalizedPath.hasPrefix("file://"), let url = URL(string: normalizedPath) {
-        if let image = UIImage(contentsOfFile: url.path) {
-            return normalizeWidgetImageOrientation(image)
-        }
+    let resolvedUrl: URL?
+    if normalizedPath.hasPrefix("file://") {
+        resolvedUrl = URL(string: normalizedPath)
+    } else {
+        resolvedUrl = URL(fileURLWithPath: normalizedPath)
+    }
+
+    return resolvedUrl.flatMap(loadDownsampledWidgetImage)
+}
+
+private func loadDownsampledWidgetImage(_ url: URL) -> UIImage? {
+    guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
+          let cgImage = CGImageSourceCreateThumbnailAtIndex(source, 0, [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceThumbnailMaxPixelSize: widgetImageMaxPixelSize,
+          ] as CFDictionary) else {
         return nil
     }
 
-    if let image = UIImage(contentsOfFile: normalizedPath) {
-        return normalizeWidgetImageOrientation(image)
-    }
-
-    return nil
+    return normalizeWidgetImageOrientation(UIImage(cgImage: cgImage))
 }
 
 private struct DualWidgetInsetMetrics {
@@ -2320,31 +2330,7 @@ private struct LocketWidgetEntryView: View {
             return nil
         }
 
-        // Prefer the direct file decode path first. Some staged widget assets,
-        // especially dual-capture composites, can render more reliably this way
-        // than through the thumbnail pipeline.
-        if let directImage = loadWidgetImageFromPath(normalizedPath) {
-            return directImage
-        }
-
-        let resolvedUrl: URL?
-        if normalizedPath.hasPrefix("file://") {
-            resolvedUrl = URL(string: normalizedPath)
-        } else {
-            resolvedUrl = URL(fileURLWithPath: normalizedPath)
-        }
-
-        guard let url = resolvedUrl,
-              let source = CGImageSourceCreateWithURL(url as CFURL, nil),
-              let cgImage = CGImageSourceCreateThumbnailAtIndex(source, 0, [
-                kCGImageSourceCreateThumbnailFromImageAlways: true,
-                kCGImageSourceCreateThumbnailWithTransform: true,
-                kCGImageSourceThumbnailMaxPixelSize: 2048,
-              ] as CFDictionary) else {
-            return nil
-        }
-
-        return normalizeWidgetImageOrientation(UIImage(cgImage: cgImage))
+        return loadWidgetImageFromPath(normalizedPath)
     }
 
     private func loadImage(fromBase64 base64: String) -> UIImage? {
@@ -2356,7 +2342,7 @@ private struct LocketWidgetEntryView: View {
               let cgImage = CGImageSourceCreateThumbnailAtIndex(source, 0, [
                 kCGImageSourceCreateThumbnailFromImageAlways: true,
                 kCGImageSourceCreateThumbnailWithTransform: true,
-                kCGImageSourceThumbnailMaxPixelSize: 2048,
+                kCGImageSourceThumbnailMaxPixelSize: widgetImageMaxPixelSize,
               ] as CFDictionary) else {
             return nil
         }

@@ -50,6 +50,8 @@ import { upsertPublicUserProfile } from './publicProfileService';
 import {
   buildNewRemoteArtifacts,
   buildRemovedRemoteArtifacts,
+  buildDualPhotoRemotePath,
+  buildUserMediaBasePath,
   getRemotePairedVideoPath,
   getRemoteStickerAssetPaths,
   normalizeRemoteArtifactPath,
@@ -141,10 +143,6 @@ function normalizeRemoteNoteDualFacing(value: NoteDualFacing | null | undefined)
 
 function normalizeRemoteNoteDualLayoutPreset(value: NoteDualLayoutPreset | null | undefined) {
   return value === 'top-left' ? value : null;
-}
-
-function getRemoteDualPhotoPath(basePath: string, slot: 'primary' | 'secondary') {
-  return `${basePath}.dual-${slot}`;
 }
 
 function getSyncPhotoUri(note: Pick<Note, 'type' | 'content' | 'photoLocalUri'>) {
@@ -1380,7 +1378,7 @@ async function uploadNoteMediaArtifacts(options: {
   allowOverwrite?: boolean;
 }) {
   const { userId, note, existingRemoteArtifacts = null, allowOverwrite = false } = options;
-  const basePath = `${userId}/${note.id}`;
+  const basePath = buildUserMediaBasePath(userId, note.id);
   const currentPhotoUri = getSyncPhotoUri(note);
   const currentDualPrimaryPhotoUri = getSyncDualPhotoUri(note, 'primary');
   const currentDualSecondaryPhotoUri = getSyncDualPhotoUri(note, 'secondary');
@@ -1403,7 +1401,7 @@ async function uploadNoteMediaArtifacts(options: {
       currentDualPrimaryPhotoUri
         ? await uploadPhotoToStorage(
             NOTE_MEDIA_BUCKET,
-            getRemoteDualPhotoPath(basePath, 'primary'),
+            buildDualPhotoRemotePath(basePath, 'primary'),
             currentDualPrimaryPhotoUri,
             { allowOverwrite }
           )
@@ -1412,7 +1410,7 @@ async function uploadNoteMediaArtifacts(options: {
       currentDualSecondaryPhotoUri
         ? await uploadPhotoToStorage(
             NOTE_MEDIA_BUCKET,
-            getRemoteDualPhotoPath(basePath, 'secondary'),
+            buildDualPhotoRemotePath(basePath, 'secondary'),
             currentDualSecondaryPhotoUri,
             { allowOverwrite }
           )
@@ -2476,49 +2474,6 @@ function createSqliteSyncRepository(resolveScope: () => string): SyncRepository 
 
     if (change.type === 'deleteAll') {
       await db.runAsync('DELETE FROM sync_queue WHERE owner_uid = ?', scope);
-    } else if (coalesceKey) {
-      const existing = await db.getFirstAsync<QueueRow>(
-        `SELECT *
-         FROM sync_queue
-         WHERE owner_uid = ? AND coalesce_key = ?
-         ORDER BY created_at ASC
-         LIMIT 1`,
-        scope,
-        coalesceKey
-      );
-
-      if (existing?.id) {
-        const nextOperation =
-          change.type === 'delete'
-            ? 'delete'
-            : existing.operation === 'create' || change.type === 'create'
-              ? 'create'
-              : 'update';
-
-        await db.runAsync(
-          `UPDATE sync_queue
-           SET entity = ?,
-               entity_id = ?,
-               operation = ?,
-               payload = ?,
-               status = 'pending',
-               last_error = NULL,
-               next_retry_at = NULL,
-               terminal = 0,
-               blocked_reason = NULL,
-               lease_token = NULL,
-               created_at = ?
-           WHERE id = ? AND owner_uid = ?`,
-          change.entity,
-          entityId,
-          nextOperation,
-          serializedPayload,
-          change.timestamp,
-          existing.id,
-          scope
-        );
-        return;
-      }
     }
 
     await db.runAsync(
@@ -2538,7 +2493,23 @@ function createSqliteSyncRepository(resolveScope: () => string): SyncRepository 
         lease_token,
         created_at
       )
-       VALUES (?, ?, ?, ?, ?, ?, 'pending', 0, NULL, NULL, 0, NULL, NULL, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, 'pending', 0, NULL, NULL, 0, NULL, NULL, ?)
+       ON CONFLICT(owner_uid, coalesce_key) WHERE coalesce_key IS NOT NULL DO UPDATE SET
+          entity = excluded.entity,
+          entity_id = excluded.entity_id,
+          operation = CASE
+            WHEN excluded.operation = 'delete' THEN 'delete'
+            WHEN sync_queue.operation = 'create' OR excluded.operation = 'create' THEN 'create'
+            ELSE 'update'
+          END,
+          payload = excluded.payload,
+          status = 'pending',
+          last_error = NULL,
+          next_retry_at = NULL,
+          terminal = 0,
+          blocked_reason = NULL,
+          lease_token = NULL,
+          created_at = excluded.created_at`,
       scope,
       change.entity,
       entityId,

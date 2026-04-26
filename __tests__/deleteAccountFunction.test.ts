@@ -75,25 +75,32 @@ function createDeleteAccountFixtures(options?: {
   const selectRows = {
     notes: [
       {
-        photo_path: ' note/photo.jpg ',
-        paired_video_path: 'note/video.mov',
+        photo_path: ' user-1/note/photo.jpg ',
+        dual_primary_photo_path: 'user-1/note/dual-primary.jpg',
+        dual_secondary_photo_path: 'attacker/note/dual-secondary.jpg',
+        paired_video_path: 'user-1/note/video.mov',
         sticker_placements_json: JSON.stringify([
-          { asset: { remotePath: 'stickers/note-sticker.png' } },
-          { asset: { remotePath: ' stickers/note-sticker.png ' } },
+          { asset: { remotePath: 'user-1/stickers/note-sticker.png' } },
+          { asset: { remotePath: ' user-1/stickers/note-sticker.png ' } },
+          { asset: { remotePath: 'attacker/stickers/forged.png' } },
         ]),
       },
     ],
     shared_posts: [
       {
-        photo_path: 'shared/photo.jpg',
-        paired_video_path: ' shared/video.mov ',
+        photo_path: 'user-1/shared/photo.jpg',
+        dual_primary_photo_path: 'user-1/shared/dual-primary.jpg',
+        dual_secondary_photo_path: 'attacker/shared/dual-secondary.jpg',
+        paired_video_path: ' user-1/shared/video.mov ',
         sticker_placements_json: JSON.stringify([
-          { asset: { remotePath: 'stickers/shared-sticker.png' } },
+          { asset: { remotePath: 'user-1/stickers/shared-sticker.png' } },
         ]),
       },
     ],
-    room_posts: [{ photo_path: 'room/photo.jpg' }],
-    sticker_assets: [{ storage_bucket: ' custom-bucket ', storage_path: ' custom/path.png ' }],
+    sticker_assets: [
+      { storage_bucket: ' note-media ', storage_path: ' user-1/stickers/registered.png ' },
+      { storage_bucket: ' custom-bucket ', storage_path: ' custom/path.png ' },
+    ],
   } as const;
 
   const mutationErrors = options?.mutationErrors ?? {};
@@ -108,7 +115,7 @@ function createDeleteAccountFixtures(options?: {
       }),
     },
     from: (table: string) => {
-      if (table === 'notes' || table === 'shared_posts' || table === 'room_posts' || table === 'sticker_assets') {
+      if (table === 'notes' || table === 'shared_posts' || table === 'sticker_assets') {
         return {
           select: () => ({
             eq: jest.fn(async () => ({
@@ -192,7 +199,7 @@ function createDeleteAccountFixtures(options?: {
 }
 
 describe('delete-account edge function', () => {
-  it('removes note, shared-post, room, and sticker storage before deleting the auth user', async () => {
+  it('removes note, shared-post, and sticker storage before deleting the auth user', async () => {
     const fixtures = createDeleteAccountFixtures();
     const handler = loadDeleteAccountHandler({
       createClient: fixtures.createClient,
@@ -216,29 +223,29 @@ describe('delete-account edge function', () => {
         {
           bucket: 'note-media',
           paths: expect.arrayContaining([
-            'note/photo.jpg',
-            'note/video.mov',
-            'stickers/note-sticker.png',
+            'user-1/note/photo.jpg',
+            'user-1/note/dual-primary.jpg',
+            'user-1/note/video.mov',
+            'user-1/stickers/note-sticker.png',
           ]),
         },
         {
           bucket: 'shared-post-media',
           paths: expect.arrayContaining([
-            'shared/photo.jpg',
-            'shared/video.mov',
-            'stickers/shared-sticker.png',
+            'user-1/shared/photo.jpg',
+            'user-1/shared/dual-primary.jpg',
+            'user-1/shared/video.mov',
+            'user-1/stickers/shared-sticker.png',
           ]),
         },
         {
-          bucket: 'room-post-media',
-          paths: ['room/photo.jpg'],
-        },
-        {
-          bucket: 'custom-bucket',
-          paths: ['custom/path.png'],
+          bucket: 'note-media',
+          paths: ['user-1/stickers/registered.png'],
         },
       ])
     );
+    expect(JSON.stringify(fixtures.storageRemovals)).not.toContain('attacker');
+    expect(JSON.stringify(fixtures.storageRemovals)).not.toContain('custom/path.png');
   });
 
   it('fails safely and skips auth deletion when sticker asset record cleanup fails', async () => {

@@ -50,6 +50,8 @@ import { sendSocialNotificationEvent } from './socialPushService';
 import {
   buildNewRemoteArtifacts,
   buildRemovedRemoteArtifacts,
+  buildDualPhotoRemotePath,
+  buildUserMediaBasePath,
   getRemotePairedVideoPath,
   getRemoteStickerAssetPaths,
   normalizeRemoteArtifactPath,
@@ -628,10 +630,6 @@ function getSharedPostDualPhotoUri(
   );
 }
 
-function getSharedPostDualPhotoPath(basePath: string, slot: 'primary' | 'secondary') {
-  return `${basePath}.dual-${slot}`;
-}
-
 function getSharedPostRemoteArtifacts(
   post: Pick<
     SharedPostRow,
@@ -659,7 +657,7 @@ async function uploadSharedPostMediaArtifacts(options: {
   allowOverwrite?: boolean;
 }) {
   const { userId, postId, note, existingArtifacts = null, allowOverwrite = false } = options;
-  const basePath = `${userId}/${postId}`;
+  const basePath = buildUserMediaBasePath(userId, postId);
   const currentPhotoUri = getSharedPostPhotoUri(note);
   const currentDualPrimaryPhotoUri = getSharedPostDualPhotoUri(note, 'primary');
   const currentDualSecondaryPhotoUri = getSharedPostDualPhotoUri(note, 'secondary');
@@ -684,7 +682,7 @@ async function uploadSharedPostMediaArtifacts(options: {
       currentDualPrimaryPhotoUri
         ? await uploadPhotoToStorage(
             SHARED_POST_MEDIA_BUCKET,
-            getSharedPostDualPhotoPath(basePath, 'primary'),
+            buildDualPhotoRemotePath(basePath, 'primary'),
             currentDualPrimaryPhotoUri,
             { allowOverwrite }
           )
@@ -693,7 +691,7 @@ async function uploadSharedPostMediaArtifacts(options: {
       currentDualSecondaryPhotoUri
         ? await uploadPhotoToStorage(
             SHARED_POST_MEDIA_BUCKET,
-            getSharedPostDualPhotoPath(basePath, 'secondary'),
+            buildDualPhotoRemotePath(basePath, 'secondary'),
             currentDualSecondaryPhotoUri,
             { allowOverwrite }
           )

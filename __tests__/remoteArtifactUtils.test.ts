@@ -1,7 +1,11 @@
 import {
   buildNewRemoteArtifacts,
   buildRemovedRemoteArtifacts,
+  buildDualPhotoRemotePath,
+  buildUserMediaBasePath,
+  filterUserOwnedRemoteMediaPaths,
   getRemotePairedVideoPath,
+  isUserOwnedRemoteMediaPath,
   normalizeRemoteEntityIds,
 } from '../services/remoteArtifactUtils';
 
@@ -38,6 +42,22 @@ describe('remoteArtifactUtils', () => {
     expect(getRemotePairedVideoPath('user-1/note-1', null)).toBe('user-1/note-1.motion.mp4');
   });
 
+  it('builds and validates owner-scoped media paths', () => {
+    const basePath = buildUserMediaBasePath(' user-1 ', 'note-1');
+
+    expect(basePath).toBe('user-1/note-1');
+    expect(buildDualPhotoRemotePath(basePath, 'primary')).toBe('user-1/note-1.dual-primary');
+    expect(isUserOwnedRemoteMediaPath('user-1', 'user-1/note-1.jpg')).toBe(true);
+    expect(isUserOwnedRemoteMediaPath('user-1', 'user-2/note-1.jpg')).toBe(false);
+    expect(isUserOwnedRemoteMediaPath('user-1', 'user-1/../note-1.jpg')).toBe(false);
+    expect(filterUserOwnedRemoteMediaPaths('user-1', [
+      ' user-1/a.jpg ',
+      'user-2/b.jpg',
+      'user-1/a.jpg',
+      '/user-1/rooted.jpg',
+    ])).toEqual(['user-1/a.jpg']);
+  });
+
   it('normalizes and de-duplicates remote ids', () => {
     expect(normalizeRemoteEntityIds([' post-1 ', null, 'post-2', 'post-1', ''])).toEqual([
       'post-1',
@@ -64,6 +84,8 @@ describe('remoteArtifactUtils', () => {
       )
     ).toEqual({
       photoPath: 'next/photo.jpg',
+      dualPrimaryPhotoPath: null,
+      dualSecondaryPhotoPath: null,
       pairedVideoPath: null,
       stickerPaths: ['sticker-a.png'],
     });
@@ -88,6 +110,8 @@ describe('remoteArtifactUtils', () => {
       )
     ).toEqual({
       photoPath: null,
+      dualPrimaryPhotoPath: null,
+      dualSecondaryPhotoPath: null,
       pairedVideoPath: 'previous/video.mov',
       stickerPaths: ['sticker-a.png'],
     });

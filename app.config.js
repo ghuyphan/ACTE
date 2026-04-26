@@ -18,8 +18,9 @@ const allowProductionWithoutBilling =
   process.env.EXPO_PUBLIC_ALLOW_PRODUCTION_WITHOUT_BILLING?.trim() === 'true';
 const easAndroidGoogleServicesFile = process.env.GOOGLE_SERVICES_JSON?.trim();
 const easIosGoogleServicesFile = process.env.GOOGLE_SERVICE_INFO_PLIST?.trim();
-const easProjectId = easProjectIdFromEnv || '82e9519b-f89b-466e-af4d-697349535c13';
-const easUpdateUrl = `https://u.expo.dev/${easProjectId}`;
+const isEasBuild = process.env.EAS_BUILD?.trim() === 'true';
+const easProjectId = easProjectIdFromEnv;
+const easUpdateUrl = easProjectId ? `https://u.expo.dev/${easProjectId}` : undefined;
 const supportUrl = process.env.EXPO_PUBLIC_SUPPORT_URL?.trim() ?? '';
 const supportEmail = process.env.EXPO_PUBLIC_SUPPORT_EMAIL?.trim() ?? '';
 const accountDeletionUrl = process.env.EXPO_PUBLIC_ACCOUNT_DELETION_URL?.trim() ?? '';
@@ -128,6 +129,10 @@ function assertProductionConfig() {
   }
 }
 
+if (isEasBuild && !easProjectId) {
+  throw new Error('EXPO_PUBLIC_EAS_PROJECT_ID is required for EAS builds so updates target the intended project.');
+}
+
 assertProductionConfig();
 
 function resolvePublicSiteBaseUrl() {
@@ -166,7 +171,7 @@ const config = {
   userInterfaceStyle: 'automatic',
   newArchEnabled: true,
   updates: {
-    enabled: true,
+    enabled: Boolean(easUpdateUrl),
     url: easUpdateUrl,
     checkAutomatically: 'ON_LOAD',
     fallbackToCacheTimeout: 0,
@@ -216,7 +221,7 @@ const config = {
       'expo-location',
       {
         locationAlwaysAndWhenInUsePermission:
-          'Allow Noto to use your location to save and find your nearby memories.',
+          'Allow Noto to use your location to save memories and send background reminders when you return to saved places.',
         locationAlwaysPermission:
           'Allow Noto to use your location in the background so it can remind you when you return to saved places.',
         locationWhenInUsePermission:

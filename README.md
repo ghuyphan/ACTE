@@ -124,6 +124,7 @@ Compatibility note:
 - [docs/release-checklist.md](./docs/release-checklist.md)
 - [docs/android-release.md](./docs/android-release.md)
 - [docs/supabase-setup.md](./docs/supabase-setup.md)
+- [docs/supabase-schema.md](./docs/supabase-schema.md)
 - [docs/revenuecat-setup.md](./docs/revenuecat-setup.md)
 - [docs/fcm-setup.md](./docs/fcm-setup.md)
 - [docs/widget-maintenance.md](./docs/widget-maintenance.md)

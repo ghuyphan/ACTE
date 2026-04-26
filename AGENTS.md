@@ -29,7 +29,7 @@ Noto is an Expo SDK 55 / React Native app for place-linked text notes and photo 
 - `widgets/`: Expo widget registration plus the checked-in iOS and Android widget source.
 - `supabase/`: SQL migrations and edge functions for account cleanup, sticker cleanup, and social push delivery.
 - `assets/images/`: App icons, splash assets, and image resources.
-- `docs/`: Maintenance docs for release, Android release, Supabase, RevenueCat, FCM/push, and widget work.
+- `docs/`: Maintenance docs for release, Android release, Supabase, Supabase schema context, RevenueCat, FCM/push, and widget work.
 - `__tests__/`: Jest coverage for hooks, services, screens, widgets, and map logic.
 - `ios/`, `android/`: Generated local native folders that may exist for widget/auth/native debugging, but are git-ignored in this repo.
 
@@ -107,6 +107,7 @@ Noto is an Expo SDK 55 / React Native app for place-linked text notes and photo 
 - Smaller helpers or platform utilities: `utils/`.
 - Theme/i18n/subscription constants: `constants/`.
 - Supabase schema or edge work: `supabase/`.
+- Supabase schema reference docs: `docs/supabase-schema.md`.
 - Custom native module work: `modules/` and `native/`.
 - Tests: `__tests__/`, named after the feature area.
 

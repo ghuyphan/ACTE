@@ -258,6 +258,7 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
   const activeInviteRef = useRef<FriendInvite | null>(null);
   const suppressedActiveInviteIdRef = useRef<string | null>(null);
   const createInvitePromiseRef = useRef<Promise<FriendInvite> | null>(null);
+  const userRef = useRef(user);
   const previousUserUidRef = useRef<string | null>(null);
   const sharedFeedSessionRef = useRef(0);
   const refreshRequestIdRef = useRef(0);
@@ -276,6 +277,7 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
   );
 
   const enabled = isAuthAvailable;
+  userRef.current = user;
   const phase: SharedFeedLoadPhase = !ready
     ? 'bootstrapping'
     : loading
@@ -685,7 +687,7 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
           if (sharedMediaHydrationKeyRef.current === hydrationKey) {
             sharedMediaHydrationKeyRef.current = null;
           }
-          throw error;
+          console.warn('[shared-feed] Shared media hydration failed:', getSharedFeedErrorMessage(error));
         })
         .finally(() => {
           if (sharedMediaHydrationPromiseRef.current === hydrationPromise) {
@@ -941,6 +943,8 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
   );
 
   useEffect(() => {
+    const activeUser = userRef.current;
+    const activeUserUid = activeUser?.uid ?? null;
     sharedFeedSessionRef.current += 1;
     const sessionId = sharedFeedSessionRef.current;
 
@@ -948,7 +952,7 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
       return;
     }
 
-    if (!enabled || !user) {
+    if (!enabled || !activeUser || !activeUserUid) {
       commitSnapshot(
         {
           friends: [],
@@ -979,59 +983,67 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
       return;
     }
 
-    if (previousUserUidRef.current && previousUserUidRef.current !== user.uid) {
+    const isSameUserSession = previousUserUidRef.current === activeUserUid;
+    if (previousUserUidRef.current && !isSameUserSession) {
       void clearSharedFeedCache(previousUserUidRef.current);
       invalidateSharedFeedRefresh(previousUserUidRef.current);
     }
 
-    previousUserUidRef.current = user.uid;
+    previousUserUidRef.current = activeUserUid;
     sharedMediaHydrationKeyRef.current = null;
     sharedMediaHydrationPromiseRef.current = null;
     sharedFeedSubscriptionHealthyRef.current = true;
     lastForegroundRefreshAtRef.current = null;
     liveSnapshotSessionRef.current = null;
-    commitSnapshot(
-      {
-        friends: [],
-        sharedPosts: [],
-        activeInvite: null,
-        ownedSharedNoteIds: [],
-      },
-      'cache',
-      null
-    );
-    setLoading(false);
-    setReady(false);
-    setInitialLoadComplete(false);
-    pendingForcedRefreshRef.current = false;
-    refreshInFlightRef.current = null;
-    suppressedActiveInviteIdRef.current = null;
-    void hydrateFromCache(user.uid, sessionId)
-      .catch((error) => {
-        if (sharedFeedSessionRef.current !== sessionId || previousUserUidRef.current !== user.uid) {
-          return;
-        }
+    if (!isSameUserSession) {
+      commitSnapshot(
+        {
+          friends: [],
+          sharedPosts: [],
+          activeInvite: null,
+          ownedSharedNoteIds: [],
+        },
+        'cache',
+        null
+      );
+      setLoading(false);
+      setReady(false);
+      setInitialLoadComplete(false);
+      pendingForcedRefreshRef.current = false;
+      refreshInFlightRef.current = null;
+      suppressedActiveInviteIdRef.current = null;
+      void hydrateFromCache(activeUserUid, sessionId)
+        .catch((error) => {
+          if (sharedFeedSessionRef.current !== sessionId || previousUserUidRef.current !== activeUserUid) {
+            return;
+          }
 
-        console.warn('Shared feed cache hydration failed:', getSharedFeedErrorMessage(error));
-        setLoading(false);
-        setReady(true);
-        setInitialLoadComplete(true);
-      })
-      .finally(() => {
-        if (sharedFeedSessionRef.current === sessionId && !isOnline) {
+          console.warn('Shared feed cache hydration failed:', getSharedFeedErrorMessage(error));
           setLoading(false);
           setReady(true);
           setInitialLoadComplete(true);
-        }
-      });
+        })
+        .finally(() => {
+          if (sharedFeedSessionRef.current === sessionId && !isOnline) {
+            setLoading(false);
+            setReady(true);
+            setInitialLoadComplete(true);
+          }
+        });
+    }
 
     if (!isOnline) {
+      if (isSameUserSession) {
+        setLoading(false);
+        setReady(true);
+        setInitialLoadComplete(true);
+      }
       return;
     }
 
-    const unsubscribe = subscribeToSharedFeed(user, {
+    const unsubscribe = subscribeToSharedFeed(activeUser, {
       onSnapshot: (snapshot) => {
-        if (sharedFeedSessionRef.current !== sessionId || previousUserUidRef.current !== user.uid) {
+        if (sharedFeedSessionRef.current !== sessionId || previousUserUidRef.current !== activeUserUid) {
           return;
         }
         return (async () => {
@@ -1039,7 +1051,7 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
           liveSnapshotSessionRef.current = sessionId;
           const updatedAt = new Date().toISOString();
           const hydratedSnapshot = await hydrateSnapshotFromCachedMedia(
-            user.uid,
+            activeUserUid,
             sessionId,
             'live',
             snapshot
@@ -1047,18 +1059,18 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
 
           if (
             sharedFeedSessionRef.current !== sessionId ||
-            previousUserUidRef.current !== user.uid
+            previousUserUidRef.current !== activeUserUid
           ) {
             return;
           }
 
-          commitSnapshotAndPersist(user.uid, hydratedSnapshot, updatedAt);
+          commitSnapshotAndPersist(activeUserUid, hydratedSnapshot, updatedAt);
           logStartupEvent('shared-feed.subscription-snapshot', {
             postCount: hydratedSnapshot.sharedPosts.length,
-            userUid: user.uid,
+            userUid: activeUserUid,
           });
           void hydrateSharedPostMediaWhenReady(
-            user.uid,
+            activeUserUid,
             sessionId,
             'live',
             updatedAt,
@@ -1070,7 +1082,7 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
         })().catch((error) => {
           if (
             sharedFeedSessionRef.current !== sessionId ||
-            previousUserUidRef.current !== user.uid
+            previousUserUidRef.current !== activeUserUid
           ) {
             return;
           }
@@ -1083,7 +1095,7 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
         });
       },
       onError: (error) => {
-        if (sharedFeedSessionRef.current !== sessionId || previousUserUidRef.current !== user.uid) {
+        if (sharedFeedSessionRef.current !== sessionId || previousUserUidRef.current !== activeUserUid) {
           return;
         }
         sharedFeedSubscriptionHealthyRef.current = false;
@@ -1104,16 +1116,17 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
     hydrateSnapshotFromCachedMedia,
     isOnline,
     isReady,
-    user,
+    user?.uid,
   ]);
 
   useEffect(() => {
-    if (!enabled || !user || !ready || !startupInteractive || sharedPosts.length === 0) {
+    const activeUserUid = userRef.current?.uid ?? null;
+    if (!enabled || !activeUserUid || !ready || !startupInteractive || sharedPosts.length === 0) {
       return;
     }
 
     void hydrateSharedPostMediaWhenReady(
-      user.uid,
+      activeUserUid,
       sharedFeedSessionRef.current,
       dataSource,
       lastUpdatedAt,
@@ -1127,7 +1140,7 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
     ready,
     sharedPosts,
     startupInteractive,
-    user,
+    user?.uid,
   ]);
 
   useEffect(() => {

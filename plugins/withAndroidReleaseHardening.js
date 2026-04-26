@@ -18,8 +18,13 @@ def uploadKeyAlias = readEnv('ACTE_UPLOAD_KEY_ALIAS')
 def uploadKeyPassword = readEnv('ACTE_UPLOAD_KEY_PASSWORD')
 def allowDebugSignedRelease = (readEnv('ACTE_ALLOW_DEBUG_SIGNED_RELEASE') ?: 'false').toBoolean()
 def isEasBuild = (readEnv('EAS_BUILD') ?: 'false').toBoolean()
+def easBuildProfile = readEnv('EAS_BUILD_PROFILE') ?: ''
 def isReleaseTaskRequested = gradle.startParameter.taskNames.any { it.toLowerCase().contains('release') }
 def releaseStoreFile = uploadStoreFilePath ? file(uploadStoreFilePath) : null
+
+if (allowDebugSignedRelease && (isEasBuild || easBuildProfile == 'production')) {
+    throw new GradleException("ACTE_ALLOW_DEBUG_SIGNED_RELEASE is only allowed for local non-production smoke builds.")
+}
 
 if (uploadStoreFilePath && !releaseStoreFile.exists()) {
     throw new GradleException("ACTE_UPLOAD_STORE_FILE points to a missing file: \${uploadStoreFilePath}")
@@ -52,7 +57,7 @@ const BUILD_GRADLE_SIGNING_CONFIG_SNIPPET = `    signingConfigs {
 const BUILD_GRADLE_RELEASE_SNIPPET = `        release {
             if (signingConfigs.findByName("release") != null) {
                 signingConfig signingConfigs.release
-            } else if (allowDebugSignedRelease) {
+            } else if (allowDebugSignedRelease && !isEasBuild && easBuildProfile != 'production') {
                 signingConfig signingConfigs.debug
             } else if (isEasBuild) {
                 logger.lifecycle("Using EAS-managed Android signing credentials for release build.")

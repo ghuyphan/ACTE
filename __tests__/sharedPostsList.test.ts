@@ -22,10 +22,6 @@ describe('supabase migration hardening', () => {
     resolve(__dirname, '../supabase/migrations/20260327123000_harden_shared_friend_revocation.sql'),
     'utf8'
   );
-  const removeStorageCleanupTriggersMigration = readFileSync(
-    resolve(__dirname, '../supabase/migrations/20260327133000_remove_storage_cleanup_triggers.sql'),
-    'utf8'
-  );
   const socialPushMigration = readFileSync(
     resolve(__dirname, '../supabase/migrations/20260329100000_add_social_push_tokens.sql'),
     'utf8'
@@ -71,9 +67,6 @@ describe('supabase migration hardening', () => {
     ),
     'utf8'
   );
-  const normalizedRemoveStorageCleanupTriggersMigration =
-    removeStorageCleanupTriggersMigration.toLowerCase();
-
   it('creates profiles and user_usage rows for each auth user', () => {
     expect(migration).toContain('create or replace function public.handle_new_user()');
     expect(migration).toContain('insert into public.profiles (id, display_name, photo_url)');
@@ -89,11 +82,8 @@ describe('supabase migration hardening', () => {
     expect(sharedFriendRevocationMigration).toContain('public.is_valid_shared_post_audience(author_user_id, audience_user_ids)');
   });
 
-  it('adds invite and membership RPCs for atomic multi-row writes', () => {
+  it('adds friend RPCs for atomic multi-row writes', () => {
     expect(migration).toContain('create or replace function public.accept_friend_invite');
-    expect(migration).toContain('create or replace function public.create_room_with_owner');
-    expect(migration).toContain('create or replace function public.join_room_by_invite');
-    expect(migration).toContain('create or replace function public.remove_room_member');
     expect(migration).toContain('create or replace function public.remove_friend');
   });
 
@@ -212,7 +202,6 @@ describe('supabase migration hardening', () => {
   it('tightens profile reads and hashes invite tokens', () => {
     expect(profileInviteHardeningMigration).toContain('create policy "profiles_select_self_or_friends"');
     expect(profileInviteHardeningMigration).toContain('alter table public.friend_invites add column if not exists token_hash text;');
-    expect(profileInviteHardeningMigration).toContain('alter table public.room_invites add column if not exists token_hash text;');
     expect(profileInviteHardeningMigration).toContain('update public.friendships');
     expect(profileInviteHardeningMigration).toContain('set created_by_invite_token = null');
     expect(profileInviteHardeningMigration).toContain('create or replace function public.accept_friend_invite');
@@ -222,21 +211,6 @@ describe('supabase migration hardening', () => {
   it('qualifies invite hashing through the extensions schema for invite RPCs', () => {
     expect(inviteDigestLookupFixMigration).toContain('create or replace function public.accept_friend_invite');
     expect(inviteDigestLookupFixMigration).toContain("extensions.digest(normalized_invite_token, 'sha256'::text)");
-    expect(inviteDigestLookupFixMigration).not.toContain('public.room_members');
   });
 
-  it('removes unsupported storage cleanup triggers that delete from storage.objects directly', () => {
-    expect(normalizedRemoveStorageCleanupTriggersMigration).toContain(
-      'drop trigger if exists tr_delete_note_media on public.notes;'
-    );
-    expect(normalizedRemoveStorageCleanupTriggersMigration).toContain(
-      'drop trigger if exists tr_delete_shared_post_media on public.shared_posts;'
-    );
-    expect(normalizedRemoveStorageCleanupTriggersMigration).toContain(
-      'drop trigger if exists tr_delete_room_post_media on public.room_posts;'
-    );
-    expect(normalizedRemoveStorageCleanupTriggersMigration).not.toContain(
-      'delete from storage.objects'
-    );
-  });
 });

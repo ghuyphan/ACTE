@@ -76,6 +76,9 @@ const withLivePhotoMotionTranscoder = (config) =>
   withFinalizedMod(config, [
     'ios',
     async (config) => {
+      const isEasBuild = process.env.EAS_BUILD?.trim() === 'true';
+      const isProductionBuild = process.env.EAS_BUILD_PROFILE?.trim() === 'production';
+      const shouldFailFast = isEasBuild || isProductionBuild;
       const projectRoot = config.modRequest.projectRoot;
       const iosRoot = config.modRequest.platformProjectRoot;
       const projectDirectoryName = fs.readdirSync(iosRoot).find((entry) => entry.endsWith('.xcodeproj'));
@@ -90,7 +93,11 @@ const withLivePhotoMotionTranscoder = (config) =>
         const destinationPath = path.join(destinationDirectory, filename);
 
         if (!fs.existsSync(sourcePath)) {
-          console.warn(`[withLivePhotoMotionTranscoder] Source file not found: ${sourcePath}`);
+          const message = `[withLivePhotoMotionTranscoder] Source file not found: ${sourcePath}`;
+          if (shouldFailFast) {
+            throw new Error(message);
+          }
+          console.warn(message);
           continue;
         }
 
@@ -99,7 +106,11 @@ const withLivePhotoMotionTranscoder = (config) =>
 
       const didPatchProject = patchProjectFile(iosRoot, appName);
       if (!didPatchProject) {
-        console.warn('[withLivePhotoMotionTranscoder] Could not patch the iOS project for native sources.');
+        const message = '[withLivePhotoMotionTranscoder] Could not patch the iOS project for native sources.';
+        if (shouldFailFast) {
+          throw new Error(message);
+        }
+        console.warn(message);
       }
 
       return config;

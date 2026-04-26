@@ -6,6 +6,8 @@ type DeleteAccountResponse =
 
 type MediaRow = {
   photo_path?: string | null;
+  dual_primary_photo_path?: string | null;
+  dual_secondary_photo_path?: string | null;
   paired_video_path?: string | null;
   sticker_placements_json?: string | null;
 };
@@ -27,9 +29,23 @@ function hasRecentSignIn(lastSignInAt: string | null | undefined) {
   return Number.isFinite(timestamp) && Date.now() - timestamp <= RECENT_SIGN_IN_MAX_AGE_MS;
 }
 
-function addStoragePath(target: Set<string>, value: string | null | undefined) {
+function normalizeStoragePath(value: string | null | undefined) {
   const normalized = typeof value === 'string' ? value.trim() : '';
-  if (normalized) {
+  return normalized && !normalized.startsWith('/') && !normalized.includes('..') ? normalized : '';
+}
+
+function isUserOwnedStoragePath(userId: string, value: string | null | undefined) {
+  const normalized = normalizeStoragePath(value);
+  return Boolean(normalized && normalized.startsWith(`${userId}/`));
+}
+
+function addStoragePath(
+  target: Set<string>,
+  value: string | null | undefined,
+  isAllowed: (path: string) => boolean
+) {
+  const normalized = normalizeStoragePath(value);
+  if (normalized && isAllowed(normalized)) {
     target.add(normalized);
   }
 }
@@ -94,24 +110,21 @@ async function cleanupOwnedMedia(
 ) {
   const notePaths = new Set<string>();
   const sharedPostPaths = new Set<string>();
-  const roomPostPaths = new Set<string>();
   const stickerAssetPathsByBucket = new Map<string, Set<string>>();
 
   const [
     { data: notes, error: notesError },
     { data: sharedPosts, error: sharedPostsError },
-    { data: roomPosts, error: roomPostsError },
     { data: stickerAssets, error: stickerAssetsError },
   ] = await Promise.all([
     adminClient
       .from('notes')
-      .select('photo_path, paired_video_path, sticker_placements_json')
+      .select('photo_path, dual_primary_photo_path, dual_secondary_photo_path, paired_video_path, sticker_placements_json')
       .eq('user_id', userId),
     adminClient
       .from('shared_posts')
-      .select('photo_path, paired_video_path, sticker_placements_json')
+      .select('photo_path, dual_primary_photo_path, dual_secondary_photo_path, paired_video_path, sticker_placements_json')
       .eq('author_user_id', userId),
-    adminClient.from('room_posts').select('photo_path').eq('author_user_id', userId),
     adminClient
       .from('sticker_assets')
       .select('storage_bucket, storage_path')
@@ -126,37 +139,45 @@ async function cleanupOwnedMedia(
     throw sharedPostsError;
   }
 
-  if (roomPostsError) {
-    throw roomPostsError;
-  }
   if (stickerAssetsError) {
     throw stickerAssetsError;
   }
 
   for (const row of (notes ?? []) as MediaRow[]) {
-    addStoragePath(notePaths, row.photo_path);
-    addStoragePath(notePaths, row.paired_video_path);
+    const addOwnedNotePath = (path: string | null | undefined) =>
+      addStoragePath(notePaths, path, (normalizedPath) => isUserOwnedStoragePath(userId, normalizedPath));
+    addOwnedNotePath(row.photo_path);
+    addOwnedNotePath(row.dual_primary_photo_path);
+    addOwnedNotePath(row.dual_secondary_photo_path);
+    addOwnedNotePath(row.paired_video_path);
     for (const stickerPath of collectStickerRemotePaths(row.sticker_placements_json)) {
-      notePaths.add(stickerPath);
+      addOwnedNotePath(stickerPath);
     }
   }
 
   for (const row of (sharedPosts ?? []) as MediaRow[]) {
-    addStoragePath(sharedPostPaths, row.photo_path);
-    addStoragePath(sharedPostPaths, row.paired_video_path);
+    const addOwnedSharedPostPath = (path: string | null | undefined) =>
+      addStoragePath(sharedPostPaths, path, (normalizedPath) => isUserOwnedStoragePath(userId, normalizedPath));
+    addOwnedSharedPostPath(row.photo_path);
+    addOwnedSharedPostPath(row.dual_primary_photo_path);
+    addOwnedSharedPostPath(row.dual_secondary_photo_path);
+    addOwnedSharedPostPath(row.paired_video_path);
     for (const stickerPath of collectStickerRemotePaths(row.sticker_placements_json)) {
-      sharedPostPaths.add(stickerPath);
+      addOwnedSharedPostPath(stickerPath);
     }
-  }
-
-  for (const row of (roomPosts ?? []) as MediaRow[]) {
-    addStoragePath(roomPostPaths, row.photo_path);
   }
 
   for (const row of (stickerAssets ?? []) as StickerAssetRow[]) {
     const bucket = typeof row.storage_bucket === 'string' ? row.storage_bucket.trim() : '';
     const path = typeof row.storage_path === 'string' ? row.storage_path.trim() : '';
     if (!bucket || !path) {
+      continue;
+    }
+
+    const isAllowedStickerPath =
+      (bucket === 'note-media' || bucket === 'shared-post-media') &&
+      isUserOwnedStoragePath(userId, path);
+    if (!isAllowedStickerPath) {
       continue;
     }
 
@@ -168,7 +189,6 @@ async function cleanupOwnedMedia(
   await Promise.all([
     removeStorageObjects(adminClient, 'note-media', notePaths),
     removeStorageObjects(adminClient, 'shared-post-media', sharedPostPaths),
-    removeStorageObjects(adminClient, 'room-post-media', roomPostPaths),
     ...Array.from(stickerAssetPathsByBucket.entries()).map(([bucket, paths]) =>
       removeStorageObjects(adminClient, bucket, paths)
     ),

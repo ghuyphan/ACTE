@@ -64,13 +64,19 @@ elif [ -d "$DEST_DIR" ]; then
   elif [ -f "$NODE_JS_SOURCE" ]; then
     echo "Copying ExpoWidgets JS bundle from node_modules source..."
     cp "$NODE_JS_SOURCE" "$DEST_JS"
-  else
-    echo "warning: ExpoWidgets JS bundle source not found in Pods or node_modules"
-  fi
-else
-  echo "warning: ExpoWidgets.bundle directory not found at $DEST_DIR"
-fi
-`;
+	  else
+	    echo "warning: ExpoWidgets JS bundle source not found in Pods or node_modules"
+	    if [ "$CONFIGURATION" = "Release" ]; then
+	      exit 1
+	    fi
+	  fi
+	else
+	  echo "warning: ExpoWidgets.bundle directory not found at $DEST_DIR"
+	  if [ "$CONFIGURATION" = "Release" ]; then
+	    exit 1
+	  fi
+	fi
+	`;
 
     project.addBuildPhase([], 'PBXShellScriptBuildPhase', SCRIPT_NAME, widgetTargetKey, {
         shellPath: '/bin/sh',

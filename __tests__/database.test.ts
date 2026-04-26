@@ -384,8 +384,8 @@ describe('database migrations', () => {
         return { user_version: 0 };
       }
 
-      if (sql.includes('SELECT owner_uid FROM notes WHERE id = ?')) {
-        return { owner_uid: 'user-1' };
+      if (sql.includes('SELECT owner_uid, updated_at FROM notes WHERE id = ?')) {
+        return { owner_uid: 'user-1', updated_at: null };
       }
 
       return null;
@@ -424,7 +424,7 @@ describe('database migrations', () => {
         return { user_version: 0 };
       }
 
-      if (sql.includes('SELECT owner_uid FROM notes WHERE id = ?')) {
+      if (sql.includes('SELECT owner_uid, updated_at FROM notes WHERE id = ?')) {
         return null;
       }
 

@@ -21,10 +21,10 @@ import {
   requireSupabase,
 } from '../utils/supabase';
 import { getFileExtension } from './mediaTypeUtils';
+import { isUserOwnedRemoteMediaPath } from './remoteMediaPaths';
 
 export const NOTE_MEDIA_BUCKET = 'note-media';
 export const SHARED_POST_MEDIA_BUCKET = 'shared-post-media';
-export const ROOM_POST_MEDIA_BUCKET = 'room-post-media';
 const UPLOAD_RETRY_DELAYS_MS = [250];
 const PHOTO_UPLOAD_BASELINE_COMPRESS = 0.72;
 const PHOTO_UPLOAD_OPTIMIZATION_PRESETS = [
@@ -223,6 +223,20 @@ async function uploadBytesWithRetry(
   }
 }
 
+function assertSafeStorageUploadPath(bucket: string, path: string) {
+  const normalizedPath = path.trim();
+  if (!normalizedPath || normalizedPath.startsWith('/') || normalizedPath.includes('..')) {
+    throw new Error(`Refusing to upload ${bucket} media to an unsafe storage path.`);
+  }
+
+  if (
+    (bucket === NOTE_MEDIA_BUCKET || bucket === SHARED_POST_MEDIA_BUCKET) &&
+    !isUserOwnedRemoteMediaPath(normalizedPath.split('/')[0], normalizedPath)
+  ) {
+    throw new Error(`Refusing to upload ${bucket} media without an owner path prefix.`);
+  }
+}
+
 async function uploadPreparedFileToStorage(
   bucket: string,
   path: string,
@@ -230,6 +244,8 @@ async function uploadPreparedFileToStorage(
   readPayload: (fileUri: string) => Promise<ArrayBuffer | null>,
   options: UploadStorageOptions = {}
 ) {
+  assertSafeStorageUploadPath(bucket, path);
+
   if (!preparedFile?.uri) {
     return null;
   }
