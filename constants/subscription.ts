@@ -56,6 +56,15 @@ export function getLocalPhotoUsageDateKey(now = new Date()) {
   return `${year}-${month}-${day}`;
 }
 
+export function getLocalPhotoUsageTimeZone() {
+  try {
+    const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone?.trim();
+    return timeZone || 'UTC';
+  } catch {
+    return 'UTC';
+  }
+}
+
 function isSameLocalCalendarDay(left: Date, right: Date) {
   return (
     left.getFullYear() === right.getFullYear() &&

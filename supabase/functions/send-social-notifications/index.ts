@@ -22,8 +22,19 @@ type SocialNotificationResponse =
     };
 
 type PushTargetRow = {
+  user_id: string;
   expo_push_token: string;
   platform: string | null;
+};
+
+type ReservedNotificationRecipientRow = {
+  recipient_user_id: string;
+};
+
+type PushTarget = {
+  userId: string;
+  token: string;
+  platform: string;
 };
 
 type PushMessage = {
@@ -280,7 +291,7 @@ async function loadPushTargets(
 
   const { data, error } = await adminClient
     .from('device_push_tokens')
-    .select('expo_push_token, platform')
+    .select('user_id, expo_push_token, platform')
     .in('user_id', userIds);
 
   if (error) {
@@ -291,17 +302,55 @@ async function loadPushTargets(
     new Map(
       ((data ?? []) as PushTargetRow[])
         .map((row) => {
+          const userId = row.user_id?.trim() ?? '';
           const token = row.expo_push_token?.trim() ?? '';
           return [
             token,
             {
+              userId,
               token,
               platform: row.platform?.trim()?.toLowerCase() ?? '',
             },
           ] as const;
         })
-        .filter(([token]) => Boolean(token))
+        .filter(([token, target]) => Boolean(token) && Boolean(target.userId))
     ).values()
+  ) satisfies PushTarget[];
+}
+
+async function reserveNotificationRecipients(
+  adminClient: ReturnType<typeof createClient>,
+  options: {
+    type: SocialNotificationRequest['type'];
+    actorUserId: string;
+    resourceId: string;
+    recipientUserIds: string[];
+  }
+) {
+  const normalizedRecipientUserIds = Array.from(
+    new Set(options.recipientUserIds.map((userId) => userId.trim()).filter(Boolean))
+  );
+  if (normalizedRecipientUserIds.length === 0) {
+    return [];
+  }
+
+  const { data, error } = await adminClient.rpc('reserve_social_notification_delivery', {
+    event_type_input: options.type,
+    actor_user_id_input: options.actorUserId,
+    recipient_user_ids_input: normalizedRecipientUserIds,
+    resource_id_input: options.resourceId,
+  });
+
+  if (error) {
+    throw error;
+  }
+
+  return Array.from(
+    new Set(
+      ((data ?? []) as ReservedNotificationRecipientRow[])
+        .map((row) => row.recipient_user_id?.trim() ?? '')
+        .filter(Boolean)
+    )
   );
 }
 
@@ -351,10 +400,9 @@ async function claimNotificationEvent(
 
   const row = Array.isArray(data) ? data[0] : data;
   const resourceId =
-    row && typeof row === 'object' && 'resource_id' in row && typeof row.resource_id === 'string'
-      ? row.resource_id.trim()
+    row && typeof row === 'object' && 'resource_id' in row
+      ? String(row.resource_id ?? '').trim()
       : '';
-
   if (!resourceId) {
     return null;
   }
@@ -506,7 +554,7 @@ Deno.serve(async (request) => {
     }
 
     try {
-      const payload =
+      const payload = await (
         body.type === 'friend_accepted'
           ? (() => {
               const recipientUserId = body.friendUserId?.trim() ?? '';
@@ -547,7 +595,8 @@ Deno.serve(async (request) => {
                   })
                 );
               })()
-            : Promise.resolve(null);
+            : Promise.resolve(null)
+      );
 
       if (!payload) {
         return jsonResponse(
@@ -599,7 +648,35 @@ Deno.serve(async (request) => {
         });
       }
 
-      const messages: PushMessage[] = pushTargets.map(({ token, platform }) =>
+      const pushRecipientUserIds = Array.from(new Set(pushTargets.map((target) => target.userId)));
+      const reservedRecipientUserIds = await reserveNotificationRecipients(adminClient, {
+        type: body.type,
+        actorUserId: user.id,
+        resourceId: claimedEvent.resource_id,
+        recipientUserIds: pushRecipientUserIds,
+      });
+      const reservedRecipientUserIdSet = new Set(reservedRecipientUserIds);
+      const reservedPushTargets = pushTargets.filter((target) =>
+        reservedRecipientUserIdSet.has(target.userId)
+      );
+
+      if (reservedPushTargets.length === 0) {
+        await markNotificationEventDelivered(
+          adminClient,
+          body.type,
+          user.id,
+          claimedEvent.resource_id
+        );
+        shouldReleaseEvent = false;
+
+        return jsonResponse({
+          success: true,
+          recipients: notificationPayload.recipientUserIds.length,
+          delivered: 0,
+        });
+      }
+
+      const messages: PushMessage[] = reservedPushTargets.map(({ token, platform }) =>
         buildPushMessage({
           token,
           platform,

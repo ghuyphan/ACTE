@@ -79,9 +79,18 @@ Noto is an Expo SDK 55 / React Native app for place-linked text notes and photo 
 - `npm run lint`: Run Expo/ESLint checks.
 - `npm run typecheck`: Run TypeScript typechecking.
 - `npm test`: Run Jest tests.
+- `npm test -- --runInBand`: Run Jest serially when debugging order-sensitive native/app mocks.
 - `npm run update:preview`: Publish an OTA update to the preview channel.
 - `npm run update:production`: Publish an OTA update to the production channel.
 - `npm run reset-project`: Run the bundled reset helper.
+
+## Environment And Release Notes
+
+- Use `.env.example` as the supported env surface; only fill the variables needed for the build or test path.
+- `app.config.js` intentionally fails production builds when required metadata is missing. Production builds need `EXPO_PUBLIC_EAS_PROJECT_ID`, the Android Maps key, a privacy policy URL, and either support/account-deletion URLs or a support email.
+- RevenueCat native billing needs platform SDK keys (`appl_...` for iOS and `goog_...` for Android) plus the entitlement/offering IDs mirrored into the relevant EAS environments.
+- Android release signing uses the `ACTE_UPLOAD_STORE_FILE`, `ACTE_UPLOAD_STORE_PASSWORD`, `ACTE_UPLOAD_KEY_ALIAS`, and `ACTE_UPLOAD_KEY_PASSWORD` env values.
+- Native push credential file paths can be injected through `GOOGLE_SERVICES_JSON` and `GOOGLE_SERVICE_INFO_PLIST`.
 
 ## Conventions
 
@@ -91,11 +100,23 @@ Noto is an Expo SDK 55 / React Native app for place-linked text notes and photo 
 - Add user-facing copy through `react-i18next` and update both `constants/locales/en.json` and `constants/locales/vi.json`.
 - Normal note CRUD should flow through `useNotesStore`.
 - Prefer the grouped source folders (`hooks/app`, `hooks/state`, `hooks/ui`, top-level public `hooks/*`, `components/notes`, `components/settings`, `components/sheets`, `components/screens/<feature>`) when adding or moving feature code. Keep route files thin and keep top-level wrapper exports only for compatibility.
+- Some top-level hooks/components remain compatibility re-export shims while the grouped folders settle. Prefer editing grouped source files instead of adding logic to those wrappers.
 - Shared feed state and sharing actions should flow through `useSharedFeedStore`.
 - Subscription state should flow through `useSubscription`.
 - Widget refreshes are already wired to note mutations; preserve that behavior when adding new mutation paths.
 - Map-specific clustering/filtering logic belongs in `hooks/map/` and `components/map/`.
 - Social push token registration and notification sends should continue to flow through `services/socialPushService.ts` and the app-level hooks that already wrap it.
+
+## Reference Docs
+
+- `README.md`: Quick start, supported env vars, high-level repo guide, and native working model.
+- `PROJECT_STRUCTURE.md`: Fuller route, directory, and entry-point map.
+- `docs/release-checklist.md`: Release procedure and verification.
+- `docs/android-release.md`: Android release signing and build notes.
+- `docs/supabase-setup.md` and `docs/supabase-schema.md`: Supabase setup, tables, storage, functions, and migrations.
+- `docs/revenuecat-setup.md`: Billing setup and entitlement configuration.
+- `docs/fcm-setup.md`: Push notification credential setup.
+- `docs/widget-maintenance.md` and `docs/widget-background-refresh.md`: Widget rendering and refresh maintenance.
 
 ## Where To Add New Code
 

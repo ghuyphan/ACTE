@@ -173,8 +173,10 @@ Noto has a strong local-first shape and a lot of recent hardening work is visibl
 
 ### 9. Revoke direct client writes to `user_usage`
 
+**Status:** Addressed locally by `supabase/migrations/20260426133000_server_authoritative_user_usage.sql`; sync now calls `recompute_user_usage` instead of upserting client-computed counters. Future server-side quota enforcement should build on this projection plus a RevenueCat entitlement mirror.
+
 **Area:** billing, quota enforcement  
-**Evidence:** The applied Supabase schema allows users to update their own `user_usage`; `services/syncService.ts:2985` writes client-computed usage.
+**Evidence:** The applied Supabase schema allowed users to update their own `user_usage`; the old sync path wrote client-computed usage from `services/syncService.ts`.
 
 **Risk:** A modified client can reset counters and bypass free photo limits. RevenueCat/Plus UI state is also client-observed.
 
@@ -186,8 +188,10 @@ Noto has a strong local-first shape and a lot of recent hardening work is visibl
 
 ### 10. Add push notification rate limits and mute controls
 
+**Status:** Rate-limit foundation addressed locally by `supabase/migrations/20260426140000_social_notification_rate_limits.sql` and the `send-social-notifications` edge function. Mute/block controls remain future product work.
+
 **Area:** social backend, abuse prevention  
-**Evidence:** `supabase/functions/send-social-notifications/index.ts:590` fans out to recipient devices; `services/sharedFeedService.ts:1581` invokes sends after sharing.
+**Evidence:** `supabase/functions/send-social-notifications/index.ts` fans out to recipient devices; `services/sharedFeedService.ts` invokes sends after sharing.
 
 **Risk:** A legitimate friend can send many shared posts and repeatedly push every recipient device.
 

@@ -38,6 +38,7 @@ Per-user usage counters used by quota and sync flows.
 - Primary key: `user_id`
 - Foreign keys: `user_id -> auth.users(id)`
 - Important fields: total note/photo counts, daily photo count/date, `last_synced_at`
+- Ownership: app clients read this table, but writes should flow through server recomputation from `public.notes`
 
 ### `public.friend_invites`
 
@@ -91,6 +92,15 @@ Idempotency and delivery-state tracking for social push events.
 - Foreign keys: `actor_user_id -> auth.users(id)`, `recipient_user_id -> auth.users(id)`
 - Important fields: delivery state, claim/attempt/delivery timestamps
 - Constraints: delivery state is `pending`, `processing`, or `delivered`
+
+### `public.social_notification_rate_limit_events`
+
+Server-owned throttle ledger for social push sends.
+
+- Primary key: `id`
+- Foreign keys: `actor_user_id -> auth.users(id)`, `recipient_user_id -> auth.users(id)`
+- Important fields: `event_type`, actor/recipient ids, optional resource id, `created_at`
+- Access: service-role RPC only; app clients should not select or mutate this table directly
 
 ### `public.sticker_assets`
 

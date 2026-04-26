@@ -1,8 +1,4 @@
-import {
-  countPhotoNotes,
-  countPhotoNotesCreatedToday,
-  getLocalPhotoUsageDateKey,
-} from '../constants/subscription';
+import { getLocalPhotoUsageTimeZone } from '../constants/subscription';
 import i18n from '../constants/i18n';
 import { getPersistentItem, setPersistentItem } from '../utils/appStorage';
 import { AppUser } from '../utils/appUser';
@@ -2846,10 +2842,6 @@ export async function syncNotes(
         notes: null,
         tombstones: null,
       };
-      let finalNoteCount = currentLocalNotes.length;
-      let finalPhotoNoteCount = countPhotoNotes(currentLocalNotes);
-      let finalDailyPhotoNoteCount = countPhotoNotesCreatedToday(currentLocalNotes);
-      let finalDailyPhotoNoteDate = getLocalPhotoUsageDateKey();
       let bootstrapCompleted = !wasInitialSyncPending;
 
       if (mode === 'full') {
@@ -2872,10 +2864,6 @@ export async function syncNotes(
         }
 
         const latestLocalNotes = await getAllNotesForScope(ownerScope);
-        finalNoteCount = latestLocalNotes.length;
-        finalPhotoNoteCount = countPhotoNotes(latestLocalNotes);
-        finalDailyPhotoNoteCount = countPhotoNotesCreatedToday(latestLocalNotes);
-        finalDailyPhotoNoteDate = getLocalPhotoUsageDateKey();
 
         if (remoteMergeResult.scanCompleted) {
           for (const note of latestLocalNotes) {
@@ -2919,13 +2907,6 @@ export async function syncNotes(
           notes: remoteMergeResult.noteCursor ?? lastRemoteCursor?.notes ?? null,
           tombstones: tombstoneMergeResult.tombstoneCursor ?? lastRemoteCursor?.tombstones ?? null,
         };
-        if (importedCount > 0) {
-          const latestLocalNotes = await getAllNotesForScope(ownerScope);
-          finalNoteCount = latestLocalNotes.length;
-          finalPhotoNoteCount = countPhotoNotes(latestLocalNotes);
-          finalDailyPhotoNoteCount = countPhotoNotesCreatedToday(latestLocalNotes);
-          finalDailyPhotoNoteDate = getLocalPhotoUsageDateKey();
-        }
       }
 
       await Promise.all([
@@ -2953,23 +2934,17 @@ export async function syncNotes(
 
       void (async () => {
         try {
-          const { error: usageError } = await supabase.from('user_usage').upsert(
-            {
-              user_id: userId,
-              note_count: finalNoteCount,
-              photo_note_count: finalPhotoNoteCount,
-              photo_note_daily_count: finalDailyPhotoNoteCount,
-              photo_note_daily_date: finalDailyPhotoNoteDate,
-              last_synced_at: syncMarker,
-            },
-            { onConflict: 'user_id' }
-          );
+          const { error: usageError } = await supabase.rpc('recompute_user_usage', {
+            user_id_input: userId,
+            synced_at_input: syncMarker,
+            time_zone_input: getLocalPhotoUsageTimeZone(),
+          });
 
           if (usageError) {
-            console.warn('[syncService] Failed to persist user usage after sync:', usageError);
+            console.warn('[syncService] Failed to refresh user usage after sync:', usageError);
           }
         } catch (error) {
-          console.warn('[syncService] Failed to persist user usage after sync:', error);
+          console.warn('[syncService] Failed to refresh user usage after sync:', error);
         }
       })();
 

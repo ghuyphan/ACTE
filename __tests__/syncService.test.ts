@@ -62,6 +62,14 @@ const mockRemoteStickerAssets = new Map<string, any>();
 const mockRemoteStickerAssetRefs = new Map<string, any>();
 const mockUserUsage = new Map<string, any>();
 const mockPublicProfiles = new Map<string, any>();
+const mockRpc = jest.fn(async (functionName: string, args: Record<string, unknown>) => {
+  if (functionName === 'recompute_user_usage') {
+    mockUserUsage.set(String(args.user_id_input), args);
+    return { data: null, error: null };
+  }
+
+  throw new Error(`Unexpected rpc: ${functionName}`);
+});
 let mockNotesUpsertError: unknown = null;
 const mockActiveNotesScope = 'test-scope';
 let mockSessionUserId = 'user-1';
@@ -1002,17 +1010,9 @@ jest.mock('../utils/supabase', () => ({
         return mockCreateStickerAssetRefsQueryBuilder();
       }
 
-      if (table === 'user_usage') {
-        return {
-          upsert: async (value: Record<string, unknown>) => {
-            mockUserUsage.set(String(value.user_id), value);
-            return { error: null };
-          },
-        };
-      }
-
       throw new Error(`Unexpected table: ${table}`);
     },
+    rpc: mockRpc,
   }),
   requireSupabase: () => ({
     from: (table: string) => {
@@ -1040,17 +1040,9 @@ jest.mock('../utils/supabase', () => ({
         return mockCreateStickerAssetRefsQueryBuilder();
       }
 
-      if (table === 'user_usage') {
-        return {
-          upsert: async (value: Record<string, unknown>) => {
-            mockUserUsage.set(String(value.user_id), value);
-            return { error: null };
-          },
-        };
-      }
-
       throw new Error(`Unexpected table: ${table}`);
     },
+    rpc: mockRpc,
   }),
 }));
 
@@ -1353,12 +1345,12 @@ describe('syncService', () => {
         photoSyncedLocalUri: 'file:///photos/note-2.jpg',
       })
     );
-    expect(mockUserUsage.get('user-1')).toEqual(
+    expect(mockRpc).toHaveBeenCalledWith(
+      'recompute_user_usage',
       expect.objectContaining({
-        note_count: 2,
-        photo_note_count: 1,
-        photo_note_daily_count: expect.any(Number),
-        photo_note_daily_date: expect.any(String),
+        user_id_input: 'user-1',
+        synced_at_input: expect.any(String),
+        time_zone_input: expect.any(String),
       })
     );
     expect(mockRemoteNoteTombstones.has('note-1')).toBe(false);
