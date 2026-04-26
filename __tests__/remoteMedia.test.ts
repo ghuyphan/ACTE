@@ -224,6 +224,24 @@ describe('remoteMedia uploads', () => {
     expect(mockDownloadAsync).not.toHaveBeenCalled();
   });
 
+  it('rejects unsafe owner-scoped upload paths before reading local media', async () => {
+    await expect(
+      uploadPhotoToStorage('note-media', 'user-1//note-1.jpg', 'file:///media/mock.jpg')
+    ).rejects.toThrow('owner path prefix');
+    await expect(
+      uploadPairedVideoToStorage(
+        'shared-post-media',
+        'user-1/./note-1.motion.mov',
+        'file:///media/mock.mov'
+      )
+    ).rejects.toThrow('owner path prefix');
+
+    expect(mockManipulateAsync).not.toHaveBeenCalled();
+    expect(mockReadPhotoAsArrayBuffer).not.toHaveBeenCalled();
+    expect(mockReadPairedVideoAsArrayBuffer).not.toHaveBeenCalled();
+    expect(mockUpload).not.toHaveBeenCalled();
+  });
+
   it('uploads photos using raw array buffers instead of base64 payloads', async () => {
     mockGetInfoAsync.mockImplementation(async (uri: string) => {
       if (uri === 'file:///cache/optimized-photo.jpg') {

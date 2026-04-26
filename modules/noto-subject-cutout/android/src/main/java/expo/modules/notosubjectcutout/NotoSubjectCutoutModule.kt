@@ -42,14 +42,14 @@ class NotoSubjectCutoutModule : Module() {
 
     AsyncFunction("prepareAsync") Coroutine { ->
       if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) {
-        Log.d(LOG_TAG, "prepareAsync: unavailable on sdk=${Build.VERSION.SDK_INT}")
+        logDebug { "prepareAsync: unavailable on sdk=${Build.VERSION.SDK_INT}" }
         mapOf("available" to false, "ready" to false)
       } else {
         val segmenter = getOrCreateSegmenter()
-        Log.d(LOG_TAG, "prepareAsync: waiting for segmenter init")
+        logDebug { "prepareAsync: waiting for segmenter init" }
         segmenter.getInitTask().await()
         warmSubjectCutout(segmenter)
-        Log.d(LOG_TAG, "prepareAsync: subject cutout model ready")
+        logDebug { "prepareAsync: subject cutout model ready" }
         mapOf("available" to true, "ready" to true)
       }
     }
@@ -82,19 +82,15 @@ class NotoSubjectCutoutModule : Module() {
 
       try {
         val sourceBitmap = decodeScaledBitmap(sourceFile, MAX_SUBJECT_CUTOUT_EDGE_PX)
-        Log.d(
-          LOG_TAG,
+        logDebug {
           "cutOutAsync: source=${sourceFile.absolutePath} size=${sourceBitmap.width}x${sourceBitmap.height}"
-        )
+        }
 
         segmenter.getInitTask().await()
 
         val result = segmenter.process(InputImage.fromBitmap(sourceBitmap, 0)).await()
         val foregroundMask = result.foregroundConfidenceMask
-        Log.d(
-          LOG_TAG,
-          "cutOutAsync: hasForegroundMask=${foregroundMask != null}"
-        )
+        logDebug { "cutOutAsync: hasForegroundMask=${foregroundMask != null}" }
         val cutoutBitmap = foregroundMask?.let { mask ->
           applyConfidenceMaskToBitmap(sourceBitmap, mask, sourceBitmap.width, sourceBitmap.height)
         }
@@ -108,10 +104,9 @@ class NotoSubjectCutoutModule : Module() {
         }
 
         val croppedBitmap = cropBitmapToVisiblePixels(cutoutBitmap) ?: cutoutBitmap
-        Log.d(
-          LOG_TAG,
+        logDebug {
           "cutOutAsync: foreground bitmap=${cutoutBitmap.width}x${cutoutBitmap.height} cropped=${croppedBitmap.width}x${croppedBitmap.height}"
-        )
+        }
         writeCutoutBitmap(croppedBitmap, destinationFile)
 
         mapOf(
@@ -122,8 +117,9 @@ class NotoSubjectCutoutModule : Module() {
         )
       } catch (error: Throwable) {
         destinationFile.delete()
-        Log.e(LOG_TAG, "cutOutAsync failed: ${error.message}", error)
-        throw mapSubjectCutoutError(error)
+        val mappedError = mapSubjectCutoutError(error)
+        logSubjectCutoutFailure(error, mappedError)
+        throw mappedError
       }
     }
   }
@@ -138,7 +134,7 @@ class NotoSubjectCutoutModule : Module() {
   private suspend fun warmSubjectCutout(segmenter: SubjectSegmenter) {
     val warmBitmap = Bitmap.createBitmap(PREPARE_BITMAP_SIZE, PREPARE_BITMAP_SIZE, Bitmap.Config.ARGB_8888)
     warmBitmap.eraseColor(Color.WHITE)
-    Log.d(LOG_TAG, "warmSubjectCutout: warming with ${PREPARE_BITMAP_SIZE}x${PREPARE_BITMAP_SIZE} bitmap")
+    logDebug { "warmSubjectCutout: warming with ${PREPARE_BITMAP_SIZE}x${PREPARE_BITMAP_SIZE} bitmap" }
     segmenter.process(InputImage.fromBitmap(warmBitmap, 0)).await()
   }
 
@@ -290,7 +286,7 @@ class NotoSubjectCutoutModule : Module() {
 
     if (error is MlKitException) {
       val normalizedMessage = error.message?.lowercase().orEmpty()
-      Log.w(LOG_TAG, "mapSubjectCutoutError: MlKitException code=${error.errorCode} message=${error.message}")
+      logMlKitException(error)
       if (
         normalizedMessage.contains("download") &&
         (normalizedMessage.contains("model") || normalizedMessage.contains("module"))
@@ -304,12 +300,43 @@ class NotoSubjectCutoutModule : Module() {
 
     return SubjectCutoutException(
       "processing-failed",
-      error.message ?: "Unable to build a sticker cutout from this image."
+      "Unable to build a sticker cutout from this image."
     )
+  }
+
+  private fun logSubjectCutoutFailure(error: Throwable, mappedError: Throwable) {
+    val category = subjectCutoutErrorCategory(mappedError)
+    if (BuildConfig.DEBUG) {
+      Log.e(LOG_TAG, "cutOutAsync failed category=$category message=${error.message}", error)
+    } else {
+      Log.w(LOG_TAG, "cutOutAsync failed category=$category")
+    }
+  }
+
+  private fun logMlKitException(error: MlKitException) {
+    if (BuildConfig.DEBUG) {
+      Log.w(LOG_TAG, "mapSubjectCutoutError: MlKitException code=${error.errorCode} message=${error.message}", error)
+    } else {
+      Log.w(LOG_TAG, "mapSubjectCutoutError: MlKitException code=${error.errorCode}")
+    }
+  }
+
+  private fun subjectCutoutErrorCategory(error: Throwable): String {
+    return if (error is SubjectCutoutException) {
+      error.subjectCutoutCode
+    } else {
+      error::class.java.simpleName
+    }
+  }
+
+  private inline fun logDebug(message: () -> String) {
+    if (BuildConfig.DEBUG) {
+      Log.d(LOG_TAG, message())
+    }
   }
 }
 
 internal class SubjectCutoutException(
-  errorCode: String,
+  val subjectCutoutCode: String,
   override val message: String
-) : CodedException(errorCode, message, null)
+) : CodedException(subjectCutoutCode, message, null)

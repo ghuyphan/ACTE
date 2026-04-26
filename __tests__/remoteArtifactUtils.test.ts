@@ -50,11 +50,17 @@ describe('remoteArtifactUtils', () => {
     expect(isUserOwnedRemoteMediaPath('user-1', 'user-1/note-1.jpg')).toBe(true);
     expect(isUserOwnedRemoteMediaPath('user-1', 'user-2/note-1.jpg')).toBe(false);
     expect(isUserOwnedRemoteMediaPath('user-1', 'user-1/../note-1.jpg')).toBe(false);
+    expect(isUserOwnedRemoteMediaPath('user-1', 'user-1//note-1.jpg')).toBe(false);
+    expect(isUserOwnedRemoteMediaPath('user-1', 'user-1/./note-1.jpg')).toBe(false);
+    expect(isUserOwnedRemoteMediaPath('user-1', 'user-1/note 1.jpg')).toBe(false);
     expect(filterUserOwnedRemoteMediaPaths('user-1', [
       ' user-1/a.jpg ',
       'user-2/b.jpg',
       'user-1/a.jpg',
       '/user-1/rooted.jpg',
+      'user-1//empty-segment.jpg',
+      'user-1/./dot-segment.jpg',
+      'user-1/space name.jpg',
     ])).toEqual(['user-1/a.jpg']);
   });
 

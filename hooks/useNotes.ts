@@ -1,1 +1,8 @@
-export { NotesProvider, useNotes, useNotesStore } from './state/useNotesStore';
+export {
+  NotesProvider,
+  useNotes,
+  useNotesActions,
+  useNotesState,
+  useNotesStore,
+} from './state/useNotesStore';
+export type { NotesActionsValue, NotesStateValue, NotesStoreValue } from './state/useNotesStore';

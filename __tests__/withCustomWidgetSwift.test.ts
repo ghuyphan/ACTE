@@ -10,6 +10,7 @@ const pluginModule = jest.requireActual('../plugins/withCustomWidgetSwift.js') a
       iosRoot: string,
       targetKey: string
     ) => number;
+    enableWidgetEntitlementsModification: (project: ReturnType<typeof createMockProject>) => number;
     getWidgetDisplayName: (config: {
       name?: string;
       plugins?: Array<string | [string, { widgets?: Array<Record<string, unknown>> }]>;
@@ -17,7 +18,8 @@ const pluginModule = jest.requireActual('../plugins/withCustomWidgetSwift.js') a
   };
 };
 
-const { copyWidgetLocalizationResources, getWidgetDisplayName } = pluginModule.__internal;
+const { copyWidgetLocalizationResources, enableWidgetEntitlementsModification, getWidgetDisplayName } =
+  pluginModule.__internal;
 type ProjectRef = ReturnType<typeof ref>;
 type PbxGroupEntry = {
   name?: string;
@@ -78,8 +80,33 @@ function createMockProject() {
             },
             WIDGET_RESOURCES_comment: 'Resources',
           },
+          XCBuildConfiguration: {
+            WIDGET_DEBUG: {
+              name: 'Debug',
+              buildSettings: {
+                CODE_SIGN_ENTITLEMENTS: 'ExpoWidgetsTarget/ExpoWidgetsTarget.entitlements',
+              },
+            },
+            WIDGET_RELEASE: {
+              name: 'Release',
+              buildSettings: {
+                CODE_SIGN_ENTITLEMENTS: '"ExpoWidgetsTarget/ExpoWidgetsTarget.entitlements"',
+                CODE_SIGN_ALLOW_ENTITLEMENTS_MODIFICATION: 'YES',
+              },
+            },
+            APP_DEBUG: {
+              name: 'Debug',
+              buildSettings: {
+                CODE_SIGN_ENTITLEMENTS: 'Noto/Noto.entitlements',
+                CODE_SIGN_ALLOW_ENTITLEMENTS_MODIFICATION: 'YES',
+              },
+            },
+          },
         },
       },
+    },
+    pbxXCBuildConfigurationSection() {
+      return this.hash.project.objects.XCBuildConfiguration;
     },
     findPBXGroupKey(criteria: { name?: string }) {
       const groups = this.hash.project.objects.PBXGroup;
@@ -216,6 +243,25 @@ describe('withCustomWidgetSwift', () => {
         ],
       })
     ).toBe('Noto');
+  });
+
+  it('allows entitlement modification only for Debug widget build settings', () => {
+    const project = createMockProject();
+
+    expect(enableWidgetEntitlementsModification(project)).toBe(2);
+
+    const configurations = project.hash.project.objects.XCBuildConfiguration;
+    const debugWidgetBuildSettings = configurations.WIDGET_DEBUG.buildSettings as Record<string, string | undefined>;
+    const releaseWidgetBuildSettings = configurations.WIDGET_RELEASE.buildSettings as Record<string, string | undefined>;
+    const debugAppBuildSettings = configurations.APP_DEBUG.buildSettings as Record<string, string | undefined>;
+
+    expect(debugWidgetBuildSettings.CODE_SIGN_ALLOW_ENTITLEMENTS_MODIFICATION).toBe('YES');
+    expect(releaseWidgetBuildSettings.CODE_SIGN_ALLOW_ENTITLEMENTS_MODIFICATION).toBeUndefined();
+    expect(debugAppBuildSettings.CODE_SIGN_ALLOW_ENTITLEMENTS_MODIFICATION).toBe('YES');
+  });
+
+  it('keeps the checked-in iOS widget Swift source available for prebuild', () => {
+    expect(fs.existsSync(path.join(__dirname, '..', 'widgets', 'ios', 'LocketWidget.swift'))).toBe(true);
   });
 
   it('copies widget localizations into a variant group without duplicating bundle entries', () => {

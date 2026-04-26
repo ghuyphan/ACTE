@@ -98,3 +98,6 @@ const withExpoWidgetsBundleFix = (config) => {
 };
 
 module.exports = withExpoWidgetsBundleFix;
+module.exports.__internal = {
+    ensureBundleCopyPhase,
+};

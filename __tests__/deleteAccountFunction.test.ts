@@ -83,6 +83,9 @@ function createDeleteAccountFixtures(options?: {
           { asset: { remotePath: 'user-1/stickers/note-sticker.png' } },
           { asset: { remotePath: ' user-1/stickers/note-sticker.png ' } },
           { asset: { remotePath: 'attacker/stickers/forged.png' } },
+          { asset: { remotePath: 'user-1//stickers/empty-segment.png' } },
+          { asset: { remotePath: 'user-1/./stickers/dot-segment.png' } },
+          { asset: { remotePath: 'user-1/stickers/space name.png' } },
         ]),
       },
     ],
@@ -94,11 +97,15 @@ function createDeleteAccountFixtures(options?: {
         paired_video_path: ' user-1/shared/video.mov ',
         sticker_placements_json: JSON.stringify([
           { asset: { remotePath: 'user-1/stickers/shared-sticker.png' } },
+          { asset: { remotePath: '/user-1/stickers/rooted.png' } },
+          { asset: { remotePath: 'user-1/stickers/../traversal.png' } },
         ]),
       },
     ],
     sticker_assets: [
       { storage_bucket: ' note-media ', storage_path: ' user-1/stickers/registered.png ' },
+      { storage_bucket: ' note-media ', storage_path: ' user-1//stickers/registered-empty.png ' },
+      { storage_bucket: ' shared-post-media ', storage_path: ' user-1/stickers/registered space.png ' },
       { storage_bucket: ' custom-bucket ', storage_path: ' custom/path.png ' },
     ],
   } as const;
@@ -246,6 +253,11 @@ describe('delete-account edge function', () => {
     );
     expect(JSON.stringify(fixtures.storageRemovals)).not.toContain('attacker');
     expect(JSON.stringify(fixtures.storageRemovals)).not.toContain('custom/path.png');
+    expect(JSON.stringify(fixtures.storageRemovals)).not.toContain('empty-segment');
+    expect(JSON.stringify(fixtures.storageRemovals)).not.toContain('dot-segment');
+    expect(JSON.stringify(fixtures.storageRemovals)).not.toContain('space name');
+    expect(JSON.stringify(fixtures.storageRemovals)).not.toContain('rooted');
+    expect(JSON.stringify(fixtures.storageRemovals)).not.toContain('traversal');
   });
 
   it('fails safely and skips auth deletion when sticker asset record cleanup fails', async () => {

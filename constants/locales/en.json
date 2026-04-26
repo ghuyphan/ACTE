@@ -999,6 +999,7 @@
     },
     "startup": {
         "databaseInitFailed": "Noto could not open its local database. Please restart the app and try again.",
+        "databaseInitTimeout": "Noto is taking too long to open its local database. Try again, and reset local data only if it keeps happening.",
         "databaseResetFailed": "Noto could not reset its local database. Please restart the app and try again.",
         "retryAction": "Try again",
         "resetLocalDataAction": "Reset local data",

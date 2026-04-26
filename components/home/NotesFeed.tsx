@@ -15,8 +15,14 @@ import { Note } from '../../services/database';
 import { SharedPost } from '../../services/sharedFeedService';
 import { normalizeOwnedSharedNoteIds } from '../../services/sharedFeedOwnership';
 import { Layout } from '../../constants/theme';
+import { RelativeTimeNowProvider, useRelativeTimeNow } from '../../hooks/useRelativeTimeNow';
 import { buildHomeFeedItems, type HomeFeedItem, getHomeFeedItemKey } from './feedItems';
-import { NoteMemoryCard, SharedPostMemoryCard } from './MemoryCardPrimitives';
+import {
+  getNoteMemoryCardRenderSignature,
+  getSharedPostMemoryCardRenderSignature,
+  NoteMemoryCard,
+  SharedPostMemoryCard,
+} from './MemoryCardPrimitives';
 
 const DOCKED_HEADER_CONTENT_OVERLAP = 22;
 const SCROLL_SNAP_EPSILON = 2;
@@ -67,24 +73,8 @@ const AnimatedNoteCard = memo(function AnimatedNoteCard({
   prevProps.colors === nextProps.colors &&
   prevProps.t === nextProps.t &&
   prevProps.onOpenNote === nextProps.onOpenNote &&
-  prevProps.item.id === nextProps.item.id &&
-  prevProps.item.type === nextProps.item.type &&
-  prevProps.item.content === nextProps.item.content &&
-  prevProps.item.caption === nextProps.item.caption &&
-  prevProps.item.photoLocalUri === nextProps.item.photoLocalUri &&
-  prevProps.item.isLivePhoto === nextProps.item.isLivePhoto &&
-  prevProps.item.pairedVideoLocalUri === nextProps.item.pairedVideoLocalUri &&
-  prevProps.item.captureVariant === nextProps.item.captureVariant &&
-  prevProps.item.dualComposedPhotoLocalUri === nextProps.item.dualComposedPhotoLocalUri &&
-  prevProps.item.locationName === nextProps.item.locationName &&
-  prevProps.item.createdAt === nextProps.item.createdAt &&
-  prevProps.item.isFavorite === nextProps.item.isFavorite &&
-  prevProps.item.moodEmoji === nextProps.item.moodEmoji &&
-  prevProps.item.noteColor === nextProps.item.noteColor &&
-  prevProps.item.hasDoodle === nextProps.item.hasDoodle &&
-  prevProps.item.doodleStrokesJson === nextProps.item.doodleStrokesJson &&
-  prevProps.item.hasStickers === nextProps.item.hasStickers &&
-  prevProps.item.stickerPlacementsJson === nextProps.item.stickerPlacementsJson &&
+  getNoteMemoryCardRenderSignature(prevProps.item) ===
+    getNoteMemoryCardRenderSignature(nextProps.item) &&
   prevProps.isSharedByMe === nextProps.isSharedByMe &&
   prevProps.isActive === nextProps.isActive
 ));
@@ -127,22 +117,8 @@ const AnimatedSharedPostCard = memo(function AnimatedSharedPostCard({
   prevProps.colors === nextProps.colors &&
   prevProps.t === nextProps.t &&
   prevProps.onOpenSharedPost === nextProps.onOpenSharedPost &&
-  prevProps.item.id === nextProps.item.id &&
-  prevProps.item.type === nextProps.item.type &&
-  prevProps.item.text === nextProps.item.text &&
-  prevProps.item.photoLocalUri === nextProps.item.photoLocalUri &&
-  prevProps.item.photoPath === nextProps.item.photoPath &&
-  prevProps.item.isLivePhoto === nextProps.item.isLivePhoto &&
-  prevProps.item.pairedVideoLocalUri === nextProps.item.pairedVideoLocalUri &&
-  prevProps.item.pairedVideoPath === nextProps.item.pairedVideoPath &&
-  prevProps.item.doodleStrokesJson === nextProps.item.doodleStrokesJson &&
-  prevProps.item.hasStickers === nextProps.item.hasStickers &&
-  prevProps.item.stickerPlacementsJson === nextProps.item.stickerPlacementsJson &&
-  prevProps.item.noteColor === nextProps.item.noteColor &&
-  prevProps.item.placeName === nextProps.item.placeName &&
-  prevProps.item.createdAt === nextProps.item.createdAt &&
-  prevProps.item.authorDisplayName === nextProps.item.authorDisplayName &&
-  prevProps.item.authorPhotoURLSnapshot === nextProps.item.authorPhotoURLSnapshot &&
+  getSharedPostMemoryCardRenderSignature(prevProps.item) ===
+    getSharedPostMemoryCardRenderSignature(nextProps.item) &&
   prevProps.isActive === nextProps.isActive
 ));
 
@@ -211,6 +187,7 @@ export default function NotesFeed({
   onInitialContentDraw,
 }: NotesFeedProps) {
   const { height } = useWindowDimensions();
+  const relativeTimeNow = useRelativeTimeNow();
   const captureVisibilityRef = useRef(true);
   const captureScrollSettledRef = useRef(true);
   const refreshGestureActiveRef = useRef(false);
@@ -665,6 +642,7 @@ export default function NotesFeed({
   );
 
   return (
+    <RelativeTimeNowProvider now={relativeTimeNow}>
     <FlashList
       ref={flatListRef}
       data={listData}
@@ -788,6 +766,7 @@ export default function NotesFeed({
       }
       scrollEnabled={scrollEnabled}
     />
+    </RelativeTimeNowProvider>
   );
 }
 

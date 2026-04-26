@@ -163,6 +163,27 @@ describe('useAppStartupBootstrap', () => {
     consoleErrorSpy.mockRestore();
   });
 
+  it('surfaces a startup error when database initialization stalls', async () => {
+    const deferred = createDeferred<unknown>();
+    mockGetDB.mockReturnValueOnce(deferred.promise);
+    const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+
+    const { result } = renderHook(() => useAppStartupBootstrap(), { wrapper });
+
+    await act(async () => {
+      jest.advanceTimersByTime(12000);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(result.current.startupError).toBe('database-init-timeout');
+      expect(result.current.isDatabaseReady).toBe(false);
+    });
+
+    consoleErrorSpy.mockRestore();
+  });
+
   it('retries database initialization on demand', async () => {
     mockGetDB.mockRejectedValueOnce(new Error('db failed'));
     const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});

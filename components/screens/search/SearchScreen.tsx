@@ -3,6 +3,7 @@ import { FlashList } from '@shopify/flash-list';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Href, Stack, useRouter } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 import { useCallback, useDeferredValue, useEffect, useRef, useState, useTransition } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
@@ -17,7 +18,10 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Layout, Shadows } from '../../../constants/theme';
 import { useAndroidBottomTabOverlayInset } from '../../../hooks/useAndroidBottomTabOverlayInset';
-import { useAndroidTabSearchQuery } from '../../../hooks/useAndroidTabSearchState';
+import {
+  clearAndroidTabSearch,
+  useAndroidTabSearchQuery,
+} from '../../../hooks/useAndroidTabSearchState';
 import { useFeedFocus } from '../../../hooks/useFeedFocus';
 import { useTheme } from '../../../hooks/useTheme';
 import { useNotesStore } from '../../../hooks/useNotes';
@@ -56,6 +60,19 @@ export default function SearchScreen() {
   const trimmedDeferredQuery = deferredQuery.trim();
   const hasQuery = trimmedActiveQuery.length > 0;
   const hasDeferredQuery = trimmedDeferredQuery.length > 0;
+
+  useFocusEffect(
+    useCallback(() => {
+      if (Platform.OS !== 'android') {
+        return undefined;
+      }
+
+      return () => {
+        clearAndroidTabSearch();
+      };
+    }, [])
+  );
+
   useEffect(() => {
     if (!hasQuery) {
       setFilteredNotes([]);

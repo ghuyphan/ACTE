@@ -5,6 +5,7 @@ import { DEFAULT_NOTE_RADIUS } from '../constants/noteRadius';
 import { getPersistentItem, getPersistentItemSync, setPersistentItem } from '../utils/appStorage';
 import type { SyncChange } from './syncService';
 import { buildNoteSearchText, tokenizeSearchQuery } from './noteSearch';
+import { isNoteCurrencyOlder, normalizeLocalRevision } from './noteCurrency';
 import { resolveSavedTextNoteColor } from './noteAppearance';
 import { resolveStoredPhotoUri } from './photoStorage';
 import { resolveStoredPairedVideoUri } from './livePhotoStorage';
@@ -61,6 +62,7 @@ export interface Note {
     stickerPlacementsJson?: string | null;
     createdAt: string;        // ISO timestamp
     updatedAt: string | null;
+    localRevision?: number;
 }
 
 export interface CreateNoteInput {
@@ -169,6 +171,7 @@ interface NoteRow {
     is_favorite: number;
     created_at: string;
     updated_at: string | null;
+    local_revision: number | null;
     search_text: string | null;
     has_doodle?: number;
     doodle_strokes_json?: string | null;
@@ -178,6 +181,7 @@ interface NoteRow {
 
 // ─── Database ───────────────────────────────────────────────────────
 let db: SQLite.SQLiteDatabase | null = null;
+let transactionDb: SQLite.SQLiteDatabase | null = null;
 let dbInitPromise: Promise<SQLite.SQLiteDatabase> | null = null;
 let transactionQueue: Promise<void> = Promise.resolve();
 let androidDatabaseQueue: Promise<void> = Promise.resolve();
@@ -240,13 +244,14 @@ function runSerializedAndroidDatabaseOperation<T>(task: () => Promise<T>): Promi
         return task();
     }
 
+    const previousTransaction = transactionQueue.catch(() => undefined);
     const previous = androidDatabaseQueue.catch(() => undefined);
     let releaseQueue!: () => void;
     androidDatabaseQueue = new Promise<void>((resolve) => {
         releaseQueue = resolve;
     });
 
-    return previous.then(async () => {
+    return Promise.all([previousTransaction, previous]).then(async () => {
         try {
             return await task();
         } finally {
@@ -408,8 +413,6 @@ async function enqueueSyncChange(
         return;
     }
 
-    const serializedPayload =
-        change.payload === undefined ? null : JSON.stringify(change.payload);
     const entityId = change.entityId ?? fallbackEntityId ?? null;
     const coalesceKey =
         change.type === 'deleteAll'
@@ -417,6 +420,30 @@ async function enqueueSyncChange(
             : entityId
                 ? `${change.entity}:${entityId}`
                 : null;
+    let payload = change.payload;
+
+    if (change.entity === 'note' && entityId && change.type !== 'delete' && change.type !== 'deleteAll') {
+        const revisionRow = await executor.getFirstAsync<{ local_revision: number | null }>(
+            'SELECT local_revision FROM notes WHERE id = ? AND owner_uid = ?',
+            entityId,
+            ownerScope
+        );
+        const localRevision = revisionRow
+            ? normalizeLocalRevision(revisionRow.local_revision)
+            : change.type === 'create'
+                ? 1
+                : 0;
+        if (payload && typeof payload === 'object' && !Array.isArray(payload)) {
+            payload = {
+                ...payload,
+                localRevision,
+            };
+        } else if (payload === undefined || payload === null) {
+            payload = { localRevision };
+        }
+    }
+    const serializedPayload =
+        payload === undefined ? null : JSON.stringify(payload);
 
     if (change.type === 'deleteAll') {
         await executor.runAsync('DELETE FROM sync_queue WHERE owner_uid = ?', ownerScope);
@@ -588,9 +615,10 @@ export async function hasScopeOwnedData(scope: string): Promise<boolean> {
 }
 
 export async function resetLocalDatabase(): Promise<void> {
-    const openDatabase = db ?? (await dbInitPromise?.catch(() => null)) ?? null;
+    const openDatabase = transactionDb ?? db ?? (await dbInitPromise?.catch(() => null)) ?? null;
 
     db = null;
+    transactionDb = null;
     dbInitPromise = null;
     transactionQueue = Promise.resolve();
     androidDatabaseQueue = Promise.resolve();
@@ -658,7 +686,8 @@ export async function getDB(): Promise<SQLite.SQLiteDatabase> {
         radius REAL NOT NULL DEFAULT 150,
         is_favorite INTEGER NOT NULL DEFAULT 0,
         created_at TEXT NOT NULL,
-        updated_at TEXT
+        updated_at TEXT,
+        local_revision INTEGER NOT NULL DEFAULT 0
       );
       CREATE INDEX IF NOT EXISTS idx_notes_created ON notes(created_at DESC);
       CREATE TABLE IF NOT EXISTS note_doodles (
@@ -891,6 +920,9 @@ export async function getDB(): Promise<SQLite.SQLiteDatabase> {
             }
             if (!columns.includes('dual_composed_photo_local_uri')) {
                 await database.execAsync(`ALTER TABLE notes ADD COLUMN dual_composed_photo_local_uri TEXT`);
+            }
+            if (!columns.includes('local_revision')) {
+                await database.execAsync(`ALTER TABLE notes ADD COLUMN local_revision INTEGER NOT NULL DEFAULT 0`);
             }
 
             await database.execAsync(`CREATE INDEX IF NOT EXISTS idx_notes_owner_created ON notes(owner_uid, created_at DESC)`);
@@ -1263,9 +1295,11 @@ export async function getDB(): Promise<SQLite.SQLiteDatabase> {
             }
 
             db = createSerializedDatabase(database);
+            transactionDb = database;
             return db;
         })().catch((error) => {
             db = null;
+            transactionDb = null;
             dbInitPromise = null;
             throw error;
         });
@@ -1278,6 +1312,7 @@ export async function withDatabaseTransaction<T>(
     task: (txn: SQLiteTransactionExecutor) => Promise<T>
 ): Promise<T> {
     const database = await getDB();
+    const nativeTransactionDatabase = transactionDb ?? database;
 
     if (Platform.OS === 'web') {
         let result: T | undefined;
@@ -1288,19 +1323,23 @@ export async function withDatabaseTransaction<T>(
     }
 
     return runSerializedNativeTransaction(async () => {
+        if (Platform.OS === 'android') {
+            await androidDatabaseQueue.catch(() => undefined);
+        }
+
         for (let attempt = 0; attempt <= SQLITE_LOCK_RETRY_DELAYS_MS.length; attempt += 1) {
             let transactionStarted = false;
 
             try {
-                await database.execAsync('BEGIN IMMEDIATE');
+                await nativeTransactionDatabase.execAsync('BEGIN IMMEDIATE');
                 transactionStarted = true;
-                const result = await task(database);
-                await database.execAsync('COMMIT');
+                const result = await task(nativeTransactionDatabase);
+                await nativeTransactionDatabase.execAsync('COMMIT');
                 return result;
             } catch (error) {
                 if (transactionStarted) {
                     try {
-                        await database.execAsync('ROLLBACK');
+                        await nativeTransactionDatabase.execAsync('ROLLBACK');
                     } catch (rollbackError) {
                         console.warn('Database rollback failed:', rollbackError);
                     }
@@ -1382,20 +1421,6 @@ function buildSearchText(input: {
         promptTextSnapshot: input.promptTextSnapshot,
         promptAnswer: input.promptAnswer,
     });
-}
-
-function isIncomingNoteSnapshotOlder(inputUpdatedAt: string | null | undefined, existingUpdatedAt: string | null | undefined) {
-    if (!inputUpdatedAt || !existingUpdatedAt) {
-        return false;
-    }
-
-    const inputTime = new Date(inputUpdatedAt).getTime();
-    const existingTime = new Date(existingUpdatedAt).getTime();
-    if (!Number.isFinite(inputTime) || !Number.isFinite(existingTime)) {
-        return inputUpdatedAt < existingUpdatedAt;
-    }
-
-    return inputTime < existingTime;
 }
 
 function buildFtsMatchExpression(query: string) {
@@ -1484,6 +1509,7 @@ function rowToNote(row: NoteRow): Note {
         stickerPlacementsJson: row.sticker_placements_json ?? null,
         createdAt: row.created_at,
         updatedAt: row.updated_at,
+        localRevision: row.local_revision ?? 0,
     };
 }
 
@@ -1520,6 +1546,7 @@ function rowToReminderSelectionNote(row: ReminderSelectionRow): Note {
         stickerPlacementsJson: null,
         createdAt: row.created_at,
         updatedAt: row.updated_at,
+        localRevision: 0,
     };
 }
 
@@ -1697,9 +1724,10 @@ export async function createNote(
                 longitude,
                 radius,
                 is_favorite,
-                created_at
+                created_at,
+                local_revision
             )
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, 1)`,
             id,
             scope,
             input.type,
@@ -1771,6 +1799,7 @@ export async function createNote(
         stickerPlacementsJson: noteDecorations.stickerPlacementsJson,
         createdAt: now,
         updatedAt: null,
+        localRevision: 1,
     };
 
     scheduleMonthlyRecapCacheRefreshForMonthKey(
@@ -1845,7 +1874,7 @@ export async function getNoteById(id: string): Promise<Note | null> {
 export async function getNoteByIdForScope(
     id: string,
     scope: string,
-    database?: SQLite.SQLiteDatabase
+    database?: SQLiteTransactionExecutor
 ): Promise<Note | null> {
     const activeDatabase = database ?? (await getDB());
     const row = await activeDatabase.getFirstAsync<NoteRow>(
@@ -1858,17 +1887,7 @@ export async function getNoteByIdForScope(
     return row ? rowToNote(row) : null;
 }
 
-export async function updateNote(
-    id: string,
-    updates: NoteUpdates,
-    options: DatabaseMutationOptions = {}
-): Promise<void> {
-    const scope = options.scope ?? getCurrentScope();
-    const existing = await getNoteByIdForScope(id, scope);
-    if (!existing) {
-        return;
-    }
-
+function buildUpdatedNotePersistence(existing: Note, updates: NoteUpdates) {
     const nextType = existing.type;
     const nextPhotoLocalUri =
         nextType === 'photo'
@@ -2018,7 +2037,52 @@ export async function updateNote(
             updates.stickerPlacementsJson !== undefined ? updates.stickerPlacementsJson : existing.stickerPlacementsJson,
     });
 
+    return {
+        nextContent,
+        nextCaption,
+        nextPhotoLocalUri,
+        nextPhotoSyncedLocalUri,
+        nextPhotoRemoteBase64,
+        nextIsLivePhoto,
+        nextPairedVideoLocalUri,
+        nextPairedVideoSyncedLocalUri,
+        nextPairedVideoRemotePath,
+        nextLocationName,
+        nextPromptId,
+        nextPromptTextSnapshot,
+        nextPromptAnswer,
+        nextMoodEmoji,
+        nextNoteColor,
+        nextCaptureVariant,
+        nextDualPrimaryPhotoLocalUri,
+        nextDualSecondaryPhotoLocalUri,
+        nextDualPrimaryFacing,
+        nextDualSecondaryFacing,
+        nextDualLayoutPreset,
+        nextDualComposedPhotoLocalUri,
+        nextRadius,
+        now,
+        searchText,
+        nextDecorations,
+    };
+}
+
+export async function updateNote(
+    id: string,
+    updates: NoteUpdates,
+    options: DatabaseMutationOptions = {}
+): Promise<void> {
+    const scope = options.scope ?? getCurrentScope();
+    let existingCreatedAt: string | null = null;
+
     await withDatabaseTransaction(async (txn) => {
+        const existing = await getNoteByIdForScope(id, scope, txn);
+        if (!existing) {
+            return;
+        }
+        existingCreatedAt = existing.createdAt;
+        const nextNote = buildUpdatedNotePersistence(existing, updates);
+
         await txn.runAsync(
             `UPDATE notes
              SET content = ?,
@@ -2045,63 +2109,72 @@ export async function updateNote(
                  dual_composed_photo_local_uri = ?,
                  search_text = ?,
                  radius = ?,
-                 updated_at = ?
+                 updated_at = ?,
+                 local_revision = local_revision + 1
              WHERE id = ? AND owner_uid = ?`,
-            nextContent,
-            nextCaption,
-            nextPhotoLocalUri,
-            nextPhotoSyncedLocalUri,
-            nextPhotoRemoteBase64,
-            nextIsLivePhoto ? 1 : 0,
-            nextPairedVideoLocalUri,
-            nextPairedVideoSyncedLocalUri,
-            nextPairedVideoRemotePath,
-            nextLocationName,
-            nextPromptId,
-            nextPromptTextSnapshot,
-            nextPromptAnswer,
-            nextMoodEmoji,
-            nextNoteColor,
-            nextCaptureVariant,
-            nextDualPrimaryPhotoLocalUri,
-            nextDualSecondaryPhotoLocalUri,
-            nextDualPrimaryFacing,
-            nextDualSecondaryFacing,
-            nextDualLayoutPreset,
-            nextDualComposedPhotoLocalUri,
-            searchText,
-            nextRadius,
-            now,
+            nextNote.nextContent,
+            nextNote.nextCaption,
+            nextNote.nextPhotoLocalUri,
+            nextNote.nextPhotoSyncedLocalUri,
+            nextNote.nextPhotoRemoteBase64,
+            nextNote.nextIsLivePhoto ? 1 : 0,
+            nextNote.nextPairedVideoLocalUri,
+            nextNote.nextPairedVideoSyncedLocalUri,
+            nextNote.nextPairedVideoRemotePath,
+            nextNote.nextLocationName,
+            nextNote.nextPromptId,
+            nextNote.nextPromptTextSnapshot,
+            nextNote.nextPromptAnswer,
+            nextNote.nextMoodEmoji,
+            nextNote.nextNoteColor,
+            nextNote.nextCaptureVariant,
+            nextNote.nextDualPrimaryPhotoLocalUri,
+            nextNote.nextDualSecondaryPhotoLocalUri,
+            nextNote.nextDualPrimaryFacing,
+            nextNote.nextDualSecondaryFacing,
+            nextNote.nextDualLayoutPreset,
+            nextNote.nextDualComposedPhotoLocalUri,
+            nextNote.searchText,
+            nextNote.nextRadius,
+            nextNote.now,
             id,
             scope
         );
-        await upsertNoteSearchDocument(txn, id, scope, searchText);
-        await persistNoteDecorationRows(txn, id, nextDecorations, now);
+        await upsertNoteSearchDocument(txn, id, scope, nextNote.searchText);
+        await persistNoteDecorationRows(txn, id, nextNote.nextDecorations, nextNote.now);
         await enqueueSyncChange(txn, scope, options.syncChange, id);
     });
 
-    scheduleMonthlyRecapCacheRefreshForMonthKey(
-        scope,
-        getRecapMonthKeyForDate(new Date(existing.createdAt), getCurrentTimeZone())
-    );
+    if (existingCreatedAt) {
+        scheduleMonthlyRecapCacheRefreshForMonthKey(
+            scope,
+            getRecapMonthKeyForDate(new Date(existingCreatedAt), getCurrentTimeZone())
+        );
+    }
 }
 
 export async function toggleFavorite(
     id: string,
     options: DatabaseMutationOptions = {}
 ): Promise<boolean> {
-    const database = await getDB();
     const scope = options.scope ?? getCurrentScope();
-    const row = await database.getFirstAsync<{ is_favorite: number }>(
-        'SELECT is_favorite FROM notes WHERE id = ? AND owner_uid = ?',
-        id,
-        scope
-    );
-    if (!row) return false;
-    const newValue = row.is_favorite === 1 ? 0 : 1;
+    let newValue: number | null = null;
+    let existingCreatedAt: string | null = null;
+
     await withDatabaseTransaction(async (txn) => {
+        const row = await txn.getFirstAsync<{ is_favorite: number; created_at: string }>(
+            'SELECT is_favorite, created_at FROM notes WHERE id = ? AND owner_uid = ?',
+            id,
+            scope
+        );
+        if (!row) {
+            return;
+        }
+
+        newValue = row.is_favorite === 1 ? 0 : 1;
+        existingCreatedAt = row.created_at;
         await txn.runAsync(
-            'UPDATE notes SET is_favorite = ?, updated_at = ? WHERE id = ? AND owner_uid = ?',
+            'UPDATE notes SET is_favorite = ?, updated_at = ?, local_revision = local_revision + 1 WHERE id = ? AND owner_uid = ?',
             newValue,
             new Date().toISOString(),
             id,
@@ -2109,13 +2182,18 @@ export async function toggleFavorite(
         );
         await enqueueSyncChange(txn, scope, options.syncChange, id);
     });
-    const note = await getNoteByIdForScope(id, scope, database);
-    if (note) {
+
+    if (newValue === null) {
+        return false;
+    }
+
+    if (existingCreatedAt) {
         scheduleMonthlyRecapCacheRefreshForMonthKey(
             scope,
-            getRecapMonthKeyForDate(new Date(note.createdAt), getCurrentTimeZone())
+            getRecapMonthKeyForDate(new Date(existingCreatedAt), getCurrentTimeZone())
         );
     }
+
     return newValue === 1;
 }
 
@@ -2404,6 +2482,7 @@ export async function upsertNoteForScope(input: UpsertNoteInput, scope: string):
         stickerPlacementsJson: input.stickerPlacementsJson,
     });
     const updatedAt = input.updatedAt ?? input.createdAt;
+    const localRevision = normalizeLocalRevision(input.localRevision);
     const noteInsertValues = [
         input.id,
         scope,
@@ -2437,12 +2516,18 @@ export async function upsertNoteForScope(input: UpsertNoteInput, scope: string):
         input.isFavorite ? 1 : 0,
         input.createdAt,
         input.updatedAt ?? null,
+        localRevision,
     ] as const;
 
     let skippedStaleUpsert = false;
     await withDatabaseTransaction(async (txn) => {
-        const existingRow = await txn.getFirstAsync<{ owner_uid: string; updated_at: string | null }>(
-            `SELECT owner_uid, updated_at FROM notes WHERE id = ?`,
+        const existingRow = await txn.getFirstAsync<{
+            owner_uid: string;
+            created_at: string;
+            updated_at: string | null;
+            local_revision: number | null;
+        }>(
+            `SELECT owner_uid, created_at, updated_at, local_revision FROM notes WHERE id = ?`,
             input.id
         );
         if (existingRow && existingRow.owner_uid !== scope) {
@@ -2450,7 +2535,17 @@ export async function upsertNoteForScope(input: UpsertNoteInput, scope: string):
                 `Refusing to overwrite note ${input.id} from scope ${existingRow.owner_uid} with scope ${scope}.`
             );
         }
-        if (existingRow && isIncomingNoteSnapshotOlder(input.updatedAt, existingRow.updated_at)) {
+        if (
+            existingRow &&
+            isNoteCurrencyOlder(
+                { updatedAt, localRevision },
+                {
+                    updatedAt: existingRow.updated_at,
+                    createdAt: existingRow.created_at,
+                    localRevision: existingRow.local_revision,
+                }
+            )
+        ) {
             skippedStaleUpsert = true;
             return;
         }
@@ -2488,7 +2583,8 @@ export async function upsertNoteForScope(input: UpsertNoteInput, scope: string):
                 radius,
                 is_favorite,
                 created_at,
-                updated_at
+                updated_at,
+                local_revision
             )
              VALUES (${noteInsertValues.map(() => '?').join(', ')})
              ON CONFLICT(id) DO UPDATE SET
@@ -2522,7 +2618,8 @@ export async function upsertNoteForScope(input: UpsertNoteInput, scope: string):
                 radius = excluded.radius,
                 is_favorite = excluded.is_favorite,
                 created_at = excluded.created_at,
-                updated_at = excluded.updated_at`,
+                updated_at = excluded.updated_at,
+                local_revision = excluded.local_revision`,
             ...noteInsertValues
         );
         await upsertNoteSearchDocument(txn, input.id, scope, searchText);
@@ -2571,6 +2668,7 @@ export async function upsertNoteForScope(input: UpsertNoteInput, scope: string):
         stickerPlacementsJson: noteDecorations.stickerPlacementsJson,
         createdAt: input.createdAt,
         updatedAt: input.updatedAt ?? null,
+        localRevision,
     };
 
     scheduleMonthlyRecapCacheRefreshForMonthKey(

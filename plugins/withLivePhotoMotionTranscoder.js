@@ -72,6 +72,32 @@ function patchProjectFile(iosRoot, appName) {
   return didPatch;
 }
 
+function copyLivePhotoSourceFiles(projectRoot, iosRoot, appName, shouldFailFast) {
+  const sourceDirectory = path.join(projectRoot, 'native', 'ios');
+  const destinationDirectory = path.join(iosRoot, appName);
+  fs.mkdirSync(destinationDirectory, { recursive: true });
+
+  let copiedCount = 0;
+  for (const filename of SOURCE_FILES) {
+    const sourcePath = path.join(sourceDirectory, filename);
+    const destinationPath = path.join(destinationDirectory, filename);
+
+    if (!fs.existsSync(sourcePath)) {
+      const message = `[withLivePhotoMotionTranscoder] Source file not found: ${sourcePath}`;
+      if (shouldFailFast) {
+        throw new Error(message);
+      }
+      console.warn(message);
+      continue;
+    }
+
+    fs.copyFileSync(sourcePath, destinationPath);
+    copiedCount += 1;
+  }
+
+  return copiedCount;
+}
+
 const withLivePhotoMotionTranscoder = (config) =>
   withFinalizedMod(config, [
     'ios',
@@ -83,26 +109,7 @@ const withLivePhotoMotionTranscoder = (config) =>
       const iosRoot = config.modRequest.platformProjectRoot;
       const projectDirectoryName = fs.readdirSync(iosRoot).find((entry) => entry.endsWith('.xcodeproj'));
       const appName = projectDirectoryName ? path.basename(projectDirectoryName, '.xcodeproj') : 'Noto';
-      const sourceDirectory = path.join(projectRoot, 'native', 'ios');
-      const destinationDirectory = path.join(iosRoot, appName);
-
-      fs.mkdirSync(destinationDirectory, { recursive: true });
-
-      for (const filename of SOURCE_FILES) {
-        const sourcePath = path.join(sourceDirectory, filename);
-        const destinationPath = path.join(destinationDirectory, filename);
-
-        if (!fs.existsSync(sourcePath)) {
-          const message = `[withLivePhotoMotionTranscoder] Source file not found: ${sourcePath}`;
-          if (shouldFailFast) {
-            throw new Error(message);
-          }
-          console.warn(message);
-          continue;
-        }
-
-        fs.copyFileSync(sourcePath, destinationPath);
-      }
+      copyLivePhotoSourceFiles(projectRoot, iosRoot, appName, shouldFailFast);
 
       const didPatchProject = patchProjectFile(iosRoot, appName);
       if (!didPatchProject) {
@@ -118,3 +125,7 @@ const withLivePhotoMotionTranscoder = (config) =>
   ]);
 
 module.exports = withLivePhotoMotionTranscoder;
+module.exports.__internal = {
+  copyLivePhotoSourceFiles,
+  SOURCE_FILES,
+};

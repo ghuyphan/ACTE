@@ -9,8 +9,9 @@ function hasUnsafeStoragePathSegment(value: string) {
   return (
     !value ||
     value.startsWith('/') ||
-    value.includes('..') ||
-    value.split('/').some((segment) => segment.trim().length === 0)
+    value.includes('//') ||
+    !/^[A-Za-z0-9][A-Za-z0-9._/-]*$/.test(value) ||
+    value.split('/').some((segment) => segment === '.' || segment === '..')
   );
 }
 

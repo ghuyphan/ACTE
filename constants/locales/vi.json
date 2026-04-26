@@ -999,6 +999,7 @@
     },
     "startup": {
         "databaseInitFailed": "Noto chưa thể mở cơ sở dữ liệu cục bộ. Hãy khởi động lại ứng dụng rồi thử lại nhé.",
+        "databaseInitTimeout": "Noto mất quá lâu để mở cơ sở dữ liệu cục bộ. Hãy thử lại, và chỉ đặt lại dữ liệu cục bộ nếu lỗi tiếp tục xảy ra.",
         "databaseResetFailed": "Noto chưa thể đặt lại cơ sở dữ liệu cục bộ. Hãy khởi động lại ứng dụng rồi thử lại nhé.",
         "retryAction": "Thử lại",
         "resetLocalDataAction": "Đặt lại dữ liệu cục bộ",

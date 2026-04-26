@@ -1,3 +1,5 @@
+import { Platform } from 'react-native';
+
 const mockExecAsync = jest.fn<Promise<void>, [string]>(async () => undefined);
 const mockRunAsync = jest.fn<Promise<void>, [string, ...unknown[]]>(async () => undefined);
 const mockGetFirstAsync = jest.fn<Promise<unknown | null>, [string, ...unknown[]]>(async (sql: string) => {
@@ -102,6 +104,7 @@ describe('database migrations', () => {
 
     await getDB();
 
+    expect(mockExecAsync.mock.calls[0]?.[0]).toContain('PRAGMA foreign_keys = ON');
     expect(mockExecAsync.mock.calls[0]?.[0]).not.toContain('idx_notes_search_text ON notes(search_text)');
     expect(mockExecAsync).toHaveBeenCalledWith(expect.stringContaining('photo_local_uri TEXT'));
     expect(mockExecAsync).toHaveBeenCalledWith('ALTER TABLE notes ADD COLUMN caption TEXT');
@@ -134,6 +137,29 @@ describe('database migrations', () => {
     });
 
     await expect(getDB()).rejects.toThrow('migration failed');
+  });
+
+  it('adds a partial unique index for sync queue coalescing after deduplicating legacy rows', async () => {
+    let getDB!: () => Promise<unknown>;
+
+    jest.isolateModules(() => {
+      ({ getDB } = require('../services/database'));
+    });
+
+    await getDB();
+
+    expect(mockExecAsync).toHaveBeenCalledWith(
+      expect.stringContaining('DELETE FROM sync_queue')
+    );
+    expect(mockExecAsync).toHaveBeenCalledWith(
+      expect.stringContaining('GROUP BY owner_uid, coalesce_key')
+    );
+    expect(mockExecAsync).toHaveBeenCalledWith(
+      expect.stringContaining('CREATE UNIQUE INDEX IF NOT EXISTS idx_sync_queue_owner_coalesce_unique')
+    );
+    expect(mockExecAsync).toHaveBeenCalledWith(
+      expect.stringContaining('WHERE coalesce_key IS NOT NULL')
+    );
   });
 
   it('preserves the theme default text note color on create and update', async () => {
@@ -275,6 +301,141 @@ describe('database migrations', () => {
     );
   });
 
+  it('uses atomic conflict updates when enqueueing sync changes', async () => {
+    let getDB!: () => Promise<unknown>;
+    let createNote!: (input: Record<string, unknown>, options?: Record<string, unknown>) => Promise<unknown>;
+
+    jest.isolateModules(() => {
+      ({ getDB, createNote } = require('../services/database'));
+    });
+
+    await getDB();
+    mockRunAsync.mockClear();
+    mockGetFirstAsync.mockImplementation(async (sql: string) => {
+      if (sql.includes('PRAGMA user_version')) {
+        return { user_version: 0 };
+      }
+
+      if (sql.includes('SELECT local_revision FROM notes WHERE id = ? AND owner_uid = ?')) {
+        return { local_revision: 1 };
+      }
+
+      return null;
+    });
+
+    await createNote(
+      {
+        id: 'note-sync-1',
+        type: 'text',
+        content: 'Queue me',
+        locationName: 'Cafe',
+        latitude: 10.77,
+        longitude: 106.69,
+      },
+      {
+        scope: 'user-1',
+        syncChange: {
+          entity: 'note',
+          entityId: 'note-sync-1',
+          payload: { content: 'Queue me' },
+          timestamp: '2026-04-26T09:00:00.000Z',
+          type: 'update',
+        },
+      }
+    );
+
+    const syncQueueCall = mockRunAsync.mock.calls.find(([sql]) =>
+      sql.includes('INSERT INTO sync_queue')
+    );
+
+    expect(syncQueueCall).toBeDefined();
+    expect(syncQueueCall?.[0]).toContain(
+      'ON CONFLICT(owner_uid, coalesce_key) WHERE coalesce_key IS NOT NULL DO UPDATE SET'
+    );
+    expect(syncQueueCall?.[0]).toContain("status = 'pending'");
+    expect(syncQueueCall?.slice(1)).toEqual([
+      'user-1',
+      'note',
+      'note-sync-1',
+      'note:note-sync-1',
+      'update',
+      JSON.stringify({ content: 'Queue me', localRevision: 1 }),
+      '2026-04-26T09:00:00.000Z',
+    ]);
+  });
+
+  it('reads the current note row inside the update transaction', async () => {
+    let getDB!: () => Promise<unknown>;
+    let updateNote!: (id: string, updates: Record<string, unknown>) => Promise<void>;
+
+    jest.isolateModules(() => {
+      ({ getDB, updateNote } = require('../services/database'));
+    });
+
+    await getDB();
+    mockExecAsync.mockClear();
+    mockGetFirstAsync.mockClear();
+    mockRunAsync.mockClear();
+    mockGetFirstAsync.mockImplementation(async (sql: string) => {
+      if (sql.includes('FROM notes')) {
+        return {
+          id: 'note-1',
+          type: 'text',
+          content: 'Before transaction edit',
+          caption: null,
+          photo_local_uri: null,
+          photo_synced_local_uri: null,
+          photo_remote_base64: null,
+          is_live_photo: 0,
+          paired_video_local_uri: null,
+          paired_video_synced_local_uri: null,
+          paired_video_remote_path: null,
+          location_name: 'District 1',
+          prompt_id: null,
+          prompt_text_snapshot: null,
+          prompt_answer: null,
+          mood_emoji: null,
+          note_color: null,
+          capture_variant: null,
+          dual_primary_photo_local_uri: null,
+          dual_secondary_photo_local_uri: null,
+          dual_primary_facing: null,
+          dual_secondary_facing: null,
+          dual_layout_preset: null,
+          dual_composed_photo_local_uri: null,
+          latitude: 10.77,
+          longitude: 106.69,
+          radius: 150,
+          is_favorite: 0,
+          search_text: '',
+          has_doodle: 0,
+          doodle_strokes_json: null,
+          has_stickers: 0,
+          sticker_placements_json: null,
+          created_at: '2026-03-27T00:00:00.000Z',
+          updated_at: null,
+        };
+      }
+
+      return null;
+    });
+
+    await updateNote('note-1', { content: 'After transaction edit' });
+
+    const beginOrder = mockExecAsync.mock.invocationCallOrder[0];
+    const commitOrder = mockExecAsync.mock.invocationCallOrder[1];
+    const selectOrder = mockGetFirstAsync.mock.invocationCallOrder[0];
+    const updateCallIndex = mockRunAsync.mock.calls.findIndex(([sql]) =>
+      sql.includes('UPDATE notes')
+    );
+    const updateOrder = mockRunAsync.mock.invocationCallOrder[updateCallIndex];
+
+    expect(mockExecAsync.mock.calls.map(([sql]) => sql)).toEqual(['BEGIN IMMEDIATE', 'COMMIT']);
+    expect(beginOrder).toBeLessThan(selectOrder);
+    expect(selectOrder).toBeLessThan(updateOrder);
+    expect(updateOrder).toBeLessThan(commitOrder);
+  });
+
   it('persists doodles and stickers alongside note rows and clears them when removed', async () => {
     let getDB!: () => Promise<unknown>;
     let createNote!: (input: Record<string, unknown>) => Promise<unknown>;
@@ -384,8 +545,13 @@ describe('database migrations', () => {
         return { user_version: 0 };
       }
 
-      if (sql.includes('SELECT owner_uid, updated_at FROM notes WHERE id = ?')) {
-        return { owner_uid: 'user-1', updated_at: null };
+      if (sql.includes('SELECT owner_uid, created_at, updated_at, local_revision FROM notes WHERE id = ?')) {
+        return {
+          owner_uid: 'user-1',
+          created_at: '2026-04-01T00:00:00.000Z',
+          updated_at: null,
+          local_revision: 0,
+        };
       }
 
       return null;
@@ -424,7 +590,7 @@ describe('database migrations', () => {
         return { user_version: 0 };
       }
 
-      if (sql.includes('SELECT owner_uid, updated_at FROM notes WHERE id = ?')) {
+      if (sql.includes('SELECT owner_uid, created_at, updated_at, local_revision FROM notes WHERE id = ?')) {
         return null;
       }
 
@@ -505,6 +671,59 @@ describe('database migrations', () => {
     ).rejects.toThrow('boom');
 
     expect(mockExecAsync.mock.calls.map(([sql]) => sql)).toEqual(['BEGIN IMMEDIATE', 'ROLLBACK']);
+  });
+
+  it('keeps direct Android database writes behind active transactions', async () => {
+    const originalPlatform = Platform.OS;
+    Platform.OS = 'android';
+
+    try {
+      let getDB!: () => Promise<{ runAsync: (sql: string, ...args: unknown[]) => Promise<void> }>;
+      let withDatabaseTransaction!: <T>(task: (txn: { runAsync: typeof mockRunAsync }) => Promise<T>) => Promise<T>;
+
+      jest.isolateModules(() => {
+        ({ getDB, withDatabaseTransaction } = require('../services/database'));
+      });
+
+      const database = await getDB();
+      mockExecAsync.mockClear();
+      mockRunAsync.mockClear();
+
+      let directWriteFinished = false;
+      let directWritePromise: Promise<void> | null = null;
+
+      await withDatabaseTransaction(async (txn) => {
+        directWritePromise = database.runAsync('DIRECT ANDROID WRITE').then(() => {
+          directWriteFinished = true;
+        });
+
+        await Promise.resolve();
+        await Promise.resolve();
+
+        expect(directWriteFinished).toBe(false);
+        expect(mockRunAsync).not.toHaveBeenCalledWith('DIRECT ANDROID WRITE');
+
+        await txn.runAsync('TRANSACTION ANDROID WRITE');
+      });
+
+      await directWritePromise;
+
+      const beginOrder = mockExecAsync.mock.invocationCallOrder[0];
+      const commitOrder = mockExecAsync.mock.invocationCallOrder[1];
+      const transactionWriteOrder = mockRunAsync.mock.invocationCallOrder[
+        mockRunAsync.mock.calls.findIndex(([sql]) => sql === 'TRANSACTION ANDROID WRITE')
+      ];
+      const directWriteOrder = mockRunAsync.mock.invocationCallOrder[
+        mockRunAsync.mock.calls.findIndex(([sql]) => sql === 'DIRECT ANDROID WRITE')
+      ];
+
+      expect(mockExecAsync.mock.calls.map(([sql]) => sql)).toEqual(['BEGIN IMMEDIATE', 'COMMIT']);
+      expect(beginOrder).toBeLessThan(transactionWriteOrder);
+      expect(transactionWriteOrder).toBeLessThan(commitOrder);
+      expect(commitOrder).toBeLessThan(directWriteOrder);
+    } finally {
+      Platform.OS = originalPlatform;
+    }
   });
 
   it('keeps empty scoped searches inside the requested owner scope', async () => {

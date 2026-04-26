@@ -1,6 +1,6 @@
-import { act, renderHook, waitFor } from '@testing-library/react-native';
+import { act, render, renderHook, waitFor } from '@testing-library/react-native';
 import { ReactNode } from 'react';
-import { NotesProvider, useNotesStore } from '../hooks/useNotes';
+import { NotesProvider, useNotesActions, useNotesStore } from '../hooks/useNotes';
 import type { Note } from '../services/database';
 
 const mockSyncGeofenceRegions = jest.fn();
@@ -134,6 +134,10 @@ beforeEach(() => {
   mockClearGeofenceRegions.mockResolvedValue(undefined);
   mockSkipImmediateReminderForNewNote.mockResolvedValue(undefined);
   mockScheduleWidgetDataUpdate.mockResolvedValue(undefined);
+  mockUseAuth.mockReturnValue({
+    user: null,
+    isReady: true,
+  });
   mockGetAllNotesForScope.mockImplementation(async () => [...mockNotesDb]);
   mockGetNotesPageForScope.mockImplementation(async (_scope: string, options: { limit: number }) =>
     mockNotesDb.slice(0, options.limit)
@@ -150,6 +154,54 @@ beforeEach(() => {
 });
 
 describe('useNotesStore', () => {
+  it('keeps action-only consumers stable when note state changes', async () => {
+    let actionRenderCount = 0;
+    let storeRenderCount = 0;
+    let latestStoreLoading = true;
+    let latestNotesLength = 0;
+    let actions: ReturnType<typeof useNotesActions> | null = null;
+
+    function ActionOnlyConsumer() {
+      actionRenderCount += 1;
+      actions = useNotesActions();
+      return null;
+    }
+
+    function StoreConsumer() {
+      const store = useNotesStore();
+      storeRenderCount += 1;
+      latestStoreLoading = store.loading;
+      latestNotesLength = store.notes.length;
+      return null;
+    }
+
+    render(
+      <NotesProvider>
+        <ActionOnlyConsumer />
+        <StoreConsumer />
+      </NotesProvider>
+    );
+
+    await waitFor(() => expect(latestStoreLoading).toBe(false));
+
+    const actionRenderCountAfterLoad = actionRenderCount;
+    const storeRenderCountAfterLoad = storeRenderCount;
+
+    await act(async () => {
+      await actions?.createNote({
+        type: 'text',
+        content: 'Action-only render check',
+        locationName: 'District 1',
+        latitude: 10.1,
+        longitude: 106.1,
+      });
+    });
+
+    expect(latestNotesLength).toBe(1);
+    expect(actionRenderCount).toBe(actionRenderCountAfterLoad);
+    expect(storeRenderCount).toBeGreaterThan(storeRenderCountAfterLoad);
+  });
+
   it('creates text and photo notes then refreshes and searches', async () => {
     const { result } = renderHook(() => useNotesStore(), { wrapper: TestWrapper });
     await waitFor(() => expect(result.current.loading).toBe(false));
@@ -301,6 +353,158 @@ describe('useNotesStore', () => {
     jest.useRealTimers();
   });
 
+  it('releases startup when full initial hydration stalls and applies the archive later', async () => {
+    jest.useFakeTimers();
+    const deferredAllNotes = createDeferred<Note[]>();
+    const recoveredNotes: Note[] = [
+      {
+        id: 'note-1',
+        type: 'text',
+        content: 'Recovered after slow hydration',
+        locationName: 'District 1',
+        latitude: 10.7,
+        longitude: 106.6,
+        radius: 150,
+        isFavorite: false,
+        createdAt: '2026-04-01T00:00:00.000Z',
+        updatedAt: null,
+      },
+    ];
+    mockGetNotesPageForScope.mockResolvedValue([]);
+    mockGetAllNotesForScope.mockReturnValue(deferredAllNotes.promise);
+
+    const { result, unmount } = renderHook(() => useNotesStore(), { wrapper: TestWrapper });
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(result.current.loading).toBe(true);
+    expect(result.current.initialLoadComplete).toBe(true);
+    expect(result.current.notes).toHaveLength(0);
+
+    await act(async () => {
+      jest.advanceTimersByTime(4500);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+      expect(result.current.initialLoadComplete).toBe(true);
+      expect(result.current.notes).toHaveLength(0);
+    });
+
+    await act(async () => {
+      deferredAllNotes.resolve(recoveredNotes);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(result.current.notes).toHaveLength(1);
+      expect(result.current.notes[0]?.content).toBe('Recovered after slow hydration');
+    });
+
+    unmount();
+    jest.useRealTimers();
+  });
+
+  it('releases startup when the staged initial notes page stalls and still hydrates the archive later', async () => {
+    jest.useFakeTimers();
+    const deferredPage = createDeferred<Note[]>();
+    const deferredAllNotes = createDeferred<Note[]>();
+    const recoveredNotes: Note[] = [
+      {
+        id: 'note-1',
+        type: 'text',
+        content: 'Recovered after slow staged page',
+        locationName: 'District 1',
+        latitude: 10.7,
+        longitude: 106.6,
+        radius: 150,
+        isFavorite: false,
+        createdAt: '2026-04-01T00:00:00.000Z',
+        updatedAt: null,
+      },
+    ];
+    mockGetNotesPageForScope.mockReturnValue(deferredPage.promise);
+    mockGetAllNotesForScope.mockReturnValue(deferredAllNotes.promise);
+
+    const { result, unmount } = renderHook(() => useNotesStore(), { wrapper: TestWrapper });
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(result.current.loading).toBe(true);
+
+    await act(async () => {
+      jest.advanceTimersByTime(2500);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+      expect(result.current.initialLoadComplete).toBe(true);
+    });
+
+    await act(async () => {
+      deferredPage.resolve([]);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(mockGetAllNotesForScope).toHaveBeenCalledWith('__local__');
+
+    await act(async () => {
+      deferredAllNotes.resolve(recoveredNotes);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(result.current.notes).toHaveLength(1);
+      expect(result.current.notes[0]?.content).toBe('Recovered after slow staged page');
+    });
+
+    unmount();
+    jest.useRealTimers();
+  });
+
+  it('releases startup after the initial load retry is exhausted', async () => {
+    jest.useFakeTimers();
+    const loadError = new Error('sqlite unavailable');
+    mockGetAllNotesForScope.mockRejectedValue(loadError);
+
+    const { result, unmount } = renderHook(() => useNotesStore(), { wrapper: TestWrapper });
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(result.current.loading).toBe(true);
+
+    await act(async () => {
+      jest.advanceTimersByTime(900);
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+      expect(result.current.initialLoadComplete).toBe(true);
+    });
+
+    unmount();
+    jest.useRealTimers();
+  });
+
   it('does not fail note creation when the skip-enter flag is still pending', async () => {
     const deferred = createDeferred<void>();
     mockSkipImmediateReminderForNewNote.mockImplementation(() => deferred.promise);
@@ -321,7 +525,12 @@ describe('useNotesStore', () => {
 
     expect(result.current.notes[0]?.id).toBe('note-1');
     expect(result.current.notes).toHaveLength(1);
-    expect(mockSkipImmediateReminderForNewNote).toHaveBeenCalledWith('note-1');
+    expect(mockSkipImmediateReminderForNewNote).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 'note-1',
+        locationName: 'District 1',
+      })
+    );
     expect(mockSyncGeofenceRegions).toHaveBeenCalledTimes(1);
 
     await act(async () => {

@@ -75,8 +75,143 @@ interface SharedPostMemoryCardProps {
   metadataFullWidth?: boolean;
 }
 
+const RENDER_SIGNATURE_SEPARATOR = '\u001f';
+
+function signatureValue(value: unknown) {
+  return value === null || value === undefined ? '' : String(value);
+}
+
+export function getNoteMemoryCardRenderSignature(note: Note) {
+  return [
+    note.id,
+    note.type,
+    note.content,
+    note.caption,
+    note.photoLocalUri,
+    note.photoSyncedLocalUri,
+    note.photoRemoteBase64,
+    note.isLivePhoto,
+    note.pairedVideoLocalUri,
+    note.pairedVideoSyncedLocalUri,
+    note.pairedVideoRemotePath,
+    note.locationName,
+    note.captureVariant,
+    note.dualPrimaryPhotoLocalUri,
+    note.dualSecondaryPhotoLocalUri,
+    note.dualPrimaryFacing,
+    note.dualSecondaryFacing,
+    note.dualLayoutPreset,
+    note.dualComposedPhotoLocalUri,
+    note.createdAt,
+    note.isFavorite,
+    note.moodEmoji,
+    note.noteColor,
+    note.hasDoodle,
+    note.doodleStrokesJson,
+    note.hasStickers,
+    note.stickerPlacementsJson,
+  ].map(signatureValue).join(RENDER_SIGNATURE_SEPARATOR);
+}
+
+export function getSharedPostMemoryCardRenderSignature(post: SharedPost) {
+  return [
+    post.id,
+    post.type,
+    post.text,
+    post.photoLocalUri,
+    post.photoPath,
+    post.isLivePhoto,
+    post.pairedVideoLocalUri,
+    post.pairedVideoPath,
+    post.doodleStrokesJson,
+    post.hasStickers,
+    post.stickerPlacementsJson,
+    post.noteColor,
+    post.placeName,
+    post.createdAt,
+    post.authorDisplayName,
+    post.authorPhotoURLSnapshot,
+  ].map(signatureValue).join(RENDER_SIGNATURE_SEPARATOR);
+}
+
 function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function MemoryVisualPressable({
+  accessibilityLabel,
+  children,
+  onPress,
+  testID,
+}: {
+  accessibilityLabel?: string;
+  children: ReactNode;
+  onPress?: () => void;
+  testID: string;
+}) {
+  if (!onPress) {
+    return <View style={styles.cardFill}>{children}</View>;
+  }
+
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel}
+      onPress={onPress}
+      testID={testID}
+      style={({ pressed }) => [
+        styles.cardFill,
+        styles.visualCardPressable,
+        pressed ? styles.visualCardPressablePressed : null,
+      ]}
+    >
+      {children}
+    </Pressable>
+  );
+}
+
+function NoteCardVisual({
+  debugTiltOverride,
+  fallbackGradient,
+  isActive,
+  note,
+}: {
+  debugTiltOverride: ReturnType<typeof useSharedValue<DebugTiltState>>;
+  fallbackGradient: readonly [string, string];
+  isActive: boolean;
+  note: Note;
+}) {
+  if (note.type === 'photo') {
+    return (
+      <ImageMemoryCard
+        imageUrl={getNotePhotoUri(note)}
+        caption={note.caption}
+        isLivePhoto={note.isLivePhoto}
+        pairedVideoUri={getNotePairedVideoUri(note)}
+        showLiveBadge={false}
+        enablePlayback={isActive}
+        autoPreviewOnceOnEnable={isActive}
+        doodleStrokesJson={note.doodleStrokesJson}
+        stickerPlacementsJson={note.stickerPlacementsJson}
+        isActive={isActive}
+        debugTiltOverride={debugTiltOverride}
+      />
+    );
+  }
+
+  return (
+    <TextMemoryCard
+      text={note.content}
+      noteId={note.id}
+      emoji={note.moodEmoji}
+      noteColor={note.noteColor}
+      fallbackGradient={fallbackGradient}
+      doodleStrokesJson={note.doodleStrokesJson}
+      stickerPlacementsJson={note.stickerPlacementsJson}
+      isActive={isActive}
+      debugTiltOverride={debugTiltOverride}
+    />
+  );
 }
 
 function MetadataContainer({
@@ -99,7 +234,7 @@ function MetadataContainer({
   );
 
   if (!onPress) {
-    return pill;
+    return containerStyle ? <View style={containerStyle}>{pill}</View> : pill;
   }
 
   return (
@@ -558,35 +693,18 @@ export function NoteMemoryCard({
   const noteCardBody = (
     <View style={[styles.cardRoot, containerStyle, { width: resolvedCardSize }]}>
       <View style={[styles.noteCardWrapper, { width: resolvedCardSize, height: resolvedCardSize }]}>
-        <View style={styles.cardFill}>
-          {note.type === 'photo' ? (
-            <ImageMemoryCard
-              imageUrl={getNotePhotoUri(note)}
-              caption={note.caption}
-              isLivePhoto={note.isLivePhoto}
-              pairedVideoUri={getNotePairedVideoUri(note)}
-              showLiveBadge={false}
-              enablePlayback={isActive}
-              autoPreviewOnceOnEnable={isActive}
-              doodleStrokesJson={note.doodleStrokesJson}
-              stickerPlacementsJson={note.stickerPlacementsJson}
-              isActive={isActive}
-              debugTiltOverride={debugTiltOverride}
-            />
-          ) : (
-            <TextMemoryCard
-              text={note.content}
-              noteId={note.id}
-              emoji={note.moodEmoji}
-              noteColor={note.noteColor}
-              fallbackGradient={themeColors.captureGradient}
-              doodleStrokesJson={note.doodleStrokesJson}
-              stickerPlacementsJson={note.stickerPlacementsJson}
-              isActive={isActive}
-              debugTiltOverride={debugTiltOverride}
-            />
-          )}
-        </View>
+        <MemoryVisualPressable
+          accessibilityLabel={noteCardAccessibilityLabel}
+          onPress={onPress}
+          testID="note-memory-visual-action"
+        >
+          <NoteCardVisual
+            debugTiltOverride={debugTiltOverride}
+            fallbackGradient={themeColors.captureGradient}
+            isActive={isActive}
+            note={note}
+          />
+        </MemoryVisualPressable>
 
         {note.isFavorite || note.isLivePhoto || isSharedByMe ? (
           <View style={styles.badgeStack}>
@@ -637,8 +755,6 @@ export function NoteMemoryCard({
         {onPress ? (
           <View style={styles.noteMetaRow}>
             <MetadataContainer
-              accessibilityLabel={noteCardAccessibilityLabel}
-              onPress={onPress}
               containerStyle={styles.noteMetaPrimaryAction}
               pillStyle={styles.noteMetadataPill}
             >
@@ -757,14 +873,18 @@ export function SharedPostMemoryCard({
   const sharedCardBody = (
     <View style={[styles.sharedCardWrap, { width: resolvedCardSize }]}>
       <View style={[styles.noteCardWrapper, { width: resolvedCardSize, height: resolvedCardSize }]}>
-        <View style={styles.cardFill}>
+        <MemoryVisualPressable
+          accessibilityLabel={sharedCardAccessibilityLabel}
+          onPress={onPress}
+          testID="shared-post-memory-visual-action"
+        >
           <SharedPostCardVisual
             post={post}
             fallbackText={t('shared.noteFallback', 'Shared note')}
             isActive={isActive}
             debugTiltOverride={debugTiltOverride}
           />
-        </View>
+        </MemoryVisualPressable>
         {showSharedBadge ? (
           <View
             pointerEvents="none"
@@ -788,8 +908,6 @@ export function SharedPostMemoryCard({
         {onPress ? (
           <View style={styles.noteMetaRow}>
             <MetadataContainer
-              accessibilityLabel={sharedCardAccessibilityLabel}
-              onPress={onPress}
               containerStyle={[
                 styles.noteMetaPrimaryAction,
                 metadataFullWidth ? styles.metadataFullWidth : null,
@@ -834,6 +952,12 @@ const styles = StyleSheet.create({
   },
   cardFill: {
     flex: 1,
+  },
+  visualCardPressable: {
+    minHeight: 44,
+  },
+  visualCardPressablePressed: {
+    opacity: 0.92,
   },
   noteCardWrapper: {
     alignSelf: 'center',

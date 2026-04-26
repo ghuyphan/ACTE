@@ -31,7 +31,13 @@ function hasRecentSignIn(lastSignInAt: string | null | undefined) {
 
 function normalizeStoragePath(value: string | null | undefined) {
   const normalized = typeof value === 'string' ? value.trim() : '';
-  return normalized && !normalized.startsWith('/') && !normalized.includes('..') ? normalized : '';
+  const isSafePath =
+    normalized &&
+    !normalized.startsWith('/') &&
+    !normalized.includes('//') &&
+    /^[A-Za-z0-9][A-Za-z0-9._/-]*$/.test(normalized) &&
+    !normalized.split('/').some((segment) => segment === '.' || segment === '..');
+  return isSafePath ? normalized : '';
 }
 
 function isUserOwnedStoragePath(userId: string, value: string | null | undefined) {

@@ -70,7 +70,7 @@ begin
         and created_at >= local_day_start
         and created_at < local_day_end
     )::integer,
-    to_char(timezone(effective_time_zone, now()), 'YYYY-MM-DD'),
+    timezone(effective_time_zone, now())::date,
     effective_time_zone,
     coalesce(synced_at_input, now())
   from public.notes

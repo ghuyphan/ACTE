@@ -11,6 +11,29 @@ interface StartupErrorViewProps {
   startupError: string;
 }
 
+function getStartupErrorMessage(
+  t: ReturnType<typeof useTranslation>['t'],
+  startupError: string
+) {
+  switch (startupError) {
+    case 'database-reset-failed':
+      return t(
+        'startup.databaseResetFailed',
+        'Noto could not reset its local database. Please restart the app and try again.'
+      );
+    case 'database-init-timeout':
+      return t(
+        'startup.databaseInitTimeout',
+        'Noto is taking too long to open its local database. Try again, and reset local data only if it keeps happening.'
+      );
+    default:
+      return t(
+        'startup.databaseInitFailed',
+        'Noto could not open its local database. Please restart the app and try again.'
+      );
+  }
+}
+
 export default function StartupErrorView({
   colors,
   isRecovering,
@@ -19,16 +42,7 @@ export default function StartupErrorView({
   startupError,
 }: StartupErrorViewProps) {
   const { t } = useTranslation();
-  const startupErrorMessage =
-    startupError === 'database-reset-failed'
-      ? t(
-          'startup.databaseResetFailed',
-          'Noto could not reset its local database. Please restart the app and try again.'
-        )
-      : t(
-          'startup.databaseInitFailed',
-          'Noto could not open its local database. Please restart the app and try again.'
-        );
+  const startupErrorMessage = getStartupErrorMessage(t, startupError);
 
   return (
     <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 }}>

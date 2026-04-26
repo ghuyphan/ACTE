@@ -54,6 +54,11 @@ import {
   normalizeRemoteEntityIds,
   type RemoteArtifactSnapshot,
 } from './remoteArtifactUtils';
+import {
+  isNoteCurrencyAtLeastAsCurrent,
+  isNoteCurrencyOlder,
+  normalizeLocalRevision,
+} from './noteCurrency';
 
 export type SyncChangeType = 'create' | 'update' | 'delete' | 'deleteAll';
 export type SyncQueueStatus = 'pending' | 'processing' | 'failed';
@@ -211,6 +216,7 @@ interface NoteRow {
   is_favorite: boolean;
   created_at: string;
   updated_at: string | null;
+  local_revision?: number | null;
   synced_at: string;
 }
 
@@ -232,6 +238,7 @@ interface RemoteDeleteArtifactRow {
 interface RemoteNoteSnapshot extends RemoteArtifactSnapshot {
   createdAt?: string | null;
   updatedAt?: string | null;
+  localRevision?: number | null;
 }
 
 interface QueueFlushFailure {
@@ -378,6 +385,21 @@ async function readQueueStats(scope: string) {
 
 function getSyncTimestamp(note: Pick<Note, 'createdAt' | 'updatedAt'> | NoteRow) {
   return new Date(('updatedAt' in note ? note.updatedAt : note.updated_at) ?? ('createdAt' in note ? note.createdAt : note.created_at)).getTime();
+}
+
+function isLocalNoteAtLeastAsCurrentAsRemote(localNote: Note, remoteNote: NoteRow) {
+  return isNoteCurrencyAtLeastAsCurrent(
+    {
+      createdAt: localNote.createdAt,
+      updatedAt: localNote.updatedAt,
+      localRevision: localNote.localRevision,
+    },
+    {
+      createdAt: remoteNote.created_at,
+      updatedAt: remoteNote.updated_at,
+      localRevision: remoteNote.local_revision,
+    }
+  );
 }
 
 function getErrorMessage(error: unknown) {
@@ -1251,7 +1273,7 @@ async function fetchRemoteNoteSnapshots(
     const { data, error } = await supabase
       .from('notes')
       .select(
-        'id, photo_path, dual_primary_photo_path, dual_secondary_photo_path, paired_video_path, sticker_placements_json, created_at, updated_at'
+        'id, photo_path, dual_primary_photo_path, dual_secondary_photo_path, paired_video_path, sticker_placements_json, created_at, updated_at, local_revision'
       )
       .eq('user_id', userId)
       .in('id', noteIdChunk);
@@ -1268,6 +1290,7 @@ async function fetchRemoteNoteSnapshots(
       sticker_placements_json?: string | null;
       created_at?: string | null;
       updated_at?: string | null;
+      local_revision?: number | null;
     }[]) {
       if (!row.id) {
         continue;
@@ -1281,6 +1304,7 @@ async function fetchRemoteNoteSnapshots(
         stickerPlacementsJson: row.sticker_placements_json ?? null,
         createdAt: row.created_at ?? null,
         updatedAt: row.updated_at ?? null,
+        localRevision: row.local_revision ?? null,
       });
     }
   }
@@ -1300,7 +1324,7 @@ async function fetchRemoteNotePage(
   let request = supabase
     .from('notes')
     .select(
-      'id, user_id, type, content, photo_path, capture_variant, dual_primary_photo_path, dual_secondary_photo_path, dual_primary_facing, dual_secondary_facing, dual_layout_preset, is_live_photo, paired_video_path, has_doodle, doodle_strokes_json, has_stickers, sticker_placements_json, location_name, prompt_id, prompt_text_snapshot, prompt_answer, mood_emoji, note_color, latitude, longitude, radius, is_favorite, created_at, updated_at, synced_at'
+      'id, user_id, type, content, photo_path, capture_variant, dual_primary_photo_path, dual_secondary_photo_path, dual_primary_facing, dual_secondary_facing, dual_layout_preset, is_live_photo, paired_video_path, has_doodle, doodle_strokes_json, has_stickers, sticker_placements_json, location_name, prompt_id, prompt_text_snapshot, prompt_answer, mood_emoji, note_color, latitude, longitude, radius, is_favorite, created_at, updated_at, local_revision, synced_at'
     )
     .eq('user_id', userId)
     .order('synced_at', { ascending: true })
@@ -1489,6 +1513,7 @@ async function serializeNoteForSupabase(
       is_favorite: note.isFavorite,
       created_at: note.createdAt,
       updated_at: note.updatedAt,
+      local_revision: normalizeLocalRevision(note.localRevision),
       synced_at: syncedAt,
     };
   } catch (error) {
@@ -1662,6 +1687,7 @@ async function deserializeRemoteNote(
     stickerPlacementsJson,
     createdAt: record.created_at,
     updatedAt: record.updated_at ?? null,
+    localRevision: normalizeLocalRevision(record.local_revision),
   };
 
   return {
@@ -1689,22 +1715,39 @@ function shouldIgnoreRemoteTombstone(
 
 function isQueuedWriteStale(
   remoteSnapshot: RemoteNoteSnapshot | null | undefined,
-  queuedAt: string
+  queuedAt: string,
+  queuedLocalRevision?: number | null
 ) {
   if (!remoteSnapshot) {
     return false;
   }
 
-  const remoteTimestamp = new Date(
-    remoteSnapshot.updatedAt ?? remoteSnapshot.createdAt ?? ''
-  ).getTime();
-  const queuedTimestamp = new Date(queuedAt).getTime();
-
-  return (
-    Number.isFinite(remoteTimestamp) &&
-    Number.isFinite(queuedTimestamp) &&
-    remoteTimestamp > queuedTimestamp
+  return isNoteCurrencyOlder(
+    {
+      timestamp: queuedAt,
+      localRevision: queuedLocalRevision,
+    },
+    {
+      createdAt: remoteSnapshot.createdAt,
+      updatedAt: remoteSnapshot.updatedAt,
+      localRevision: remoteSnapshot.localRevision,
+    }
   );
+}
+
+function getQueuedLocalRevision(item: SyncQueueItem) {
+  if (!item.payload?.trim()) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(item.payload) as { localRevision?: unknown };
+    return typeof parsed.localRevision === 'number' && Number.isFinite(parsed.localRevision)
+      ? parsed.localRevision
+      : null;
+  } catch {
+    return null;
+  }
 }
 
 async function markItemFailed(
@@ -2218,7 +2261,7 @@ async function flushPendingQueueToSupabase(
 
         if (change.operation === 'delete') {
           const remoteSnapshot = remoteNoteSnapshots.get(change.entityId) ?? null;
-          if (isQueuedWriteStale(remoteSnapshot, change.createdAt)) {
+          if (isQueuedWriteStale(remoteSnapshot, change.createdAt, getQueuedLocalRevision(change))) {
             syncedNoteIds.add(change.entityId);
             await syncRepository.markDone(change.id, leaseToken);
             processedCount += 1;
@@ -2238,7 +2281,7 @@ async function flushPendingQueueToSupabase(
             await deleteRemoteNote(userId, change.entityId);
           } else {
             const remoteSnapshot = remoteNoteSnapshots.get(note.id) ?? null;
-            if (isQueuedWriteStale(remoteSnapshot, change.createdAt)) {
+            if (isQueuedWriteStale(remoteSnapshot, change.createdAt, getQueuedLocalRevision(change))) {
               syncedNoteIds.add(note.id);
               await syncRepository.markDone(change.id, leaseToken);
               processedCount += 1;
@@ -2416,7 +2459,7 @@ async function mergeRemoteNotesFromSupabase(
 
       const existingLocalNote =
         localNoteMap.get(row.id) ?? (await getNoteByIdForScope(row.id, ownerScope));
-      if (existingLocalNote && getSyncTimestamp(existingLocalNote) >= getSyncTimestamp(row)) {
+      if (existingLocalNote && isLocalNoteAtLeastAsCurrentAsRemote(existingLocalNote, row)) {
         noteCursor = buildRemoteNoteCursor(row) ?? noteCursor;
         continue;
       }

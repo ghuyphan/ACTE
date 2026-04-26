@@ -18,7 +18,7 @@ Noto has a strong local-first shape and a lot of recent hardening work is visibl
 
 ### 1. Bind all remote media paths to their owner before reads or deletes
 
-**Status:** Mostly addressed locally by `supabase/migrations/20260426120000_harden_media_path_ownership.sql`, owner-prefixed upload paths, and delete-account path filtering. Still add SQL/RLS integration tests before treating this as fully closed.
+**Status:** Addressed locally by `supabase/migrations/20260426120000_harden_media_path_ownership.sql`, owner-prefixed upload paths, stricter client/edge path guards, and regression coverage for unsafe/cross-owner paths plus current migration ownership constraints.
 
 **Area:** Supabase storage, RLS, account deletion, sharing  
 **Evidence:**
@@ -63,7 +63,7 @@ Noto has a strong local-first shape and a lot of recent hardening work is visibl
 
 ### 3. Make sync writes optimistic instead of stale-snapshot overwrites
 
-**Status:** Partially addressed locally for incoming note snapshots by skipping older `updated_at` upserts. Full optimistic local revisions and targeted sync metadata patches remain future work.
+**Status:** Further addressed locally with a durable `local_revision` field in SQLite and Supabase notes. Sync now serializes local revisions, imports same-timestamp remote edits when their revision is newer, and uses queued revision metadata as an additional stale-write guard. Targeted sync metadata patches remain future work.
 
 **Area:** local database, sync queue, offline correctness  
 **Evidence:**
@@ -89,6 +89,8 @@ Noto has a strong local-first shape and a lot of recent hardening work is visibl
 
 ### 4. Fix local read-modify-write races in note mutations
 
+**Status:** Addressed locally in `services/database.ts`; `updateNote` and `toggleFavorite` read their base note rows inside the serialized write transaction and increment a persisted local revision for conflict-aware sync.
+
 **Area:** SQLite mutation model  
 **Evidence:**
 
@@ -106,6 +108,8 @@ Noto has a strong local-first shape and a lot of recent hardening work is visibl
 - Return a conflict result when `WHERE id = ? AND owner_uid = ? AND local_revision = ?` updates zero rows.
 
 ### 5. Route every database write through one operation queue
+
+**Status:** Addressed locally in `services/database.ts`; direct Android database operations now wait behind active transactions, and transactions use the raw connection internally so transaction-scoped statements do not deadlock on the outer operation queue.
 
 **Area:** SQLite isolation, Android stability  
 **Evidence:**
@@ -218,6 +222,8 @@ Noto has a strong local-first shape and a lot of recent hardening work is visibl
 
 ### 12. Fix feed-card memo comparison for synced photo URIs
 
+**Status:** Addressed locally in `components/home/NotesFeed.tsx`; photo-card memo comparison now includes `photoSyncedLocalUri`, with a regression test covering sync hydration of a display URI.
+
 **Area:** frontend rendering correctness  
 **Evidence:** `components/home/NotesFeed.tsx:65` compares a subset of note media fields, while display URI resolution can use `photoSyncedLocalUri`.
 
@@ -230,6 +236,8 @@ Noto has a strong local-first shape and a lot of recent hardening work is visibl
 - Add a regression test where `photoSyncedLocalUri` changes without `photoLocalUri`.
 
 ### 13. Make note and shared-post cards' main visual surface actionable
+
+**Status:** Addressed locally in `components/home/MemoryCardPrimitives.tsx`; note and shared-post visual cards are now full-surface accessible press targets, while footer export/detail and status badges remain separate controls.
 
 **Area:** UX, accessibility  
 **Evidence:** `components/home/MemoryCardPrimitives.tsx:558` limits primary open action to small metadata/chevron controls.
@@ -244,6 +252,8 @@ Noto has a strong local-first shape and a lot of recent hardening work is visibl
 
 ### 14. Scope or clear Android tab search state
 
+**Status:** Addressed locally in `components/screens/search/SearchScreen.tsx`; Android tab search query is cleared on search-screen blur, with regression coverage in `__tests__/searchScreen.test.tsx`.
+
 **Area:** navigation state  
 **Evidence:** `hooks/useAndroidTabSearchState.ts:8` uses a process-global singleton; `clearAndroidTabSearch` exists but is not wired.
 
@@ -256,7 +266,7 @@ Noto has a strong local-first shape and a lot of recent hardening work is visibl
 
 ### 15. Add a unique constraint for sync queue coalescing
 
-**Status:** Addressed locally in `services/database.ts` and `services/syncService.ts`; queue coalescing now uses a partial unique index and atomic `ON CONFLICT` updates. Still worth stress-testing under concurrent enqueue pressure.
+**Status:** Addressed locally in `services/database.ts` and `services/syncService.ts`; queue coalescing now uses a partial unique index and atomic `ON CONFLICT` updates, with regression coverage pinning the migration and enqueue SQL shape.
 
 **Area:** sync queue correctness  
 **Evidence:** `services/database.ts:1071` creates a non-unique `(owner_uid, coalesce_key)` index; enqueue does select-then-insert/update at `services/database.ts:431`.
@@ -270,7 +280,7 @@ Noto has a strong local-first shape and a lot of recent hardening work is visibl
 
 ### 16. Enable SQLite foreign keys on every connection
 
-**Status:** Addressed locally in `services/database.ts` by enabling foreign keys after database open. Add a cascade regression test when touching related cleanup code.
+**Status:** Addressed locally in `services/database.ts` by enabling foreign keys after database open, with regression coverage that pins the connection-level PRAGMA during initialization.
 
 **Area:** local persistence integrity  
 **Evidence:** `services/database.ts:659` sets WAL but not `PRAGMA foreign_keys = ON`; tables declare cascades around `services/database.ts:696`.
@@ -285,7 +295,7 @@ Noto has a strong local-first shape and a lot of recent hardening work is visibl
 
 ### 17. Make release build plugin failures fail fast
 
-**Status:** Addressed locally for widget/native-source checks and widget entitlement mutation scope. Add release/prebuild assertions so this stays covered.
+**Status:** Addressed locally for widget/native-source checks and widget entitlement mutation scope, with release/prebuild regression coverage for Android widget sources, Live Photo native sources, Expo Widgets bundle copying, and iOS widget entitlement settings.
 
 **Area:** native build reliability  
 **Evidence:**
@@ -333,6 +343,8 @@ Noto has a strong local-first shape and a lot of recent hardening work is visibl
 
 ### 20. Sanitize native privacy logs
 
+**Status:** Addressed locally in `modules/noto-subject-cutout/android/src/main/java/expo/modules/notosubjectcutout/NotoSubjectCutoutModule.kt`; verbose source-path/error logging is debug-only, release logs use error categories, and the module explicitly generates `BuildConfig`.
+
 **Area:** privacy, production diagnostics  
 **Evidence:** `modules/noto-subject-cutout/android/src/main/java/expo/modules/notosubjectcutout/NotoSubjectCutoutModule.kt:85` logs local source paths and errors.
 
@@ -363,9 +375,13 @@ Suggested extraction order:
 
 ### Centralize clocks and timers
 
+**Status:** Addressed locally for the home feed by adding a shared relative-time clock provider; memory cards now reuse the feed clock instead of each starting their own minute timer.
+
 `useRelativeTimeNow` creates one timer per mounted card. Move to a screen-level clock and pass `now` into cards, or provide a shared relative-time context. This reduces background timer churn in long feeds.
 
 ### Split state and actions contexts
+
+**Status:** Addressed locally in `hooks/state/useNotesStore.tsx`; notes state and actions now have separate contexts while `useNotesStore()` remains backward compatible, with regression coverage for action-only consumers.
 
 `hooks/state/useNotesStore.tsx:540` returns a fresh state/actions object. Screens that only need actions still re-render when notes change. Split into state and actions contexts, or use selector-based subscriptions for high-churn screens.
 

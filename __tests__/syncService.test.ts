@@ -49,6 +49,7 @@ type NoteRecord = {
   isFavorite: boolean;
   createdAt: string;
   updatedAt: string | null;
+  localRevision?: number;
 };
 
 let queueRows: QueueRow[] = [];
@@ -1732,6 +1733,73 @@ describe('syncService', () => {
         id: 'note-conflict',
         content: 'newer remote edit',
         updatedAt: '2026-03-11T00:00:00.000Z',
+      })
+    );
+  });
+
+  it('uses remote local revision to break same-timestamp queued write conflicts', async () => {
+    await AsyncStorage.setItem('sync.lastRemoteCursor.user-1', '2026-03-09T00:00:00.000Z');
+    localNotesStore = [
+      {
+        ...createTextNote('note-revision-conflict', 'local edit at same time'),
+        updatedAt: '2026-03-11T00:00:00.000Z',
+        localRevision: 2,
+      },
+    ];
+    mockRemoteNotes.set('note-revision-conflict', {
+      id: 'note-revision-conflict',
+      user_id: 'user-1',
+      type: 'text',
+      content: 'remote edit at same time',
+      photo_path: null,
+      has_doodle: false,
+      doodle_strokes_json: null,
+      has_stickers: false,
+      sticker_placements_json: null,
+      location_name: 'Da Nang',
+      prompt_id: null,
+      prompt_text_snapshot: null,
+      prompt_answer: null,
+      mood_emoji: null,
+      note_color: null,
+      latitude: 16.06,
+      longitude: 108.22,
+      radius: 150,
+      is_favorite: false,
+      created_at: '2026-03-09T00:00:00.000Z',
+      updated_at: '2026-03-11T00:00:00.000Z',
+      local_revision: 3,
+      synced_at: '2026-03-11T00:00:00.000Z',
+    });
+
+    await getSyncService().recordChange({
+      type: 'update',
+      entity: 'note',
+      entityId: 'note-revision-conflict',
+      payload: { content: 'local edit at same time', localRevision: 2 },
+      timestamp: '2026-03-11T00:00:00.000Z',
+    });
+
+    const result = await syncNotes(syncUser, localNotesStore, { mode: 'incremental' });
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        status: 'success',
+        importedCount: 1,
+      })
+    );
+    expect(queueRows).toHaveLength(0);
+    expect(mockRemoteNotes.get('note-revision-conflict')).toEqual(
+      expect.objectContaining({
+        content: 'remote edit at same time',
+        local_revision: 3,
+      })
+    );
+    expect(localNotesStore[0]).toEqual(
+      expect.objectContaining({
+        id: 'note-revision-conflict',
+        content: 'remote edit at same time',
+        localRevision: 3,
       })
     );
   });

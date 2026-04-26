@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
-import { Tabs } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import AndroidFloatingTabBar from './AndroidFloatingTabBar';
+import Tabs from './SafeExpoTabs';
 import { getAppTabDefinitions } from './tabConfig';
 import { useTheme } from '../../hooks/useTheme';
 

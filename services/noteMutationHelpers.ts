@@ -109,5 +109,6 @@ export function mergeNotePatch(note: Note, updates: NoteUpdates, updatedAt = new
     stickerPlacementsJson:
       updates.stickerPlacementsJson !== undefined ? updates.stickerPlacementsJson : note.stickerPlacementsJson ?? null,
     updatedAt,
+    localRevision: (note.localRevision ?? 0) + 1,
   };
 }

@@ -14,6 +14,13 @@ import {
 } from '../../services/startupRouting';
 import { registerSocialPushBackgroundTaskAsync } from '../../utils/backgroundSocialPush';
 import { scheduleOnIdle } from '../../utils/scheduleOnIdle';
+import { withTimeout } from '../../utils/timeout';
+
+const DATABASE_STARTUP_TIMEOUT_MS = 12000;
+
+function waitForDatabaseStartup() {
+  return withTimeout(getDB(), DATABASE_STARTUP_TIMEOUT_MS, new Error('database-init-timeout'));
+}
 
 export function useAppStartupBootstrap() {
   const [startupError, setStartupError] = useState<string | null>(null);
@@ -83,7 +90,7 @@ export function useAppStartupBootstrap() {
       setIsRecovering(true);
     }
 
-    getDB()
+    waitForDatabaseStartup()
       .then(() => {
         if (cancelled) {
           return;
@@ -105,7 +112,11 @@ export function useAppStartupBootstrap() {
         console.error('Database init failed:', err);
         if (!cancelled) {
           setIsDatabaseReady(false);
-          setStartupError('database-init-failed');
+          setStartupError(
+            err instanceof Error && err.message === 'database-init-timeout'
+              ? 'database-init-timeout'
+              : 'database-init-failed'
+          );
           setIsRecovering(false);
         }
       });

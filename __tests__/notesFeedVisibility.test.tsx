@@ -26,6 +26,13 @@ const mockTextMemoryCard = jest.fn(
     </View>
   )
 );
+const mockImageMemoryCard = jest.fn(
+  ({ imageUrl }: { imageUrl?: string }) => (
+    <View>
+      <Text testID="mock-image-memory-card-uri">{imageUrl ?? ''}</Text>
+    </View>
+  )
+);
 
 jest.mock('../hooks/useTheme', () => ({
   useTheme: () => ({
@@ -37,6 +44,11 @@ jest.mock('../hooks/useTheme', () => ({
   }),
 }));
 
+jest.mock('../hooks/useRelativeTimeNow', () => ({
+  RelativeTimeNowProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  useRelativeTimeNow: () => new Date('2026-04-10T04:00:00.000Z'),
+}));
+
 jest.mock('../components/notes/TextMemoryCard', () => {
   const React = require('react');
   return function MockTextMemoryCard(props: any) {
@@ -45,18 +57,87 @@ jest.mock('../components/notes/TextMemoryCard', () => {
 });
 
 jest.mock('../components/notes/ImageMemoryCard', () => {
-  const React = require('react');
-  const { View } = require('react-native');
-  return function MockImageMemoryCard() {
-    return <View />;
+  return function MockImageMemoryCard(props: any) {
+    return mockImageMemoryCard(props);
   };
 });
 
 beforeEach(() => {
   mockTextMemoryCard.mockClear();
+  mockImageMemoryCard.mockClear();
 });
 
 describe('NotesFeed capture visibility', () => {
+  it('rerenders photo cards when sync hydrates a display URI', () => {
+    const basePhotoNote = {
+      id: 'note-photo',
+      type: 'photo',
+      content: '',
+      photoLocalUri: null,
+      photoSyncedLocalUri: null,
+      caption: null,
+      locationName: 'Cafe',
+      latitude: 0,
+      longitude: 0,
+      radius: 150,
+      isFavorite: false,
+      createdAt: '2026-03-19T00:00:00.000Z',
+      updatedAt: null,
+    };
+    const onOpenNote = jest.fn();
+    const onOpenSharedPost = jest.fn();
+    const colors = {
+      primary: '#FFC107',
+      text: '#1C1C1E',
+      secondaryText: '#8E8E93',
+      danger: '#FF3B30',
+      card: '#FFFFFF',
+    };
+    const t = ((key: string, fallback?: string) => fallback ?? key) as any;
+    const captureHeader = <View testID="capture-header" />;
+    const view = render(
+      <NotesFeed
+        flatListRef={{ current: null }}
+        captureHeader={captureHeader}
+        captureMode="camera"
+        notes={[basePhotoNote] as any}
+        sharedPosts={[]}
+        refreshing={false}
+        onRefresh={jest.fn()}
+        topInset={0}
+        snapHeight={700}
+        onOpenNote={onOpenNote}
+        onOpenSharedPost={onOpenSharedPost}
+        colors={colors}
+        t={t}
+      />
+    );
+
+    expect(view.getByTestId('mock-image-memory-card-uri')).toHaveTextContent('');
+
+    view.rerender(
+      <NotesFeed
+        flatListRef={{ current: null }}
+        captureHeader={captureHeader}
+        captureMode="camera"
+        notes={[{ ...basePhotoNote, photoSyncedLocalUri: 'file:///synced/photo.jpg' }] as any}
+        sharedPosts={[]}
+        refreshing={false}
+        onRefresh={jest.fn()}
+        topInset={0}
+        snapHeight={700}
+        onOpenNote={onOpenNote}
+        onOpenSharedPost={onOpenSharedPost}
+        colors={colors}
+        t={t}
+      />
+    );
+
+    expect(view.getByTestId('mock-image-memory-card-uri')).toHaveTextContent(
+      'file:///synced/photo.jpg'
+    );
+  });
+
   it('marks only the settled centered card as active', () => {
     const view = render(
       <NotesFeed

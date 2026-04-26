@@ -1,6 +1,11 @@
 import React from 'react';
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
-import { NoteMemoryCard, SharedPostMemoryCard } from '../components/home/MemoryCardPrimitives';
+import {
+  getNoteMemoryCardRenderSignature,
+  getSharedPostMemoryCardRenderSignature,
+  NoteMemoryCard,
+  SharedPostMemoryCard,
+} from '../components/home/MemoryCardPrimitives';
 
 const mockRequestSavePermission = jest.fn();
 const mockCaptureViewAsImage = jest.fn();
@@ -190,6 +195,34 @@ beforeEach(() => {
 });
 
 describe('SharedPostMemoryCard', () => {
+  it('includes visual and metadata fields in the shared-post render signature', () => {
+    const basePost = {
+      id: 'shared-1',
+      type: 'photo',
+      text: 'Shared memory',
+      photoLocalUri: 'file:///local.jpg',
+      photoPath: 'user-1/shared-1.jpg',
+      isLivePhoto: true,
+      pairedVideoLocalUri: 'file:///local.mov',
+      pairedVideoPath: 'user-1/shared-1.mov',
+      doodleStrokesJson: null,
+      hasStickers: false,
+      stickerPlacementsJson: null,
+      noteColor: null,
+      placeName: 'District 1',
+      createdAt: '2026-04-10T02:00:00.000Z',
+      authorDisplayName: 'Lan',
+      authorPhotoURLSnapshot: null,
+    } as any;
+
+    expect(getSharedPostMemoryCardRenderSignature(basePost)).not.toBe(
+      getSharedPostMemoryCardRenderSignature({
+        ...basePost,
+        pairedVideoPath: 'user-1/shared-1-updated.mov',
+      })
+    );
+  });
+
   it('formats timestamps the same way as note cards', () => {
     const post = {
       id: 'shared-1',
@@ -238,6 +271,40 @@ describe('SharedPostMemoryCard', () => {
 });
 
 describe('NoteMemoryCard', () => {
+  it('includes visual and metadata fields in the note render signature', () => {
+    const baseNote = {
+      id: 'note-1',
+      type: 'photo',
+      content: 'file:///photo.jpg',
+      caption: null,
+      photoLocalUri: 'file:///photo.jpg',
+      photoSyncedLocalUri: null,
+      photoRemoteBase64: null,
+      isLivePhoto: true,
+      pairedVideoLocalUri: 'file:///photo.mov',
+      pairedVideoSyncedLocalUri: null,
+      pairedVideoRemotePath: null,
+      captureVariant: 'single',
+      dualComposedPhotoLocalUri: null,
+      locationName: 'District 1',
+      createdAt: '2026-04-10T02:00:00.000Z',
+      isFavorite: false,
+      moodEmoji: null,
+      noteColor: null,
+      hasDoodle: false,
+      doodleStrokesJson: null,
+      hasStickers: false,
+      stickerPlacementsJson: null,
+    } as any;
+
+    expect(getNoteMemoryCardRenderSignature(baseNote)).not.toBe(
+      getNoteMemoryCardRenderSignature({
+        ...baseNote,
+        photoSyncedLocalUri: 'file:///synced-photo.jpg',
+      })
+    );
+  });
+
   it('shows the shared badge for a text note shared by me', () => {
     const note = {
       id: 'note-1',
@@ -483,7 +550,7 @@ describe('NoteMemoryCard', () => {
     expect(getByText('District 5')).toBeTruthy();
     expect(getAllByRole('button')).toHaveLength(3);
 
-    fireEvent.press(getByLabelText('Open note details for District 5'));
+    fireEvent.press(getByTestId('note-memory-visual-action'));
     fireEvent.press(getByLabelText('Open note details'));
 
     expect(onPress).toHaveBeenCalledTimes(2);
@@ -701,7 +768,7 @@ describe('SharedPostMemoryCard interactions', () => {
     expect(getByTestId('shared-post-card-visual')).toBeTruthy();
     expect(getByText('District 3')).toBeTruthy();
 
-    fireEvent.press(getByLabelText('Open shared post details for District 3'));
+    fireEvent.press(getByTestId('shared-post-memory-visual-action'));
 
     expect(onPress).toHaveBeenCalledTimes(1);
   });

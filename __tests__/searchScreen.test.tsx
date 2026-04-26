@@ -1,9 +1,16 @@
 import React from 'react';
-import { act, render, waitFor } from '@testing-library/react-native';
+import { act, render, renderHook, waitFor } from '@testing-library/react-native';
+import { Platform } from 'react-native';
 import { FeedFocusProvider } from '../hooks/useFeedFocus';
+import {
+  clearAndroidTabSearch,
+  setAndroidTabSearchQuery,
+  useAndroidTabSearchQuery,
+} from '../hooks/useAndroidTabSearchState';
 
 const mockSearchBarProps: { onChangeText?: (event: { nativeEvent: { text: string } }) => void } = {};
 const mockStackScreenOptions: any[] = [];
+let mockLatestFocusCleanup: (() => void) | undefined;
 type MockNote = {
   id: string;
   type: 'photo' | 'text';
@@ -85,6 +92,21 @@ jest.mock('expo-router', () => {
         mockSearchBarProps.onChangeText = props.onChangeText;
         return <TextInput testID="search-bar" />;
       },
+    },
+  };
+});
+
+jest.mock('@react-navigation/native', () => {
+  const React = require('react');
+  return {
+    useFocusEffect: (callback: () => void | (() => void)) => {
+      React.useEffect(() => {
+        mockLatestFocusCleanup = callback() ?? undefined;
+        return () => {
+          mockLatestFocusCleanup?.();
+          mockLatestFocusCleanup = undefined;
+        };
+      }, [callback]);
     },
   };
 });
@@ -186,6 +208,8 @@ import SearchScreen from '../app/(tabs)/search/index';
 describe('SearchScreen', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    clearAndroidTabSearch();
+    mockLatestFocusCleanup = undefined;
     mockStackScreenOptions.length = 0;
   });
 
@@ -256,5 +280,33 @@ describe('SearchScreen', () => {
     });
 
     consoleWarnSpy.mockRestore();
+  });
+
+  it('clears the Android tab search query when the search screen loses focus', () => {
+    const originalPlatform = Platform.OS;
+    Platform.OS = 'android';
+
+    try {
+      act(() => {
+        setAndroidTabSearchQuery('coffee');
+      });
+
+      const { result } = renderHook(() => useAndroidTabSearchQuery());
+      expect(result.current).toBe('coffee');
+
+      render(
+        <FeedFocusProvider>
+          <SearchScreen />
+        </FeedFocusProvider>
+      );
+
+      act(() => {
+        mockLatestFocusCleanup?.();
+      });
+
+      expect(result.current).toBe('');
+    } finally {
+      Platform.OS = originalPlatform;
+    }
   });
 });

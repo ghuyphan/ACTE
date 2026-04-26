@@ -281,6 +281,7 @@ const withCustomWidgetSwift = (config) =>
 module.exports = withCustomWidgetSwift;
 module.exports.__internal = {
   copyWidgetLocalizationResources,
+  enableWidgetEntitlementsModification,
   getWidgetDisplayName,
   setWidgetDisplayName,
 };

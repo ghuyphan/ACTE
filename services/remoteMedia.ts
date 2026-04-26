@@ -278,6 +278,7 @@ export async function uploadPhotoToStorage(
     return null;
   }
 
+  assertSafeStorageUploadPath(bucket, path);
   const preparedPhoto = await optimizePhotoForUpload(photoUri);
   return uploadPreparedFileToStorage(
     bucket,
@@ -303,6 +304,7 @@ export async function uploadPairedVideoToStorage(
     return null;
   }
 
+  assertSafeStorageUploadPath(bucket, path);
   const preparedVideo = await optimizePairedVideoForUpload(videoUri);
   return uploadPreparedFileToStorage(
     bucket,

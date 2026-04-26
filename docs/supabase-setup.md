@@ -46,6 +46,7 @@ The current checked-in migrations cover:
 - legacy room schema cleanup through `20260426123000_drop_legacy_room_schema.sql`
 - server-authoritative usage recomputation through `20260426133000_server_authoritative_user_usage.sql`
 - service-role social push throttling through `20260426140000_social_notification_rate_limits.sql`
+- usage daily-date cast fix through `20260426143000_fix_user_usage_daily_date_cast.sql`
 
 The backend storage surface now includes media and cleanup concerns for:
 

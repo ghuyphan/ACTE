@@ -47,12 +47,30 @@ const RESOURCE_MAPPINGS = [
   ['widgets/android/drawable/noto_widget_live_photo_icon.xml', 'app/src/main/res/drawable/noto_widget_live_photo_icon.xml'],
 ];
 
-function copyFileIfPresent(projectRoot, androidRoot, sourceRelativePath, targetRelativePath) {
-  const sourcePath = path.join(projectRoot, sourceRelativePath);
-  if (!fs.existsSync(sourcePath)) {
-    return;
-  }
+const SOURCE_MAPPINGS = [
+  [PROVIDER_SOURCE_PATH, PROVIDER_TARGET_PATH],
+  [MODULE_SOURCE_PATH, MODULE_TARGET_PATH],
+  [PACKAGE_SOURCE_PATH, PACKAGE_TARGET_PATH],
+  ...RESOURCE_MAPPINGS,
+];
 
+function getMissingWidgetSourcePaths(projectRoot) {
+  return SOURCE_MAPPINGS
+    .map(([sourceRelativePath]) => sourceRelativePath)
+    .filter((sourceRelativePath) => !fs.existsSync(path.join(projectRoot, sourceRelativePath)));
+}
+
+function assertWidgetSourceFiles(projectRoot) {
+  const missingSourcePaths = getMissingWidgetSourcePaths(projectRoot);
+  if (missingSourcePaths.length > 0) {
+    throw new Error(
+      `[withCustomAndroidWidget] Required Android widget source files are missing: ${missingSourcePaths.join(', ')}`
+    );
+  }
+}
+
+function copyRequiredFile(projectRoot, androidRoot, sourceRelativePath, targetRelativePath) {
+  const sourcePath = path.join(projectRoot, sourceRelativePath);
   const targetPath = path.join(androidRoot, targetRelativePath);
   fs.mkdirSync(path.dirname(targetPath), { recursive: true });
   fs.copyFileSync(sourcePath, targetPath);
@@ -164,12 +182,9 @@ const withCustomAndroidWidget = (config) =>
       const projectRoot = config.modRequest.projectRoot;
       const androidRoot = config.modRequest.platformProjectRoot;
 
-      copyFileIfPresent(projectRoot, androidRoot, PROVIDER_SOURCE_PATH, PROVIDER_TARGET_PATH);
-      copyFileIfPresent(projectRoot, androidRoot, MODULE_SOURCE_PATH, MODULE_TARGET_PATH);
-      copyFileIfPresent(projectRoot, androidRoot, PACKAGE_SOURCE_PATH, PACKAGE_TARGET_PATH);
-
-      for (const [sourceRelativePath, targetRelativePath] of RESOURCE_MAPPINGS) {
-        copyFileIfPresent(projectRoot, androidRoot, sourceRelativePath, targetRelativePath);
+      assertWidgetSourceFiles(projectRoot);
+      for (const [sourceRelativePath, targetRelativePath] of SOURCE_MAPPINGS) {
+        copyRequiredFile(projectRoot, androidRoot, sourceRelativePath, targetRelativePath);
       }
 
       patchMainApplication(androidRoot);
@@ -181,3 +196,8 @@ const withCustomAndroidWidget = (config) =>
   ]);
 
 module.exports = withCustomAndroidWidget;
+module.exports.__internal = {
+  assertWidgetSourceFiles,
+  getMissingWidgetSourcePaths,
+  SOURCE_MAPPINGS,
+};

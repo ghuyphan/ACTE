@@ -1,5 +1,14 @@
 import * as FileSystem from '../../utils/fileSystem';
-import { createContext, ReactNode, useCallback, useContext, useEffect, useRef, useState } from 'react';
+import {
+  createContext,
+  ReactNode,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { useAuth } from '../useAuth';
 import {
   CreateNoteInput,
@@ -38,14 +47,18 @@ import { scheduleWidgetDataUpdate } from '../../services/widgetService';
 import type { UpdateWidgetDataOptions } from '../../services/widgetService';
 import { scheduleOnIdle } from '../../utils/scheduleOnIdle';
 import { traceStartupAsync } from '../../utils/startupTrace';
+import { withTimeoutResult } from '../../utils/timeout';
 
 export type NotesLoadPhase = 'bootstrapping' | 'hydrating' | 'ready' | 'refreshing';
 
-interface NotesStoreValue {
+export interface NotesStateValue {
   notes: Note[];
   phase: NotesLoadPhase;
   loading: boolean;
   initialLoadComplete: boolean;
+}
+
+export interface NotesActionsValue {
   refreshNotes: (
     showLoading?: boolean,
     options?: { updateWidget?: boolean; syncGeofences?: boolean }
@@ -59,15 +72,20 @@ interface NotesStoreValue {
   getNoteById: (id: string) => Promise<Note | null>;
 }
 
-const NotesStoreContext = createContext<NotesStoreValue | undefined>(undefined);
+export interface NotesStoreValue extends NotesStateValue, NotesActionsValue {}
+
+const NotesStateContext = createContext<NotesStateValue | undefined>(undefined);
+const NotesActionsContext = createContext<NotesActionsValue | undefined>(undefined);
 const INITIAL_NOTES_BOOTSTRAP_LIMIT = 24;
 const INITIAL_NOTES_LOAD_RETRY_DELAY_MS = 900;
+const INITIAL_NOTES_STAGED_LOAD_TIMEOUT_MS = 2500;
+const INITIAL_NOTES_FULL_HYDRATION_TIMEOUT_MS = 4500;
 
 function resolveNotesScope(userUid: string | null | undefined) {
   return typeof userUid === 'string' && userUid.trim() ? userUid.trim() : LOCAL_NOTES_SCOPE;
 }
 
-function useNotesStoreValue(): NotesStoreValue {
+function useNotesStoreValue(): { state: NotesStateValue; actions: NotesActionsValue } {
   const { user, isReady: authReady } = useAuth();
   const [notes, setNotes] = useState<Note[]>([]);
   const [phase, setPhase] = useState<NotesLoadPhase>('bootstrapping');
@@ -199,6 +217,21 @@ function useNotesStoreValue(): NotesStoreValue {
       const requestId = ++refreshRequestIdRef.current;
       let didSucceed = false;
       let shouldRetryInitialLoad = false;
+      let shouldReleaseInitialLoadGate = false;
+
+      const isCurrentRefreshRequest = () =>
+        refreshRequestIdRef.current === requestId && activeScopeRef.current === scope;
+
+      const publishLoadedNotes = (nextNotes: Note[]) => {
+        notesRef.current = nextNotes;
+        setNotes(nextNotes);
+        if (options?.updateWidget) {
+          scheduleWidgetUpdate(nextNotes);
+        }
+        if (options?.syncGeofences) {
+          syncGeofencesForNotes('note refresh', nextNotes);
+        }
+      };
 
       try {
         if (showLoading) {
@@ -208,31 +241,96 @@ function useNotesStoreValue(): NotesStoreValue {
         }
 
         if (showLoading) {
-          const stagedNotes = await getNotesPageForScope(scope, {
+          const stagedNotesPromise = getNotesPageForScope(scope, {
             limit: INITIAL_NOTES_BOOTSTRAP_LIMIT,
           });
-          if (refreshRequestIdRef.current !== requestId || activeScopeRef.current !== scope) {
+          const stagedResult = await withTimeoutResult(
+            stagedNotesPromise,
+            INITIAL_NOTES_STAGED_LOAD_TIMEOUT_MS
+          );
+          if (!isCurrentRefreshRequest()) {
             return;
           }
 
-          notesRef.current = stagedNotes;
-          setNotes(stagedNotes);
+          if (stagedResult.status === 'timed-out') {
+            console.warn(
+              '[notes] Initial staged notes load timed out; releasing startup with current notes.'
+            );
+            void stagedNotesPromise
+              .then(async (stagedNotes) => {
+                if (!isCurrentRefreshRequest()) {
+                  return;
+                }
+
+                notesRef.current = stagedNotes;
+                setNotes(stagedNotes);
+
+                const allNotes = await getAllNotesForScope(scope);
+                if (!isCurrentRefreshRequest()) {
+                  return;
+                }
+
+                publishLoadedNotes(allNotes);
+                initialLoadRetryCountRef.current = 0;
+              })
+              .catch((error) => {
+                console.error('Failed to finish background note hydration:', error);
+              });
+
+            shouldReleaseInitialLoadGate = true;
+            return;
+          }
+
+          notesRef.current = stagedResult.value;
+          setNotes(stagedResult.value);
           setPhase('hydrating');
         }
 
-        const allNotes = await getAllNotesForScope(scope);
-        if (refreshRequestIdRef.current !== requestId || activeScopeRef.current !== scope) {
+        const allNotesPromise = getAllNotesForScope(scope);
+        if (showLoading) {
+          const hydrationResult = await withTimeoutResult(
+            allNotesPromise,
+            INITIAL_NOTES_FULL_HYDRATION_TIMEOUT_MS
+          );
+          if (!isCurrentRefreshRequest()) {
+            return;
+          }
+
+          if (hydrationResult.status === 'timed-out') {
+            console.warn(
+              '[notes] Initial full hydration timed out; releasing startup with staged notes.'
+            );
+            void allNotesPromise
+              .then((allNotes) => {
+                if (!isCurrentRefreshRequest()) {
+                  return;
+                }
+
+                publishLoadedNotes(allNotes);
+                initialLoadRetryCountRef.current = 0;
+              })
+              .catch((error) => {
+                console.error('Failed to finish background note hydration:', error);
+              });
+
+            shouldReleaseInitialLoadGate = true;
+            return;
+          }
+
+          publishLoadedNotes(hydrationResult.value);
+        } else {
+          const allNotes = await allNotesPromise;
+          if (!isCurrentRefreshRequest()) {
+            return;
+          }
+
+          publishLoadedNotes(allNotes);
+        }
+
+        if (!isCurrentRefreshRequest()) {
           return;
         }
 
-        notesRef.current = allNotes;
-        setNotes(allNotes);
-        if (options?.updateWidget) {
-          scheduleWidgetUpdate(allNotes);
-        }
-        if (options?.syncGeofences) {
-          syncGeofencesForNotes('note refresh', allNotes);
-        }
         didSucceed = true;
         initialLoadRetryCountRef.current = 0;
       } catch (error) {
@@ -249,8 +347,17 @@ function useNotesStoreValue(): NotesStoreValue {
           initialLoadRetryCountRef.current += 1;
           shouldRetryInitialLoad = true;
         }
+
+        shouldReleaseInitialLoadGate =
+          showLoading &&
+          !shouldRetryInitialLoad &&
+          refreshRequestIdRef.current === requestId &&
+          activeScopeRef.current === scope;
       } finally {
-        if (refreshRequestIdRef.current === requestId && (didSucceed || !showLoading)) {
+        if (
+          refreshRequestIdRef.current === requestId &&
+          (didSucceed || !showLoading || shouldReleaseInitialLoadGate)
+        ) {
           setPhase('ready');
         }
       }
@@ -423,6 +530,8 @@ function useNotesStoreValue(): NotesStoreValue {
       const nextNotes = replaceNoteInCollection(notesRef.current, id, (note) => ({
         ...note,
         isFavorite: newValue,
+        updatedAt: timestamp,
+        localRevision: (note.localRevision ?? 0) + 1,
       }));
       commitNotes(nextNotes);
       syncGeofencesForNotes('favorite change', nextNotes);
@@ -537,33 +646,80 @@ function useNotesStoreValue(): NotesStoreValue {
       : dbGetById(id);
   }, []);
 
+  const state = useMemo(
+    () => ({
+      notes,
+      phase,
+      loading,
+      initialLoadComplete,
+    }),
+    [initialLoadComplete, loading, notes, phase]
+  );
+
+  const actions = useMemo(
+    () => ({
+      refreshNotes,
+      createNote,
+      updateNote,
+      toggleFavorite,
+      searchNotes,
+      deleteNote,
+      deleteAllNotes,
+      getNoteById,
+    }),
+    [
+      createNote,
+      deleteAllNotes,
+      deleteNote,
+      getNoteById,
+      refreshNotes,
+      searchNotes,
+      toggleFavorite,
+      updateNote,
+    ]
+  );
+
   return {
-    notes,
-    phase,
-    loading,
-    initialLoadComplete,
-    refreshNotes,
-    createNote,
-    updateNote,
-    toggleFavorite,
-    searchNotes,
-    deleteNote,
-    deleteAllNotes,
-    getNoteById,
+    state,
+    actions,
   };
 }
 
 export function NotesProvider({ children }: { children: ReactNode }) {
-  const value = useNotesStoreValue();
-  return <NotesStoreContext.Provider value={value}>{children}</NotesStoreContext.Provider>;
+  const { state, actions } = useNotesStoreValue();
+  return (
+    <NotesActionsContext.Provider value={actions}>
+      <NotesStateContext.Provider value={state}>{children}</NotesStateContext.Provider>
+    </NotesActionsContext.Provider>
+  );
+}
+
+export function useNotesState() {
+  const context = useContext(NotesStateContext);
+  if (!context) {
+    throw new Error('useNotesState must be used within a NotesProvider');
+  }
+  return context;
+}
+
+export function useNotesActions() {
+  const context = useContext(NotesActionsContext);
+  if (!context) {
+    throw new Error('useNotesActions must be used within a NotesProvider');
+  }
+  return context;
 }
 
 export function useNotesStore() {
-  const context = useContext(NotesStoreContext);
-  if (!context) {
-    throw new Error('useNotesStore must be used within a NotesProvider');
-  }
-  return context;
+  const state = useNotesState();
+  const actions = useNotesActions();
+  return useMemo(
+    () => ({
+      ...state,
+      ...actions,
+    }),
+    [actions, state]
+  );
 }
 
 export const useNotes = useNotesStore;
