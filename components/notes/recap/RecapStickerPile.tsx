@@ -654,6 +654,7 @@ const RecapStickerPileContent = memo(function RecapStickerPileContent({
   const displayItems = useMemo(() => items, [items]);
   const positions = useMemo(() => getPilePositions(displayItems.length), [displayItems.length]);
   const [layout, setLayout] = useState({ width: 1, height: 176 });
+  const hasMeasuredLayout = layout.width > 1;
   const displayEntries = useMemo<PileDisplayEntry[]>(
     () => {
       const largestBaseSize = positions.reduce((largest, position) => Math.max(largest, position.size), 0);
@@ -736,7 +737,7 @@ const RecapStickerPileContent = memo(function RecapStickerPileContent({
           <Text style={[styles.title, { color: colors.androidTabShellInactive }]}>{title}</Text>
         </View>
         <View style={styles.canvas} onLayout={handleLayout}>
-          {displayEntries.map(({ item, metrics }, index) => (
+          {hasMeasuredLayout ? displayEntries.map(({ item, metrics }, index) => (
             <RecapBubble
               key={item.key}
               item={item}
@@ -747,7 +748,7 @@ const RecapStickerPileContent = memo(function RecapStickerPileContent({
               physicsState={physicsState}
               physicsStateIndex={index}
             />
-          ))}
+          )) : null}
         </View>
       </GlassView>
     ) : (
@@ -765,7 +766,7 @@ const RecapStickerPileContent = memo(function RecapStickerPileContent({
           <Text style={[styles.title, { color: colors.secondaryText }]}>{title}</Text>
         </View>
         <View style={styles.canvas} onLayout={handleLayout}>
-          {displayEntries.map(({ item, metrics }, index) => (
+          {hasMeasuredLayout ? displayEntries.map(({ item, metrics }, index) => (
             <RecapBubble
               key={item.key}
               item={item}
@@ -776,7 +777,7 @@ const RecapStickerPileContent = memo(function RecapStickerPileContent({
               physicsState={physicsState}
               physicsStateIndex={index}
             />
-          ))}
+          )) : null}
         </View>
       </View>
     )

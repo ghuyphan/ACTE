@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
-import React, { memo, useCallback, useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
+import React, { memo, useCallback, useMemo } from 'react';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
 import Animated, { useAnimatedStyle, withSpring, withTiming } from 'react-native-reanimated';
 import { Typography } from '../../../constants/theme';
@@ -38,10 +38,11 @@ interface RecapCalendarGridProps {
   selectedDayKeys?: string[];
   onSelectDay?: (dayKey: string) => void;
   compact?: boolean;
+  availableWidth?: number;
+  columnWidth?: number;
 }
 
 const DEFAULT_WEEKDAY_LABELS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
-const COMPACT_COLUMN_WIDTH = 56;
 const PHOTO_FRAME_BORDER_COLOR = '#FFFFFF';
 const PHOTO_BACKING_COLOR = '#FFF7EA';
 
@@ -429,9 +430,10 @@ function RecapCalendarGrid({
   selectedDayKeys = [],
   onSelectDay,
   compact = false,
+  availableWidth,
+  columnWidth,
 }: RecapCalendarGridProps) {
   const { colors } = useTheme();
-  const [calendarWidth, setCalendarWidth] = useState(0);
   const selectedDayKeySet = useMemo(() => new Set(selectedDayKeys), [selectedDayKeys]);
   const palette = useMemo<CalendarPalette>(
     () => ({
@@ -455,20 +457,11 @@ function RecapCalendarGrid({
       colors.text,
     ]
   );
-  const measuredCompact = calendarWidth > 0 ? calendarWidth / 7 < COMPACT_COLUMN_WIDTH : false;
-  const isCompact = compact || measuredCompact;
-  const columnHorizontalInset = isCompact ? 1 : 2.5;
-  const columnWidth =
-    calendarWidth > 0
-      ? Math.max((calendarWidth - columnHorizontalInset * 2 * 7) / 7, 0)
-      : undefined;
-  const handleCalendarLayout = useCallback((event: LayoutChangeEvent) => {
-    const nextWidth = event.nativeEvent.layout.width;
-    setCalendarWidth((currentWidth) => (currentWidth === nextWidth ? currentWidth : nextWidth));
-  }, []);
+  const isCompact = compact;
+  const gridWidthStyle = availableWidth ? { width: availableWidth } : null;
 
   return (
-    <View style={mergeStyles(styles.section, isCompact ? styles.sectionCompact : null)} onLayout={handleCalendarLayout}>
+    <View style={mergeStyles(styles.section, isCompact ? styles.sectionCompact : null, gridWidthStyle)}>
       <View style={styles.weekRow}>
         {weekDayLabels.map((label, index) => (
           <View

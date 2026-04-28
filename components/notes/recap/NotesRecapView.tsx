@@ -1,11 +1,14 @@
 import { memo, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import Reanimated, { FadeIn, FadeInDown, FadeInUp } from 'react-native-reanimated';
-import { Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useReducedMotion } from '../../../hooks/useReducedMotion';
 import { useTheme } from '../../../hooks/useTheme';
-import { useNotesRecapViewModel } from '../../../hooks/state/useNotesRecapViewModel';
+import {
+  useNotesRecapViewModel,
+  type PreparedNotesRecapData,
+} from '../../../hooks/state/useNotesRecapViewModel';
 import type { Note } from '../../../services/database';
 import { GlassView } from '../../ui/GlassView';
 import RecapCalendarGrid from './RecapCalendarGrid';
@@ -24,11 +27,13 @@ const NotesRecapView = memo(function NotesRecapView({
   bottomInset,
   isVisible = false,
   suspendPhysics = false,
+  preparedData,
 }: {
   notes: Note[];
   bottomInset: number;
   isVisible?: boolean;
   suspendPhysics?: boolean;
+  preparedData?: PreparedNotesRecapData | null;
 }) {
   const { t } = useTranslation();
   const { colors, isDark } = useTheme();
@@ -40,7 +45,10 @@ const NotesRecapView = memo(function NotesRecapView({
   const {
     activeMonthLabel,
     activeRecap,
+    calendarColumnWidth,
     calendarDays,
+    calendarInnerWidth,
+    calendarShellPadding,
     isCompactRecap,
     nextMonthDisabled,
     pileItems,
@@ -51,7 +59,8 @@ const NotesRecapView = memo(function NotesRecapView({
     selectDay,
     switchMonth,
     weekDayLabels,
-  } = useNotesRecapViewModel({ notes });
+    isPreparing,
+  } = useNotesRecapViewModel({ notes, preparedData, deferUntilPrepared: true });
   const [hasCompletedFirstReveal, setHasCompletedFirstReveal] = useState(
     process.env.NODE_ENV === 'test'
   );
@@ -81,6 +90,23 @@ const NotesRecapView = memo(function NotesRecapView({
 
   const shouldEnablePilePhysics = isVisible && hasCompletedFirstReveal && !suspendPhysics;
   const glassColorScheme = isDark ? 'dark' : 'light';
+
+  if (isPreparing) {
+    return (
+      <View
+        testID="notes-recap-preparing"
+        style={[
+          styles.recapScreen,
+          styles.recapPreparing,
+          {
+            paddingHorizontal: recapHorizontalPadding,
+          },
+        ]}
+      >
+        <ActivityIndicator size="large" color={colors.primary} />
+      </View>
+    );
+  }
 
   return (
     <View
@@ -185,9 +211,9 @@ const NotesRecapView = memo(function NotesRecapView({
                       styles.recapCalendarShell,
                       {
                         borderColor: shellBorderColor,
-                        paddingHorizontal: isCompactRecap ? 10 : 14,
-                        paddingTop: isCompactRecap ? 12 : 16,
-                        paddingBottom: isCompactRecap ? 8 : 10,
+                        paddingHorizontal: calendarShellPadding.horizontal,
+                        paddingTop: calendarShellPadding.top,
+                        paddingBottom: calendarShellPadding.bottom,
                       },
                     ]}
                     fallbackColor={shellBackgroundColor}
@@ -200,6 +226,8 @@ const NotesRecapView = memo(function NotesRecapView({
                       selectedDayKeys={selectedDayKeys}
                       onSelectDay={selectDay}
                       compact={isCompactRecap}
+                      availableWidth={calendarInnerWidth}
+                      columnWidth={calendarColumnWidth}
                     />
                   </GlassView>
                 ) : (
@@ -209,9 +237,9 @@ const NotesRecapView = memo(function NotesRecapView({
                       {
                         borderColor: shellBorderColor,
                         backgroundColor: shellBackgroundColor,
-                        paddingHorizontal: isCompactRecap ? 10 : 14,
-                        paddingTop: isCompactRecap ? 12 : 16,
-                        paddingBottom: isCompactRecap ? 8 : 10,
+                        paddingHorizontal: calendarShellPadding.horizontal,
+                        paddingTop: calendarShellPadding.top,
+                        paddingBottom: calendarShellPadding.bottom,
                       },
                     ]}
                   >
@@ -221,6 +249,8 @@ const NotesRecapView = memo(function NotesRecapView({
                       selectedDayKeys={selectedDayKeys}
                       onSelectDay={selectDay}
                       compact={isCompactRecap}
+                      availableWidth={calendarInnerWidth}
+                      columnWidth={calendarColumnWidth}
                     />
                   </View>
                 )}
@@ -236,6 +266,10 @@ const NotesRecapView = memo(function NotesRecapView({
 const styles = StyleSheet.create({
   recapScreen: {
     flex: 1,
+  },
+  recapPreparing: {
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   recapPinnedHeader: {
     gap: 18,

@@ -1,6 +1,10 @@
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 import * as ReactNative from 'react-native';
-import { useNotesRecapViewModel } from '../hooks/state/useNotesRecapViewModel';
+import {
+  useNotesRecapViewModel,
+  usePreparedNotesRecapData,
+} from '../hooks/state/useNotesRecapViewModel';
+import { resolveNotesRecapLayout } from '../constants/recapLayout';
 import type { Note } from '../services/database';
 
 let mockLanguage = 'en';
@@ -193,6 +197,29 @@ describe('useNotesRecapViewModel', () => {
     await waitFor(() => {
       expect(vietnameseResult.result.current.weekDayLabels).toEqual(['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN']);
     });
+  });
+
+  it('derives compact calendar geometry before first render', async () => {
+    const layout = resolveNotesRecapLayout(430);
+
+    expect(layout.isCompact).toBe(true);
+    expect(layout.calendarInnerWidth).toBe(382);
+    expect(layout.calendarColumnWidth).toBeCloseTo(382 / 7);
+  });
+
+  it('prepares recap data outside the presenter hook', async () => {
+    const notes = [buildNote()];
+
+    const { result } = renderHook(() =>
+      usePreparedNotesRecapData({ notes, enabled: true, immediate: true })
+    );
+
+    await waitFor(() => {
+      expect(result.current.data?.monthEntries).toHaveLength(1);
+    });
+
+    expect(result.current.data?.recapsByKey.has('2026-04')).toBe(true);
+    expect(result.current.isPreparing).toBe(false);
   });
 
   it('supports selecting multiple recap days at the same time', async () => {

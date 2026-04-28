@@ -22,6 +22,7 @@ import { DOODLE_ARTBOARD_FRAME } from '../../../constants/doodleLayout';
 import { useAuth } from '../../../hooks/useAuth';
 import { useFeedFocus } from '../../../hooks/useFeedFocus';
 import { useNotesStore } from '../../../hooks/useNotes';
+import { usePreparedNotesRecapData } from '../../../hooks/state/useNotesRecapViewModel';
 import { useSharedFeedStore } from '../../../hooks/useSharedFeed';
 import { useSyncStatus } from '../../../hooks/useSyncStatus';
 import { useTheme } from '../../../hooks/useTheme';
@@ -252,7 +253,6 @@ export default function NotesIndexScreen() {
   const { sharedPosts, loading: sharedLoading } = useSharedFeedStore();
   const { isInitialSyncPending, status: syncStatus } = useSyncStatus();
   const [mode, setMode] = useState<RecapMode>('all');
-  const [hasPreparedRecap, setHasPreparedRecap] = useState(process.env.NODE_ENV === 'test');
   const [showGridDecorations, setShowGridDecorations] = useState(process.env.NODE_ENV === 'test');
   const [isRecapPhysicsSuspended, setIsRecapPhysicsSuspended] = useState(false);
   const [visibleSharedPhotoIds, setVisibleSharedPhotoIds] = useState<string[]>([]);
@@ -319,37 +319,17 @@ export default function NotesIndexScreen() {
   const isBootstrapSyncing = syncStatus === 'syncing' && isInitialSyncPending && items.length === 0;
   const isLoading = ((loading || sharedLoading) && items.length === 0) || isBootstrapSyncing;
   const hasRecapNotes = notes.length > 0;
-  const shouldRenderRecap = hasRecapNotes && (hasPreparedRecap || mode === 'recap');
+  const shouldRenderRecap = hasRecapNotes && mode === 'recap';
+  const preparedRecap = usePreparedNotesRecapData({
+    notes,
+    enabled: hasRecapNotes && !isLoading,
+    immediate: mode === 'recap',
+  });
   useEffect(() => {
     if (!hasRecapNotes && mode !== 'all') {
       setMode('all');
     }
   }, [hasRecapNotes, mode]);
-
-  useEffect(() => {
-    if (!hasRecapNotes) {
-      setHasPreparedRecap(process.env.NODE_ENV === 'test');
-      return;
-    }
-
-    if (hasPreparedRecap || mode === 'recap') {
-      setHasPreparedRecap(true);
-      return;
-    }
-
-    if (process.env.NODE_ENV === 'test') {
-      setHasPreparedRecap(true);
-      return;
-    }
-
-    const idleHandle = scheduleOnIdle(() => {
-      setHasPreparedRecap(true);
-    }, { timeout: 220 });
-
-    return () => {
-      idleHandle.cancel();
-    };
-  }, [hasPreparedRecap, hasRecapNotes, mode]);
 
   useEffect(() => {
     if (process.env.NODE_ENV === 'test') {
@@ -610,6 +590,7 @@ export default function NotesIndexScreen() {
                     bottomInset={insets.bottom}
                     isVisible
                     suspendPhysics={isRecapPhysicsSuspended}
+                    preparedData={preparedRecap.data}
                   />
                 ) : null}
               </View>

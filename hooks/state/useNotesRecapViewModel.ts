@@ -5,7 +5,6 @@ import {
   useDeferredValue,
   useEffect,
   useMemo,
-  useRef,
   useState,
   type ComponentProps,
 } from 'react';
@@ -13,7 +12,7 @@ import { useTranslation } from 'react-i18next';
 import { useWindowDimensions } from 'react-native';
 import type { RecapCalendarDay } from '../../components/notes/recap/RecapCalendarGrid';
 import RecapStickerPile from '../../components/notes/recap/RecapStickerPile';
-import { Layout } from '../../constants/theme';
+import { resolveNotesRecapLayout } from '../../constants/recapLayout';
 import { useTheme } from '../useTheme';
 import {
   getCachedMonthlyRecaps,
@@ -32,6 +31,7 @@ import {
   type MonthlyRecapStickerUsage,
 } from '../../services/monthlyRecap';
 import { getNotePhotoUri } from '../../services/photoStorage';
+import { scheduleOnIdle } from '../../utils/scheduleOnIdle';
 
 interface NotesRecapCalendarModel {
   calendarDays: RecapCalendarDay[];
@@ -44,14 +44,30 @@ interface NotesRecapPileModel {
   items: ComponentProps<typeof RecapStickerPile>['items'];
 }
 
+export interface PreparedNotesRecapData {
+  monthEntries: CachedNotesRecapMonthEntry[];
+  noteById: Map<string, Note>;
+  recapsByKey: Map<string, MonthlyRecap>;
+  timeZone: string;
+}
+
+interface CachedNotesRecapMonthEntry extends CachedMonthlyRecapEntry {
+  monthEntry: ReturnType<typeof buildRecapMonthEntries>[number];
+}
+
 export interface UseNotesRecapViewModelOptions {
   notes: Note[];
+  preparedData?: PreparedNotesRecapData | null;
+  deferUntilPrepared?: boolean;
 }
 
 export interface UseNotesRecapViewModelResult {
   activeMonthLabel: string | null;
   activeRecap: MonthlyRecap | null;
   calendarDays: RecapCalendarDay[];
+  calendarColumnWidth: number;
+  calendarInnerWidth: number;
+  calendarShellPadding: ReturnType<typeof resolveNotesRecapLayout>['calendarShellPadding'];
   isCompactRecap: boolean;
   nextMonthDisabled: boolean;
   pileItems: ComponentProps<typeof RecapStickerPile>['items'];
@@ -62,6 +78,18 @@ export interface UseNotesRecapViewModelResult {
   selectDay: (dayKey: string) => void;
   switchMonth: (direction: 'previous' | 'next') => void;
   weekDayLabels: string[];
+  isPreparing: boolean;
+}
+
+export interface UsePreparedNotesRecapDataOptions {
+  notes: Note[];
+  enabled: boolean;
+  immediate?: boolean;
+}
+
+export interface UsePreparedNotesRecapDataResult {
+  data: PreparedNotesRecapData | null;
+  isPreparing: boolean;
 }
 
 function getRecapLocale(language: string) {
@@ -153,72 +181,169 @@ function buildStickerPileItemsFromUsage(
   }));
 }
 
-function areCachedMonthlyRecapMapsEqual(
-  current: Map<string, CachedMonthlyRecapEntry>,
-  next: Map<string, CachedMonthlyRecapEntry>
-) {
-  if (current.size !== next.size) {
-    return false;
+function buildPreparedNotesRecapData(
+  notes: Note[],
+  {
+    cachedRecapsByKey = new Map(),
+    monthWindow = 12,
+    timeZone,
+  }: {
+    cachedRecapsByKey?: Map<string, CachedMonthlyRecapEntry>;
+    monthWindow?: number;
+    timeZone: string;
   }
+): PreparedNotesRecapData {
+  const monthEntries = buildRecapMonthEntries(notes, { timeZone, monthWindow });
+  const noteById = new Map(notes.map((note) => [note.id, note] as const));
+  const recapsByKey = new Map<string, MonthlyRecap>();
+  const preparedMonthEntries: CachedNotesRecapMonthEntry[] = monthEntries.map((monthEntry) => {
+    const digest = buildMonthlyRecapDigest(monthEntry.notes);
+    const cachedEntry = cachedRecapsByKey.get(monthEntry.monthKey);
+    const recap =
+      cachedEntry && cachedEntry.digest === digest
+        ? cachedEntry.recap
+        : buildMonthlyRecapFromScopedNotes(monthEntry.notes, {
+            year: monthEntry.monthDate.getFullYear(),
+            month: monthEntry.monthDate.getMonth(),
+            timeZone,
+          });
 
-  for (const [monthKey, nextEntry] of next) {
-    const currentEntry = current.get(monthKey);
-    if (!currentEntry || currentEntry.digest !== nextEntry.digest) {
-      return false;
+    recapsByKey.set(monthEntry.monthKey, recap);
+
+    return {
+      digest,
+      recap,
+      monthEntry,
+    };
+  });
+
+  return {
+    monthEntries: preparedMonthEntries,
+    noteById,
+    recapsByKey,
+    timeZone,
+  };
+}
+
+export function usePreparedNotesRecapData({
+  notes,
+  enabled,
+  immediate = false,
+}: UsePreparedNotesRecapDataOptions): UsePreparedNotesRecapDataResult {
+  const timeZone = useMemo(
+    () => Intl.DateTimeFormat().resolvedOptions().timeZone ?? 'UTC',
+    []
+  );
+  const [state, setState] = useState<UsePreparedNotesRecapDataResult>({
+    data: null,
+    isPreparing: false,
+  });
+
+  useEffect(() => {
+    if (!enabled || notes.length === 0) {
+      setState((current) =>
+        current.data || current.isPreparing ? { data: null, isPreparing: false } : current
+      );
+      return;
     }
-  }
 
-  return true;
+    let cancelled = false;
+    let idleHandle: ReturnType<typeof scheduleOnIdle> | null = null;
+
+    setState((current) => ({ data: current.data, isPreparing: true }));
+
+    const prepare = () => {
+      const monthKeys = buildRecapMonthEntries(notes, { timeZone, monthWindow: 12 }).map(
+        (entry) => entry.monthKey
+      );
+
+      void getCachedMonthlyRecaps(monthKeys, { timeZone })
+        .catch((error) => {
+          console.warn('[notes-recap] Failed to load cached month recaps:', error);
+          return new Map<string, CachedMonthlyRecapEntry>();
+        })
+        .then((cachedRecapsByKey) => {
+          if (cancelled) {
+            return;
+          }
+
+          const nextData = buildPreparedNotesRecapData(notes, {
+            cachedRecapsByKey,
+            timeZone,
+          });
+          setState({ data: nextData, isPreparing: false });
+
+          const staleEntry = nextData.monthEntries.find((entry) => {
+            const cachedEntry = cachedRecapsByKey.get(entry.monthEntry.monthKey);
+            return !cachedEntry || cachedEntry.digest !== entry.digest;
+          });
+
+          if (staleEntry) {
+            void refreshCachedMonthlyRecapForMonthKey(staleEntry.monthEntry.monthKey, {
+              timeZone,
+            }).catch((error) => {
+              console.warn('[notes-recap] Failed to warm cached month recap:', error);
+            });
+          }
+        });
+    };
+
+    if (immediate) {
+      prepare();
+    } else {
+      idleHandle = scheduleOnIdle(prepare, { timeout: 220 });
+    }
+
+    return () => {
+      cancelled = true;
+      idleHandle?.cancel();
+    };
+  }, [enabled, immediate, notes, timeZone]);
+
+  return state;
 }
 
 export function useNotesRecapViewModel({
   notes,
+  preparedData,
+  deferUntilPrepared = false,
 }: UseNotesRecapViewModelOptions): UseNotesRecapViewModelResult {
   const { t, i18n } = useTranslation();
   const { colors } = useTheme();
   const { width } = useWindowDimensions();
   const [selectedDayKeys, setSelectedDayKeys] = useState<string[]>([]);
   const [activeMonthKey, setActiveMonthKey] = useState<string | null>(null);
-  const [cachedRecapsByKey, setCachedRecapsByKey] = useState<Map<string, CachedMonthlyRecapEntry>>(
-    () => new Map()
-  );
-  const cachedRecapsRef = useRef(cachedRecapsByKey);
-
-  useEffect(() => {
-    cachedRecapsRef.current = cachedRecapsByKey;
-  }, [cachedRecapsByKey]);
 
   const locale = useMemo(() => getRecapLocale(i18n.language), [i18n.language]);
-  const isCompactRecap = width < 390;
-  const recapHorizontalPadding = isCompactRecap ? 14 : Layout.screenPadding;
+  const recapLayout = useMemo(() => resolveNotesRecapLayout(width), [width]);
+  const isCompactRecap = recapLayout.isCompact;
+  const recapHorizontalPadding = recapLayout.horizontalPadding;
   const deferredNotes = useDeferredValue(notes);
   const timeZone = useMemo(
-    () => Intl.DateTimeFormat().resolvedOptions().timeZone ?? 'UTC',
-    []
+    () => preparedData?.timeZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone ?? 'UTC',
+    [preparedData?.timeZone]
   );
   const weekDayLabels = useMemo(() => buildWeekdayLabels(locale), [locale]);
   const todayKey = useMemo(() => {
     const today = new Date();
     return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
   }, []);
+  const fallbackPreparedData = useMemo(
+    () =>
+      preparedData || deferUntilPrepared
+        ? null
+        : buildPreparedNotesRecapData(deferredNotes, { timeZone }),
+    [deferUntilPrepared, deferredNotes, preparedData, timeZone]
+  );
+  const recapData = preparedData ?? fallbackPreparedData;
 
   const monthEntries = useMemo(
-    () => buildRecapMonthEntries(deferredNotes, { timeZone, monthWindow: 12 }),
-    [deferredNotes, timeZone]
+    () => recapData?.monthEntries.map((entry) => entry.monthEntry) ?? [],
+    [recapData]
   );
-  const noteById = useMemo(
-    () => new Map(deferredNotes.map((note) => [note.id, note] as const)),
-    [deferredNotes]
-  );
+  const noteById = useMemo(() => recapData?.noteById ?? new Map<string, Note>(), [recapData]);
   const monthKeys = useMemo(
     () => new Set(monthEntries.map((entry) => entry.monthKey)),
-    [monthEntries]
-  );
-  const monthDigestsByKey = useMemo(
-    () =>
-      new Map(
-        monthEntries.map((entry) => [entry.monthKey, buildMonthlyRecapDigest(entry.notes)] as const)
-      ),
     [monthEntries]
   );
   const activeMonthIndex = useMemo(
@@ -237,91 +362,18 @@ export function useNotesRecapViewModel({
       return null;
     }
 
-    const cachedEntry = cachedRecapsByKey.get(activeMonthEntry.monthKey);
-    const activeMonthDigest = monthDigestsByKey.get(activeMonthEntry.monthKey);
-    if (cachedEntry && cachedEntry.digest === activeMonthDigest) {
-      return cachedEntry.recap;
-    }
-
-    return buildMonthlyRecapFromScopedNotes(activeMonthEntry.notes, {
-      year: activeMonthEntry.monthDate.getFullYear(),
-      month: activeMonthEntry.monthDate.getMonth(),
-      timeZone,
-    });
-  }, [activeMonthEntry, cachedRecapsByKey, monthDigestsByKey, timeZone]);
-
-  useEffect(() => {
-    let cancelled = false;
-    const nextMonthKeys = monthEntries.map((entry) => entry.monthKey);
-
-    if (nextMonthKeys.length === 0) {
-      setCachedRecapsByKey(new Map());
-      return () => {
-        cancelled = true;
-      };
-    }
-
-    void getCachedMonthlyRecaps(nextMonthKeys, { timeZone })
-      .then((nextEntries) => {
-        if (!cancelled && !areCachedMonthlyRecapMapsEqual(cachedRecapsRef.current, nextEntries)) {
-          setCachedRecapsByKey(nextEntries);
-        }
-      })
-      .catch((error) => {
-        if (!cancelled) {
-          console.warn('[notes-recap] Failed to load cached month recaps:', error);
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [monthEntries, timeZone]);
-
-  useEffect(() => {
-    if (!activeMonthEntry) {
-      return;
-    }
-
-    const activeMonthDigest = monthDigestsByKey.get(activeMonthEntry.monthKey);
-    const cachedEntry = cachedRecapsByKey.get(activeMonthEntry.monthKey);
-    if (cachedEntry && cachedEntry.digest === activeMonthDigest) {
-      return;
-    }
-
-    let cancelled = false;
-
-    void refreshCachedMonthlyRecapForMonthKey(activeMonthEntry.monthKey, { timeZone })
-      .then((nextEntry) => {
-        if (cancelled || !nextEntry) {
-          return;
-        }
-
-        setCachedRecapsByKey((current) => {
-          const existingEntry = current.get(activeMonthEntry.monthKey);
-          if (existingEntry?.digest === nextEntry.digest) {
-            return current;
-          }
-
-          const nextMap = new Map(current);
-          nextMap.set(activeMonthEntry.monthKey, nextEntry);
-          return nextMap;
-        });
-      })
-      .catch((error) => {
-        if (!cancelled) {
-          console.warn('[notes-recap] Failed to warm cached month recap:', error);
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [activeMonthEntry, cachedRecapsByKey, monthDigestsByKey, timeZone]);
+    return recapData?.recapsByKey.get(activeMonthEntry.monthKey) ?? null;
+  }, [activeMonthEntry, recapData]);
 
   useEffect(() => {
     if (!activeRecap) {
-      setSelectedDayKeys((current) => (current.length > 0 ? [] : current));
+      if (selectedDayKeys.length > 0) {
+        setSelectedDayKeys([]);
+      }
+      return;
+    }
+
+    if (selectedDayKeys.length === 0) {
       return;
     }
 
@@ -329,11 +381,11 @@ export function useNotesRecapViewModel({
       activeRecap.days.filter((day) => day.noteCount > 0).map((day) => day.dateKey)
     );
 
-    setSelectedDayKeys((current) => {
-      const next = current.filter((dayKey) => validDayKeys.has(dayKey));
-      return next.length === current.length ? current : next;
-    });
-  }, [activeRecap]);
+    const nextSelectedDayKeys = selectedDayKeys.filter((dayKey) => validDayKeys.has(dayKey));
+    if (nextSelectedDayKeys.length !== selectedDayKeys.length) {
+      setSelectedDayKeys(nextSelectedDayKeys);
+    }
+  }, [activeRecap, selectedDayKeys]);
 
   useEffect(() => {
     const firstMonthKey = monthEntries[0]?.monthKey ?? null;
@@ -523,7 +575,11 @@ export function useNotesRecapViewModel({
     activeMonthLabel: activeRecap ? formatRecapMonthLabel(activeRecap.month.start, locale) : null,
     activeRecap,
     calendarDays: activeRecapCalendarModel?.calendarDays ?? [],
+    calendarColumnWidth: recapLayout.calendarColumnWidth,
+    calendarInnerWidth: recapLayout.calendarInnerWidth,
+    calendarShellPadding: recapLayout.calendarShellPadding,
     isCompactRecap,
+    isPreparing: deferUntilPrepared && !preparedData,
     nextMonthDisabled: activeMonthIndex <= 0,
     pileItems: activeRecapPileModel?.items ?? [],
     pileTitle: activeRecapPileModel?.title,
