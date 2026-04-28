@@ -222,7 +222,7 @@ describe('useSettingsScreenModel', () => {
         returnTo: '/(tabs)/settings',
       },
     });
-    expect(result.current.showSync).toBe(false);
+    expect(result.current.activeSettingsSheet).toBe(null);
   });
 
   it('routes signed-out account entry back to settings after auth', () => {
@@ -270,7 +270,7 @@ describe('useSettingsScreenModel', () => {
     });
 
     expect(mockRouterPush).not.toHaveBeenCalled();
-    expect(result.current.showSync).toBe(true);
+    expect(result.current.activeSettingsSheet).toBe('sync');
   });
 
   it('shows unavailable when auth is not available in the build', () => {

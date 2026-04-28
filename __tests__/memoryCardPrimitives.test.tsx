@@ -537,7 +537,7 @@ describe('NoteMemoryCard', () => {
       updatedAt: null,
     } as any;
 
-    const { getAllByRole, getByLabelText, getByTestId, getByText } = render(
+    const { getAllByLabelText, getAllByRole, getByTestId, getByText } = render(
       <NoteMemoryCard
         note={note}
         colors={colors}
@@ -551,7 +551,7 @@ describe('NoteMemoryCard', () => {
     expect(getAllByRole('button')).toHaveLength(3);
 
     fireEvent.press(getByTestId('note-memory-visual-action'));
-    fireEvent.press(getByLabelText('Open note details'));
+    fireEvent.press(getAllByLabelText('Open note details for District 5')[1]);
 
     expect(onPress).toHaveBeenCalledTimes(2);
   });

@@ -263,6 +263,20 @@ interface FeedbackState {
     token: number;
 }
 
+type PolaroidExportState = {
+    animationSuccess: boolean;
+    animationUri: string | null;
+    captureVisible: boolean;
+    exporting: boolean;
+};
+
+const initialPolaroidExportState: PolaroidExportState = {
+    animationSuccess: false,
+    animationUri: null,
+    captureVisible: false,
+    exporting: false,
+};
+
 interface NoteDetailSheetProps {
     noteId: string;
     visible: boolean;
@@ -306,10 +320,9 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
     const [pastePrompt, setPastePrompt] = useState<StickerPastePromptState>({ visible: false, x: CARD_SIZE / 2, y: CARD_SIZE / 2 });
     const [interactionFeedback, setInteractionFeedback] = useState<FeedbackState | null>(null);
     const [locationSelection, setLocationSelection] = useState<{ start: number; end: number } | undefined>(undefined);
-    const [polaroidExporting, setPolaroidExporting] = useState(false);
-    const [showPolaroidCapture, setShowPolaroidCapture] = useState(false);
-    const [polaroidAnimationUri, setPolaroidAnimationUri] = useState<string | null>(null);
-    const [polaroidAnimationSuccess, setPolaroidAnimationSuccess] = useState(false);
+    const [polaroidExportState, setPolaroidExportState] = useState<PolaroidExportState>(
+        initialPolaroidExportState
+    );
     const isSharedByMe = useMemo(
         () => (
             Boolean(
@@ -400,10 +413,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
         cleanupCapturedImage(polaroidTempUriRef.current);
         polaroidTempUriRef.current = null;
         polaroidReadyResolverRef.current = null;
-        setPolaroidAnimationUri(null);
-        setPolaroidAnimationSuccess(false);
-        setShowPolaroidCapture(false);
-        setPolaroidExporting(false);
+        setPolaroidExportState(initialPolaroidExportState);
     }, []);
 
     const handleChangeStickerPlacements = useCallback((
@@ -1756,21 +1766,24 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
     };
 
     const handleDownloadPolaroid = useCallback(async () => {
-        if (!note || isDeleting || isEditing || polaroidExporting) {
+        if (!note || isDeleting || isEditing || polaroidExportState.exporting) {
             return;
         }
 
         void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-        setPolaroidExporting(true);
-        setPolaroidAnimationSuccess(false);
-        setPolaroidAnimationUri(null);
+        setPolaroidExportState({
+            animationSuccess: false,
+            animationUri: null,
+            captureVisible: false,
+            exporting: true,
+        });
 
         let permissionStatus: SavePermissionStatus;
 
         try {
             permissionStatus = await requestSavePermission();
         } catch (error) {
-            setPolaroidExporting(false);
+            setPolaroidExportState((current) => ({ ...current, exporting: false }));
             if (error instanceof PolaroidExportError && error.code === 'requires-update') {
                 showPolaroidRequiresUpdateAlert();
                 return;
@@ -1787,12 +1800,12 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
         }
 
         if (permissionStatus !== 'granted') {
-            setPolaroidExporting(false);
+            setPolaroidExportState((current) => ({ ...current, exporting: false }));
             showPolaroidPermissionAlert(permissionStatus);
             return;
         }
 
-        setShowPolaroidCapture(true);
+        setPolaroidExportState((current) => ({ ...current, captureVisible: true }));
         await waitForPolaroidRenderReady();
         await delay(reduceMotionEnabled ? 60 : 140);
 
@@ -1801,10 +1814,16 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
         try {
             capturedUri = await captureViewAsImage(polaroidCaptureRef);
             polaroidTempUriRef.current = capturedUri;
-            setPolaroidAnimationUri(capturedUri);
+            setPolaroidExportState((current) => ({
+                ...current,
+                animationUri: capturedUri,
+            }));
 
             await savePolaroidToLibrary(capturedUri);
-            setPolaroidAnimationSuccess(true);
+            setPolaroidExportState((current) => ({
+                ...current,
+                animationSuccess: true,
+            }));
             void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         } catch (error) {
             console.warn('Polaroid export failed:', error);
@@ -1822,13 +1841,13 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
             );
             return;
         } finally {
-            setPolaroidExporting(false);
+            setPolaroidExportState((current) => ({ ...current, exporting: false }));
         }
     }, [
         isDeleting,
         isEditing,
         note,
-        polaroidExporting,
+        polaroidExportState.exporting,
         reduceMotionEnabled,
         resetPolaroidCaptureState,
         showPolaroidRequiresUpdateAlert,
@@ -1903,12 +1922,12 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
             onDelete={handleDelete}
             onDownloadPolaroid={handleDownloadPolaroid}
             onPolaroidAnimationFinished={handlePolaroidAnimationFinished}
-            polaroidAnimationSuccess={polaroidAnimationSuccess}
-            polaroidAnimationUri={polaroidAnimationUri}
+            polaroidAnimationSuccess={polaroidExportState.animationSuccess}
+            polaroidAnimationUri={polaroidExportState.animationUri}
             polaroidCaptureRef={polaroidCaptureRef}
-            polaroidExporting={polaroidExporting}
+            polaroidExporting={polaroidExportState.exporting}
             polaroidFallbackLocationLabel={t('noteDetail.unknownLocation', 'Unknown place')}
-            showPolaroidCapture={showPolaroidCapture}
+            showPolaroidCapture={polaroidExportState.captureVisible}
             scrollContainerRef={scrollContainerRef}
             showPremiumColorAlert={showPremiumColorAlert}
         />

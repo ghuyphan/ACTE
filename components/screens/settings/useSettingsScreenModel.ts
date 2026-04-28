@@ -22,6 +22,8 @@ import {
   resolveAppLanguageKey,
 } from '../../settings/settingsSelectionOptions';
 
+export type SettingsSheetKey = 'language' | 'appTheme' | 'theme' | 'haptics' | 'sync';
+
 function formatSyncTimestamp(dateString: string | null) {
   if (!dateString) {
     return null;
@@ -66,11 +68,15 @@ export function useSettingsScreenModel() {
   const legalLinkAvailability = useMemo(getLegalLinkAvailability, []);
   const legalLinkActions = useMemo(createLegalLinkActions, []);
 
-  const [showTheme, setShowTheme] = useState(false);
-  const [showAppTheme, setShowAppTheme] = useState(false);
-  const [showLanguage, setShowLanguage] = useState(false);
-  const [showHaptics, setShowHaptics] = useState(false);
-  const [showSync, setShowSync] = useState(false);
+  const [activeSettingsSheet, setActiveSettingsSheet] = useState<SettingsSheetKey | null>(null);
+
+  const openSettingsSheet = useCallback((sheet: SettingsSheetKey) => {
+    setActiveSettingsSheet(sheet);
+  }, []);
+
+  const closeSettingsSheet = useCallback(() => {
+    setActiveSettingsSheet(null);
+  }, []);
 
   const openAccountScreen = useCallback(() => {
     if (!isAuthAvailable) {
@@ -104,8 +110,8 @@ export function useSettingsScreenModel() {
       return;
     }
 
-    setShowSync(true);
-  }, [isAuthAvailable, openAccountScreen, user]);
+    openSettingsSheet('sync');
+  }, [isAuthAvailable, openAccountScreen, openSettingsSheet, user]);
 
   const themeLabel = getThemeLabel(theme, t);
   const appThemeLabel = getAppThemeLabel(appTheme, t);
@@ -354,6 +360,8 @@ export function useSettingsScreenModel() {
     appVersion,
     appThemeLabel,
     alertProps,
+    activeSettingsSheet,
+    closeSettingsSheet,
     colors,
     hapticsValue,
     insets,
@@ -367,26 +375,17 @@ export function useSettingsScreenModel() {
     notes,
     openAccountScreen,
     openPlusScreen,
+    openSettingsSheet,
     openSocialPushSettings,
     openSyncScreen,
     plusHint,
     plusValue,
     promptClearAll,
-    setShowHaptics,
-    setShowAppTheme,
-    setShowLanguage,
-    setShowSync,
-    setShowTheme,
-    showHaptics,
-    showAppTheme,
-    showLanguage,
     showSocialPushEntry: Boolean(
       user &&
       sharedFeedEnabled
     ),
     showSyncEntry: Boolean(isAuthAvailable),
-    showSync,
-    showTheme,
     socialPushHint,
     socialPushValue,
     syncValue,

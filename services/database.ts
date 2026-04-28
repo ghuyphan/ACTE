@@ -183,6 +183,7 @@ interface NoteRow {
 let db: SQLite.SQLiteDatabase | null = null;
 let transactionDb: SQLite.SQLiteDatabase | null = null;
 let dbInitPromise: Promise<SQLite.SQLiteDatabase> | null = null;
+let dbGeneration = 0;
 let transactionQueue: Promise<void> = Promise.resolve();
 let androidDatabaseQueue: Promise<void> = Promise.resolve();
 const APP_SCHEMA_VERSION = 18;
@@ -244,14 +245,13 @@ function runSerializedAndroidDatabaseOperation<T>(task: () => Promise<T>): Promi
         return task();
     }
 
-    const previousTransaction = transactionQueue.catch(() => undefined);
     const previous = androidDatabaseQueue.catch(() => undefined);
     let releaseQueue!: () => void;
     androidDatabaseQueue = new Promise<void>((resolve) => {
         releaseQueue = resolve;
     });
 
-    return Promise.all([previousTransaction, previous]).then(async () => {
+    return previous.then(async () => {
         try {
             return await task();
         } finally {
@@ -615,13 +615,21 @@ export async function hasScopeOwnedData(scope: string): Promise<boolean> {
 }
 
 export async function resetLocalDatabase(): Promise<void> {
-    const openDatabase = transactionDb ?? db ?? (await dbInitPromise?.catch(() => null)) ?? null;
+    const openDatabase = transactionDb ?? db ?? null;
+    const pendingInitPromise = dbInitPromise;
 
+    dbGeneration += 1;
     db = null;
     transactionDb = null;
     dbInitPromise = null;
     transactionQueue = Promise.resolve();
     androidDatabaseQueue = Promise.resolve();
+
+    if (!openDatabase && pendingInitPromise) {
+        void pendingInitPromise
+            .then((staleDatabase) => staleDatabase.closeAsync())
+            .catch(() => undefined);
+    }
 
     if (openDatabase) {
         try {
@@ -640,6 +648,7 @@ export async function getDB(): Promise<SQLite.SQLiteDatabase> {
     }
 
     if (!dbInitPromise) {
+        const initGeneration = dbGeneration;
         dbInitPromise = (async () => {
             const database = await SQLite.openDatabaseAsync(
                 DATABASE_NAME,
@@ -1294,13 +1303,24 @@ export async function getDB(): Promise<SQLite.SQLiteDatabase> {
                 await normalizeDynamicThemeNoteColors(database);
             }
 
+            if (initGeneration !== dbGeneration) {
+                try {
+                    await database.closeAsync();
+                } catch (error) {
+                    console.warn('[database] Failed to close stale database init:', error);
+                }
+                throw new Error('database-init-stale');
+            }
+
             db = createSerializedDatabase(database);
             transactionDb = database;
             return db;
         })().catch((error) => {
-            db = null;
-            transactionDb = null;
-            dbInitPromise = null;
+            if (initGeneration === dbGeneration) {
+                db = null;
+                transactionDb = null;
+                dbInitPromise = null;
+            }
             throw error;
         });
     }
@@ -1322,11 +1342,7 @@ export async function withDatabaseTransaction<T>(
         return result as T;
     }
 
-    return runSerializedNativeTransaction(async () => {
-        if (Platform.OS === 'android') {
-            await androidDatabaseQueue.catch(() => undefined);
-        }
-
+    const runTransaction = async () => {
         for (let attempt = 0; attempt <= SQLITE_LOCK_RETRY_DELAYS_MS.length; attempt += 1) {
             let transactionStarted = false;
 
@@ -1354,7 +1370,13 @@ export async function withDatabaseTransaction<T>(
         }
 
         throw new Error('Database transaction retry failed unexpectedly.');
-    });
+    };
+
+    if (Platform.OS === 'android') {
+        return runSerializedAndroidDatabaseOperation(runTransaction);
+    }
+
+    return runSerializedNativeTransaction(runTransaction);
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────

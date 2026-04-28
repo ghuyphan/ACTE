@@ -1,4 +1,4 @@
-import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { AppState } from 'react-native';
 import i18n from '../constants/i18n';
 import { Note } from '../services/database';
@@ -99,6 +99,64 @@ type SharedMediaPatch = {
   dualSecondaryPhotoLocalUri: string | null;
   pairedVideoLocalUri: string | null;
 };
+
+type SharedFeedLoadState = {
+  loading: boolean;
+  ready: boolean;
+  initialLoadComplete: boolean;
+  dataSource: 'live' | 'cache';
+  lastUpdatedAt: string | null;
+};
+
+type SharedFeedLoadAction =
+  | { type: 'snapshotCommitted'; source: 'live' | 'cache'; updatedAt: string | null }
+  | { type: 'cacheHydrated'; hasCachedSnapshot: boolean; isOnline: boolean }
+  | { type: 'refreshStarted' }
+  | { type: 'ready' }
+  | { type: 'resetForUser' };
+
+const initialSharedFeedLoadState: SharedFeedLoadState = {
+  dataSource: 'cache',
+  initialLoadComplete: false,
+  lastUpdatedAt: null,
+  loading: false,
+  ready: false,
+};
+
+function sharedFeedLoadReducer(
+  state: SharedFeedLoadState,
+  action: SharedFeedLoadAction
+): SharedFeedLoadState {
+  switch (action.type) {
+    case 'snapshotCommitted':
+      return {
+        ...state,
+        dataSource: action.source,
+        lastUpdatedAt: action.updatedAt,
+      };
+    case 'cacheHydrated':
+      return {
+        ...state,
+        loading: !action.hasCachedSnapshot && action.isOnline,
+        ready: true,
+        initialLoadComplete: action.hasCachedSnapshot || !action.isOnline,
+      };
+    case 'refreshStarted':
+      return {
+        ...state,
+        loading: true,
+      };
+    case 'ready':
+      return {
+        ...state,
+        loading: false,
+        ready: true,
+        initialLoadComplete: true,
+      };
+    case 'resetForUser':
+      return initialSharedFeedLoadState;
+  }
+}
 
 function sortFriendsByFriendedAt(friends: FriendConnection[]) {
   return [...friends].sort(
@@ -247,11 +305,10 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
   const [sharedPosts, setSharedPosts] = useState<SharedPost[]>([]);
   const [ownedSharedNoteIds, setOwnedSharedNoteIds] = useState<string[]>([]);
   const [activeInvite, setActiveInvite] = useState<FriendInvite | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [ready, setReady] = useState(false);
-  const [initialLoadComplete, setInitialLoadComplete] = useState(false);
-  const [dataSource, setDataSource] = useState<'live' | 'cache'>('cache');
-  const [lastUpdatedAt, setLastUpdatedAt] = useState<string | null>(null);
+  const [loadState, dispatchLoadState] = useReducer(
+    sharedFeedLoadReducer,
+    initialSharedFeedLoadState
+  );
   const friendsRef = useRef<FriendConnection[]>([]);
   const sharedPostsRef = useRef<SharedPost[]>([]);
   const ownedSharedNoteIdsRef = useRef<string[]>([]);
@@ -278,6 +335,13 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
 
   const enabled = isAuthAvailable;
   userRef.current = user;
+  const {
+    loading,
+    ready,
+    initialLoadComplete,
+    dataSource,
+    lastUpdatedAt,
+  } = loadState;
   const phase: SharedFeedLoadPhase = !ready
     ? 'bootstrapping'
     : loading
@@ -317,8 +381,7 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
       setSharedPosts(snapshot.sharedPosts);
       setOwnedSharedNoteIds(nextOwnedSharedNoteIds);
       setActiveInvite(snapshot.activeInvite);
-      setDataSource(source);
-      setLastUpdatedAt(updatedAt);
+      dispatchLoadState({ type: 'snapshotCommitted', source, updatedAt });
     },
     []
   );
@@ -794,9 +857,7 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
       hydratedSnapshot.friends.length > 0 ||
       hydratedSnapshot.sharedPosts.length > 0 ||
       Boolean(hydratedSnapshot.activeInvite);
-    setLoading(!hasCachedSnapshot && isOnline);
-    setReady(true);
-    setInitialLoadComplete(hasCachedSnapshot || !isOnline);
+    dispatchLoadState({ type: 'cacheHydrated', hasCachedSnapshot, isOnline });
     void hydrateSharedPostMediaWhenReady(
       userUid,
       sessionId,
@@ -827,18 +888,14 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
       );
       suppressedActiveInviteIdRef.current = null;
       createInvitePromiseRef.current = null;
-      setLoading(false);
-      setReady(true);
-      setInitialLoadComplete(true);
+      dispatchLoadState({ type: 'ready' });
       pendingForcedRefreshRef.current = false;
       refreshInFlightRef.current = null;
       return;
     }
 
     if (!isOnline) {
-      setLoading(false);
-      setReady(true);
-      setInitialLoadComplete(true);
+      dispatchLoadState({ type: 'ready' });
       return;
     }
 
@@ -851,7 +908,7 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
 
     const requestId = ++refreshRequestIdRef.current;
     const refreshPromise = (async () => {
-      setLoading(true);
+      dispatchLoadState({ type: 'refreshStarted' });
       try {
         const snapshot = await traceStartupAsync(
           'shared-feed.refresh',
@@ -883,9 +940,7 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
           isCurrentSharedFeedSession(sessionId, userUid) &&
           refreshRequestIdRef.current === requestId
         ) {
-          setLoading(false);
-          setReady(true);
-          setInitialLoadComplete(true);
+          dispatchLoadState({ type: 'ready' });
         }
       }
     })().finally(async () => {
@@ -965,9 +1020,7 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
       );
       suppressedActiveInviteIdRef.current = null;
       createInvitePromiseRef.current = null;
-      setLoading(false);
-      setReady(true);
-      setInitialLoadComplete(true);
+      dispatchLoadState({ type: 'ready' });
       pendingForcedRefreshRef.current = false;
       refreshInFlightRef.current = null;
       sharedMediaHydrationKeyRef.current = null;
@@ -1006,9 +1059,7 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
         'cache',
         null
       );
-      setLoading(false);
-      setReady(false);
-      setInitialLoadComplete(false);
+      dispatchLoadState({ type: 'resetForUser' });
       pendingForcedRefreshRef.current = false;
       refreshInFlightRef.current = null;
       suppressedActiveInviteIdRef.current = null;
@@ -1019,24 +1070,18 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
           }
 
           console.warn('Shared feed cache hydration failed:', getSharedFeedErrorMessage(error));
-          setLoading(false);
-          setReady(true);
-          setInitialLoadComplete(true);
+          dispatchLoadState({ type: 'ready' });
         })
         .finally(() => {
           if (sharedFeedSessionRef.current === sessionId && !isOnline) {
-            setLoading(false);
-            setReady(true);
-            setInitialLoadComplete(true);
+            dispatchLoadState({ type: 'ready' });
           }
         });
     }
 
     if (!isOnline) {
       if (isSameUserSession) {
-        setLoading(false);
-        setReady(true);
-        setInitialLoadComplete(true);
+        dispatchLoadState({ type: 'ready' });
       }
       return;
     }
@@ -1076,9 +1121,7 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
             updatedAt,
             hydratedSnapshot.sharedPosts
           );
-          setLoading(false);
-          setReady(true);
-          setInitialLoadComplete(true);
+          dispatchLoadState({ type: 'ready' });
         })().catch((error) => {
           if (
             sharedFeedSessionRef.current !== sessionId ||
@@ -1089,9 +1132,7 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
 
           sharedFeedSubscriptionHealthyRef.current = false;
           console.warn('Shared feed subscription snapshot failed:', getSharedFeedErrorMessage(error));
-          setLoading(false);
-          setReady(true);
-          setInitialLoadComplete(true);
+          dispatchLoadState({ type: 'ready' });
         });
       },
       onError: (error) => {
@@ -1100,9 +1141,7 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
         }
         sharedFeedSubscriptionHealthyRef.current = false;
         console.warn('Shared feed subscription failed:', getSharedFeedErrorMessage(error));
-        setLoading(false);
-        setReady(true);
-        setInitialLoadComplete(true);
+        dispatchLoadState({ type: 'ready' });
       },
     });
 

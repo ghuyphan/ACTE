@@ -159,10 +159,9 @@ function MemoryVisualPressable({
       accessibilityLabel={accessibilityLabel}
       onPress={onPress}
       testID={testID}
-      style={({ pressed }) => [
+      style={() => [
         styles.cardFill,
         styles.visualCardPressable,
-        pressed ? styles.visualCardPressablePressed : null,
       ]}
     >
       {children}
@@ -498,9 +497,6 @@ export function NoteMemoryCard({
         location: locationLabel,
       })
     : undefined;
-  const noteCardIconAccessibilityLabel = onPress
-    ? t('home.openNoteDetailsButtonA11y', 'Open note details')
-    : undefined;
   const noteCardPolaroidAccessibilityLabel = onPress
     ? t('noteDetail.downloadPolaroid', 'Save as Polaroid')
     : undefined;
@@ -687,6 +683,14 @@ export function NoteMemoryCard({
         <View style={[styles.metadataPillDot, { backgroundColor: colors.secondaryText }]} />
         <Text style={[styles.metadataPillDate, { color: colors.secondaryText }]}>{dateStr}</Text>
       </View>
+      {onPress ? (
+        <Ionicons
+          name="chevron-forward"
+          size={15}
+          color={colors.secondaryText}
+          style={styles.metadataPillChevron}
+        />
+      ) : null}
     </View>
   );
 
@@ -755,7 +759,9 @@ export function NoteMemoryCard({
         {onPress ? (
           <View style={styles.noteMetaRow}>
             <MetadataContainer
+              accessibilityLabel={noteCardAccessibilityLabel}
               containerStyle={styles.noteMetaPrimaryAction}
+              onPress={onPress}
               pillStyle={styles.noteMetadataPill}
             >
               {noteMetadata}
@@ -770,14 +776,6 @@ export function NoteMemoryCard({
                   color={colors.primary}
                   isCapturing={polaroidExporting}
                 />
-              </MetadataIconButton>
-            ) : null}
-            {noteCardIconAccessibilityLabel ? (
-              <MetadataIconButton
-                accessibilityLabel={noteCardIconAccessibilityLabel}
-                onPress={onPress}
-              >
-                <Ionicons name="chevron-forward" size={16} color={colors.primary} />
               </MetadataIconButton>
             ) : null}
           </View>
@@ -857,6 +855,14 @@ export function SharedPostMemoryCard({
         <View style={[styles.metadataPillDot, { backgroundColor: colors.secondaryText }]} />
         <Text style={[styles.metadataPillDate, { color: colors.secondaryText }]}>{dateStr}</Text>
       </View>
+      {onPress ? (
+        <Ionicons
+          name="chevron-forward"
+          size={15}
+          color={colors.secondaryText}
+          style={styles.metadataPillChevron}
+        />
+      ) : null}
     </View>
   );
 
@@ -866,10 +872,6 @@ export function SharedPostMemoryCard({
         location: placeLabel,
       })
     : undefined;
-  const sharedCardIconAccessibilityLabel = onPress
-    ? t('shared.openSharedDetailsButtonA11y', 'Open shared details')
-    : undefined;
-
   const sharedCardBody = (
     <View style={[styles.sharedCardWrap, { width: resolvedCardSize }]}>
       <View style={[styles.noteCardWrapper, { width: resolvedCardSize, height: resolvedCardSize }]}>
@@ -908,10 +910,12 @@ export function SharedPostMemoryCard({
         {onPress ? (
           <View style={styles.noteMetaRow}>
             <MetadataContainer
+              accessibilityLabel={sharedCardAccessibilityLabel}
               containerStyle={[
                 styles.noteMetaPrimaryAction,
                 metadataFullWidth ? styles.metadataFullWidth : null,
               ]}
+              onPress={onPress}
               pillStyle={[
                 styles.noteMetadataPill,
                 metadataFullWidth ? styles.metadataFullWidth : null,
@@ -919,14 +923,6 @@ export function SharedPostMemoryCard({
             >
               {sharedMetadata}
             </MetadataContainer>
-            {sharedCardIconAccessibilityLabel ? (
-              <MetadataIconButton
-                accessibilityLabel={sharedCardIconAccessibilityLabel}
-                onPress={onPress}
-              >
-                <Ionicons name="chevron-forward" size={16} color={colors.primary} />
-              </MetadataIconButton>
-            ) : null}
           </View>
         ) : (
           <MetadataContainer pillStyle={metadataFullWidth ? styles.metadataFullWidth : null}>
@@ -955,9 +951,6 @@ const styles = StyleSheet.create({
   },
   visualCardPressable: {
     minHeight: 44,
-  },
-  visualCardPressablePressed: {
-    opacity: 0.92,
   },
   noteCardWrapper: {
     alignSelf: 'center',
@@ -1160,6 +1153,10 @@ const styles = StyleSheet.create({
     height: 4,
     borderRadius: 2,
     marginHorizontal: 2,
+  },
+  metadataPillChevron: {
+    flexShrink: 0,
+    marginLeft: -2,
   },
   metadataPillContent: {
     flexDirection: 'row',

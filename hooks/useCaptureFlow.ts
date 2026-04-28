@@ -57,6 +57,18 @@ type CameraCaptureErrorLike = {
   code?: string;
 };
 
+type LivePhotoCaptureState = {
+  isCapturing: boolean;
+  isSettling: boolean;
+  isSaveGuardActive: boolean;
+};
+
+const initialLivePhotoCaptureState: LivePhotoCaptureState = {
+  isCapturing: false,
+  isSaveGuardActive: false,
+  isSettling: false,
+};
+
 function normalizeCapturedFileUri(path: string) {
   return path.startsWith('file://') ? path : `file://${path}`;
 }
@@ -84,9 +96,9 @@ export function useCaptureFlow() {
   const [dualPrimaryFacing, setDualPrimaryFacing] = useState<DualCameraFacing | null>(null);
   const [dualSecondaryFacing, setDualSecondaryFacing] = useState<DualCameraFacing | null>(null);
   const [isStillPhotoCaptureInProgress, setIsStillPhotoCaptureInProgress] = useState(false);
-  const [isLivePhotoCaptureInProgress, setIsLivePhotoCaptureInProgress] = useState(false);
-  const [isLivePhotoCaptureSettling, setIsLivePhotoCaptureSettling] = useState(false);
-  const [isLivePhotoSaveGuardActive, setIsLivePhotoSaveGuardActive] = useState(false);
+  const [livePhotoCaptureState, setLivePhotoCaptureState] = useState<LivePhotoCaptureState>(
+    initialLivePhotoCaptureState
+  );
   const [radius, setRadius] = useState(DEFAULT_NOTE_RADIUS);
   const [facing, setFacing] = useState<'back' | 'front'>('back');
   const [backCameraLens, setBackCameraLens] = useState<BackCameraLens>('wide');
@@ -133,6 +145,20 @@ export function useCaptureFlow() {
   const captureScale = useSharedValue(1);
   const captureTranslateY = useSharedValue(0);
   const shutterScale = useSharedValue(1);
+  const isLivePhotoCaptureInProgress = livePhotoCaptureState.isCapturing;
+  const isLivePhotoCaptureSettling = livePhotoCaptureState.isSettling;
+  const isLivePhotoSaveGuardActive = livePhotoCaptureState.isSaveGuardActive;
+
+  const updateLivePhotoCaptureState = useCallback((updates: Partial<LivePhotoCaptureState>) => {
+    setLivePhotoCaptureState((current) => ({
+      ...current,
+      ...updates,
+    }));
+  }, []);
+
+  const resetLivePhotoCaptureState = useCallback(() => {
+    setLivePhotoCaptureState(initialLivePhotoCaptureState);
+  }, []);
 
   const completeModeSwitch = useCallback((callback: () => void) => {
     callback();
@@ -262,8 +288,8 @@ export function useCaptureFlow() {
 
   const clearLivePhotoSaveGuard = useCallback(() => {
     clearLivePhotoSaveGuardTimeout();
-    setIsLivePhotoSaveGuardActive(false);
-  }, [clearLivePhotoSaveGuardTimeout]);
+    updateLivePhotoCaptureState({ isSaveGuardActive: false });
+  }, [clearLivePhotoSaveGuardTimeout, updateLivePhotoCaptureState]);
 
   const clearLivePhotoTapSuppression = useCallback(() => {
     suppressNextPhotoTapRef.current = false;
@@ -392,11 +418,15 @@ export function useCaptureFlow() {
       setCapturedPairedVideo(null);
       clearDualCaptureState();
       setIsStillPhotoCaptureInProgress(false);
-      setIsLivePhotoCaptureInProgress(false);
-      setIsLivePhotoCaptureSettling(false);
-      setIsLivePhotoSaveGuardActive(false);
+      resetLivePhotoCaptureState();
     });
-  }, [animateModeSwitch, cancelLivePhotoCapture, clearDualCaptureState, isModeSwitchAnimating]);
+  }, [
+    animateModeSwitch,
+    cancelLivePhotoCapture,
+    clearDualCaptureState,
+    isModeSwitchAnimating,
+    resetLivePhotoCaptureState,
+  ]);
 
   const refreshCameraSession = useCallback(() => {
     setCameraSessionKey((current) => current + 1);
@@ -413,13 +443,13 @@ export function useCaptureFlow() {
   const finishLivePhotoCapture = useCallback(async () => {
     clearLivePhotoStopTimeout();
     if (!cameraRef.current || !livePhotoRecordingActiveRef.current) {
-      setIsLivePhotoCaptureInProgress(false);
+      updateLivePhotoCaptureState({ isCapturing: false });
       return;
     }
 
     livePhotoRecordingActiveRef.current = false;
     livePhotoRecordingStartedAtRef.current = null;
-    setIsLivePhotoCaptureInProgress(false);
+    updateLivePhotoCaptureState({ isCapturing: false });
 
     try {
       await cameraRef.current.stopRecording();
@@ -447,23 +477,29 @@ export function useCaptureFlow() {
       clearLivePhotoSaveGuard();
       setCapturedPhoto(photoUri);
       setCapturedPairedVideo(pairedVideoUri);
-      setIsLivePhotoCaptureSettling(true);
-      setIsLivePhotoSaveGuardActive(true);
+      updateLivePhotoCaptureState({ isSaveGuardActive: true, isSettling: true });
       livePhotoSettleTimeoutRef.current = setTimeout(() => {
-        setIsLivePhotoCaptureSettling(false);
+        updateLivePhotoCaptureState({ isSettling: false });
       }, LIVE_PHOTO_SETTLE_MS);
       livePhotoSaveGuardTimeoutRef.current = setTimeout(() => {
-        setIsLivePhotoSaveGuardActive(false);
+        updateLivePhotoCaptureState({ isSaveGuardActive: false });
         livePhotoSaveGuardTimeoutRef.current = null;
       }, LIVE_PHOTO_SAVE_GUARD_MS);
       clearLivePhotoTapSuppression();
       return;
     }
 
-    setIsLivePhotoCaptureSettling(false);
+    updateLivePhotoCaptureState({ isSettling: false });
     clearLivePhotoSaveGuard();
     clearLivePhotoTapSuppression();
-  }, [cameraRef, clearLivePhotoSaveGuard, clearLivePhotoSettleTimeout, clearLivePhotoStopTimeout, resetLivePhotoCaptureRefs]);
+  }, [
+    cameraRef,
+    clearLivePhotoSaveGuard,
+    clearLivePhotoSettleTimeout,
+    clearLivePhotoStopTimeout,
+    resetLivePhotoCaptureRefs,
+    updateLivePhotoCaptureState,
+  ]);
 
   const handleShutterPressOut = useCallback(() => {
     shutterScale.value = withSpring(1, {
@@ -511,8 +547,7 @@ export function useCaptureFlow() {
       if (photo?.path) {
         clearLivePhotoSaveGuard();
         clearDualCaptureState();
-        setIsLivePhotoCaptureInProgress(false);
-        setIsLivePhotoCaptureSettling(false);
+        updateLivePhotoCaptureState({ isCapturing: false, isSettling: false });
         setCapturedPairedVideo(null);
         setCapturedPhoto(normalizeCapturedFileUri(photo.path));
       }
@@ -526,6 +561,7 @@ export function useCaptureFlow() {
     clearLivePhotoSaveGuard,
     isLivePhotoCaptureInProgress,
     shutterScale,
+    updateLivePhotoCaptureState,
   ]);
 
   const capturePhotoFile = useCallback(async () => {
@@ -548,14 +584,19 @@ export function useCaptureFlow() {
       });
       shutterScale.value = 1;
       clearLivePhotoSaveGuard();
-      setIsLivePhotoCaptureInProgress(false);
-      setIsLivePhotoCaptureSettling(false);
+      updateLivePhotoCaptureState({ isCapturing: false, isSettling: false });
       return photo?.path ? normalizeCapturedFileUri(photo.path) : null;
     } finally {
       stillPhotoCaptureInFlightRef.current = false;
       setIsStillPhotoCaptureInProgress(false);
     }
-  }, [cameraRef, clearLivePhotoSaveGuard, isLivePhotoCaptureInProgress, shutterScale]);
+  }, [
+    cameraRef,
+    clearLivePhotoSaveGuard,
+    isLivePhotoCaptureInProgress,
+    shutterScale,
+    updateLivePhotoCaptureState,
+  ]);
 
   const startLivePhotoCapture = useCallback(async () => {
     if (!cameraRef.current || isLivePhotoCaptureInProgress || stillPhotoCaptureInFlightRef.current) {
@@ -570,8 +611,7 @@ export function useCaptureFlow() {
     const captureToken = livePhotoCaptureTokenRef.current;
     livePhotoRecordingActiveRef.current = true;
     livePhotoRecordingStartedAtRef.current = Date.now();
-    setIsLivePhotoCaptureInProgress(true);
-    setIsLivePhotoCaptureSettling(false);
+    updateLivePhotoCaptureState({ isCapturing: true, isSettling: false });
     setCapturedPairedVideo(null);
     livePhotoVideoPromiseRef.current = new Promise<string | null>((resolve, reject) => {
       livePhotoVideoResolveRef.current = resolve;
@@ -642,7 +682,7 @@ export function useCaptureFlow() {
     } catch (error) {
       livePhotoRecordingActiveRef.current = false;
       stillPhotoCaptureInFlightRef.current = false;
-      setIsLivePhotoCaptureInProgress(false);
+      updateLivePhotoCaptureState({ isCapturing: false });
       setIsStillPhotoCaptureInProgress(false);
       try {
         await cameraRef.current.cancelRecording();
@@ -660,6 +700,7 @@ export function useCaptureFlow() {
     finishLivePhotoCapture,
     isLivePhotoCaptureInProgress,
     resetLivePhotoCaptureRefs,
+    updateLivePhotoCaptureState,
   ]);
 
   const requestPermission = useCallback(async () => {
@@ -677,9 +718,7 @@ export function useCaptureFlow() {
     setCapturedPairedVideo(null);
     clearDualCaptureState();
     setIsStillPhotoCaptureInProgress(false);
-    setIsLivePhotoCaptureInProgress(false);
-    setIsLivePhotoCaptureSettling(false);
-    setIsLivePhotoSaveGuardActive(false);
+    resetLivePhotoCaptureState();
     clearLivePhotoTapSuppression();
     setRadius(DEFAULT_NOTE_RADIUS);
     setBackCameraLens(wideBackCameraDevice ? 'wide' : (availableBackCameraLenses[0] ?? 'wide'));
@@ -688,6 +727,7 @@ export function useCaptureFlow() {
     cancelLivePhotoCapture,
     clearDualCaptureState,
     clearLivePhotoTapSuppression,
+    resetLivePhotoCaptureState,
     wideBackCameraDevice,
   ]);
 
@@ -705,9 +745,7 @@ export function useCaptureFlow() {
     setDualSecondaryFacing(draft.dualSecondaryFacing ?? null);
     setFacing(draft.facing === 'front' ? 'front' : 'back');
     setIsStillPhotoCaptureInProgress(false);
-    setIsLivePhotoCaptureInProgress(false);
-    setIsLivePhotoCaptureSettling(false);
-    setIsLivePhotoSaveGuardActive(false);
+    resetLivePhotoCaptureState();
     clearLivePhotoTapSuppression();
     setRadius(draft.radius);
     setSelectedPhotoFilterId(draft.selectedPhotoFilterId);
@@ -715,7 +753,7 @@ export function useCaptureFlow() {
     if (draft.captureMode === 'camera') {
       setCameraSessionKey((current) => current + 1);
     }
-  }, [cancelLivePhotoCapture, clearLivePhotoTapSuppression]);
+  }, [cancelLivePhotoCapture, clearLivePhotoTapSuppression, resetLivePhotoCaptureState]);
 
   const needsCameraPermission = captureMode === 'camera' && (!permission || !permission.granted);
 

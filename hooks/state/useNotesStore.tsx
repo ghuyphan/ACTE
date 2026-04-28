@@ -81,8 +81,100 @@ const INITIAL_NOTES_LOAD_RETRY_DELAY_MS = 900;
 const INITIAL_NOTES_STAGED_LOAD_TIMEOUT_MS = 2500;
 const INITIAL_NOTES_FULL_HYDRATION_TIMEOUT_MS = 4500;
 
+type InitialNotesRefreshOutcome = 'loaded' | 'released' | 'stale';
+
 function resolveNotesScope(userUid: string | null | undefined) {
   return typeof userUid === 'string' && userUid.trim() ? userUid.trim() : LOCAL_NOTES_SCOPE;
+}
+
+async function loadInitialNotesForScope({
+  scope,
+  isCurrentRefreshRequest,
+  markHydrating,
+  onHydrationComplete,
+  publishLoadedNotes,
+  publishStagedNotes,
+}: {
+  scope: string;
+  isCurrentRefreshRequest: () => boolean;
+  markHydrating: () => void;
+  onHydrationComplete: () => void;
+  publishLoadedNotes: (notes: Note[]) => void;
+  publishStagedNotes: (notes: Note[]) => void;
+}): Promise<InitialNotesRefreshOutcome> {
+  const stagedNotesPromise = getNotesPageForScope(scope, {
+    limit: INITIAL_NOTES_BOOTSTRAP_LIMIT,
+  });
+  const stagedResult = await withTimeoutResult(
+    stagedNotesPromise,
+    INITIAL_NOTES_STAGED_LOAD_TIMEOUT_MS
+  );
+  if (!isCurrentRefreshRequest()) {
+    return 'stale';
+  }
+
+  if (stagedResult.status === 'timed-out') {
+    console.warn(
+      '[notes] Initial staged notes load timed out; releasing startup with current notes.'
+    );
+    void stagedNotesPromise
+      .then(async (stagedNotes) => {
+        if (!isCurrentRefreshRequest()) {
+          return;
+        }
+
+        publishStagedNotes(stagedNotes);
+
+        const allNotes = await getAllNotesForScope(scope);
+        if (!isCurrentRefreshRequest()) {
+          return;
+        }
+
+        publishLoadedNotes(allNotes);
+        onHydrationComplete();
+      })
+      .catch((error) => {
+        console.error('Failed to finish background note hydration:', error);
+      });
+
+    return 'released';
+  }
+
+  publishStagedNotes(stagedResult.value);
+  markHydrating();
+
+  const allNotesPromise = getAllNotesForScope(scope);
+  const hydrationResult = await withTimeoutResult(
+    allNotesPromise,
+    INITIAL_NOTES_FULL_HYDRATION_TIMEOUT_MS
+  );
+  if (!isCurrentRefreshRequest()) {
+    return 'stale';
+  }
+
+  if (hydrationResult.status === 'timed-out') {
+    console.warn(
+      '[notes] Initial full hydration timed out; releasing startup with staged notes.'
+    );
+    void allNotesPromise
+      .then((allNotes) => {
+        if (!isCurrentRefreshRequest()) {
+          return;
+        }
+
+        publishLoadedNotes(allNotes);
+        onHydrationComplete();
+      })
+      .catch((error) => {
+        console.error('Failed to finish background note hydration:', error);
+      });
+
+    return 'released';
+  }
+
+  publishLoadedNotes(hydrationResult.value);
+  onHydrationComplete();
+  return 'loaded';
 }
 
 function useNotesStoreValue(): { state: NotesStateValue; actions: NotesActionsValue } {
@@ -215,9 +307,7 @@ function useNotesStoreValue(): { state: NotesStateValue; actions: NotesActionsVa
     ) => {
       const scope = options?.scope ?? activeScopeRef.current;
       const requestId = ++refreshRequestIdRef.current;
-      let didSucceed = false;
-      let shouldRetryInitialLoad = false;
-      let shouldReleaseInitialLoadGate = false;
+      let refreshOutcome: InitialNotesRefreshOutcome | 'failed' | null = null;
 
       const isCurrentRefreshRequest = () =>
         refreshRequestIdRef.current === requestId && activeScopeRef.current === scope;
@@ -233,6 +323,15 @@ function useNotesStoreValue(): { state: NotesStateValue; actions: NotesActionsVa
         }
       };
 
+      const publishStagedNotes = (nextNotes: Note[]) => {
+        notesRef.current = nextNotes;
+        setNotes(nextNotes);
+      };
+
+      const resetInitialLoadRetryCount = () => {
+        initialLoadRetryCountRef.current = 0;
+      };
+
       try {
         if (showLoading) {
           setPhase('bootstrapping');
@@ -241,86 +340,19 @@ function useNotesStoreValue(): { state: NotesStateValue; actions: NotesActionsVa
         }
 
         if (showLoading) {
-          const stagedNotesPromise = getNotesPageForScope(scope, {
-            limit: INITIAL_NOTES_BOOTSTRAP_LIMIT,
+          refreshOutcome = await loadInitialNotesForScope({
+            scope,
+            isCurrentRefreshRequest,
+            markHydrating: () => setPhase('hydrating'),
+            onHydrationComplete: resetInitialLoadRetryCount,
+            publishLoadedNotes,
+            publishStagedNotes,
           });
-          const stagedResult = await withTimeoutResult(
-            stagedNotesPromise,
-            INITIAL_NOTES_STAGED_LOAD_TIMEOUT_MS
-          );
-          if (!isCurrentRefreshRequest()) {
-            return;
-          }
-
-          if (stagedResult.status === 'timed-out') {
-            console.warn(
-              '[notes] Initial staged notes load timed out; releasing startup with current notes.'
-            );
-            void stagedNotesPromise
-              .then(async (stagedNotes) => {
-                if (!isCurrentRefreshRequest()) {
-                  return;
-                }
-
-                notesRef.current = stagedNotes;
-                setNotes(stagedNotes);
-
-                const allNotes = await getAllNotesForScope(scope);
-                if (!isCurrentRefreshRequest()) {
-                  return;
-                }
-
-                publishLoadedNotes(allNotes);
-                initialLoadRetryCountRef.current = 0;
-              })
-              .catch((error) => {
-                console.error('Failed to finish background note hydration:', error);
-              });
-
-            shouldReleaseInitialLoadGate = true;
-            return;
-          }
-
-          notesRef.current = stagedResult.value;
-          setNotes(stagedResult.value);
-          setPhase('hydrating');
-        }
-
-        const allNotesPromise = getAllNotesForScope(scope);
-        if (showLoading) {
-          const hydrationResult = await withTimeoutResult(
-            allNotesPromise,
-            INITIAL_NOTES_FULL_HYDRATION_TIMEOUT_MS
-          );
-          if (!isCurrentRefreshRequest()) {
-            return;
-          }
-
-          if (hydrationResult.status === 'timed-out') {
-            console.warn(
-              '[notes] Initial full hydration timed out; releasing startup with staged notes.'
-            );
-            void allNotesPromise
-              .then((allNotes) => {
-                if (!isCurrentRefreshRequest()) {
-                  return;
-                }
-
-                publishLoadedNotes(allNotes);
-                initialLoadRetryCountRef.current = 0;
-              })
-              .catch((error) => {
-                console.error('Failed to finish background note hydration:', error);
-              });
-
-            shouldReleaseInitialLoadGate = true;
-            return;
-          }
-
-          publishLoadedNotes(hydrationResult.value);
+          return;
         } else {
-          const allNotes = await allNotesPromise;
+          const allNotes = await getAllNotesForScope(scope);
           if (!isCurrentRefreshRequest()) {
+            refreshOutcome = 'stale';
             return;
           }
 
@@ -331,47 +363,44 @@ function useNotesStoreValue(): { state: NotesStateValue; actions: NotesActionsVa
           return;
         }
 
-        didSucceed = true;
-        initialLoadRetryCountRef.current = 0;
+        refreshOutcome = 'loaded';
+        resetInitialLoadRetryCount();
       } catch (error) {
         console.error('Failed to load notes:', error);
+        refreshOutcome = 'failed';
         if (showLoading) {
           setPhase('bootstrapping');
         }
-        if (
+        const shouldRetryInitialLoad =
           showLoading &&
           initialLoadRetryCountRef.current < 1 &&
           refreshRequestIdRef.current === requestId &&
-          activeScopeRef.current === scope
-        ) {
+          activeScopeRef.current === scope;
+
+        if (shouldRetryInitialLoad) {
           initialLoadRetryCountRef.current += 1;
-          shouldRetryInitialLoad = true;
+          clearInitialLoadRetryTimer();
+          initialLoadRetryTimerRef.current = setTimeout(() => {
+            if (activeScopeRef.current !== scope) {
+              return;
+            }
+
+            initialLoadRetryTimerRef.current = null;
+            void refreshNotes(true, options);
+          }, INITIAL_NOTES_LOAD_RETRY_DELAY_MS);
+          return;
         }
 
-        shouldReleaseInitialLoadGate =
-          showLoading &&
-          !shouldRetryInitialLoad &&
-          refreshRequestIdRef.current === requestId &&
-          activeScopeRef.current === scope;
+        if (showLoading && refreshRequestIdRef.current === requestId && activeScopeRef.current === scope) {
+          refreshOutcome = 'released';
+        }
       } finally {
         if (
           refreshRequestIdRef.current === requestId &&
-          (didSucceed || !showLoading || shouldReleaseInitialLoadGate)
+          (!showLoading || refreshOutcome === 'loaded' || refreshOutcome === 'released')
         ) {
           setPhase('ready');
         }
-      }
-
-      if (shouldRetryInitialLoad) {
-        clearInitialLoadRetryTimer();
-        initialLoadRetryTimerRef.current = setTimeout(() => {
-          if (activeScopeRef.current !== scope) {
-            return;
-          }
-
-          initialLoadRetryTimerRef.current = null;
-          void refreshNotes(true, options);
-        }, INITIAL_NOTES_LOAD_RETRY_DELAY_MS);
       }
     },
     [clearInitialLoadRetryTimer, scheduleWidgetUpdate, syncGeofencesForNotes]

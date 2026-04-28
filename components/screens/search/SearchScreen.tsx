@@ -4,7 +4,7 @@ import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Href, Stack, useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
-import { useCallback, useDeferredValue, useEffect, useRef, useState, useTransition } from 'react';
+import { useCallback, useDeferredValue, useEffect, useReducer, useState, useTransition } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   ActivityIndicator,
@@ -38,6 +38,47 @@ function getPreviewText(note: Note, photoLabel: string, emptyLabel: string) {
   });
 }
 
+type SearchStatus = 'idle' | 'searching' | 'success' | 'failed';
+
+type SearchState = {
+  query: string;
+  results: Note[];
+  status: SearchStatus;
+};
+
+type SearchAction =
+  | { type: 'queryChanged'; query: string }
+  | { type: 'searchStarted'; query: string }
+  | { type: 'searchSucceeded'; query: string; results: Note[] }
+  | { type: 'searchFailed'; query: string };
+
+const initialSearchState: SearchState = {
+  query: '',
+  results: [],
+  status: 'idle',
+};
+
+function searchReducer(state: SearchState, action: SearchAction): SearchState {
+  switch (action.type) {
+    case 'queryChanged':
+      return action.query
+        ? { query: action.query, results: [], status: 'searching' }
+        : initialSearchState;
+    case 'searchStarted':
+      return action.query === state.query
+        ? { ...state, results: [], status: 'searching' }
+        : state;
+    case 'searchSucceeded':
+      return action.query === state.query
+        ? { query: action.query, results: action.results, status: 'success' }
+        : state;
+    case 'searchFailed':
+      return action.query === state.query
+        ? { query: action.query, results: [], status: 'failed' }
+        : state;
+  }
+}
+
 export default function SearchScreen() {
   const { t } = useTranslation();
   const { colors, isDark } = useTheme();
@@ -48,11 +89,7 @@ export default function SearchScreen() {
   const { notes, loading, searchNotes } = useNotesStore();
   const router = useRouter();
   const [query, setQuery] = useState('');
-  const [filteredNotes, setFilteredNotes] = useState<Note[]>([]);
-  const [isSearching, setIsSearching] = useState(false);
-  const [resolvedQuery, setResolvedQuery] = useState('');
-  const [searchFailed, setSearchFailed] = useState(false);
-  const activeSearchRequestRef = useRef(0);
+  const [searchState, dispatchSearch] = useReducer(searchReducer, initialSearchState);
   const [, startSearchTransition] = useTransition();
   const activeQuery = Platform.OS === 'android' ? androidTabSearchQuery : query;
   const deferredQuery = useDeferredValue(activeQuery);
@@ -74,51 +111,28 @@ export default function SearchScreen() {
   );
 
   useEffect(() => {
-    if (!hasQuery) {
-      setFilteredNotes([]);
-      setResolvedQuery('');
-      activeSearchRequestRef.current += 1;
-      setIsSearching(false);
-      setSearchFailed(false);
-      return;
-    }
-
-    activeSearchRequestRef.current += 1;
-    setIsSearching(true);
-    setSearchFailed(false);
-  }, [hasQuery, activeQuery]);
+    dispatchSearch({ type: 'queryChanged', query: trimmedActiveQuery });
+  }, [trimmedActiveQuery]);
 
   useEffect(() => {
     if (!hasDeferredQuery) {
-      setFilteredNotes([]);
-      setResolvedQuery('');
-      activeSearchRequestRef.current += 1;
-      setIsSearching(false);
-      setSearchFailed(false);
       return;
     }
 
     let cancelled = false;
-    const requestId = activeSearchRequestRef.current;
-    setSearchFailed(false);
-    setIsSearching(true);
+    const searchQuery = trimmedDeferredQuery;
+    dispatchSearch({ type: 'searchStarted', query: searchQuery });
 
-    void searchNotes(trimmedDeferredQuery)
+    void searchNotes(searchQuery)
       .then((results) => {
-        if (!cancelled && activeSearchRequestRef.current === requestId) {
-          setFilteredNotes(results);
-          setResolvedQuery(trimmedDeferredQuery);
-          setIsSearching(false);
-          setSearchFailed(false);
+        if (!cancelled) {
+          dispatchSearch({ type: 'searchSucceeded', query: searchQuery, results });
         }
       })
       .catch((error) => {
-        if (!cancelled && activeSearchRequestRef.current === requestId) {
+        if (!cancelled) {
           console.warn('Search query failed:', error);
-          setFilteredNotes([]);
-          setResolvedQuery(trimmedDeferredQuery);
-          setIsSearching(false);
-          setSearchFailed(true);
+          dispatchSearch({ type: 'searchFailed', query: searchQuery });
         }
       });
 
@@ -128,15 +142,15 @@ export default function SearchScreen() {
   }, [hasDeferredQuery, searchNotes, trimmedDeferredQuery]);
 
   const visibleNotes =
-    hasQuery
-      ? resolvedQuery === trimmedActiveQuery
-        ? filteredNotes
-        : []
+    hasQuery && searchState.status === 'success' && searchState.query === trimmedActiveQuery
+      ? searchState.results
       : [];
+  const isSearching = searchState.status === 'searching';
+  const searchFailed = hasQuery && searchState.status === 'failed';
   const shouldShowSearchingState =
     hasQuery &&
     !searchFailed &&
-    (isSearching || resolvedQuery !== trimmedActiveQuery) &&
+    (isSearching || searchState.query !== trimmedActiveQuery) &&
     visibleNotes.length === 0;
   const shouldShowEmptyState = !searchFailed && !shouldShowSearchingState && visibleNotes.length === 0;
 

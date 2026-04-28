@@ -19,8 +19,6 @@ import {
 } from './settingsScreenSections';
 import { useSettingsScreenModel } from './useSettingsScreenModel';
 
-type SheetKey = 'language' | 'appTheme' | 'theme' | 'haptics' | 'sync' | null;
-
 function getAndroidIconName(icon: SettingsIconKey): React.ComponentProps<typeof Ionicons>['name'] {
   switch (icon) {
     case 'account':
@@ -176,26 +174,16 @@ export default function SettingsScreenAndroid() {
   const bottomTabOverlayInset = useAndroidBottomTabOverlayInset();
 
   let sheetContent: React.ReactNode = null;
-  const sheet: SheetKey = model.showAppTheme
-    ? 'appTheme'
-    : model.showTheme
-    ? 'theme'
-    : model.showLanguage
-      ? 'language'
-      : model.showHaptics
-        ? 'haptics'
-        : model.showSync
-          ? 'sync'
-          : null;
+  const sheet = model.activeSettingsSheet;
 
   if (sheet === 'appTheme') {
-    sheetContent = <SettingsAppThemeSheetAndroid onClose={() => model.setShowAppTheme(false)} />;
+    sheetContent = <SettingsAppThemeSheetAndroid onClose={model.closeSettingsSheet} />;
   } else if (sheet === 'theme') {
-    sheetContent = <SettingsThemeSheetAndroid onClose={() => model.setShowTheme(false)} />;
+    sheetContent = <SettingsThemeSheetAndroid onClose={model.closeSettingsSheet} />;
   } else if (sheet === 'language') {
-    sheetContent = <SettingsLanguageSheetAndroid onClose={() => model.setShowLanguage(false)} />;
+    sheetContent = <SettingsLanguageSheetAndroid onClose={model.closeSettingsSheet} />;
   } else if (sheet === 'haptics') {
-    sheetContent = <SettingsHapticsSheetAndroid onClose={() => model.setShowHaptics(false)} />;
+    sheetContent = <SettingsHapticsSheetAndroid onClose={model.closeSettingsSheet} />;
   } else if (sheet === 'sync') {
     sheetContent = <SettingsSyncSheetAndroid accountHint={model.accountHint} />;
   }
@@ -260,13 +248,7 @@ export default function SettingsScreenAndroid() {
 
       <AppSheet
         visible={sheet !== null}
-        onClose={() => {
-          model.setShowAppTheme(false);
-          model.setShowTheme(false);
-          model.setShowHaptics(false);
-          model.setShowLanguage(false);
-          model.setShowSync(false);
-        }}
+        onClose={model.closeSettingsSheet}
         androidPresentation="edge"
       >
         {sheetContent}

@@ -2,6 +2,8 @@ import { Platform } from 'react-native';
 
 const mockExecAsync = jest.fn<Promise<void>, [string]>(async () => undefined);
 const mockRunAsync = jest.fn<Promise<void>, [string, ...unknown[]]>(async () => undefined);
+const mockCloseAsync = jest.fn<Promise<void>, []>(async () => undefined);
+const mockDeleteDatabaseAsync = jest.fn<Promise<void>, [string]>(async () => undefined);
 const mockGetFirstAsync = jest.fn<Promise<unknown | null>, [string, ...unknown[]]>(async (sql: string) => {
   if (sql.includes('PRAGMA user_version')) {
     return { user_version: 0 };
@@ -56,6 +58,7 @@ let mockDatabase: {
   runAsync: (sql: string, ...args: unknown[]) => Promise<void>;
   getAllAsync: (sql: string, ...args: unknown[]) => Promise<unknown[]>;
   getFirstAsync: (sql: string, ...args: unknown[]) => Promise<unknown | null>;
+  closeAsync: () => Promise<void>;
   withExclusiveTransactionAsync: (callback: (txn: unknown) => Promise<void>) => Promise<void>;
   withTransactionAsync: (callback: (txn: unknown) => Promise<void>) => Promise<void>;
 };
@@ -65,6 +68,7 @@ mockDatabase = {
   runAsync: (sql: string, ...args: unknown[]) => mockRunAsync(sql, ...args),
   getAllAsync: (sql: string, ...args: unknown[]) => mockGetAllAsync(sql, ...args),
   getFirstAsync: (sql: string, ...args: unknown[]) => mockGetFirstAsync(sql, ...args),
+  closeAsync: () => mockCloseAsync(),
   withExclusiveTransactionAsync: async (callback: (txn: unknown) => Promise<void>) => {
     await callback(mockDatabase);
   },
@@ -73,8 +77,11 @@ mockDatabase = {
   },
 };
 
+const mockOpenDatabaseAsync = jest.fn<Promise<typeof mockDatabase>, unknown[]>(async () => mockDatabase);
+
 jest.mock('expo-sqlite', () => ({
-  openDatabaseAsync: async () => mockDatabase,
+  openDatabaseAsync: (...args: unknown[]) => mockOpenDatabaseAsync(...args),
+  deleteDatabaseAsync: (name: string) => mockDeleteDatabaseAsync(name),
 }));
 
 jest.mock('expo-crypto', () => ({
@@ -89,10 +96,21 @@ function countSqlPlaceholders(sql: string) {
   return (sql.match(/\?/g) ?? []).length;
 }
 
+function createDeferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((nextResolve, nextReject) => {
+    resolve = nextResolve;
+    reject = nextReject;
+  });
+  return { promise, resolve, reject };
+}
+
 describe('database migrations', () => {
   afterEach(() => {
     jest.resetModules();
     jest.clearAllMocks();
+    mockOpenDatabaseAsync.mockImplementation(async () => mockDatabase);
   });
 
   it('adds new note columns and backfills photo/search metadata for legacy rows', async () => {
@@ -137,6 +155,29 @@ describe('database migrations', () => {
     });
 
     await expect(getDB()).rejects.toThrow('migration failed');
+  });
+
+  it('resets local database without waiting for a stuck initialization', async () => {
+    const pendingOpen = createDeferred<typeof mockDatabase>();
+    mockOpenDatabaseAsync.mockImplementationOnce(() => pendingOpen.promise);
+
+    let getDB!: () => Promise<unknown>;
+    let resetLocalDatabase!: () => Promise<void>;
+
+    jest.isolateModules(() => {
+      ({ getDB, resetLocalDatabase } = require('../services/database'));
+    });
+
+    const initPromise = getDB();
+    await Promise.resolve();
+
+    await expect(resetLocalDatabase()).resolves.toBeUndefined();
+    expect(mockDeleteDatabaseAsync).toHaveBeenCalledWith('acte_notes.db');
+    expect(mockCloseAsync).not.toHaveBeenCalled();
+
+    pendingOpen.resolve(mockDatabase);
+    await expect(initPromise).rejects.toThrow('database-init-stale');
+    expect(mockCloseAsync).toHaveBeenCalled();
   });
 
   it('adds a partial unique index for sync queue coalescing after deduplicating legacy rows', async () => {

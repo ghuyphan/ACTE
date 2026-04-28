@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useReducer, useState } from 'react';
 import { i18nReady } from '../../constants/i18n';
 import { getDB, resetLocalDatabase } from '../../services/database';
 import { arePlaceRemindersEnabled, syncGeofenceRegions } from '../../services/geofenceService';
@@ -18,35 +18,88 @@ import { withTimeout } from '../../utils/timeout';
 
 const DATABASE_STARTUP_TIMEOUT_MS = 12000;
 
+type DatabaseStartupState = {
+  attempt: number;
+  error: string | null;
+  status: 'loading' | 'recovering' | 'resetting' | 'ready' | 'failed';
+};
+
+type DatabaseStartupAction =
+  | { type: 'retryRequested' }
+  | { type: 'resetStarted' }
+  | { type: 'startupSucceeded' }
+  | { type: 'startupFailed'; error: string }
+  | { type: 'resetFailed' };
+
+const initialDatabaseStartupState: DatabaseStartupState = {
+  attempt: 0,
+  error: null,
+  status: 'loading',
+};
+
+function databaseStartupReducer(
+  state: DatabaseStartupState,
+  action: DatabaseStartupAction
+): DatabaseStartupState {
+  switch (action.type) {
+    case 'retryRequested':
+      return {
+        attempt: state.attempt + 1,
+        error: null,
+        status: 'recovering',
+      };
+    case 'resetStarted':
+      return {
+        attempt: state.attempt + 1,
+        error: null,
+        status: 'resetting',
+      };
+    case 'startupSucceeded':
+      return {
+        ...state,
+        error: null,
+        status: 'ready',
+      };
+    case 'startupFailed':
+      return {
+        ...state,
+        error: action.error,
+        status: 'failed',
+      };
+    case 'resetFailed':
+      return {
+        ...state,
+        error: 'database-reset-failed',
+        status: 'failed',
+      };
+  }
+}
+
 function waitForDatabaseStartup() {
   return withTimeout(getDB(), DATABASE_STARTUP_TIMEOUT_MS, new Error('database-init-timeout'));
 }
 
 export function useAppStartupBootstrap() {
-  const [startupError, setStartupError] = useState<string | null>(null);
-  const [isRecovering, setIsRecovering] = useState(false);
-  const [isDatabaseReady, setIsDatabaseReady] = useState(false);
+  const [databaseStartup, dispatchDatabaseStartup] = useReducer(
+    databaseStartupReducer,
+    initialDatabaseStartupState
+  );
   const [startupRoute, setStartupRoute] = useState<StartupEntryRoute | null>(() => getCachedStartupRoute('entry'));
   const [isStartupRouteReady, setIsStartupRouteReady] = useState(() => Boolean(getCachedStartupRoute('entry')));
-  const [databaseAttempt, setDatabaseAttempt] = useState(0);
 
   const retryStartup = useCallback(() => {
-    setIsRecovering(true);
-    setIsDatabaseReady(false);
-    setDatabaseAttempt((current) => current + 1);
+    dispatchDatabaseStartup({ type: 'retryRequested' });
   }, []);
 
   const resetStartupData = useCallback(async () => {
-    setIsRecovering(true);
+    dispatchDatabaseStartup({ type: 'resetStarted' });
 
     try {
       await resetLocalDatabase();
-      setIsDatabaseReady(false);
-      setDatabaseAttempt((current) => current + 1);
+      dispatchDatabaseStartup({ type: 'retryRequested' });
     } catch (error) {
       console.error('Database reset failed:', error);
-      setStartupError('database-reset-failed');
-      setIsRecovering(false);
+      dispatchDatabaseStartup({ type: 'resetFailed' });
     }
   }, []);
 
@@ -86,8 +139,8 @@ export function useAppStartupBootstrap() {
     let startupIdleHandle: ReturnType<typeof scheduleOnIdle> | null = null;
     let startupTimeout: ReturnType<typeof setTimeout> | null = null;
 
-    if (databaseAttempt > 0) {
-      setIsRecovering(true);
+    if (databaseStartup.status === 'resetting') {
+      return;
     }
 
     waitForDatabaseStartup()
@@ -96,9 +149,7 @@ export function useAppStartupBootstrap() {
           return;
         }
 
-        setIsDatabaseReady(true);
-        setStartupError(null);
-        setIsRecovering(false);
+        dispatchDatabaseStartup({ type: 'startupSucceeded' });
         startupIdleHandle = scheduleOnIdle(() => {
           startupTimeout = setTimeout(() => {
             if (arePlaceRemindersEnabled()) {
@@ -111,13 +162,13 @@ export function useAppStartupBootstrap() {
       .catch((err) => {
         console.error('Database init failed:', err);
         if (!cancelled) {
-          setIsDatabaseReady(false);
-          setStartupError(
-            err instanceof Error && err.message === 'database-init-timeout'
-              ? 'database-init-timeout'
-              : 'database-init-failed'
-          );
-          setIsRecovering(false);
+          dispatchDatabaseStartup({
+            type: 'startupFailed',
+            error:
+              err instanceof Error && err.message === 'database-init-timeout'
+                ? 'database-init-timeout'
+                : 'database-init-failed',
+          });
         }
       });
 
@@ -128,15 +179,15 @@ export function useAppStartupBootstrap() {
         clearTimeout(startupTimeout);
       }
     };
-  }, [databaseAttempt]);
+  }, [databaseStartup.attempt]);
 
   return {
-    isDatabaseReady,
-    isRecovering,
+    isDatabaseReady: databaseStartup.status === 'ready',
+    isRecovering: databaseStartup.status === 'recovering' || databaseStartup.status === 'resetting',
     startupRoute,
     isStartupRouteReady,
     resetStartupData,
     retryStartup,
-    startupError,
+    startupError: databaseStartup.error,
   };
 }

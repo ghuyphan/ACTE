@@ -239,40 +239,40 @@ export default function SettingsScreenIOS() {
         </List>
 
         <AppSheet
-          visible={model.showAppTheme}
-          onClose={() => model.setShowAppTheme(false)}
+          visible={model.activeSettingsSheet === 'appTheme'}
+          onClose={model.closeSettingsSheet}
           iosContentType="swift-ui"
         >
           <SettingsAppThemeSheet />
         </AppSheet>
 
         <AppSheet
-          visible={model.showTheme}
-          onClose={() => model.setShowTheme(false)}
+          visible={model.activeSettingsSheet === 'theme'}
+          onClose={model.closeSettingsSheet}
           iosContentType="swift-ui"
         >
           <SettingsThemeSheet />
         </AppSheet>
 
         <AppSheet
-          visible={model.showHaptics}
-          onClose={() => model.setShowHaptics(false)}
+          visible={model.activeSettingsSheet === 'haptics'}
+          onClose={model.closeSettingsSheet}
           iosContentType="swift-ui"
         >
           <SettingsHapticsSheet />
         </AppSheet>
 
         <AppSheet
-          visible={model.showLanguage}
-          onClose={() => model.setShowLanguage(false)}
+          visible={model.activeSettingsSheet === 'language'}
+          onClose={model.closeSettingsSheet}
           iosContentType="swift-ui"
         >
           <SettingsLanguageSheet />
         </AppSheet>
 
         <AppSheet
-          visible={model.showSync}
-          onClose={() => model.setShowSync(false)}
+          visible={model.activeSettingsSheet === 'sync'}
+          onClose={model.closeSettingsSheet}
           iosContentType="swift-ui"
         >
           <SettingsSyncSheet accountHint={model.accountHint} />
