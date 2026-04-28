@@ -93,6 +93,44 @@ describe('noteAppearance', () => {
     ).toBe('matcha-theme-dark');
   });
 
+  it('uses the provided color scheme for selected adaptive theme colors', () => {
+    expect(
+      getCaptureNoteGradient({
+        noteColor: 'peach-theme',
+        colorScheme: 'dark',
+      })
+    ).toEqual(['#F4C4A4', '#F0ADC2']);
+
+    expect(
+      resolveSavedTextNoteColor('peach-theme', {
+        colorScheme: 'dark',
+      })
+    ).toBe('peach-theme-dark');
+  });
+
+  it('uses dark-mode variants for regular selected capture colors', () => {
+    expect(
+      getCaptureNoteGradient({
+        noteColor: 'marigold-glow',
+        colorScheme: 'dark',
+      })
+    ).toEqual(['#F2C96F', '#F19A7A']);
+
+    expect(
+      getCaptureNoteGradient({
+        noteColor: 'sky-blue',
+        colorScheme: 'dark',
+      })
+    ).toEqual(['#7EA7D8', '#8FCBE0']);
+
+    expect(
+      getCaptureNoteGradient({
+        noteColor: 'sky-blue',
+        colorScheme: 'light',
+      })
+    ).toEqual(['#A1C4FD', '#C2E9FB']);
+  });
+
   it('falls back to a stable hashed gradient when no emoji palette matches', () => {
     expect(getTextNoteCardGradient({ text: 'Just a quiet note', noteId: 'note-123' })).toEqual(
       getTextNoteCardGradient({ text: 'Just a quiet note', noteId: 'note-123' })

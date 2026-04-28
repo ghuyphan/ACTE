@@ -1,8 +1,9 @@
 import React from 'react';
-import { fireEvent, render } from '@testing-library/react-native';
+import { fireEvent, render, waitFor } from '@testing-library/react-native';
 import { View } from 'react-native';
 import NoteStickerCanvas from '../components/notes/NoteStickerCanvas';
 import type { NoteStickerPlacement } from '../services/noteStickers';
+import * as FileSystem from '../utils/fileSystem';
 
 let mockStampCanvasRenderCount = 0;
 
@@ -188,6 +189,92 @@ describe('NoteStickerCanvas', () => {
       ])
     );
     expect(getByTestId('note-sticker-image-placement-1').props.transition).toBe(0);
+  });
+
+  it('reports sticker artwork ready after the real image finishes loading', async () => {
+    const onImagesReady = jest.fn();
+    const { getByTestId } = render(
+      <NoteStickerCanvas placements={[stickerPlacement]} onImagesReady={onImagesReady} />
+    );
+
+    fireEvent(getByTestId('note-sticker-image-placement-1'), 'loadEnd');
+
+    await waitFor(() => {
+      expect(onImagesReady).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it('uses a single native image without generated outlines for view-shot exports', async () => {
+    const onImagesReady = jest.fn();
+    const exportPlacement = {
+      ...stickerPlacement,
+      asset: {
+        ...stickerPlacement.asset,
+        localUri: 'data:image/png;base64,abc123',
+      },
+    };
+    const { getByTestId, queryByTestId } = render(
+      <NoteStickerCanvas
+        placements={[exportPlacement]}
+        onImagesReady={onImagesReady}
+        viewShotCompatibleImages
+      />
+    );
+
+    expect(queryByTestId('note-sticker-outline-placement-1')).toBeNull();
+
+    fireEvent(getByTestId('note-sticker-image-placement-1'), 'loadEnd');
+
+    await waitFor(() => {
+      expect(onImagesReady).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it('inlines local sticker files before reporting view-shot export readiness', async () => {
+    const readAsStringSpy = jest
+      .spyOn(FileSystem, 'readAsStringAsync')
+      .mockResolvedValueOnce('abc123');
+    const onImagesReady = jest.fn();
+    const { getByTestId, queryByTestId } = render(
+      <NoteStickerCanvas
+        placements={[stickerPlacement]}
+        onImagesReady={onImagesReady}
+        viewShotCompatibleImages
+      />
+    );
+
+    expect(queryByTestId('note-sticker-image-placement-1')).toBeNull();
+
+    await waitFor(() => {
+      expect(getByTestId('note-sticker-image-placement-1').props.source.uri).toBe(
+        'data:image/png;base64,abc123'
+      );
+    });
+
+    fireEvent(getByTestId('note-sticker-image-placement-1'), 'loadEnd');
+
+    await waitFor(() => {
+      expect(onImagesReady).toHaveBeenCalledTimes(1);
+    });
+    expect(readAsStringSpy).toHaveBeenCalledWith('file:///stickers/sticker-1.png', {
+      encoding: FileSystem.EncodingType.Base64,
+    });
+
+    readAsStringSpy.mockRestore();
+  });
+
+  it('reports stamp artwork ready after the Skia image resolves', async () => {
+    const onImagesReady = jest.fn();
+    render(
+      <NoteStickerCanvas
+        placements={[{ ...stickerPlacement, renderMode: 'stamp' }]}
+        onImagesReady={onImagesReady}
+      />
+    );
+
+    await waitFor(() => {
+      expect(onImagesReady).toHaveBeenCalledTimes(1);
+    });
   });
 
   it('renders lock, outline, and delete controls on the selected editable sticker', () => {

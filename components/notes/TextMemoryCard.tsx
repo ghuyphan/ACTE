@@ -30,6 +30,7 @@ interface TextMemoryCardProps {
     stickerPlacementsJson?: string | null;
     remoteBucket?: string;
     isActive?: boolean;
+    colorScheme?: 'light' | 'dark';
     debugTiltOverride?: SharedValue<DebugTiltState>;
 }
 
@@ -43,11 +44,19 @@ function TextMemoryCard({
     stickerPlacementsJson = null,
     remoteBucket,
     isActive = false,
+    colorScheme,
     debugTiltOverride,
 }: TextMemoryCardProps) {
     const gradient = useMemo(
-        () => getTextNoteCardGradient({ text, noteId, emoji, noteColor, fallbackGradient }),
-        [emoji, fallbackGradient, noteColor, noteId, text]
+        () => getTextNoteCardGradient({
+            text,
+            noteId,
+            emoji,
+            noteColor,
+            fallbackGradient,
+            colorScheme,
+        }),
+        [colorScheme, emoji, fallbackGradient, noteColor, noteId, text]
     );
     const stickerMotionVariant = useMemo<StickerMotionVariant>(
         () => getNoteColorStickerMotion(noteColor) ?? getGradientStickerMotionVariant(gradient),

@@ -15,8 +15,8 @@ jest.mock('../components/notes/NoteStickerCanvas', () => {
   const React = require('react');
   const { View } = require('react-native');
 
-  return function MockNoteStickerCanvas() {
-    return <View testID="mock-note-sticker-canvas" />;
+  return function MockNoteStickerCanvas(props: any) {
+    return <View testID="mock-note-sticker-canvas" {...props} />;
   };
 });
 
@@ -95,6 +95,7 @@ describe('PolaroidExportView', () => {
       <PolaroidExportView
         note={note as any}
         fallbackLocationLabel="Unknown place"
+        fallbackGradient={['#A8DADC', '#F4A261']}
       />
     );
 
@@ -108,5 +109,19 @@ describe('PolaroidExportView', () => {
       expect.objectContaining({ zIndex: 1 })
     );
     expect(view.getByTestId('mock-note-sticker-canvas')).toBeTruthy();
+    expect(view.getByTestId('mock-note-sticker-canvas').props.viewShotCompatibleImages).toBe(
+      true
+    );
+    expect(view.getByTestId('polaroid-export-canvas').props.style).toEqual(
+      expect.objectContaining({
+        backgroundColor: 'transparent',
+        height: 1048,
+        width: 876,
+      })
+    );
+    expect(view.getByTestId('polaroid-export-text-card').props.colors).toEqual([
+      '#A8DADC',
+      '#F4A261',
+    ]);
   });
 });

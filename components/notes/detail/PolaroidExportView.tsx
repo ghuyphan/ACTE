@@ -1,6 +1,6 @@
 import { BlurTargetView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
-import React, { forwardRef, memo, useEffect, useMemo, useRef, useState } from 'react';
+import React, { forwardRef, memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   StyleSheet,
   Text,
@@ -10,7 +10,7 @@ import { STICKER_ARTBOARD_FRAME, DOODLE_ARTBOARD_FRAME } from '../../../constant
 import i18n from '../../../constants/i18n';
 import { Fonts, Layout, Typography } from '../../../constants/theme';
 import type { Note } from '../../../services/database';
-import { getNoteCardTextPalette, getTextNoteCardGradient } from '../../../services/noteAppearance';
+import { getCaptureNoteGradient, getNoteCardTextPalette } from '../../../services/noteAppearance';
 import { parseNoteDoodleStrokes } from '../../../services/noteDoodles';
 import { parseNoteStickerPlacements } from '../../../services/noteStickers';
 import { formatNoteTextWithEmoji } from '../../../services/noteTextPresentation';
@@ -23,13 +23,13 @@ import PhotoCaptionChip from '../PhotoCaptionChip';
 import PhotoMediaView from '../PhotoMediaView';
 import PremiumNoteFinishOverlay from '../../ui/PremiumNoteFinishOverlay';
 
-const CANVAS_WIDTH = 1080;
-const CANVAS_HEIGHT = 1350;
 const POLAROID_WIDTH = 876;
 const POLAROID_CARD_SIZE = 820;
 const POLAROID_TOP_PADDING = 28;
 const POLAROID_SIDE_PADDING = 28;
 const POLAROID_BOTTOM_PADDING = 164;
+const POLAROID_FRAME_HEIGHT =
+  POLAROID_TOP_PADDING + POLAROID_CARD_SIZE + POLAROID_BOTTOM_PADDING + 36;
 
 type PolaroidExportViewProps = {
   note: Note;
@@ -56,34 +56,37 @@ function PolaroidExportViewInner(
   { note, fallbackLocationLabel, fallbackGradient = null, onReady }: PolaroidExportViewProps,
   ref: React.ForwardedRef<View>
 ) {
+  const stickerPlacements = useMemo(
+    () => parseNoteStickerPlacements(note.stickerPlacementsJson),
+    [note.stickerPlacementsJson]
+  );
   const [layoutReady, setLayoutReady] = useState(false);
   const [mediaReady, setMediaReady] = useState(note.type === 'text');
+  const [stickersReady, setStickersReady] = useState(stickerPlacements.length === 0);
   const [readyToken, setReadyToken] = useState(note.id);
 
   useEffect(() => {
     setLayoutReady(false);
     setMediaReady(note.type === 'text');
+    setStickersReady(stickerPlacements.length === 0);
     setReadyToken(note.id);
-  }, [note.id, note.type]);
+  }, [note.id, note.stickerPlacementsJson, note.type, stickerPlacements.length]);
 
   useEffect(() => {
-    if (!layoutReady || !mediaReady || readyToken !== note.id) {
+    if (!layoutReady || !mediaReady || !stickersReady || readyToken !== note.id) {
       return;
     }
 
     onReady?.();
-  }, [layoutReady, mediaReady, note.id, onReady, readyToken]);
+  }, [layoutReady, mediaReady, note.id, onReady, readyToken, stickersReady]);
 
   const gradient = useMemo(
     () =>
-      getTextNoteCardGradient({
-        text: note.content,
-        noteId: note.id,
-        emoji: note.moodEmoji,
+      getCaptureNoteGradient({
         noteColor: note.noteColor,
         fallbackGradient,
       }),
-    [fallbackGradient, note.content, note.id, note.moodEmoji, note.noteColor]
+    [fallbackGradient, note.noteColor]
   );
   const doodleStrokes = useMemo(
     () => parseNoteDoodleStrokes(note.doodleStrokesJson),
@@ -93,10 +96,6 @@ function PolaroidExportViewInner(
     () => getNoteCardTextPalette(gradient),
     [gradient]
   );
-  const stickerPlacements = useMemo(
-    () => parseNoteStickerPlacements(note.stickerPlacementsJson),
-    [note.stickerPlacementsJson]
-  );
   const photoCaptionBlurTargetRef = useRef<View | null>(null);
   const displayedText = useMemo(
     () => formatNoteTextWithEmoji(note.content, note.moodEmoji),
@@ -104,17 +103,18 @@ function PolaroidExportViewInner(
   );
   const locationLabel = note.locationName?.trim() || fallbackLocationLabel;
   const dateLabel = formatPolaroidDate(note.createdAt);
+  const handleStickerImagesReady = useCallback(() => {
+    setStickersReady(true);
+  }, []);
 
   return (
     <View
       ref={ref}
       collapsable={false}
+      testID="polaroid-export-canvas"
       onLayout={() => setLayoutReady(true)}
       style={styles.captureCanvas}
     >
-      <View style={[styles.backdropBlob, styles.backdropBlobTop]} />
-      <View style={[styles.backdropBlob, styles.backdropBlobBottom]} />
-      <View style={styles.polaroidShadow} />
       <View collapsable={false} style={styles.polaroidFrame}>
         <View style={styles.noteCardSlot}>
           {note.type === 'photo' ? (
@@ -144,6 +144,8 @@ function PolaroidExportViewInner(
                       placements={stickerPlacements}
                       editable={false}
                       stampShadowEnabled={false}
+                      onImagesReady={handleStickerImagesReady}
+                      viewShotCompatibleImages
                     />
                   </View>
                 ) : null}
@@ -170,6 +172,7 @@ function PolaroidExportViewInner(
             </View>
           ) : (
             <LinearGradient
+              testID="polaroid-export-text-card"
               colors={gradient}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
@@ -191,6 +194,8 @@ function PolaroidExportViewInner(
                     placements={stickerPlacements}
                     editable={false}
                     stampShadowEnabled={false}
+                    onImagesReady={handleStickerImagesReady}
+                    viewShotCompatibleImages
                   />
                 </View>
               ) : null}
@@ -244,43 +249,12 @@ export default memo(PolaroidExportView);
 
 const styles = StyleSheet.create({
   captureCanvas: {
-    width: CANVAS_WIDTH,
-    height: CANVAS_HEIGHT,
-    backgroundColor: '#E5D5C2',
+    width: POLAROID_WIDTH,
+    height: POLAROID_FRAME_HEIGHT,
+    backgroundColor: 'transparent',
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
-  },
-  backdropBlob: {
-    position: 'absolute',
-    borderRadius: 999,
-    opacity: 0.5,
-  },
-  backdropBlobTop: {
-    width: 640,
-    height: 640,
-    top: -170,
-    right: -120,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-  },
-  backdropBlobBottom: {
-    width: 720,
-    height: 720,
-    bottom: -280,
-    left: -190,
-    backgroundColor: 'rgba(184,138,102,0.16)',
-  },
-  polaroidShadow: {
-    position: 'absolute',
-    width: POLAROID_WIDTH,
-    height: POLAROID_CARD_SIZE + POLAROID_TOP_PADDING + POLAROID_BOTTOM_PADDING,
-    borderRadius: 42,
-    backgroundColor: 'rgba(83, 55, 34, 0.14)',
-    transform: [{ translateY: 22 }, { rotate: '-2deg' }],
-    shadowColor: '#3B2416',
-    shadowOffset: { width: 0, height: 26 },
-    shadowOpacity: 0.18,
-    shadowRadius: 42,
   },
   polaroidFrame: {
     width: POLAROID_WIDTH,

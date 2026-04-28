@@ -19,6 +19,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { Layout, Typography } from '../../../constants/theme';
 import { useReducedMotion } from '../../../hooks/useReducedMotion';
+import { POLAROID_EXPORT_HEIGHT, POLAROID_EXPORT_WIDTH } from '../../../services/polaroidExport';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 const DETAIL_POLAROID_WIDTH = Math.min(screenWidth - 64, 264);
@@ -266,7 +267,7 @@ const styles = StyleSheet.create({
   },
   detailPolaroidWrap: {
     width: DETAIL_POLAROID_WIDTH,
-    aspectRatio: 1080 / 1350,
+    aspectRatio: POLAROID_EXPORT_WIDTH / POLAROID_EXPORT_HEIGHT,
     borderRadius: 20,
     overflow: 'hidden',
     shadowColor: '#201109',
@@ -287,7 +288,7 @@ const styles = StyleSheet.create({
   },
   homePolaroidWrap: {
     width: HOME_POLAROID_WIDTH,
-    aspectRatio: 1080 / 1350,
+    aspectRatio: POLAROID_EXPORT_WIDTH / POLAROID_EXPORT_HEIGHT,
     borderRadius: 20,
     overflow: 'hidden',
     shadowColor: '#201109',
@@ -299,7 +300,6 @@ const styles = StyleSheet.create({
   previewImage: {
     width: '100%',
     height: '100%',
-    backgroundColor: '#F3E8D9',
   },
   flashOverlay: {
     ...StyleSheet.absoluteFillObject,

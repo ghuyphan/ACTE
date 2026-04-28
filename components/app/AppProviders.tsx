@@ -11,6 +11,7 @@ import {
   HapticsProvider,
   NoteDetailSheetProvider,
   NotesProvider,
+  PolaroidExportCaptureProvider,
   SharedFeedProvider,
   SubscriptionProvider,
   SyncStatusProvider,
@@ -41,6 +42,7 @@ const providerChain: ProviderComponent[] = [
   SyncStatusProvider,
   SharedFeedProvider,
   SavedNoteRevealUiProvider,
+  PolaroidExportCaptureProvider,
   // Android bottom-sheet modals portal through this provider. Keep any context
   // sheet content reads above it, and any provider that renders sheet content below it.
   BottomSheetModalProvider,

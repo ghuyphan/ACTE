@@ -515,7 +515,12 @@ export function getNoteColorCardGradient(
     }
   }
 
-  return getNoteColorPreset(noteColor)?.card ?? null;
+  const preset = getNoteColorPreset(noteColor);
+  if (!preset) {
+    return null;
+  }
+
+  return options?.colorScheme === 'dark' && preset.darkCard ? preset.darkCard : preset.card;
 }
 
 export function getNoteColorStickerMotion(noteColor?: string | null): NoteColorStickerMotion | null {
@@ -543,7 +548,9 @@ export function resolveSavedTextNoteColor(
     return APP_THEME_DEFAULT_NOTE_COLOR_ID;
   }
 
-  return normalizeSavedTextNoteColor(noteColor);
+  return resolveConcreteThemeNoteColorId(noteColor, options?.colorScheme)
+    ?? getNoteColorPreset(noteColor)?.id
+    ?? DEFAULT_NOTE_COLOR_ID;
 }
 
 export function getEditableTextNoteColor(noteColor?: string | null): string | null {

@@ -83,6 +83,7 @@ function CaptureTextColorButton({
           colors={getCaptureNoteGradient({
             noteColor,
             fallbackGradient: colors.captureGradient ?? colors.gradient ?? null,
+            colorScheme: colors.captureGlassColorScheme,
           })}
           start={{ x: 0.08, y: 0.06 }}
           end={{ x: 0.94, y: 0.94 }}

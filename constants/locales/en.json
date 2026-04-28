@@ -4,7 +4,10 @@
         "capture": "Add",
         "search": "Search",
         "map": "Spots",
-        "settings": "App"
+        "settings": "App",
+        "returnToVisibleHint": "Returns to the visible tab",
+        "searchFocusHint": "Focuses the search field",
+        "searchOpenHint": "Opens search"
     },
     "home": {
         "title": "Your Journal",
@@ -1020,6 +1023,7 @@
         "ok": "OK",
         "close": "Close",
         "back": "Back",
+        "clear": "Clear",
         "loading": "Loading",
         "previewLivePhotoMotion": "Preview live photo motion"
     }

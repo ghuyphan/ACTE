@@ -35,21 +35,22 @@ export type NoteColorId =
 export type NoteColorPreset = {
   id: NoteColorId;
   card: GradientPair;
+  darkCard?: GradientPair;
   tier?: NoteColorTier;
   finish?: NoteColorFinish;
   stickerMotion?: NoteColorStickerMotion;
 };
 
 export const NOTE_COLOR_PRESETS: NoteColorPreset[] = [
-  { id: 'marigold-glow', card: ['#F6D365', '#FDA085'] },
+  { id: 'marigold-glow', card: ['#F6D365', '#FDA085'], darkCard: ['#F2C96F', '#F19A7A'] },
   { id: 'peach-theme', card: ['#FFD9C6', '#F6BCCB'] },
   { id: 'matcha-theme', card: ['#D8E9C1', '#BEE7D7'] },
   { id: 'berry-theme', card: ['#D9D3FF', '#F3CBE9'] },
   { id: 'cotton-candy-theme', card: ['#F8D7E2', '#D4C9FA'] },
-  { id: 'jade-pop', card: ['#84FAB0', '#8FD3F4'] }, // Added a slight blue hue for a modern pop
-  { id: 'sky-blue', card: ['#A1C4FD', '#C2E9FB'], stickerMotion: 'water' },
-  { id: 'tangerine-clay', card: ['#FAD961', '#F76B1C'] },
-  { id: 'pool-teal', card: ['#4FACFE', '#00F2FE'], stickerMotion: 'water' },
+  { id: 'jade-pop', card: ['#84FAB0', '#8FD3F4'], darkCard: ['#65D28F', '#6FB6CB'] },
+  { id: 'sky-blue', card: ['#A1C4FD', '#C2E9FB'], darkCard: ['#7EA7D8', '#8FCBE0'], stickerMotion: 'water' },
+  { id: 'tangerine-clay', card: ['#FAD961', '#F76B1C'], darkCard: ['#DFAE45', '#C9652D'] },
+  { id: 'pool-teal', card: ['#4FACFE', '#00F2FE'], darkCard: ['#3B91CF', '#2AC5D2'], stickerMotion: 'water' },
   { id: 'aurora-rgb', card: ['#5B5FFF', '#FF4FD8'], tier: 'plus', finish: 'rgb' },
   { id: 'holo-foil', card: ['#F5F1EA', '#DDE6F1'], tier: 'plus', finish: 'holo' },
   { id: 'chrome-rare', card: ['#5E6B88', '#D2A7FF'], tier: 'plus', finish: 'chrome' },

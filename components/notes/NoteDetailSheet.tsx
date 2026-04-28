@@ -29,6 +29,7 @@ import { useNotes } from '../../hooks/useNotes';
 import { useSharedFeedStore } from '../../hooks/useSharedFeed';
 import { useReducedMotion } from '../../hooks/useReducedMotion';
 import { useAndroidKeyboardBlurOnHide } from '../../hooks/ui/useAndroidKeyboardBlurOnHide';
+import { usePolaroidExportCapture } from '../../hooks/usePolaroidExportCapture';
 import { useStickerCreationFlow } from '../../hooks/ui/useStickerCreationFlow';
 import { useStickerSourceSheetFlow } from '../../hooks/ui/useStickerSourceSheetFlow';
 import { useSubscription } from '../../hooks/useSubscription';
@@ -80,7 +81,6 @@ import {
     importStickerAssetFromClipboard,
 } from '../../utils/stickerClipboard';
 import {
-    captureViewAsImage,
     cleanupCapturedImage,
     PolaroidExportError,
     requestSavePermission,
@@ -163,10 +163,6 @@ type StickerPastePromptState = {
 };
 
 type StickerImportIntent = 'sticker' | 'stamp';
-
-function delay(ms: number) {
-    return new Promise((resolve) => setTimeout(resolve, ms));
-}
 
 function getStickerImportErrorMessage(
     t: ReturnType<typeof useTranslation>['t'],
@@ -266,14 +262,12 @@ interface FeedbackState {
 type PolaroidExportState = {
     animationSuccess: boolean;
     animationUri: string | null;
-    captureVisible: boolean;
     exporting: boolean;
 };
 
 const initialPolaroidExportState: PolaroidExportState = {
     animationSuccess: false,
     animationUri: null,
-    captureVisible: false,
     exporting: false,
 };
 
@@ -299,6 +293,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
         restorePurchases,
     } = useSubscription();
     const reduceMotionEnabled = useReducedMotion();
+    const { capturePolaroidExport } = usePolaroidExportCapture();
     const [note, setNote] = useState<Note | null>(null);
     const [loading, setLoading] = useState(true);
     const [richDecorationsReady, setRichDecorationsReady] = useState(false);
@@ -359,9 +354,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
     const activeNoteKeyRef = useRef(`note-detail-${Math.random().toString(36).slice(2)}`);
     const lastFreeEditNoteColorRef = useRef<string | null>(null);
     const subjectCutoutPrewarmRequestedRef = useRef(false);
-    const polaroidCaptureRef = useRef<any>(null);
     const polaroidTempUriRef = useRef<string | null>(null);
-    const polaroidReadyResolverRef = useRef<(() => void) | null>(null);
     const noteRef = useRef<Note | null>(null);
     const noteIdRef = useRef(noteId);
     const isEditingRef = useRef(false);
@@ -412,7 +405,6 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
     const resetPolaroidCaptureState = useCallback(() => {
         cleanupCapturedImage(polaroidTempUriRef.current);
         polaroidTempUriRef.current = null;
-        polaroidReadyResolverRef.current = null;
         setPolaroidExportState(initialPolaroidExportState);
     }, []);
 
@@ -446,34 +438,6 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
     useEffect(() => {
         stickerModeEnabledRef.current = stickerModeEnabled;
     }, [stickerModeEnabled]);
-
-    const waitForPolaroidRenderReady = useCallback(() => {
-        return new Promise<void>((resolve) => {
-            let settled = false;
-            const timeoutId = setTimeout(() => {
-                if (settled) {
-                    return;
-                }
-                settled = true;
-                polaroidReadyResolverRef.current = null;
-                resolve();
-            }, 900);
-
-            polaroidReadyResolverRef.current = () => {
-                if (settled) {
-                    return;
-                }
-                settled = true;
-                clearTimeout(timeoutId);
-                polaroidReadyResolverRef.current = null;
-                resolve();
-            };
-        });
-    }, []);
-
-    const handlePolaroidRenderReady = useCallback(() => {
-        polaroidReadyResolverRef.current?.();
-    }, []);
 
     const handlePolaroidAnimationFinished = useCallback(() => {
         resetPolaroidCaptureState();
@@ -1774,7 +1738,6 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
         setPolaroidExportState({
             animationSuccess: false,
             animationUri: null,
-            captureVisible: false,
             exporting: true,
         });
 
@@ -1805,14 +1768,15 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
             return;
         }
 
-        setPolaroidExportState((current) => ({ ...current, captureVisible: true }));
-        await waitForPolaroidRenderReady();
-        await delay(reduceMotionEnabled ? 60 : 140);
-
         let capturedUri: string | null = null;
 
         try {
-            capturedUri = await captureViewAsImage(polaroidCaptureRef);
+            capturedUri = await capturePolaroidExport({
+                note,
+                fallbackLocationLabel: t('noteDetail.unknownLocation', 'Unknown place'),
+                fallbackGradient: colors.captureGradient,
+                settleDelayMs: reduceMotionEnabled ? 60 : 140,
+            });
             polaroidTempUriRef.current = capturedUri;
             setPolaroidExportState((current) => ({
                 ...current,
@@ -1847,13 +1811,14 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
         isDeleting,
         isEditing,
         note,
+        capturePolaroidExport,
+        colors.captureGradient,
         polaroidExportState.exporting,
         reduceMotionEnabled,
         resetPolaroidCaptureState,
         showPolaroidRequiresUpdateAlert,
         showPolaroidPermissionAlert,
         t,
-        waitForPolaroidRenderReady,
     ]);
 
     const renderBody = () => (
@@ -1908,7 +1873,6 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
             onClearDoodle={handleClearDoodle}
             onLocationChangeText={handleLocationChangeText}
             onLocationSelectionChange={handleLocationSelectionChange}
-            onPolaroidCaptureReady={handlePolaroidRenderReady}
             onShowCardPastePrompt={handleShowCardPastePrompt}
             onConfirmPasteFromPrompt={handleConfirmPasteFromPrompt}
             dismissPastePrompt={dismissPastePrompt}
@@ -1924,10 +1888,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
             onPolaroidAnimationFinished={handlePolaroidAnimationFinished}
             polaroidAnimationSuccess={polaroidExportState.animationSuccess}
             polaroidAnimationUri={polaroidExportState.animationUri}
-            polaroidCaptureRef={polaroidCaptureRef}
             polaroidExporting={polaroidExportState.exporting}
-            polaroidFallbackLocationLabel={t('noteDetail.unknownLocation', 'Unknown place')}
-            showPolaroidCapture={polaroidExportState.captureVisible}
             scrollContainerRef={scrollContainerRef}
             showPremiumColorAlert={showPremiumColorAlert}
         />

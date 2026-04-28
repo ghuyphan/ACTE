@@ -4,6 +4,7 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   LayoutChangeEvent,
+  Image as RNImage,
   Pressable,
   Platform,
   type StyleProp,
@@ -17,6 +18,8 @@ import {
   hydrateStickerPlacements,
   type NoteStickerPlacement,
 } from '../../services/noteStickers';
+import { normalizeImageMimeType } from '../../services/mediaTypeUtils';
+import * as FileSystem from '../../utils/fileSystem';
 import {
   getStickerPinchScale,
   getStickerOutlineOffsets,
@@ -56,6 +59,8 @@ interface NoteStickerCanvasProps {
   onGestureActiveChange?: (active: boolean) => void;
   entryAnimation?: StickerEntryAnimation | null;
   onEntryAnimationComplete?: (placementId: string) => void;
+  onImagesReady?: () => void;
+  viewShotCompatibleImages?: boolean;
 }
 
 const STICKER_OUTLINE_COLOR = 'rgba(255,255,255,0.98)';
@@ -69,6 +74,72 @@ function normalizePlacements(placements: NoteStickerPlacement[]) {
     ...placement,
     zIndex: index + 1,
   }));
+}
+
+function getStickerArtworkReadyKey(placement: NoteStickerPlacement) {
+  return [
+    placement.id,
+    placement.asset.localUri,
+    placement.renderMode ?? 'sticker',
+    placement.stampStyle ?? 'classic',
+  ].join(':');
+}
+
+function getViewShotDataUriMimeType(mimeType: string | null | undefined) {
+  const normalizedMimeType = normalizeImageMimeType(mimeType);
+
+  return normalizedMimeType || 'image/png';
+}
+
+function shouldInlineImageForViewShot(uri: string) {
+  return uri.startsWith('file://') || uri.startsWith('content://');
+}
+
+function useViewShotImageUri(
+  uri: string,
+  mimeType: string | null | undefined,
+  enabled: boolean
+) {
+  const needsInline = enabled && shouldInlineImageForViewShot(uri);
+  const [resolvedUri, setResolvedUri] = useState<string | null>(needsInline ? null : uri);
+
+  useEffect(() => {
+    const shouldInline = enabled && shouldInlineImageForViewShot(uri);
+    if (!shouldInline) {
+      setResolvedUri(uri);
+      return;
+    }
+
+    let cancelled = false;
+    setResolvedUri(null);
+
+    void FileSystem.readAsStringAsync(uri, {
+      encoding: FileSystem.EncodingType.Base64,
+    })
+      .then((base64) => {
+        if (cancelled) {
+          return;
+        }
+
+        const trimmedBase64 = base64.trim();
+        setResolvedUri(
+          trimmedBase64
+            ? `data:${getViewShotDataUriMimeType(mimeType)};base64,${trimmedBase64}`
+            : uri
+        );
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setResolvedUri(uri);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [enabled, mimeType, uri]);
+
+  return resolvedUri;
 }
 
 function measureWindowRect(
@@ -211,6 +282,8 @@ function EditableSticker({
   onToggleSelectedPlacementOutline,
   onRemoveSelectedPlacement,
   onGestureActiveChange,
+  onArtworkReady,
+  viewShotCompatibleImages,
 }: {
   placement: NoteStickerPlacement;
   layout: CanvasLayout;
@@ -228,6 +301,8 @@ function EditableSticker({
   onToggleSelectedPlacementOutline?: (placementId: string) => void;
   onRemoveSelectedPlacement?: (placementId: string) => void;
   onGestureActiveChange?: (active: boolean) => void;
+  onArtworkReady?: (artworkKey: string) => void;
+  viewShotCompatibleImages: boolean;
 }) {
   const panStartRef = useRef<{ x: number; y: number }>({ x: placement.x, y: placement.y });
   const pinchStartScaleRef = useRef(placement.scale);
@@ -252,7 +327,19 @@ function EditableSticker({
     stampMetrics,
   } = placementFrame;
   const entryAnimationActive = Boolean(entryAnimation);
-  const showOutline = activePlacement.renderMode !== 'stamp' && activePlacement.outlineEnabled !== false;
+  const artworkReadyKey = useMemo(
+    () => getStickerArtworkReadyKey(activePlacement),
+    [activePlacement]
+  );
+  const viewShotImageUri = useViewShotImageUri(
+    activePlacement.asset.localUri,
+    activePlacement.asset.mimeType,
+    viewShotCompatibleImages
+  );
+  const showOutline =
+    !viewShotCompatibleImages &&
+    activePlacement.renderMode !== 'stamp' &&
+    activePlacement.outlineEnabled !== false;
   const showOutlineToggle = activePlacement.renderMode !== 'stamp' && Boolean(onToggleSelectedPlacementOutline);
 
   useEffect(() => {
@@ -464,45 +551,84 @@ function EditableSticker({
           testID={`note-sticker-outline-${placement.id}`}
           style={styles.stickerOutlineLayer}
         >
-          {outlineOffsets.map((offset, index) => (
-            <ExpoImage
-              key={`${placement.id}-outline-${index}`}
-              source={{ uri: activePlacement.asset.localUri }}
-              style={[
-                styles.stickerLayerImage,
-                stickerFrameStyle,
-                {
-                  tintColor: STICKER_OUTLINE_COLOR,
-                  opacity: 0.92,
-                  transform: [
-                    { translateX: offset.x * outlineSize },
-                    { translateY: offset.y * outlineSize },
-                  ],
-                },
-              ]}
-              contentFit="contain"
-              transition={0}
-            />
-          ))}
+          {viewShotImageUri ? outlineOffsets.map((offset, index) => (
+            viewShotCompatibleImages ? (
+              <RNImage
+                key={`${placement.id}-outline-${index}`}
+                fadeDuration={0}
+                resizeMode="contain"
+                source={{ uri: viewShotImageUri }}
+                style={[
+                  styles.stickerLayerImage,
+                  stickerFrameStyle,
+                  {
+                    tintColor: STICKER_OUTLINE_COLOR,
+                    opacity: 0.92,
+                    transform: [
+                      { translateX: offset.x * outlineSize },
+                      { translateY: offset.y * outlineSize },
+                    ],
+                  },
+                ]}
+              />
+            ) : (
+              <ExpoImage
+                key={`${placement.id}-outline-${index}`}
+                source={{ uri: viewShotImageUri }}
+                style={[
+                  styles.stickerLayerImage,
+                  stickerFrameStyle,
+                  {
+                    tintColor: STICKER_OUTLINE_COLOR,
+                    opacity: 0.92,
+                    transform: [
+                      { translateX: offset.x * outlineSize },
+                      { translateY: offset.y * outlineSize },
+                    ],
+                  },
+                ]}
+                contentFit="contain"
+                transition={0}
+              />
+            )
+          )) : null}
         </View>
       ) : null}
       {stampMetrics ? (
         <StampStickerArtwork
           localUri={activePlacement.asset.localUri}
+          renderUri={viewShotImageUri ?? undefined}
           metrics={stampMetrics}
           shadowEnabled={stampShadowEnabled}
           width={baseWidth}
           height={baseHeight}
+          renderer={viewShotCompatibleImages ? 'native' : 'skia'}
+          style={activePlacement.stampStyle}
           paperTestID={`note-sticker-stamp-paper-${placement.id}`}
           artworkTestID={`note-sticker-stamp-${placement.id}`}
+          onReady={() => onArtworkReady?.(artworkReadyKey)}
         />
+      ) : viewShotCompatibleImages ? (
+        viewShotImageUri ? (
+          <RNImage
+            testID={`note-sticker-image-${placement.id}`}
+            fadeDuration={0}
+            resizeMode="contain"
+            source={{ uri: viewShotImageUri }}
+            style={[styles.stickerLayerImage, stickerFrameStyle]}
+            onLoadEnd={() => onArtworkReady?.(artworkReadyKey)}
+            onError={() => onArtworkReady?.(artworkReadyKey)}
+          />
+        ) : null
       ) : (
         <ExpoImage
           testID={`note-sticker-image-${placement.id}`}
-          source={{ uri: activePlacement.asset.localUri }}
+          source={{ uri: viewShotImageUri ?? activePlacement.asset.localUri }}
           style={[styles.stickerLayerImage, stickerFrameStyle]}
           contentFit="contain"
           transition={interactiveRef.current ? 0 : 120}
+          onLoadEnd={() => onArtworkReady?.(artworkReadyKey)}
+          onError={() => onArtworkReady?.(artworkReadyKey)}
         />
       )}
     </View>
@@ -574,6 +700,8 @@ function NoteStickerCanvas({
   onGestureActiveChange,
   entryAnimation = null,
   onEntryAnimationComplete,
+  onImagesReady,
+  viewShotCompatibleImages = false,
 }: NoteStickerCanvasProps) {
   const [layout, setLayout] = useState<CanvasLayout>({ width: 1, height: 1 });
   const [canvasWindowRect, setCanvasWindowRect] = useState<WindowRect | null>(null);
@@ -606,6 +734,54 @@ function NoteStickerCanvas({
 
   const renderedPlacements = editable ? placements : hydratedPlacements;
   const sortedPlacements = useMemo(() => sortStickerPlacements(renderedPlacements), [renderedPlacements]);
+  const artworkReadyKeys = useMemo(
+    () => sortedPlacements.map(getStickerArtworkReadyKey),
+    [sortedPlacements]
+  );
+  const artworkReadySignature = artworkReadyKeys.join('|');
+  const artworkReadyStateRef = useRef({
+    signature: artworkReadySignature,
+    readyKeys: new Set<string>(),
+  });
+
+  if (artworkReadyStateRef.current.signature !== artworkReadySignature) {
+    artworkReadyStateRef.current = {
+      signature: artworkReadySignature,
+      readyKeys: new Set<string>(),
+    };
+  }
+
+  useEffect(() => {
+    if (artworkReadyKeys.length === 0) {
+      onImagesReady?.();
+    }
+  }, [artworkReadyKeys.length, onImagesReady]);
+
+  const handleArtworkReady = useCallback(
+    (artworkKey: string) => {
+      const readyState = artworkReadyStateRef.current;
+      if (readyState.signature !== artworkReadySignature) {
+        return;
+      }
+
+      if (readyState.readyKeys.has(artworkKey)) {
+        return;
+      }
+
+      readyState.readyKeys.add(artworkKey);
+      if (readyState.readyKeys.size < artworkReadyKeys.length) {
+        return;
+      }
+
+      if (typeof requestAnimationFrame === 'function') {
+        requestAnimationFrame(() => onImagesReady?.());
+        return;
+      }
+
+      setTimeout(() => onImagesReady?.(), 0);
+    },
+    [artworkReadyKeys.length, artworkReadySignature, onImagesReady]
+  );
 
   const measureCanvasInWindow = useCallback(async () => {
     const nextRect = await measureWindowRect(canvasRef.current as MeasurableView | null, layout);
@@ -711,6 +887,8 @@ function NoteStickerCanvas({
           onToggleSelectedPlacementOutline={onToggleSelectedPlacementOutline}
           onRemoveSelectedPlacement={onRemoveSelectedPlacement}
           onGestureActiveChange={onGestureActiveChange}
+          onArtworkReady={handleArtworkReady}
+          viewShotCompatibleImages={viewShotCompatibleImages}
         />
       ))}
     </View>

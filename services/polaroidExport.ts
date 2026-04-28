@@ -1,8 +1,8 @@
 import type { RefObject } from 'react';
 import type { View } from 'react-native';
 
-export const POLAROID_EXPORT_WIDTH = 1080;
-export const POLAROID_EXPORT_HEIGHT = 1350;
+export const POLAROID_EXPORT_WIDTH = 876;
+export const POLAROID_EXPORT_HEIGHT = 1048;
 
 export type SavePermissionStatus = 'granted' | 'denied' | 'blocked';
 export type PolaroidExportResult =

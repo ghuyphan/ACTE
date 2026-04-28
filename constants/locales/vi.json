@@ -4,7 +4,10 @@
         "capture": "Thêm",
         "search": "Tìm kiếm",
         "map": "Bản đồ",
-        "settings": "Cài đặt"
+        "settings": "Cài đặt",
+        "returnToVisibleHint": "Quay lại tab đang hiển thị",
+        "searchFocusHint": "Đưa con trỏ vào ô tìm kiếm",
+        "searchOpenHint": "Mở tìm kiếm"
     },
     "home": {
         "title": "Nhật ký của bạn",
@@ -1020,6 +1023,7 @@
         "ok": "Đồng ý",
         "close": "Đóng",
         "back": "Quay lại",
+        "clear": "Xóa",
         "loading": "Đang tải",
         "previewLivePhotoMotion": "Xem thử chuyển động Live Photo"
     }

@@ -8,14 +8,13 @@ import {
 } from '../components/home/MemoryCardPrimitives';
 
 const mockRequestSavePermission = jest.fn();
-const mockCaptureViewAsImage = jest.fn();
+const mockCapturePolaroidExport = jest.fn();
 const mockSavePolaroidToLibrary = jest.fn();
 const mockCleanupCapturedImage = jest.fn();
 const mockImpactAsync = jest.fn();
 const mockNotificationAsync = jest.fn();
 const mockShowAppAlert = jest.fn();
 const mockPolaroidAnimation = jest.fn();
-let mockShouldSignalPolaroidReady = true;
 
 const mockT = ((key: string, fallbackOrOptions?: string | { defaultValue?: string; location?: string }) => {
   if (typeof fallbackOrOptions === 'string') {
@@ -62,12 +61,17 @@ jest.mock('../hooks/useHaptics', () => ({
   notificationAsync: (...args: any[]) => mockNotificationAsync(...args),
 }));
 
+jest.mock('../hooks/usePolaroidExportCapture', () => ({
+  usePolaroidExportCapture: () => ({
+    capturePolaroidExport: (...args: any[]) => mockCapturePolaroidExport(...args),
+  }),
+}));
+
 jest.mock('../services/polaroidExport', () => ({
   PolaroidExportError: class MockPolaroidExportError extends Error {
     code = 'requires-update' as const;
   },
   requestSavePermission: (...args: any[]) => mockRequestSavePermission(...args),
-  captureViewAsImage: (...args: any[]) => mockCaptureViewAsImage(...args),
   savePolaroidToLibrary: (...args: any[]) => mockSavePolaroidToLibrary(...args),
   cleanupCapturedImage: (...args: any[]) => mockCleanupCapturedImage(...args),
 }));
@@ -96,6 +100,7 @@ jest.mock('../hooks/useTheme', () => ({
       danger: '#FF3B30',
       success: '#34C759',
       gradient: ['#FFC107', '#FF9F0A'],
+      captureGradient: ['#FFC107', '#FF9F0A'],
     },
   }),
 }));
@@ -130,20 +135,6 @@ jest.mock('../components/ui/LivePhotoIcon', () => {
     const { Text } = require('react-native');
     return <Text>live-photo-icon</Text>;
   };
-});
-
-jest.mock('../components/notes/detail/PolaroidExportView', () => {
-  const React = require('react');
-
-  return React.forwardRef(function MockPolaroidExportView(props: any, ref: any) {
-    const { View } = require('react-native');
-
-    React.useImperativeHandle(ref, () => ({}));
-    if (mockShouldSignalPolaroidReady) {
-      props.onReady?.();
-    }
-    return <View testID="mock-polaroid-export-view" />;
-  });
 });
 
 jest.mock('../components/notes/detail/PolaroidExportAnimation', () => {
@@ -185,9 +176,8 @@ const colors = {
 beforeEach(() => {
   jest.useRealTimers();
   jest.clearAllMocks();
-  mockShouldSignalPolaroidReady = true;
   mockRequestSavePermission.mockResolvedValue('granted');
-  mockCaptureViewAsImage.mockResolvedValue('file:///tmp/noto-polaroid.png');
+  mockCapturePolaroidExport.mockResolvedValue('file:///tmp/noto-polaroid.png');
   mockSavePolaroidToLibrary.mockResolvedValue(undefined);
   mockCleanupCapturedImage.mockImplementation(() => undefined);
   mockImpactAsync.mockResolvedValue(undefined);
@@ -601,11 +591,19 @@ describe('NoteMemoryCard', () => {
       await Promise.resolve();
     });
 
-    await waitFor(() => expect(mockCaptureViewAsImage).toHaveBeenCalledTimes(1), {
+    await waitFor(() => expect(mockCapturePolaroidExport).toHaveBeenCalledTimes(1), {
       timeout: 1000,
     });
 
     expect(mockRequestSavePermission).toHaveBeenCalledTimes(1);
+    expect(mockCapturePolaroidExport).toHaveBeenCalledWith(
+      expect.objectContaining({
+        fallbackGradient: expect.any(Array),
+        fallbackLocationLabel: 'Unknown place',
+        note,
+        settleDelayMs: 140,
+      })
+    );
     expect(mockSavePolaroidToLibrary).toHaveBeenCalledWith('file:///tmp/noto-polaroid.png');
     expect(mockCleanupCapturedImage).toHaveBeenCalledWith('file:///tmp/noto-polaroid.png');
     expect(mockNotificationAsync).toHaveBeenCalledWith('success');
@@ -621,10 +619,7 @@ describe('NoteMemoryCard', () => {
     expect(mockShowAppAlert).not.toHaveBeenCalled();
   });
 
-  it('falls back to the render-ready timeout when the export view does not signal ready', async () => {
-    jest.useFakeTimers();
-    mockShouldSignalPolaroidReady = false;
-
+  it('saves the provider-captured polaroid without mounting a local export view', async () => {
     const note = {
       id: 'note-polaroid-timeout-1',
       type: 'text',
@@ -669,17 +664,9 @@ describe('NoteMemoryCard', () => {
       await Promise.resolve();
     });
 
-    await act(async () => {
-      jest.advanceTimersByTime(900);
-      await Promise.resolve();
+    await waitFor(() => {
+      expect(mockCapturePolaroidExport).toHaveBeenCalledTimes(1);
     });
-
-    await act(async () => {
-      jest.advanceTimersByTime(140);
-      await Promise.resolve();
-    });
-
-    expect(mockCaptureViewAsImage).toHaveBeenCalledTimes(1);
     expect(mockSavePolaroidToLibrary).toHaveBeenCalledWith('file:///tmp/noto-polaroid.png');
     expect(mockCleanupCapturedImage).toHaveBeenCalledWith('file:///tmp/noto-polaroid.png');
     expect(mockShowAppAlert).not.toHaveBeenCalled();

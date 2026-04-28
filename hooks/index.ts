@@ -8,6 +8,10 @@ export { useHaptics, HapticsProvider } from './useHaptics';
 export { useNoteDetailSheet, NoteDetailSheetProvider } from './useNoteDetailSheet';
 export { useNotes, useNotesActions, useNotesState, useNotesStore, NotesProvider } from './useNotes';
 export type { NotesActionsValue, NotesStateValue, NotesStoreValue } from './useNotes';
+export {
+  PolaroidExportCaptureProvider,
+  usePolaroidExportCapture,
+} from './usePolaroidExportCapture';
 export { useSharedFeedStore, SharedFeedProvider } from './useSharedFeed';
 export { useSubscription, SubscriptionProvider } from './useSubscription';
 export { useSyncStatus, SyncStatusProvider } from './useSyncStatus';

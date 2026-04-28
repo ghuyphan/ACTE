@@ -21,7 +21,7 @@ export default function SharedPostCardVisual({
   isActive?: boolean;
   debugTiltOverride?: SharedValue<DebugTiltState>;
 }) {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   const previewText = getSharedPostPreviewText(post, {
     photoLabel: fallbackText,
     emptyLabel: fallbackText,
@@ -84,6 +84,7 @@ export default function SharedPostCardVisual({
       noteId={post.id}
       noteColor={post.noteColor}
       fallbackGradient={colors.captureGradient}
+      colorScheme={isDark ? 'dark' : 'light'}
       doodleStrokesJson={post.doodleStrokesJson}
       stickerPlacementsJson={post.stickerPlacementsJson}
       remoteBucket={SHARED_POST_MEDIA_BUCKET}

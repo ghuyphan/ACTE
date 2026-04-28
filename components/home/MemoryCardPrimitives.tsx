@@ -14,9 +14,9 @@ import * as Haptics from '../../hooks/useHaptics';
 import { useRelativeTimeNow } from '../../hooks/useRelativeTimeNow';
 import { useReducedMotion } from '../../hooks/useReducedMotion';
 import { useTheme } from '../../hooks/useTheme';
+import { usePolaroidExportCapture } from '../../hooks/usePolaroidExportCapture';
 import { Note } from '../../services/database';
 import {
-  captureViewAsImage,
   cleanupCapturedImage,
   PolaroidExportError,
   requestSavePermission,
@@ -35,7 +35,6 @@ import {
 } from '../notes/StickerPhysicsDebugControls';
 import PolaroidCaptureButton from '../notes/detail/PolaroidCaptureButton';
 import PolaroidExportAnimation from '../notes/detail/PolaroidExportAnimation';
-import PolaroidExportView from '../notes/detail/PolaroidExportView';
 import TextMemoryCard from '../notes/TextMemoryCard';
 import { GlassView } from '../ui/GlassView';
 import { glassTokens, getGlassSurfacePalette } from '../ui/glassTokens';
@@ -134,10 +133,6 @@ export function getSharedPostMemoryCardRenderSignature(post: SharedPost) {
   ].map(signatureValue).join(RENDER_SIGNATURE_SEPARATOR);
 }
 
-function delay(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
 function MemoryVisualPressable({
   accessibilityLabel,
   children,
@@ -173,11 +168,13 @@ function NoteCardVisual({
   debugTiltOverride,
   fallbackGradient,
   isActive,
+  isDark,
   note,
 }: {
   debugTiltOverride: ReturnType<typeof useSharedValue<DebugTiltState>>;
   fallbackGradient: readonly [string, string];
   isActive: boolean;
+  isDark: boolean;
   note: Note;
 }) {
   if (note.type === 'photo') {
@@ -205,6 +202,7 @@ function NoteCardVisual({
       emoji={note.moodEmoji}
       noteColor={note.noteColor}
       fallbackGradient={fallbackGradient}
+      colorScheme={isDark ? 'dark' : 'light'}
       doodleStrokesJson={note.doodleStrokesJson}
       stickerPlacementsJson={note.stickerPlacementsJson}
       isActive={isActive}
@@ -465,9 +463,10 @@ export function NoteMemoryCard({
   isActive = false,
   isSharedByMe = false,
 }: NoteMemoryCardProps) {
-  const { colors: themeColors } = useTheme();
+  const { colors: themeColors, isDark } = useTheme();
   const { width } = useWindowDimensions();
   const reduceMotionEnabled = useReducedMotion();
+  const { capturePolaroidExport } = usePolaroidExportCapture();
   const now = useRelativeTimeNow();
   const resolvedCardSize = cardSize ?? width - (Layout.screenPadding - 8) * 2;
   const dateStr = formatNoteTimestamp(note.createdAt, 'card', now);
@@ -475,12 +474,9 @@ export function NoteMemoryCard({
   const locationLabel = note.locationName ?? t('home.unknownLocation', 'Unknown location');
   const [expandedBadgeKey, setExpandedBadgeKey] = useState<'shared' | 'live-photo' | 'favorite' | null>(null);
   const [polaroidExporting, setPolaroidExporting] = useState(false);
-  const [showPolaroidCapture, setShowPolaroidCapture] = useState(false);
   const [polaroidAnimationUri, setPolaroidAnimationUri] = useState<string | null>(null);
   const [polaroidAnimationSuccess, setPolaroidAnimationSuccess] = useState(false);
-  const polaroidCaptureRef = useRef<View | null>(null);
   const polaroidTempUriRef = useRef<string | null>(null);
-  const polaroidReadyResolverRef = useRef<(() => void) | null>(null);
   const sharedStatusLabel = t('home.noteStatusShared', 'Shared');
   const sharedStatusA11yLabel = t('home.noteStatusSharedA11y', 'Shared with friends');
   const livePhotoPreviewHintLabel = t('home.noteStatusLivePhotoHint', 'Hold to preview');
@@ -504,45 +500,14 @@ export function NoteMemoryCard({
   const cleanupPolaroidCaptureResources = useCallback(() => {
     cleanupCapturedImage(polaroidTempUriRef.current);
     polaroidTempUriRef.current = null;
-    polaroidReadyResolverRef.current = null;
   }, []);
 
   const resetPolaroidCaptureState = useCallback(() => {
     cleanupPolaroidCaptureResources();
     setPolaroidAnimationUri(null);
     setPolaroidAnimationSuccess(false);
-    setShowPolaroidCapture(false);
     setPolaroidExporting(false);
   }, [cleanupPolaroidCaptureResources]);
-
-  const waitForPolaroidRenderReady = useCallback(() => {
-    return new Promise<void>((resolve) => {
-      let settled = false;
-      const timeoutId = setTimeout(() => {
-        if (settled) {
-          return;
-        }
-        settled = true;
-        polaroidReadyResolverRef.current = null;
-        resolve();
-      }, 900);
-
-      polaroidReadyResolverRef.current = () => {
-        if (settled) {
-          return;
-        }
-
-        settled = true;
-        clearTimeout(timeoutId);
-        polaroidReadyResolverRef.current = null;
-        resolve();
-      };
-    });
-  }, []);
-
-  const handlePolaroidRenderReady = useCallback(() => {
-    polaroidReadyResolverRef.current?.();
-  }, []);
 
   const handlePolaroidAnimationFinished = useCallback(() => {
     resetPolaroidCaptureState();
@@ -625,14 +590,15 @@ export function NoteMemoryCard({
       return;
     }
 
-    setShowPolaroidCapture(true);
-    await waitForPolaroidRenderReady();
-    await delay(reduceMotionEnabled ? 60 : 140);
-
     let capturedUri: string | null = null;
 
     try {
-      capturedUri = await captureViewAsImage(polaroidCaptureRef);
+      capturedUri = await capturePolaroidExport({
+        note,
+        fallbackLocationLabel: t('noteDetail.unknownLocation', 'Unknown place'),
+        fallbackGradient: themeColors.captureGradient,
+        settleDelayMs: reduceMotionEnabled ? 60 : 140,
+      });
       polaroidTempUriRef.current = capturedUri;
       setPolaroidAnimationUri(capturedUri);
       await savePolaroidToLibrary(capturedUri);
@@ -658,14 +624,16 @@ export function NoteMemoryCard({
       setPolaroidExporting(false);
     }
   }, [
+    capturePolaroidExport,
     noteCardPolaroidAccessibilityLabel,
+    note,
     polaroidExporting,
     reduceMotionEnabled,
     resetPolaroidCaptureState,
     showPolaroidPermissionAlert,
     showPolaroidRequiresUpdateAlert,
     t,
-    waitForPolaroidRenderReady,
+    themeColors.captureGradient,
   ]);
 
   useEffect(() => () => {
@@ -706,6 +674,7 @@ export function NoteMemoryCard({
             debugTiltOverride={debugTiltOverride}
             fallbackGradient={themeColors.captureGradient}
             isActive={isActive}
+            isDark={isDark}
             note={note}
           />
         </MemoryVisualPressable>
@@ -784,17 +753,6 @@ export function NoteMemoryCard({
             {noteMetadata}
           </MetadataContainer>
         )}
-        {showPolaroidCapture ? (
-          <View pointerEvents="none" style={styles.offscreenPolaroidCapture}>
-            <PolaroidExportView
-              ref={polaroidCaptureRef}
-              note={note}
-              fallbackLocationLabel={t('noteDetail.unknownLocation', 'Unknown place')}
-              fallbackGradient={themeColors.captureGradient}
-              onReady={handlePolaroidRenderReady}
-            />
-          </View>
-        ) : null}
         <PolaroidExportAnimation
           uri={polaroidAnimationUri}
           success={polaroidAnimationSuccess}
@@ -986,15 +944,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     minHeight: 56,
     paddingTop: 16,
-  },
-  offscreenPolaroidCapture: {
-    position: 'absolute',
-    left: -9999,
-    top: 0,
-    width: 1080,
-    height: 1350,
-    opacity: 1,
-    zIndex: -1,
   },
   noteMetaRow: {
     width: '88%',

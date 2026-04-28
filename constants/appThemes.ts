@@ -26,7 +26,7 @@ export const APP_THEME_METADATA = {
 } as const satisfies Record<AppThemeType, { labelKey: string; labelFallback: string }>;
 
 export const APP_THEME_PREVIEW_COLORS = {
-  default: ['#F3B6C6', '#F7E2A4'],
+  default: ['#E0B15B', '#F2DEC0'],
   peach: ['#F4C4A4', '#F7D7B5'],
   matcha: ['#BFD8A6', '#E3D9A7'],
   berry: ['#B6B1F2', '#F1B7C9'],

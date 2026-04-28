@@ -287,7 +287,7 @@ export default function LoginScreen() {
   }));
 
   const gradientColors: [string, string, string] = isDark
-    ? [colors.background, colors.card, '#1A1A1A']
+    ? [colors.background, colors.card, colors.surface]
     : [colors.background, colors.surface, '#ECE2D7'];
   const resolvedFormDetentHeight = formContentHeight > 0 ? formContentHeight + IOS_SHEET_DETENT_BUFFER : 0;
   const resolvedPreviousFormDetentHeight =

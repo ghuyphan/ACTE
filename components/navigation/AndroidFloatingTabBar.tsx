@@ -1,10 +1,24 @@
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
+import { Ionicons } from '@expo/vector-icons';
 import { getFocusedRouteNameFromRoute } from '@react-navigation/native';
 import * as Haptics from '../../hooks/useHaptics';
 import { LinearGradient } from 'expo-linear-gradient';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Keyboard, Platform, Pressable, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
+import {
+  Keyboard,
+  Platform,
+  Pressable,
+  type StyleProp,
+  StyleSheet,
+  Text,
+  TextInput,
+  type ViewStyle,
+  View,
+  useWindowDimensions,
+} from 'react-native';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
+  type AnimatedStyle,
   Easing,
   interpolate,
   useAnimatedStyle,
@@ -18,6 +32,7 @@ import { useSavedNoteRevealUi } from '../../hooks/ui/useSavedNoteRevealUi';
 import { useTheme } from '../../hooks/useTheme';
 import { glassTokens } from '../ui/glassTokens';
 import {
+  clearAndroidTabSearch,
   requestAndroidTabSearchFocus,
   setAndroidTabSearchQuery,
   useAndroidTabSearchFocusRequestId,
@@ -51,6 +66,9 @@ const SEARCH_NAVIGATION_DELAY_MS = 170;
 const KEYBOARD_AVOIDANCE_GAP = 10;
 const COMPACT_SCREEN_WIDTH = 390;
 const VERY_NARROW_SCREEN_WIDTH = 360;
+const PRIMARY_DRAG_ACTIVATION_DISTANCE = 10;
+const PRIMARY_DRAG_VERTICAL_CANCEL_DISTANCE = 14;
+const PRIMARY_DRAG_VELOCITY_PROJECTION = 0.08;
 
 type PrimaryRouteItem = {
   accessibilityLabel: string;
@@ -89,6 +107,14 @@ function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max);
 }
 
+function getNearestPrimaryIndex(activeIndex: number, translationX: number, itemStride: number, itemCount: number) {
+  if (activeIndex < 0 || itemStride <= 0 || itemCount <= 0) {
+    return -1;
+  }
+
+  return clamp(Math.round(activeIndex + translationX / itemStride), 0, itemCount - 1);
+}
+
 function shouldDisplayTabBar(route: BottomTabBarProps['state']['routes'][number]) {
   const focusedRouteName = getFocusedRouteNameFromRoute(route);
   return focusedRouteName == null || focusedRouteName === 'index';
@@ -109,10 +135,14 @@ const CompactPrimaryButton = memo(function CompactPrimaryButton({
   onLongPress: (routeKey: string) => void;
   onNavigate: (routeKey: string, routeName: string, routeParams: object | undefined, isFocused: boolean) => void;
 }) {
+  const { t } = useTranslation();
+
   return (
     <Pressable
       accessibilityRole="button"
+      accessibilityHint={t('tabs.returnToVisibleHint', 'Returns to the visible tab')}
       accessibilityLabel={item.accessibilityLabel}
+      hitSlop={8}
       onLongPress={() => onLongPress(item.key)}
       onPress={() => onNavigate(item.key, item.routeName, item.params, activeRouteKey === item.key)}
       style={({ pressed }) => [
@@ -162,8 +192,10 @@ const PrimaryRouteButton = memo(function PrimaryRouteButton({
       accessibilityRole="tab"
       accessibilityState={isFocused ? { selected: true } : {}}
       accessibilityLabel={item.accessibilityLabel}
+      hitSlop={{ bottom: 8, left: 4, right: 4, top: 8 }}
       onLongPress={() => onLongPress(item.key)}
       onPress={() => onNavigate(item.key, item.routeName, item.params, isFocused)}
+      testID={item.descriptor.options.tabBarButtonTestID}
       style={({ pressed }) => [
         styles.tabButton,
         !isLast ? { marginRight: metrics.tabGap } : null,
@@ -209,9 +241,9 @@ const SearchFieldContent = memo(function SearchFieldContent({
   searchSelected,
 }: {
   colors: ReturnType<typeof useTheme>['colors'];
-  inputAnimatedStyle: any;
+  inputAnimatedStyle: StyleProp<AnimatedStyle<ViewStyle>>;
   placeholder: string;
-  placeholderAnimatedStyle: any;
+  placeholderAnimatedStyle: StyleProp<AnimatedStyle<ViewStyle>>;
   searchMorphActive: boolean;
   searchSelected: boolean;
 }) {
@@ -257,6 +289,20 @@ const SearchFieldContent = memo(function SearchFieldContent({
             style={[styles.searchInput, { color: colors.androidTabShellActive }]}
             value={query}
           />
+          {query.length > 0 ? (
+            <Pressable
+              accessibilityLabel={t('common.clear', 'Clear')}
+              accessibilityRole="button"
+              hitSlop={10}
+              onPress={(event) => {
+                event.stopPropagation();
+                clearAndroidTabSearch();
+              }}
+              style={styles.searchClearButton}
+            >
+              <Ionicons color={colors.androidTabShellInactive} name="close-circle" size={17} />
+            </Pressable>
+          ) : null}
         </Animated.View>
       ) : null}
     </>
@@ -277,11 +323,21 @@ export default function AndroidFloatingTabBar({
   const [searchPreviewActive, setSearchPreviewActive] = useState(false);
   const [lastPrimaryRouteKey, setLastPrimaryRouteKey] = useState<string | null>(null);
   const searchNavigationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const dragPreviewIndexRef = useRef(-1);
+  const dragReleaseTargetIndexRef = useRef(-1);
   const indicatorIndex = useSharedValue(state.index);
   const visibility = useSharedValue(1);
   const searchExpansion = useSharedValue(0);
+  const primaryDragOffset = useSharedValue(0);
   const activeRoute = state.routes[state.index];
-  const searchSelected = activeRoute.name === 'search';
+  const searchRoute = useMemo(
+    () =>
+      state.routes.find((route) => descriptors[route.key]?.options.tabBarButtonTestID === 'android-tab-search-button') ??
+      state.routes.find((route) => route.name === 'search') ??
+      null,
+    [descriptors, state.routes]
+  );
+  const searchSelected = searchRoute ? activeRoute.key === searchRoute.key : activeRoute.name === 'search';
   const searchMorphActive = searchSelected || searchPreviewActive;
   const keyboardVisible = keyboardHeight > 0;
   const tabBarVisible =
@@ -289,12 +345,8 @@ export default function AndroidFloatingTabBar({
     (!keyboardVisible || searchMorphActive) &&
     !isSavedNoteRevealActive;
   const primaryRoutes = useMemo(
-    () => state.routes.filter((route) => route.name !== 'search'),
-    [state.routes]
-  );
-  const searchRoute = useMemo(
-    () => state.routes.find((route) => route.name === 'search') ?? null,
-    [state.routes]
+    () => state.routes.filter((route) => route.key !== searchRoute?.key && route.name !== 'search'),
+    [searchRoute?.key, state.routes]
   );
   const activePrimaryIndex = useMemo(
     () => primaryRoutes.findIndex((route) => route.key === activeRoute.key),
@@ -412,9 +464,12 @@ export default function AndroidFloatingTabBar({
   const searchPlaceholder = responsiveMetrics.isCompact
     ? t('tabs.search', 'Search')
     : t('home.searchPlaceholder', 'Search your journal...');
+  const searchAccessibilityHint = searchSelected
+    ? t('tabs.searchFocusHint', 'Focuses the search field')
+    : t('tabs.searchOpenHint', 'Opens search');
   const shellBackgroundColor = colors.androidTabShellBackground;
   const shellBorderColor = colors.androidTabShellBorder;
-  const selectedShellBackgroundColor = colors.androidTabShellSelectedBackground;
+  const selectedShellBackgroundColor = colors.androidTabShellMutedBackground;
   const focusedSearchBackgroundColor = searchSelected
     ? colors.androidTabShellSelectedBackground
     : colors.androidTabShellBackground;
@@ -446,8 +501,18 @@ export default function AndroidFloatingTabBar({
   ]);
 
   useEffect(() => {
+    if (activePrimaryIndex >= 0 && dragReleaseTargetIndexRef.current === activePrimaryIndex) {
+      indicatorIndex.value = activePrimaryIndex;
+      primaryDragOffset.value = 0;
+      dragReleaseTargetIndexRef.current = -1;
+      dragPreviewIndexRef.current = activePrimaryIndex;
+      return;
+    }
+
     indicatorIndex.value = withSpring(Math.max(activePrimaryIndex, 0), INDICATOR_SPRING);
-  }, [activePrimaryIndex, indicatorIndex]);
+    primaryDragOffset.value = withTiming(0, { duration: 120 });
+    dragPreviewIndexRef.current = activePrimaryIndex;
+  }, [activePrimaryIndex, indicatorIndex, primaryDragOffset]);
 
   useEffect(() => {
     visibility.value = withTiming(tabBarVisible ? 1 : 0, {
@@ -513,7 +578,9 @@ export default function AndroidFloatingTabBar({
     () => ({
       opacity: tabWidth > 0 && activePrimaryIndex >= 0 && !searchMorphActive ? visibility.value : 0,
       width: tabWidth,
-      transform: [{ translateX: indicatorIndex.value * (tabWidth + responsiveMetrics.tabGap) }],
+      transform: [
+        { translateX: indicatorIndex.value * (tabWidth + responsiveMetrics.tabGap) + primaryDragOffset.value },
+      ],
     }),
     [activePrimaryIndex, searchMorphActive, responsiveMetrics.tabGap, tabWidth]
   );
@@ -582,6 +649,18 @@ export default function AndroidFloatingTabBar({
     [navigation]
   );
 
+  const navigateToPrimaryIndex = useCallback(
+    (nextIndex: number) => {
+      const route = primaryRouteItems[nextIndex];
+      if (!route) {
+        return;
+      }
+
+      navigateToRoute(route.key, route.routeName, route.params, activeRoute.key === route.key);
+    },
+    [activeRoute.key, navigateToRoute, primaryRouteItems]
+  );
+
   const emitLongPress = useCallback(
     (routeKey: string) => {
       navigation.emit({
@@ -616,6 +695,100 @@ export default function AndroidFloatingTabBar({
     }, SEARCH_NAVIGATION_DELAY_MS);
   }, [navigation, searchRoute, searchSelected]);
 
+  const beginPrimarySelectionDrag = useCallback(() => {
+    if (activePrimaryIndex < 0 || searchMorphActive || tabWidth <= 0 || primaryRouteItems.length <= 1) {
+      return;
+    }
+
+    dragPreviewIndexRef.current = activePrimaryIndex;
+    dragReleaseTargetIndexRef.current = -1;
+  }, [activePrimaryIndex, primaryRouteItems.length, searchMorphActive, tabWidth]);
+
+  const updatePrimarySelectionDrag = useCallback(
+    (translationX: number) => {
+      if (activePrimaryIndex < 0 || searchMorphActive || tabWidth <= 0 || primaryRouteItems.length <= 1) {
+        return;
+      }
+
+      const itemStride = tabWidth + responsiveMetrics.tabGap;
+      const minOffset = -activePrimaryIndex * itemStride;
+      const maxOffset = (primaryRouteItems.length - 1 - activePrimaryIndex) * itemStride;
+      const clampedOffset = clamp(translationX, minOffset, maxOffset);
+      const previewIndex = getNearestPrimaryIndex(
+        activePrimaryIndex,
+        clampedOffset,
+        itemStride,
+        primaryRouteItems.length
+      );
+
+      primaryDragOffset.value = clampedOffset;
+
+      if (previewIndex >= 0 && previewIndex !== dragPreviewIndexRef.current) {
+        dragPreviewIndexRef.current = previewIndex;
+        void Haptics.selectionAsync();
+      }
+    },
+    [activePrimaryIndex, primaryDragOffset, primaryRouteItems.length, responsiveMetrics.tabGap, searchMorphActive, tabWidth]
+  );
+
+  const endPrimarySelectionDrag = useCallback(
+    (translationX: number, velocityX: number) => {
+      if (activePrimaryIndex < 0 || searchMorphActive || tabWidth <= 0 || primaryRouteItems.length <= 1) {
+        return;
+      }
+
+      const itemStride = tabWidth + responsiveMetrics.tabGap;
+      const projectedTranslation = translationX + velocityX * PRIMARY_DRAG_VELOCITY_PROJECTION;
+      const nextIndex = getNearestPrimaryIndex(
+        activePrimaryIndex,
+        projectedTranslation,
+        itemStride,
+        primaryRouteItems.length
+      );
+
+      if (nextIndex >= 0) {
+        if (nextIndex !== activePrimaryIndex) {
+          dragReleaseTargetIndexRef.current = nextIndex;
+          primaryDragOffset.value = withSpring((nextIndex - activePrimaryIndex) * itemStride, INDICATOR_SPRING);
+        }
+
+        navigateToPrimaryIndex(nextIndex);
+      }
+    },
+    [
+      activePrimaryIndex,
+      navigateToPrimaryIndex,
+      primaryDragOffset,
+      primaryRouteItems.length,
+      responsiveMetrics.tabGap,
+      searchMorphActive,
+      tabWidth,
+    ]
+  );
+
+  const finalizePrimarySelectionDrag = useCallback(() => {
+    if (dragReleaseTargetIndexRef.current >= 0) {
+      return;
+    }
+
+    primaryDragOffset.value = withSpring(0, INDICATOR_SPRING);
+  }, [primaryDragOffset]);
+
+  const primarySelectionGesture = useMemo(
+    () =>
+      Gesture.Pan()
+        .runOnJS(true)
+        .maxPointers(1)
+        .activeOffsetX([-PRIMARY_DRAG_ACTIVATION_DISTANCE, PRIMARY_DRAG_ACTIVATION_DISTANCE])
+        .failOffsetY([-PRIMARY_DRAG_VERTICAL_CANCEL_DISTANCE, PRIMARY_DRAG_VERTICAL_CANCEL_DISTANCE])
+        .shouldCancelWhenOutside(false)
+        .onStart(beginPrimarySelectionDrag)
+        .onUpdate((event) => updatePrimarySelectionDrag(event.translationX))
+        .onEnd((event) => endPrimarySelectionDrag(event.translationX, event.velocityX))
+        .onFinalize(finalizePrimarySelectionDrag),
+    [beginPrimarySelectionDrag, endPrimarySelectionDrag, finalizePrimarySelectionDrag, updatePrimarySelectionDrag]
+  );
+
   return (
     <Animated.View
       pointerEvents={tabBarVisible ? 'auto' : 'none'}
@@ -636,92 +809,101 @@ export default function AndroidFloatingTabBar({
       ]}
     >
       <View style={[styles.shellRow, { gap: responsiveMetrics.searchBarGap }]}>
-        <Animated.View
-          style={[
-            styles.bar,
-            primaryBarAnimatedStyle,
-            {
-              backgroundColor: shellBackgroundColor,
-              borderColor: shellBorderColor,
-              padding: responsiveMetrics.barContentInset,
-            },
-          ]}
-        >
-          <LinearGradient
-            pointerEvents="none"
-            colors={shellGradientColors}
-            start={{ x: 0.1, y: 0 }}
-            end={{ x: 0.9, y: 1 }}
-            style={StyleSheet.absoluteFill}
-          />
-
+        <GestureDetector gesture={primarySelectionGesture}>
           <Animated.View
-            pointerEvents="none"
             style={[
-              styles.activeCapsule,
-              indicatorAnimatedStyle,
+              styles.bar,
+              primaryBarAnimatedStyle,
               {
-                backgroundColor: selectedShellBackgroundColor,
-                borderColor: colors.androidTabShellSelectedBorder,
-                bottom: responsiveMetrics.barContentInset,
-                left: responsiveMetrics.barContentInset,
-                top: responsiveMetrics.barContentInset,
+                backgroundColor: shellBackgroundColor,
+                borderColor: shellBorderColor,
+                padding: responsiveMetrics.barContentInset,
+                shadowColor: colors.androidTabShellShadow,
               },
             ]}
           >
             <LinearGradient
-              colors={colors.androidTabShellSelectedGradient}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
+              pointerEvents="none"
+              colors={shellGradientColors}
+              start={{ x: 0.1, y: 0 }}
+              end={{ x: 0.9, y: 1 }}
               style={StyleSheet.absoluteFill}
             />
-          </Animated.View>
 
-          <View style={styles.barContent}>
             <Animated.View
-              pointerEvents={searchMorphActive ? 'none' : 'auto'}
-              style={[styles.primaryTabsRow, primaryTabsAnimatedStyle]}
+              pointerEvents="none"
+              style={[
+                styles.activeCapsule,
+                indicatorAnimatedStyle,
+                {
+                  backgroundColor: selectedShellBackgroundColor,
+                  bottom: Math.max(responsiveMetrics.barContentInset - 1, 0),
+                  left: responsiveMetrics.barContentInset,
+                  top: Math.max(responsiveMetrics.barContentInset - 1, 0),
+                },
+              ]}
             >
-              {primaryRouteItems.map((route, index) => (
-                <PrimaryRouteButton
-                  key={route.key}
-                  colors={colors}
-                  isFocused={activeRoute.key === route.key}
-                  isLast={index === primaryRouteItems.length - 1}
-                  item={route}
-                  metrics={responsiveMetrics}
-                  onLongPress={emitLongPress}
-                  onNavigate={navigateToRoute}
-                />
-              ))}
+              <LinearGradient
+                colors={[
+                  colors.androidTabShellScrim,
+                  colors.androidTabShellMutedBackground,
+                  colors.androidTabShellBackground,
+                ]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={StyleSheet.absoluteFill}
+              />
             </Animated.View>
 
-            {compactPrimaryItem ? (
+            <View style={styles.barContent}>
               <Animated.View
-                pointerEvents={searchMorphActive ? 'auto' : 'none'}
-                style={[styles.compactPrimaryWrap, compactPrimaryAnimatedStyle]}
+                pointerEvents={searchMorphActive ? 'none' : 'auto'}
+                style={[styles.primaryTabsRow, primaryTabsAnimatedStyle]}
               >
-                <CompactPrimaryButton
-                  activeRouteKey={activeRoute.key}
-                  colors={colors}
-                  item={compactPrimaryItem}
-                  metrics={responsiveMetrics}
-                  onLongPress={emitLongPress}
-                  onNavigate={navigateToRoute}
-                />
+                {primaryRouteItems.map((route, index) => (
+                  <PrimaryRouteButton
+                    key={route.key}
+                    colors={colors}
+                    isFocused={activeRoute.key === route.key}
+                    isLast={index === primaryRouteItems.length - 1}
+                    item={route}
+                    metrics={responsiveMetrics}
+                    onLongPress={emitLongPress}
+                    onNavigate={navigateToRoute}
+                  />
+                ))}
               </Animated.View>
-            ) : null}
-          </View>
-        </Animated.View>
+
+              {compactPrimaryItem ? (
+                <Animated.View
+                  pointerEvents={searchMorphActive ? 'auto' : 'none'}
+                  style={[styles.compactPrimaryWrap, compactPrimaryAnimatedStyle]}
+                >
+                  <CompactPrimaryButton
+                    activeRouteKey={activeRoute.key}
+                    colors={colors}
+                    item={compactPrimaryItem}
+                    metrics={responsiveMetrics}
+                    onLongPress={emitLongPress}
+                    onNavigate={navigateToRoute}
+                  />
+                </Animated.View>
+              ) : null}
+            </View>
+          </Animated.View>
+        </GestureDetector>
 
         {searchRoute ? (
           <Animated.View style={searchAnimatedStyle}>
             <Pressable
               accessibilityRole="tab"
               accessibilityState={searchSelected ? { selected: true } : {}}
+              accessibilityHint={searchAccessibilityHint}
               accessibilityLabel={descriptors[searchRoute.key].options.tabBarAccessibilityLabel ?? 'Search'}
+              hitSlop={{ bottom: 8, left: 4, right: 8, top: 8 }}
               onLongPress={() => emitLongPress(searchRoute.key)}
               onPress={activateSearch}
+              testID={descriptors[searchRoute.key].options.tabBarButtonTestID}
               style={({ pressed }) => [
                 styles.searchButton,
                 {
@@ -729,6 +911,7 @@ export default function AndroidFloatingTabBar({
                   borderColor: focusedSearchBorderColor,
                   height: responsiveMetrics.searchButtonSize,
                   paddingHorizontal: responsiveMetrics.searchHorizontalPadding,
+                  shadowColor: colors.androidTabShellShadow,
                 },
                 pressed ? styles.tabButtonPressed : null,
               ]}
@@ -740,7 +923,6 @@ export default function AndroidFloatingTabBar({
                 end={{ x: 0.85, y: 1 }}
                 style={StyleSheet.absoluteFill}
               />
-
               <Animated.View
                 style={[
                   styles.searchIconWrap,
@@ -791,8 +973,12 @@ const styles = StyleSheet.create({
   bar: {
     borderRadius: glassTokens.headerContainerRadius,
     borderWidth: glassTokens.borderWidth,
+    elevation: 8,
     overflow: 'hidden',
     position: 'relative',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.16,
+    shadowRadius: 22,
   },
   barContent: {
     justifyContent: 'center',
@@ -812,7 +998,6 @@ const styles = StyleSheet.create({
   },
   activeCapsule: {
     borderRadius: 999,
-    borderWidth: glassTokens.borderWidth,
     overflow: 'hidden',
     position: 'absolute',
   },
@@ -848,8 +1033,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderRadius: glassTokens.headerContainerRadius,
     borderWidth: glassTokens.borderWidth,
+    elevation: 8,
     justifyContent: 'center',
     overflow: 'hidden',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.16,
+    shadowRadius: 22,
   },
   searchIconWrap: {
     alignItems: 'center',
@@ -878,10 +1067,19 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     zIndex: 1,
   },
+  searchClearButton: {
+    alignItems: 'center',
+    height: 28,
+    justifyContent: 'center',
+    position: 'absolute',
+    right: 0,
+    width: 28,
+  },
   searchInput: {
     fontFamily: 'Noto Sans',
     fontSize: 14,
     fontWeight: '600',
+    paddingRight: 30,
     paddingVertical: 0,
     textAlign: 'left',
     width: '100%',

@@ -5,8 +5,8 @@ import {
   Path,
   useImage,
 } from '@shopify/react-native-skia';
-import { memo, useMemo } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { memo, useEffect, useMemo } from 'react';
+import { Image, StyleSheet, View } from 'react-native';
 import type { StickerStampStyle } from '../../services/noteStickers';
 import {
   createStampFramePath,
@@ -19,6 +19,7 @@ import {
 
 interface StampStickerArtworkProps {
   localUri: string;
+  renderUri?: string;
   width: number;
   height: number;
   style?: StickerStampStyle;
@@ -26,10 +27,13 @@ interface StampStickerArtworkProps {
   shadowEnabled?: boolean;
   artworkTestID?: string;
   paperTestID?: string;
+  onReady?: () => void;
+  renderer?: 'skia' | 'native';
 }
 
 function StampStickerArtwork({
   localUri,
+  renderUri,
   width,
   height,
   style = 'classic',
@@ -37,6 +41,8 @@ function StampStickerArtwork({
   shadowEnabled = true,
   artworkTestID,
   paperTestID,
+  onReady,
+  renderer = 'skia',
 }: StampStickerArtworkProps) {
   const stampMetrics = useMemo(
     () => metrics ?? getStampFrameMetrics(width, height, style),
@@ -47,8 +53,63 @@ function StampStickerArtwork({
     [stampMetrics]
   );
   const stampImage = useImage(localUri);
+  const nativeImageUri = renderer === 'native' ? renderUri : localUri;
   const stampOutlineWidth = Math.max(2.4, stampMetrics.perforationRadius * 0.66);
   const stampBorderWidth = Math.max(1, stampMetrics.perforationRadius * 0.18);
+
+  useEffect(() => {
+    if (renderer === 'skia' && stampImage) {
+      onReady?.();
+    }
+  }, [onReady, renderer, stampImage]);
+
+  if (renderer === 'native') {
+    const isCircle = style === 'circle';
+    const renderedImage = nativeImageUri ? (
+      <Image
+        fadeDuration={0}
+        resizeMode="cover"
+        source={{ uri: nativeImageUri }}
+        style={styles.nativeStampImage}
+        onError={onReady}
+        onLoadEnd={onReady}
+      />
+    ) : null;
+
+    return (
+      <View
+        pointerEvents="none"
+        testID={paperTestID}
+        style={[
+          styles.stampPaper,
+          shadowEnabled ? styles.stampPaperShadow : null,
+          {
+            width: stampMetrics.outerWidth,
+            height: stampMetrics.outerHeight,
+            borderRadius: isCircle
+              ? stampMetrics.outerWidth / 2
+              : Math.max(10, stampMetrics.perforationRadius * 0.9),
+            shadowColor: shadowEnabled ? STAMP_DROP_SHADOW_COLOR : 'transparent',
+          },
+        ]}
+      >
+        <View
+          testID={artworkTestID}
+          style={[
+            styles.nativeStampClip,
+            {
+              borderColor: STAMP_PAPER_BORDER_COLOR,
+              borderRadius: isCircle
+                ? stampMetrics.outerWidth / 2
+                : Math.max(10, stampMetrics.perforationRadius * 0.9),
+            },
+          ]}
+        >
+          {renderedImage}
+        </View>
+      </View>
+    );
+  }
 
   return (
     <View
@@ -105,6 +166,16 @@ const styles = StyleSheet.create({
     elevation: 6,
   },
   stampArtwork: {
+    width: '100%',
+    height: '100%',
+  },
+  nativeStampClip: {
+    width: '100%',
+    height: '100%',
+    overflow: 'hidden',
+    borderWidth: 2,
+  },
+  nativeStampImage: {
     width: '100%',
     height: '100%',
   },

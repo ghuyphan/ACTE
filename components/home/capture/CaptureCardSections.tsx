@@ -116,6 +116,7 @@ export const TextCaptureSurface = memo(function TextCaptureSurface({
   const captureGradient = getCaptureNoteGradient({
     noteColor,
     fallbackGradient: colors.captureGradient ?? colors.gradient ?? null,
+    colorScheme: colors.captureGlassColorScheme,
   });
   const usesLightCaptureChrome = colors.captureGlassColorScheme === 'light';
   const handleToggleSelectedPlacementMotionLock = useCallback(

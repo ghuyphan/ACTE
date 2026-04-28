@@ -42,7 +42,6 @@ import { getNotePhotoUri } from '../../../services/photoStorage';
 import { formatNoteTextWithEmoji } from '../../../services/noteTextPresentation';
 import { formatDate } from '../../../utils/dateUtils';
 import { parseNoteStickerPlacements } from '../../../services/noteStickers';
-import { POLAROID_EXPORT_HEIGHT, POLAROID_EXPORT_WIDTH } from '../../../services/polaroidExport';
 import DynamicStickerCanvas from '../DynamicStickerCanvas';
 import NoteDoodleCanvas from '../NoteDoodleCanvas';
 import NoteStickerCanvas, { type StickerEntryAnimation } from '../NoteStickerCanvas';
@@ -56,7 +55,6 @@ import NoteDetailActionSection from './NoteDetailActionSection';
 import NoteDetailEditToolbar from './NoteDetailEditToolbar';
 import NoteDetailInfoSection from './NoteDetailInfoSection';
 import PolaroidExportAnimation from './PolaroidExportAnimation';
-import PolaroidExportView from './PolaroidExportView';
 import { SkeletonCard } from './NoteDetailPrimitives';
 import NoteDetailStatusBadges from './NoteDetailStatusBadges';
 import { getNoteDetailTheme, type NoteDetailColors } from './noteDetailTheme';
@@ -134,7 +132,6 @@ type NoteDetailSheetContentProps = {
     onDownloadPolaroid: () => void;
     onLocationChangeText: (value: string) => void;
     onLocationSelectionChange: (event: any) => void;
-    onPolaroidCaptureReady: () => void;
     onPressStickerCanvas: () => void;
     onSaveEdit: () => void;
     onShowCardPastePrompt: (event: GestureResponderEvent) => void;
@@ -150,10 +147,7 @@ type NoteDetailSheetContentProps = {
     onPolaroidAnimationFinished: () => void;
     polaroidAnimationSuccess: boolean;
     polaroidAnimationUri: string | null;
-    polaroidCaptureRef: any;
     polaroidExporting: boolean;
-    polaroidFallbackLocationLabel: string;
-    showPolaroidCapture: boolean;
     previewOnlyNoteColorIds: string[];
     richDecorationsReady: boolean;
     saveIconAnimatedStyle: any;
@@ -260,13 +254,9 @@ export default function NoteDetailSheetContent({
     onDownloadPolaroid,
     polaroidAnimationSuccess,
     polaroidAnimationUri,
-    polaroidCaptureRef,
     polaroidExporting,
-    polaroidFallbackLocationLabel,
     richDecorationsReady,
     onPolaroidAnimationFinished,
-    onPolaroidCaptureReady,
-    showPolaroidCapture,
 }: NoteDetailSheetContentProps) {
     const noteDetailTheme = useMemo(() => getNoteDetailTheme(colors), [colors]);
     const [deleteConfirmVisible, setDeleteConfirmVisible] = useState(false);
@@ -900,17 +890,6 @@ export default function NoteDetailSheetContent({
                     />
                 </View>
             ) : null}
-            {showPolaroidCapture && note ? (
-                <View pointerEvents="none" style={styles.offscreenPolaroidCapture}>
-                    <PolaroidExportView
-                        ref={polaroidCaptureRef}
-                        note={note}
-                        fallbackLocationLabel={polaroidFallbackLocationLabel}
-                        fallbackGradient={themeCaptureGradient}
-                        onReady={onPolaroidCaptureReady}
-                    />
-                </View>
-            ) : null}
             <PolaroidExportAnimation
                 uri={polaroidAnimationUri}
                 success={polaroidAnimationSuccess}
@@ -1040,15 +1019,6 @@ const styles = StyleSheet.create({
         width: '100%',
         maxWidth: CARD_SIZE,
         alignSelf: 'center',
-    },
-    offscreenPolaroidCapture: {
-        position: 'absolute',
-        left: -9999,
-        top: 0,
-        width: POLAROID_EXPORT_WIDTH,
-        height: POLAROID_EXPORT_HEIGHT,
-        opacity: 1,
-        zIndex: -1,
     },
     photoContainer: {
         width: CARD_SIZE,
