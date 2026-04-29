@@ -25,7 +25,8 @@ import {
   truncationMode,
 } from '@expo/ui/swift-ui/modifiers';
 import React from 'react';
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
+import NotoLoader from '../../ui/NotoLoader';
 import ProfileAvatar from './ProfileAvatar';
 import {
   buildProfileSections,
@@ -83,7 +84,7 @@ function KeyValueRow({
         {row.loading ? (
           <RNHostView matchContents>
             <View style={styles.rowSpinner}>
-              <ActivityIndicator size="small" color={iconColor} />
+              <NotoLoader variant="inline" size="small" color={iconColor} />
             </View>
           </RNHostView>
         ) : (

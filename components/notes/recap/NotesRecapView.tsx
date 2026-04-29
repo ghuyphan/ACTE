@@ -1,7 +1,7 @@
 import { memo, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import Reanimated, { FadeIn, FadeInDown, FadeInUp } from 'react-native-reanimated';
-import { ActivityIndicator, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useReducedMotion } from '../../../hooks/useReducedMotion';
 import { useTheme } from '../../../hooks/useTheme';
@@ -11,6 +11,7 @@ import {
 } from '../../../hooks/state/useNotesRecapViewModel';
 import type { Note } from '../../../services/database';
 import { GlassView } from '../../ui/GlassView';
+import NotoLoader from '../../ui/NotoLoader';
 import RecapCalendarGrid from './RecapCalendarGrid';
 import RecapMonthPicker from './RecapMonthPicker';
 import RecapStickerPile from './RecapStickerPile';
@@ -103,7 +104,7 @@ const NotesRecapView = memo(function NotesRecapView({
           },
         ]}
       >
-        <ActivityIndicator size="large" color={colors.primary} />
+        <NotoLoader variant="note" size="large" color={colors.primary} />
       </View>
     );
   }

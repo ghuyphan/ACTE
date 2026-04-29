@@ -4,7 +4,6 @@ import { Image } from 'expo-image';
 import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
-  ActivityIndicator,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -17,6 +16,7 @@ import { FriendConnection, SharedPost } from '../../services/sharedFeedService';
 import { isOlderIOS } from '../../utils/platform';
 import SharedPostCardVisual from './SharedPostCardVisual';
 import InfoPill from '../ui/InfoPill';
+import NotoLoader from '../ui/NotoLoader';
 
 function PostCard({ post }: { post: SharedPost }) {
   const { t } = useTranslation();
@@ -179,7 +179,7 @@ export default function SharedMomentsStrip({
 
         {loading ? (
           <View style={styles.loadingState}>
-            <ActivityIndicator size="small" color={colors.primary} />
+            <NotoLoader variant="photo" size="small" color={colors.primary} />
             <Text style={[styles.loadingTitle, { color: colors.text }]}>
               {t('home.bootstrapLoadingSharedTitle', 'Loading shared memories')}
             </Text>

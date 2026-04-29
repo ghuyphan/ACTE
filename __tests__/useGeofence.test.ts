@@ -1,4 +1,5 @@
 import { act, renderHook, waitFor } from '@testing-library/react-native';
+import { AppState, type AppStateStatus } from 'react-native';
 import { useGeofence } from '../hooks/useGeofence';
 
 const mockGetForegroundPermissionsAsync = jest.fn();
@@ -15,6 +16,7 @@ const mockSyncGeofenceRegions = jest.fn();
 const mockGetReminderPermissionState = jest.fn();
 const mockSyncSocialPushRegistration = jest.fn();
 const mockArePlaceRemindersEnabled = jest.fn();
+let appStateListener: ((state: AppStateStatus) => void) | null = null;
 
 jest.mock('expo-location', () => ({
   getForegroundPermissionsAsync: (...args: unknown[]) => mockGetForegroundPermissionsAsync(...args),
@@ -51,6 +53,13 @@ jest.mock('../hooks/useAuth', () => ({
 
 beforeEach(() => {
   jest.clearAllMocks();
+  appStateListener = null;
+  jest.spyOn(AppState, 'addEventListener').mockImplementation((_type, listener) => {
+    appStateListener = listener as (state: AppStateStatus) => void;
+    return {
+      remove: jest.fn(),
+    } as ReturnType<typeof AppState.addEventListener>;
+  });
   mockGetForegroundPermissionsAsync.mockResolvedValue({ status: 'denied', canAskAgain: true });
   mockRequestForegroundPermissionsAsync.mockResolvedValue({ status: 'denied', canAskAgain: true });
   mockGetBackgroundPermissionsAsync.mockResolvedValue({ status: 'denied', canAskAgain: true });
@@ -71,6 +80,7 @@ beforeEach(() => {
 
 afterEach(() => {
   jest.useRealTimers();
+  jest.restoreAllMocks();
 });
 
 describe('useGeofence', () => {
@@ -78,7 +88,6 @@ describe('useGeofence', () => {
     renderHook(() => useGeofence());
 
     await waitFor(() => {
-      expect(mockGetForegroundPermissionsAsync).toHaveBeenCalled();
       expect(mockGetReminderPermissionState).toHaveBeenCalled();
     });
 
@@ -115,6 +124,8 @@ describe('useGeofence', () => {
       expect(response.location).toBeNull();
       expect(response.requiresSettings).toBe(true);
     });
+
+    expect(mockRequestForegroundPermissionsAsync).not.toHaveBeenCalled();
   });
 
   it('returns requiresSettings when location services are disabled', async () => {
@@ -130,6 +141,43 @@ describe('useGeofence', () => {
     });
 
     expect(mockGetCurrentPositionAsync).not.toHaveBeenCalled();
+  });
+
+  it('clears a cached location when foreground location is revoked while the app is backgrounded', async () => {
+    const location = {
+      coords: { latitude: 10.7626, longitude: 106.6601 },
+      timestamp: Date.now(),
+    };
+    mockGetForegroundPermissionsAsync.mockResolvedValue({ status: 'granted', canAskAgain: true });
+    mockGetLastKnownPositionAsync.mockResolvedValue(location);
+    mockGetReminderPermissionState.mockResolvedValue({
+      foregroundGranted: true,
+      remindersEnabled: false,
+    });
+
+    const { result } = renderHook(() => useGeofence());
+
+    await waitFor(() => {
+      expect(result.current.location).toEqual(location);
+    });
+
+    mockGetForegroundPermissionsAsync.mockResolvedValue({ status: 'denied', canAskAgain: false });
+    mockGetReminderPermissionState.mockResolvedValue({
+      foregroundGranted: false,
+      remindersEnabled: false,
+    });
+
+    await act(async () => {
+      appStateListener?.('background');
+      appStateListener?.('active');
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(result.current.location).toBeNull();
+      expect(result.current.hasLocationPermission).toBe(false);
+    });
+    expect(mockRequestForegroundPermissionsAsync).not.toHaveBeenCalled();
   });
 
   it('returns a typed failure when the foreground permission request throws', async () => {
@@ -249,6 +297,77 @@ describe('useGeofence', () => {
     });
 
     expect(mockSyncGeofenceRegions).toHaveBeenCalled();
+  });
+
+  it('does not re-request background location when it is blocked in system settings', async () => {
+    mockGetForegroundPermissionsAsync.mockResolvedValue({ status: 'granted', canAskAgain: true });
+    mockGetBackgroundPermissionsAsync.mockResolvedValue({ status: 'denied', canAskAgain: false });
+    mockGetReminderPermissionState.mockResolvedValue({
+      foregroundGranted: true,
+      remindersEnabled: false,
+    });
+
+    const { result } = renderHook(() => useGeofence());
+
+    await act(async () => {
+      const permissionResult = await result.current.requestReminderPermissions();
+      expect(permissionResult).toEqual({
+        enabled: false,
+        requiresSettings: true,
+      });
+    });
+
+    expect(mockRequestBackgroundPermissionsAsync).not.toHaveBeenCalled();
+    expect(mockNotificationsRequestPermissionsAsync).not.toHaveBeenCalled();
+    expect(mockSyncGeofenceRegions).not.toHaveBeenCalled();
+  });
+
+  it('does not request notifications when background location is denied', async () => {
+    mockGetForegroundPermissionsAsync.mockResolvedValue({ status: 'granted', canAskAgain: true });
+    mockGetBackgroundPermissionsAsync.mockResolvedValue({ status: 'denied', canAskAgain: true });
+    mockRequestBackgroundPermissionsAsync.mockResolvedValue({ status: 'denied', canAskAgain: true });
+    mockGetReminderPermissionState.mockResolvedValue({
+      foregroundGranted: true,
+      remindersEnabled: false,
+    });
+
+    const { result } = renderHook(() => useGeofence());
+
+    await act(async () => {
+      const permissionResult = await result.current.requestReminderPermissions();
+      expect(permissionResult).toEqual({
+        enabled: false,
+        requiresSettings: false,
+      });
+    });
+
+    expect(mockRequestBackgroundPermissionsAsync).toHaveBeenCalled();
+    expect(mockNotificationsGetPermissionsAsync).not.toHaveBeenCalled();
+    expect(mockNotificationsRequestPermissionsAsync).not.toHaveBeenCalled();
+    expect(mockSyncGeofenceRegions).not.toHaveBeenCalled();
+  });
+
+  it('does not re-request notifications when reminder notifications are blocked', async () => {
+    mockGetForegroundPermissionsAsync.mockResolvedValue({ status: 'granted', canAskAgain: true });
+    mockGetBackgroundPermissionsAsync.mockResolvedValue({ status: 'granted', canAskAgain: true });
+    mockNotificationsGetPermissionsAsync.mockResolvedValue({ status: 'denied', canAskAgain: false });
+    mockGetReminderPermissionState.mockResolvedValue({
+      foregroundGranted: true,
+      remindersEnabled: false,
+    });
+
+    const { result } = renderHook(() => useGeofence());
+
+    await act(async () => {
+      const permissionResult = await result.current.requestReminderPermissions();
+      expect(permissionResult).toEqual({
+        enabled: false,
+        requiresSettings: true,
+      });
+    });
+
+    expect(mockNotificationsRequestPermissionsAsync).not.toHaveBeenCalled();
+    expect(mockSyncGeofenceRegions).not.toHaveBeenCalled();
   });
 
   it('does not report reminders as enabled when geofence registration fails', async () => {

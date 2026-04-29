@@ -3,11 +3,12 @@ import { ClipboardPasteButton } from 'expo-clipboard';
 import { LinearGradient } from 'expo-linear-gradient';
 import type { TFunction } from 'i18next';
 import { type ComponentProps, type ReactNode } from 'react';
-import { ActivityIndicator, StyleSheet, View, type ViewStyle } from 'react-native';
+import { StyleSheet, View, type ViewStyle } from 'react-native';
 import { ENABLE_PHOTO_STICKERS } from '../../../constants/experiments';
 import { getCaptureNoteGradient } from '../../../services/noteAppearance';
 import DoodleIcon from '../../ui/DoodleIcon';
 import LivePhotoIcon from '../../ui/LivePhotoIcon';
+import NotoLoader from '../../ui/NotoLoader';
 import StickerIcon from '../../ui/StickerIcon';
 import { getGlassSurfacePalette } from '../../ui/glassTokens';
 import {
@@ -276,11 +277,11 @@ function CaptureDecorateRail({
             ]}
           >
             {importingSticker ? (
-              <ActivityIndicator
+              <NotoLoader
                 testID="capture-sticker-import-loading"
+                variant="inline"
                 size="small"
                 color={theme.detailIconColor}
-                animating={importingSticker}
               />
             ) : (
               <Ionicons name="add-outline" size={14} color={theme.detailIconColor} />
@@ -409,11 +410,11 @@ export function TextCaptureBottomBar({
                       },
                     ]}
                   >
-                    <ActivityIndicator
+                    <NotoLoader
                       testID="capture-inline-paste-sticker-loading"
+                      variant="inline"
                       size="small"
                       color={colors.captureGlassText}
-                      animating={inlinePasteLoading}
                     />
                   </CaptureAnimatedPressable>
                 ) : useNativeInlinePasteButton ? (

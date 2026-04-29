@@ -1,13 +1,14 @@
 import { Ionicons } from '@expo/vector-icons';
 import { TFunction } from 'i18next';
 import { memo } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import type {
   HomeFeedBootstrapState,
   HomeFeedMode,
 } from '../../hooks/app/useHomeFeedViewModel';
 import * as Haptics from '../../hooks/useHaptics';
 import CatBoxIcon from '../ui/CatBoxIcon';
+import NotoLoader from '../ui/NotoLoader';
 
 interface HomeFeedEmptyStateProps {
   mode: Exclude<HomeFeedMode, 'content'>;
@@ -90,7 +91,7 @@ function HomeFeedEmptyState({
     <View style={styles.emptyState} testID="home-feed-empty-state">
       <View style={styles.emptyIconWrap}>
         {isSyncingEmpty ? (
-          <ActivityIndicator size="small" color={colors.primary} />
+          <NotoLoader variant="inline" size={34} color={colors.primary} />
         ) : isBootstrapBlocked ? (
           <Ionicons name="cloud-offline-outline" size={44} color={colors.secondaryText} />
         ) : isFriendsEmpty ? (

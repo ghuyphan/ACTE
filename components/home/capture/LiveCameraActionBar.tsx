@@ -1,5 +1,5 @@
 import type { TFunction } from 'i18next';
-import { ActivityIndicator, View } from 'react-native';
+import { View } from 'react-native';
 import type { PhotoFilterId } from '../../../services/photoFilters';
 import type { CaptureCardColors } from './captureShared';
 import { CaptureAnimatedPressable } from './CaptureAnimatedPressable';
@@ -7,6 +7,7 @@ import { CaptureControlRail } from './CaptureControlRail';
 import { CaptureToggleIconButton } from './CaptureToggleIconButton';
 import { PhotoFilterPicker } from './PhotoFilterPicker';
 import { Ionicons } from '@expo/vector-icons';
+import NotoLoader from '../../ui/NotoLoader';
 import {
   DECORATE_OPTION_ACTIVE_SCALE,
   DECORATE_OPTION_CONTENT_SCALE,
@@ -175,7 +176,7 @@ export function LiveCameraActionBar({
             ]}
           >
             {importingPhoto ? (
-              <ActivityIndicator size="small" color={colors.captureGlassText} animating />
+              <NotoLoader variant="inline" size="small" color={colors.captureGlassText} />
             ) : libraryImportLocked ? (
               <Ionicons name="lock-closed-outline" size={17} color={colors.captureGlassText} />
             ) : (

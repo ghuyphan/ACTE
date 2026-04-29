@@ -563,6 +563,42 @@ describe('HomeScreen empty state', () => {
     });
   });
 
+  it('persists the reminder recovery prompt before showing it', async () => {
+    mockNotesStoreState = {
+      ...mockNotesStoreState,
+      notes: [buildNote()],
+    };
+    let resolvePromptWrite: (() => void) | undefined;
+    mockSetPersistentItem.mockImplementation(
+      () => new Promise<void>((resolve) => {
+        resolvePromptWrite = resolve;
+      })
+    );
+
+    await renderHomeScreen();
+
+    await waitFor(() => {
+      expect(mockSetPersistentItem).toHaveBeenCalledWith(
+        'noto.home.reminder-recovery-prompt.v1.user-1',
+        '1'
+      );
+    });
+    expect(mockShowAlert).not.toHaveBeenCalled();
+
+    await act(async () => {
+      resolvePromptWrite?.();
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(mockShowAlert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: 'Enable reminders for your saved places',
+        })
+      );
+    });
+  });
+
   it('does not show the reminder recovery prompt when reminders are already enabled', async () => {
     mockNotesStoreState = {
       ...mockNotesStoreState,

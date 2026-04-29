@@ -8,7 +8,6 @@ import { useTranslation } from 'react-i18next';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Reanimated, { FadeInUp } from 'react-native-reanimated';
 import {
-  ActivityIndicator,
   Platform,
   Pressable,
   StyleSheet,
@@ -44,6 +43,7 @@ import { scheduleOnIdle } from '../../../utils/scheduleOnIdle';
 import { useNotesGridSharedPhotoHydration } from './useNotesGridSharedPhotoHydration';
 import { GlassView } from '../../ui/GlassView';
 import { buildNotesGridTileModels } from './buildNotesGridTileModels';
+import NotoLoader from '../../ui/NotoLoader';
 
 const GRID_DOODLE_STROKE_WIDTH = 4.5;
 const GRID_STICKER_MIN_SIZE = 0;
@@ -193,7 +193,7 @@ const GridTile = memo(function GridTile({
             >
               <Text style={[styles.photoPlaceholderIcon, { color: colors.primary }]}>+</Text>
             </View>
-            <ActivityIndicator size="small" color={colors.primary} />
+            <NotoLoader variant="inline" size="small" color={colors.primary} />
           </View>
         ) : (
           <LinearGradient
@@ -491,7 +491,7 @@ export default function NotesIndexScreen() {
       <View style={[styles.container, { backgroundColor: colors.background }]}>
         {isLoading ? (
           <View style={styles.center}>
-            <ActivityIndicator size="large" color={colors.primary} />
+            <NotoLoader variant="skeleton" size="large" color={colors.primary} />
             {isBootstrapSyncing ? (
               <View style={styles.loadingCopy}>
                 <Text style={[styles.loadingTitle, { color: colors.text }]}>

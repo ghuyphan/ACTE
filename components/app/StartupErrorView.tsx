@@ -1,6 +1,7 @@
-import { ActivityIndicator, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import type { ThemeColors } from '../../hooks/useTheme';
+import NotoLoader from '../ui/NotoLoader';
 import PrimaryButton from '../ui/PrimaryButton';
 
 interface StartupErrorViewProps {
@@ -76,7 +77,7 @@ export default function StartupErrorView({
       </View>
       {isRecovering ? (
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 18 }}>
-          <ActivityIndicator color={colors.primary} />
+          <NotoLoader variant="inline" color={colors.primary} />
           <Text style={{ color: colors.secondaryText, fontSize: 13, textAlign: 'center' }}>
             {t('startup.recoveryInProgress', 'Trying to recover your local data...')}
           </Text>

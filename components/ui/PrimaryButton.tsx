@@ -1,7 +1,8 @@
 import { ReactNode } from 'react';
-import { ActivityIndicator, Pressable, StyleProp, StyleSheet, Text, TextStyle, View, ViewStyle } from 'react-native';
+import { Pressable, StyleProp, StyleSheet, Text, TextStyle, View, ViewStyle } from 'react-native';
 import { Layout, Shadows, Typography } from '../../constants/theme';
 import { useTheme } from '../../hooks/useTheme';
+import NotoLoader from './NotoLoader';
 
 const BUTTON_HIT_SLOP = { top: 6, right: 6, bottom: 6, left: 6 } as const;
 const BUTTON_PRESS_RETENTION_OFFSET = { top: 12, right: 12, bottom: 12, left: 12 } as const;
@@ -76,7 +77,7 @@ export default function PrimaryButton({
       testID={testID}
     >
       {loading ? (
-        <ActivityIndicator color={labelColor} />
+        <NotoLoader variant="inline" color={labelColor} />
       ) : (
         <View style={styles.content}>
           {leadingIcon ? <View style={styles.leadingIcon}>{leadingIcon}</View> : null}

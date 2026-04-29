@@ -5,7 +5,6 @@ import { Href, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
-  ActivityIndicator,
   Platform,
   Pressable,
   StyleSheet,
@@ -48,6 +47,7 @@ import { showAppAlert } from '../../utils/alert';
 import { isOlderIOS } from '../../utils/platform';
 import { scheduleOnIdle } from '../../utils/scheduleOnIdle';
 import { Shadows } from '../../constants/theme';
+import NotoLoader from '../ui/NotoLoader';
 
 const MIN_ZOOM_DELTA = 0.002;
 const RECENTER_BUTTON_ZOOM_DELTA = 0.012;
@@ -1102,7 +1102,7 @@ export default function MapScreenIOS() {
   if (loading) {
     return (
       <View style={[styles.center, { backgroundColor: colors.background }]}>
-        <ActivityIndicator size="large" color={colors.primary} />
+        <NotoLoader variant="map" size="large" color={colors.primary} />
       </View>
     );
   }

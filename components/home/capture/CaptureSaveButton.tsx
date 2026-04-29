@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
-import { ActivityIndicator } from 'react-native';
 import Reanimated from 'react-native-reanimated';
+import NotoLoader from '../../ui/NotoLoader';
 import type { CaptureCardAnimatedStyle, CaptureCardColors } from './captureShared';
 import { CaptureAnimatedPressable } from './CaptureAnimatedPressable';
 import { styles } from './captureCardStyles';
@@ -99,11 +99,11 @@ export function CaptureSaveButton({
             pointerEvents="none"
             style={[styles.captureToggleIconLayer, animatedSaveSpinnerStyle]}
           >
-            <ActivityIndicator
+            <NotoLoader
               testID="capture-save-button-spinner-indicator"
+              variant="inline"
               size="small"
               color="#FFFFFF"
-              animating={isSaveBusy}
             />
           </Reanimated.View>
           <Reanimated.View

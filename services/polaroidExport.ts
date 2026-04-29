@@ -76,6 +76,9 @@ export async function requestSavePermission(): Promise<SavePermissionStatus> {
   if (existingPermission.granted) {
     return 'granted';
   }
+  if (existingPermission.canAskAgain === false) {
+    return 'blocked';
+  }
 
   const requestedPermission = await mediaLibrary.requestPermissionsAsync(true);
   if (requestedPermission.granted) {

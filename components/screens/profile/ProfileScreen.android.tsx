@@ -1,9 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Stack } from 'expo-router';
 import React from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Layout } from '../../../constants/theme';
 import type { ThemeColors } from '../../../hooks/useTheme';
+import NotoLoader from '../../ui/NotoLoader';
 import ProfileAvatar from './ProfileAvatar';
 import {
   buildProfileSections,
@@ -107,7 +108,11 @@ function ProfileListItem({
             </Text>
           ) : null}
           {row.loading ? (
-            <ActivityIndicator size="small" color={row.destructive ? colors.danger : colors.primary} />
+            <NotoLoader
+              variant="inline"
+              size="small"
+              color={row.destructive ? colors.danger : colors.primary}
+            />
           ) : null}
           {row.onPress && !row.loading ? (
             <Ionicons

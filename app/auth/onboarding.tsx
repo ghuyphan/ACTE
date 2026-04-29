@@ -2,7 +2,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect, useRouter } from 'expo-router';
 import React, { useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ActivityIndicator, Image, type ImageSourcePropType, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image, type ImageSourcePropType, Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, {
     FadeInDown,
     FadeOutDown,
@@ -10,6 +10,7 @@ import Animated, {
     withSpring,
     withTiming,
 } from 'react-native-reanimated';
+import NotoLoader from '../../components/ui/NotoLoader';
 import PrimaryButton from '../../components/ui/PrimaryButton';
 import { Layout, Typography } from '../../constants/theme';
 import { useAuth } from '../../hooks/useAuth';
@@ -301,7 +302,7 @@ export default function OnboardingScreen() {
                         pressed && !isCompleting && { opacity: 0.7 }
                     ]}>
                         {isSecondaryCompleting ? (
-                            <ActivityIndicator color={colors.secondaryText} size="small" />
+                            <NotoLoader variant="inline" color={colors.secondaryText} size="small" />
                         ) : (
                             <Text style={[styles.skipText, { color: colors.secondaryText }]}>
                                 {isNotificationStep

@@ -7,7 +7,6 @@ import { useFocusEffect } from '@react-navigation/native';
 import { useCallback, useDeferredValue, useEffect, useReducer, useState, useTransition } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
-  ActivityIndicator,
   Keyboard,
   Platform,
   Pressable,
@@ -30,6 +29,7 @@ import { getTextNoteCardGradient } from '../../../services/noteAppearance';
 import { getNotePhotoUri } from '../../../services/photoStorage';
 import { getNotePreviewText } from '../../../services/noteTextPresentation';
 import { formatDate } from '../../../utils/dateUtils';
+import NotoLoader from '../../ui/NotoLoader';
 
 function getPreviewText(note: Note, photoLabel: string, emptyLabel: string) {
   return getNotePreviewText(note, {
@@ -312,7 +312,7 @@ export default function SearchScreen() {
 
       {loading ? (
         <View style={styles.centerWrap}>
-          <ActivityIndicator size="large" color={colors.primary} />
+          <NotoLoader variant="skeleton" size="large" color={colors.primary} />
         </View>
       ) : searchFailed ? (
         <Pressable
@@ -361,7 +361,11 @@ export default function SearchScreen() {
             style={styles.emptyState}
           >
             <View style={styles.emptyIconWrap}>
-              <ActivityIndicator size={Platform.OS === 'ios' ? 'small' : 'large'} color={colors.primary} />
+              <NotoLoader
+                variant={Platform.OS === 'ios' ? 'inline' : 'note'}
+                size={Platform.OS === 'ios' ? 34 : 'large'}
+                color={colors.primary}
+              />
             </View>
             <Text style={[styles.emptyTitle, { color: colors.text }]}>
               {t('common.loading', 'Loading')}
@@ -424,7 +428,7 @@ export default function SearchScreen() {
                   },
                 ]}
               >
-                <ActivityIndicator size="small" color={colors.primary} />
+                <NotoLoader variant="inline" size="small" color={colors.primary} />
                 <Text style={[styles.searchingBannerText, { color: colors.secondaryText }]}>
                   {t('common.loading', 'Loading')}
                 </Text>

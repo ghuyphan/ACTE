@@ -1,8 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import type { ThemeColors } from '../../../hooks/useTheme';
+import NotoLoader from '../../ui/NotoLoader';
 
 interface ProfileAvatarProps {
   avatarLabel: string;
@@ -86,7 +87,7 @@ export default function ProfileAvatar({
           ]}
         >
           {isLoading ? (
-            <ActivityIndicator size="small" color={colors.primary} />
+            <NotoLoader variant="inline" size="small" color={colors.primary} />
           ) : (
             <Ionicons name="camera" size={iconSize} color={colors.primary} />
           )}

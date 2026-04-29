@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import * as ImagePicker from 'expo-image-picker';
 import type { TFunction } from 'i18next';
+import { Linking } from 'react-native';
 import { showAppAlert } from '../../utils/alert';
 import {
   createStickerPlacement,
@@ -271,22 +272,37 @@ export function useCaptureCardStickerFlow({
   const pickStickerImportSource = useCallback(
     async (): Promise<PickedStickerImportSource | null> => {
       let mediaPermission = await ImagePicker.getMediaLibraryPermissionsAsync();
-      if (mediaPermission.status !== 'granted') {
+      if (mediaPermission.status !== 'granted' && mediaPermission.canAskAgain !== false) {
         mediaPermission = await ImagePicker.requestMediaLibraryPermissionsAsync();
       }
 
       if (mediaPermission.status !== 'granted') {
+        const permissionBlocked = mediaPermission.canAskAgain === false;
         showAppAlert(
           t('capture.photoLibraryPermissionTitle', 'Photo access needed'),
-          mediaPermission.canAskAgain === false
+          permissionBlocked
             ? t(
-              'capture.photoLibraryPermissionSettingsMsg',
-              'Photo library access is blocked for Noto. Open Settings to import from your library.'
+                'capture.photoLibraryPermissionSettingsMsg',
+                'Photo library access is blocked for Noto. Open Settings to import from your library.'
             )
             : t(
-              'capture.photoLibraryPermissionMsg',
-              'Allow photo library access so you can import an image into this note.'
-            )
+                'capture.photoLibraryPermissionMsg',
+                'Allow photo library access so you can import an image into this note.'
+            ),
+          permissionBlocked
+            ? [
+                {
+                  text: t('common.cancel', 'Cancel'),
+                  style: 'cancel',
+                },
+                {
+                  text: t('common.openSettings', 'Open Settings'),
+                  onPress: () => {
+                    void Linking.openSettings();
+                  },
+                },
+              ]
+            : undefined
         );
         return null;
       }

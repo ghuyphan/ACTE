@@ -1,13 +1,14 @@
 import { useRootNavigationState, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 import {
   getCachedStartupRoute,
   loadStartupRoute,
   type StartupIndexRoute,
 } from '../services/startupRouting';
 import { useTheme } from '../hooks/useTheme';
+import NotoLoader from '../components/ui/NotoLoader';
 
 export default function Index() {
   const { t } = useTranslation();
@@ -57,7 +58,7 @@ export default function Index() {
         backgroundColor: colors.background,
       }}
     >
-      <ActivityIndicator color={colors.primary} size="small" />
+      <NotoLoader variant="inline" size={34} color={colors.primary} />
       <Text
         style={{
           marginTop: 12,

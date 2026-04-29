@@ -2,7 +2,7 @@ import { FlashList } from '@shopify/flash-list';
 import { Stack, useRouter } from 'expo-router';
 import { useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ActivityIndicator, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { SharedPostMemoryCard } from '../../home/MemoryCardPrimitives';
 import { Layout } from '../../../constants/theme';
@@ -12,6 +12,7 @@ import { useSharedFeedStore } from '../../../hooks/useSharedFeed';
 import { useTheme } from '../../../hooks/useTheme';
 import { SharedPost } from '../../../services/sharedFeedService';
 import { formatNoteTimestamp } from '../../../utils/dateUtils';
+import NotoLoader from '../../ui/NotoLoader';
 
 export default function SharedIndexScreen() {
   const { t } = useTranslation();
@@ -165,7 +166,7 @@ export default function SharedIndexScreen() {
       ) : !authReady ? (
         <View style={styles.flexFill}>
           <View style={styles.center}>
-            <ActivityIndicator size="large" color={colors.primary} />
+            <NotoLoader variant="note" size="large" color={colors.primary} />
           </View>
         </View>
       ) : !user ? (
@@ -203,7 +204,7 @@ export default function SharedIndexScreen() {
             </View>
           ) : null}
           <View style={styles.center}>
-            <ActivityIndicator size="large" color={colors.primary} />
+            <NotoLoader variant="photo" size="large" color={colors.primary} />
           </View>
         </View>
       ) : (

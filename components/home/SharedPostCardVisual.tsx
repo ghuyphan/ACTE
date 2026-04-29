@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { Layout } from '../../constants/theme';
 import { useTheme } from '../../hooks/useTheme';
 import { getSharedPostPreviewText } from '../../services/noteTextPresentation';
@@ -8,6 +8,7 @@ import { SHARED_POST_MEDIA_BUCKET } from '../../services/remoteMedia';
 import ImageMemoryCard from '../notes/ImageMemoryCard';
 import type { DebugTiltState } from '../notes/StickerPhysicsDebugControls';
 import TextMemoryCard from '../notes/TextMemoryCard';
+import NotoLoader from '../ui/NotoLoader';
 import type { SharedValue } from 'react-native-reanimated';
 
 export default function SharedPostCardVisual({
@@ -73,7 +74,7 @@ export default function SharedPostCardVisual({
         >
           <Ionicons name="image-outline" size={22} color={colors.primary} />
         </View>
-        <ActivityIndicator size="small" color={colors.primary} />
+        <NotoLoader variant="inline" size="small" color={colors.primary} />
       </View>
     );
   }

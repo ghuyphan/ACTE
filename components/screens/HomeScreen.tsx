@@ -1582,23 +1582,29 @@ export default function HomeScreen() {
           return;
         }
 
-        void setPersistentItem(promptKey, '1').catch(() => undefined);
-        showAlert({
-          variant: 'info',
-          title: t('capture.reminderRecoveryTitle', 'Enable reminders for your saved places'),
-          message: t(
-            'capture.reminderRecoveryMsg',
-            'Noto found saved places in your journal. Turn on background location and notifications if you want a reminder when you return.'
-          ),
-          primaryAction: {
-            label: t('capture.enableReminders', 'Enable reminders'),
-            onPress: promptReminderPermissionsFromDisclosure,
-          },
-          secondaryAction: {
-            label: t('common.notNow', 'Not now'),
-            variant: 'secondary',
-          },
-        });
+        return setPersistentItem(promptKey, '1')
+          .then(() => {
+            if (cancelled) {
+              return;
+            }
+
+            showAlert({
+              variant: 'info',
+              title: t('capture.reminderRecoveryTitle', 'Enable reminders for your saved places'),
+              message: t(
+                'capture.reminderRecoveryMsg',
+                'Noto found saved places in your journal. Turn on background location and notifications if you want a reminder when you return.'
+              ),
+              primaryAction: {
+                label: t('capture.enableReminders', 'Enable reminders'),
+                onPress: promptReminderPermissionsFromDisclosure,
+              },
+              secondaryAction: {
+                label: t('common.notNow', 'Not now'),
+                variant: 'secondary',
+              },
+            });
+          });
       })
       .catch(() => undefined);
 
@@ -2673,7 +2679,7 @@ export default function HomeScreen() {
     intent: PhotoLibraryImportIntent = 'editable-photo'
   ) => {
     let mediaPermission = await ImagePicker.getMediaLibraryPermissionsAsync();
-    if (mediaPermission.status !== 'granted') {
+    if (mediaPermission.status !== 'granted' && mediaPermission.canAskAgain !== false) {
       mediaPermission = await ImagePicker.requestMediaLibraryPermissionsAsync();
     }
 
@@ -2768,7 +2774,7 @@ export default function HomeScreen() {
 
   const handleImportMotionClip = useCallback(async () => {
     let mediaPermission = await ImagePicker.getMediaLibraryPermissionsAsync();
-    if (mediaPermission.status !== 'granted') {
+    if (mediaPermission.status !== 'granted' && mediaPermission.canAskAgain !== false) {
       mediaPermission = await ImagePicker.requestMediaLibraryPermissionsAsync();
     }
 

@@ -64,6 +64,19 @@ describe('polaroidExport', () => {
     await expect(requestSavePermission()).resolves.toBe('blocked');
   });
 
+  it('does not re-request add-only permission when existing access is already blocked', async () => {
+    mediaLibraryMock.getPermissionsAsync.mockResolvedValueOnce({
+      granted: false,
+      canAskAgain: false,
+      status: 'denied',
+      expires: 'never',
+    } as any);
+
+    await expect(requestSavePermission()).resolves.toBe('blocked');
+
+    expect(mediaLibraryMock.requestPermissionsAsync).not.toHaveBeenCalled();
+  });
+
   it('captures the export view with the expected high-res dimensions', async () => {
     await expect(captureViewAsImage(viewRef)).resolves.toBe('file:///tmp/noto-polaroid.png');
 
