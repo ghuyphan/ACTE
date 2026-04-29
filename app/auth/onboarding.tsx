@@ -148,14 +148,12 @@ export default function OnboardingScreen() {
         }, [router, user])
     );
 
-    const completeOnboarding = async (options?: { allowWhileCompleting?: boolean; keepLoadingState?: boolean }) => {
+    const completeOnboarding = async (options?: { allowWhileCompleting?: boolean }): Promise<boolean> => {
         if (isCompleting && !options?.allowWhileCompleting) {
-            return;
+            return false;
         }
 
-        if (!options?.keepLoadingState) {
-            setIsCompleting(true);
-        }
+        setIsCompleting(true);
         let didComplete = false;
         await completeOnboardingAndEnterApp((route) => {
             didComplete = true;
@@ -167,10 +165,11 @@ export default function OnboardingScreen() {
         }).catch((error) => {
             console.warn('Failed to persist onboarding state:', error);
         }).finally(() => {
-            if (!options?.keepLoadingState || !didComplete) {
+            if (!didComplete) {
                 setIsCompleting(false);
             }
         });
+        return didComplete;
     };
 
     const completeOnboardingWithNotifications = async () => {
@@ -192,7 +191,7 @@ export default function OnboardingScreen() {
             console.warn('[social-push] Permission prompt failed during onboarding:', error);
         }
 
-        await completeOnboarding({ allowWhileCompleting: true, keepLoadingState: true });
+        await completeOnboarding({ allowWhileCompleting: true });
     };
 
     const completeOnboardingWithoutNotifications = async () => {
@@ -202,10 +201,13 @@ export default function OnboardingScreen() {
 
         setIsSecondaryCompleting(true);
 
+        let didComplete = false;
         try {
-            await completeOnboarding();
+            didComplete = await completeOnboarding();
         } finally {
-            setIsSecondaryCompleting(false);
+            if (!didComplete) {
+                setIsSecondaryCompleting(false);
+            }
         }
     };
 

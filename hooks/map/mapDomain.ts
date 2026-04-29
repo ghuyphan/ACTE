@@ -106,21 +106,21 @@ export function getInitialMapRegion(
   location: Location.LocationObject | null,
   notes: Note[]
 ): Region {
-  if (location) {
-    return {
-      latitude: location.coords.latitude,
-      longitude: location.coords.longitude,
-      latitudeDelta: 0.02,
-      longitudeDelta: 0.02,
-    };
-  }
-
   if (notes.length > 0) {
     return {
       latitude: notes[0].latitude,
       longitude: notes[0].longitude,
       latitudeDelta: 0.035,
       longitudeDelta: 0.035,
+    };
+  }
+
+  if (location) {
+    return {
+      latitude: location.coords.latitude,
+      longitude: location.coords.longitude,
+      latitudeDelta: 0.02,
+      longitudeDelta: 0.02,
     };
   }
 

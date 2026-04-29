@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import { Platform, StyleSheet, Text, View } from 'react-native';
-import MapView, { Marker, Region } from 'react-native-maps';
+import MapView, { Marker, Region, type LongPressEvent } from 'react-native-maps';
 import Reanimated, {
   interpolate,
   interpolateColor,
@@ -49,8 +49,10 @@ interface MapCanvasProps {
   selectedFriendPostId: string | null;
   markerPulseId: string | null;
   markerPulseKey: number;
+  saveTargetCoordinate?: { latitude: number; longitude: number } | null;
   reduceMotionEnabled: boolean;
   onMapPress: () => void;
+  onMapLongPress?: (coordinate: { latitude: number; longitude: number }) => void;
   onMapReady: () => void;
   onRegionChangeComplete: (region: Region, details?: MapRegionChangeDetails) => void;
   onLeafPress: (groupId: string) => void;
@@ -487,8 +489,10 @@ function MapCanvas({
   selectedFriendPostId,
   markerPulseId,
   markerPulseKey,
+  saveTargetCoordinate = null,
   reduceMotionEnabled,
   onMapPress,
+  onMapLongPress,
   onMapReady,
   onRegionChangeComplete,
   onLeafPress,
@@ -754,6 +758,9 @@ function MapCanvas({
       style={StyleSheet.absoluteFill}
       initialRegion={initialRegion}
       onPress={onMapPress}
+      onLongPress={(event: LongPressEvent) => {
+        onMapLongPress?.(event.nativeEvent.coordinate);
+      }}
       onMapReady={onMapReady}
       onRegionChangeComplete={onRegionChangeComplete}
       showsCompass={false}
@@ -882,6 +889,28 @@ function MapCanvas({
           )
         );
       })}
+      {saveTargetCoordinate ? (
+        <Marker
+          key={`save-target-${saveTargetCoordinate.latitude.toFixed(6)}-${saveTargetCoordinate.longitude.toFixed(6)}`}
+          testID="map-save-target-marker"
+          coordinate={saveTargetCoordinate}
+          anchor={{ x: 0.5, y: 0.5 }}
+          tracksViewChanges={reduceMotionEnabled}
+          accessibilityLabel="Selected save location"
+        >
+          <View
+            style={[
+              styles.saveTargetMarker,
+              {
+                backgroundColor: palette.cardBackground,
+                borderColor: palette.focus,
+              },
+            ]}
+          >
+            <Ionicons name="add" size={18} color={palette.focus} />
+          </View>
+        </Marker>
+      ) : null}
       {friendMarkers.map((post) => {
         const isSelected = selectedFriendPostId === post.id;
         const authorLabel = post.authorDisplayName?.trim() || 'F';
@@ -1215,6 +1244,19 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  saveTargetMarker: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    borderWidth: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.12,
+    shadowRadius: 16,
+    elevation: 5,
   },
   friendMarker: {
     width: 40,

@@ -251,8 +251,18 @@ function parsePersistedCaptureDraft(rawValue: string | null): PersistedCaptureDr
   }
 }
 
+type MapSaveCoordinate = {
+  latitude: number;
+  longitude: number;
+};
+
 export default function HomeScreen() {
-  const { openSharedManageAt } = useLocalSearchParams<{ openSharedManageAt?: string }>();
+  const { openSharedManageAt, mapSaveAt, mapSaveLat, mapSaveLon } = useLocalSearchParams<{
+    openSharedManageAt?: string;
+    mapSaveAt?: string;
+    mapSaveLat?: string;
+    mapSaveLon?: string;
+  }>();
   const { height: windowHeight } = useWindowDimensions();
   const { t } = useTranslation();
   const { colors, isDark, appTheme } = useTheme();
@@ -359,6 +369,7 @@ export default function HomeScreen() {
   const [pendingSavedNoteScrollTargetId, setPendingSavedNoteScrollTargetId] = useState<string | null>(null);
   const [hasSeenLivePhotoCameraHint, setHasSeenLivePhotoCameraHint] = useState<boolean | null>(null);
   const [showLivePhotoCameraHint, setShowLivePhotoCameraHint] = useState(false);
+  const [pendingMapSaveCoordinate, setPendingMapSaveCoordinate] = useState<MapSaveCoordinate | null>(null);
 
   const searchAnim = useSharedValue(0);
   const flatListRef = useRef<any>(null);
@@ -377,6 +388,7 @@ export default function HomeScreen() {
   const settledArchiveItemRef = useRef<{ id: string; kind: 'note' | 'shared-post' } | null>(null);
   const previousVisibleFeedItemKeysRef = useRef<string[] | null>(null);
   const lastHandledOpenSharedManageAtRef = useRef<string | null>(null);
+  const lastHandledMapSaveAtRef = useRef<string | null>(null);
   const [captureDraftReady, setCaptureDraftReady] = useState(false);
   const [dualCaptureSupported, setDualCaptureSupported] = useState(false);
   const [dualCaptureComposeRequest, setDualCaptureComposeRequest] =
@@ -523,6 +535,26 @@ export default function HomeScreen() {
     restoreCaptureState,
     clearDualCaptureState,
   } = useCaptureFlow();
+
+  useEffect(() => {
+    if (!mapSaveAt || mapSaveAt === lastHandledMapSaveAtRef.current) {
+      return;
+    }
+
+    const latitude = Number(mapSaveLat);
+    const longitude = Number(mapSaveLon);
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+      return;
+    }
+
+    lastHandledMapSaveAtRef.current = mapSaveAt;
+    setPendingMapSaveCoordinate({ latitude, longitude });
+    setCaptureMode('text');
+    requestAnimationFrame(() => {
+      flatListRef.current?.scrollToOffset?.({ offset: 0, animated: !reduceMotionEnabled });
+    });
+  }, [mapSaveAt, mapSaveLat, mapSaveLon, reduceMotionEnabled, setCaptureMode]);
+
   const isCameraPreviewActive =
     captureMode === 'camera' &&
     isCaptureVisible &&
@@ -2351,14 +2383,16 @@ export default function HomeScreen() {
       setSaveButtonState('saving');
       setSaving(true);
 
+      const mapSaveCoordinate = pendingMapSaveCoordinate;
       let currentLocation = location;
       let locationResult: ForegroundLocationRequestResult = {
         location: currentLocation,
         requiresSettings: false,
         reason: null,
       };
+      let saveCoordinate: MapSaveCoordinate | null = mapSaveCoordinate;
 
-      if (!currentLocation) {
+      if (!saveCoordinate && !currentLocation) {
         try {
           locationResult = await requestForegroundLocation();
         } catch (error) {
@@ -2372,7 +2406,14 @@ export default function HomeScreen() {
         currentLocation = locationResult.location;
       }
 
-      if (!currentLocation) {
+      if (!saveCoordinate && currentLocation) {
+        saveCoordinate = {
+          latitude: currentLocation.coords.latitude,
+          longitude: currentLocation.coords.longitude,
+        };
+      }
+
+      if (!saveCoordinate) {
         setSaveButtonState('idle');
         showDoneSheet(
           'error',
@@ -2401,8 +2442,8 @@ export default function HomeScreen() {
           stickerSnapshot.placements.length > 0
             ? JSON.stringify(stickerSnapshot.placements)
             : null;
-        const lat = currentLocation.coords.latitude;
-        const lon = currentLocation.coords.longitude;
+        const lat = saveCoordinate.latitude;
+        const lon = saveCoordinate.longitude;
         const geocodedName = await resolveLocationNameFromCoordinates(lat, lon);
         const locationName = geocodedName ?? t('capture.unknownPlace', 'Unknown Place');
 
@@ -2533,6 +2574,9 @@ export default function HomeScreen() {
         }
 
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        if (mapSaveCoordinate) {
+          setPendingMapSaveCoordinate(null);
+        }
 
         if (shareOutcome === 'default' && remindersEnabled) {
           completeInlineSaveFlow(createdNote);
@@ -2586,6 +2630,7 @@ export default function HomeScreen() {
     }
   }, [
     location,
+    pendingMapSaveCoordinate,
     requestForegroundLocation,
     clearInlineSaveTimers,
     completeInlineSaveFlow,

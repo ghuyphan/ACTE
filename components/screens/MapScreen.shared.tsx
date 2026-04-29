@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { GlassView } from '../ui/GlassView';
 import * as Haptics from '../../hooks/useHaptics';
-import { useRouter } from 'expo-router';
+import { Href, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
@@ -72,6 +72,11 @@ type MapRegionChangeDetails = {
 
 type OverlayState = 'content' | 'no-filter-results' | 'no-notes' | 'area-empty';
 
+type MapSaveTarget = {
+  latitude: number;
+  longitude: number;
+};
+
 function areRegionsClose(left: Region | null, right: Region) {
   if (!left) {
     return false;
@@ -109,12 +114,12 @@ function isCoordinateComfortablyInRegion(region: Region, latitude: number, longi
   );
 }
 
-function getStatusPreviewHeight(kind: 'collapsed' | 'filtered-empty' | 'no-notes' | 'area-empty') {
+function getStatusPreviewHeight(kind: 'collapsed' | 'save-here' | 'filtered-empty' | 'no-notes' | 'area-empty') {
   if (kind === 'filtered-empty') {
     return STATUS_PREVIEW_FILTERED_HEIGHT;
   }
 
-  if (kind === 'collapsed' || kind === 'area-empty') {
+  if (kind === 'collapsed' || kind === 'save-here' || kind === 'area-empty') {
     return STATUS_PREVIEW_COLLAPSED_HEIGHT;
   }
 
@@ -141,6 +146,7 @@ export default function MapScreenIOS() {
   const [markerPulseId, setMarkerPulseId] = useState<string | null>(null);
   const [markerPulseKey, setMarkerPulseKey] = useState(0);
   const [mapUiReady, setMapUiReady] = useState(!shouldDeferMapWarmup);
+  const [saveTarget, setSaveTarget] = useState<MapSaveTarget | null>(null);
   const [settledRegion, setSettledRegion] = useState<Region | null>(null);
   const hasAppliedInitialViewportRef = useRef(false);
   const hasCenteredOnLocationRef = useRef(false);
@@ -320,11 +326,14 @@ export default function MapScreenIOS() {
     | 'hidden'
     | 'preview'
     | 'collapsed'
+    | 'save-here'
     | 'filtered-empty'
     | 'no-notes'
     | 'area-empty' =
     !mapUiReady || friendsPreviewVisible
       ? 'hidden'
+      : saveTarget
+        ? 'save-here'
       : overlayShowsNotesPreview && notesPreviewVisibility === 'visible'
         ? 'preview'
         : overlayShowsNotesPreview && notesPreviewVisibility === 'collapsed'
@@ -339,6 +348,7 @@ export default function MapScreenIOS() {
   const bottomOverlayVisible = bottomOverlayKind !== 'hidden';
   const isStatusOverlay =
     bottomOverlayKind === 'collapsed' ||
+    bottomOverlayKind === 'save-here' ||
     bottomOverlayKind === 'filtered-empty' ||
     bottomOverlayKind === 'no-notes' ||
     bottomOverlayKind === 'area-empty';
@@ -500,14 +510,43 @@ export default function MapScreenIOS() {
 
   const handleMapCanvasPress = useCallback(() => {
     nearbyPreviewFocusGuardUntilRef.current = 0;
+    setSaveTarget(null);
     resetToNearbyPreview();
     clearFriendsPreview();
     handleMapPress();
   }, [clearFriendsPreview, handleMapPress, resetToNearbyPreview]);
 
+  const handleMapCanvasLongPress = useCallback(
+    (coordinate: MapSaveTarget) => {
+      nearbyPreviewFocusGuardUntilRef.current = 0;
+      setSaveTarget(coordinate);
+      resetToNearbyPreview();
+      clearFriendsPreview();
+      clearSelection();
+      emitLightHaptic();
+    },
+    [clearFriendsPreview, clearSelection, emitLightHaptic, resetToNearbyPreview]
+  );
+
+  const handleSaveAtTarget = useCallback(() => {
+    if (!saveTarget) {
+      return;
+    }
+
+    router.push({
+      pathname: '/(tabs)',
+      params: {
+        mapSaveAt: String(Date.now()),
+        mapSaveLat: saveTarget.latitude.toFixed(7),
+        mapSaveLon: saveTarget.longitude.toFixed(7),
+      },
+    } as Href);
+  }, [router, saveTarget]);
+
   const handleChangeFilterType = useCallback(
     (nextType: Parameters<typeof setFilterType>[0]) => {
       nearbyPreviewFocusGuardUntilRef.current = 0;
+      setSaveTarget(null);
       revealNotesPreview({ resetToNearby: true });
       setFilterType(nextType);
     },
@@ -516,17 +555,20 @@ export default function MapScreenIOS() {
 
   const handleToggleFavorites = useCallback(() => {
     nearbyPreviewFocusGuardUntilRef.current = 0;
+    setSaveTarget(null);
     revealNotesPreview({ resetToNearby: true });
     toggleFavoritesOnly();
   }, [revealNotesPreview, toggleFavoritesOnly]);
 
   const handleClearActiveFilters = useCallback(() => {
     nearbyPreviewFocusGuardUntilRef.current = 0;
+    setSaveTarget(null);
     revealNotesPreview({ resetToNearby: true });
     clearFilters();
   }, [clearFilters, revealNotesPreview]);
 
   const goToMyLocation = useCallback(async () => {
+    setSaveTarget(null);
     const result = await requestForegroundLocation();
     const target = result?.location ?? location;
 
@@ -641,6 +683,7 @@ export default function MapScreenIOS() {
   const handleClusterPress = useCallback(
     (node: MapClusterNode) => {
       nearbyPreviewFocusGuardUntilRef.current = 0;
+      setSaveTarget(null);
       resetToNearbyPreview();
       revealNotesPreview();
       handleClusterMarkerPress();
@@ -718,6 +761,7 @@ export default function MapScreenIOS() {
   const handleLeafPress = useCallback(
     (groupId: string) => {
       nearbyPreviewFocusGuardUntilRef.current = 0;
+      setSaveTarget(null);
       resetToNearbyPreview();
       closeFriendsPreview();
       triggerMarkerPulse(groupId);
@@ -751,6 +795,7 @@ export default function MapScreenIOS() {
   const handleSeparatedNotePress = useCallback(
     (noteId: string) => {
       nearbyPreviewFocusGuardUntilRef.current = 0;
+      setSaveTarget(null);
       resetToNearbyPreview();
       closeFriendsPreview();
       triggerMarkerPulse(noteId);
@@ -855,6 +900,7 @@ export default function MapScreenIOS() {
 
   const handleOpenFriendsLayer = useCallback(() => {
     nearbyPreviewFocusGuardUntilRef.current = 0;
+    setSaveTarget(null);
     resetToNearbyPreview();
     if (!hasFriendLayer) {
       return;
@@ -880,6 +926,7 @@ export default function MapScreenIOS() {
   const focusFriendPost = useCallback(
     (postId: string, options?: { animate?: boolean; openPreview?: boolean }) => {
       nearbyPreviewFocusGuardUntilRef.current = 0;
+      setSaveTarget(null);
       const targetPost =
         friendMarkerPosts.find((post) => post.id === postId) ??
         friendPosts.find((post) => post.id === postId);
@@ -963,42 +1010,6 @@ export default function MapScreenIOS() {
       return;
     }
 
-    if (location && !hasCenteredOnLocationRef.current) {
-      const baseRegion = settledRegion ?? visibleRegion ?? initialRegion;
-      if (
-        isCoordinateCenteredInRegion(
-          baseRegion,
-          location.coords.latitude,
-          location.coords.longitude
-        )
-      ) {
-        hasCenteredOnLocationRef.current = true;
-        return;
-      }
-
-      animateToRegion(
-        {
-          latitude: location.coords.latitude,
-          longitude: location.coords.longitude,
-          latitudeDelta: Math.max(
-            MIN_ZOOM_DELTA,
-            Math.min(baseRegion.latitudeDelta, RECENTER_BUTTON_ZOOM_DELTA)
-          ),
-          longitudeDelta: Math.max(
-            MIN_ZOOM_DELTA,
-            Math.min(baseRegion.longitudeDelta, RECENTER_BUTTON_ZOOM_DELTA)
-          ),
-        },
-        0
-      );
-      hasCenteredOnLocationRef.current = true;
-      return;
-    }
-
-    if (hasAppliedInitialViewportRef.current || location) {
-      return;
-    }
-
     const fitCoordinates = [
       ...notes.map((note) => ({
         latitude: note.latitude,
@@ -1010,19 +1021,19 @@ export default function MapScreenIOS() {
       })),
     ];
 
-    if (fitCoordinates.length > 1) {
-      mapRef.current.fitToCoordinates(
-        fitCoordinates,
-        {
-          edgePadding: { top: 150, right: 90, bottom: 210, left: 90 },
-          animated: false,
-        }
-      );
-      hasAppliedInitialViewportRef.current = true;
-      return;
-    }
+    if (!hasAppliedInitialViewportRef.current && fitCoordinates.length > 0) {
+      if (fitCoordinates.length > 1) {
+        mapRef.current.fitToCoordinates(
+          fitCoordinates,
+          {
+            edgePadding: { top: 150, right: 90, bottom: 210, left: 90 },
+            animated: false,
+          }
+        );
+        hasAppliedInitialViewportRef.current = true;
+        return;
+      }
 
-    if (fitCoordinates.length === 1) {
       const [coordinate] = fitCoordinates;
       const baseRegion = settledRegion ?? visibleRegion ?? initialRegion;
       animateToRegion(
@@ -1044,11 +1055,38 @@ export default function MapScreenIOS() {
       return;
     }
 
-    if (fitCoordinates.length === 0) {
+    if (fitCoordinates.length > 0 || !location || hasCenteredOnLocationRef.current) {
       return;
     }
 
-    hasAppliedInitialViewportRef.current = true;
+    const baseRegion = settledRegion ?? visibleRegion ?? initialRegion;
+    if (
+      isCoordinateCenteredInRegion(
+        baseRegion,
+        location.coords.latitude,
+        location.coords.longitude
+      )
+    ) {
+      hasCenteredOnLocationRef.current = true;
+      return;
+    }
+
+    animateToRegion(
+      {
+        latitude: location.coords.latitude,
+        longitude: location.coords.longitude,
+        latitudeDelta: Math.max(
+          MIN_ZOOM_DELTA,
+          Math.min(baseRegion.latitudeDelta, RECENTER_BUTTON_ZOOM_DELTA)
+        ),
+        longitudeDelta: Math.max(
+          MIN_ZOOM_DELTA,
+          Math.min(baseRegion.longitudeDelta, RECENTER_BUTTON_ZOOM_DELTA)
+        ),
+      },
+      0
+    );
+    hasCenteredOnLocationRef.current = true;
   }, [
     animateToRegion,
     friendMarkerPosts,
@@ -1087,8 +1125,10 @@ export default function MapScreenIOS() {
         selectedFriendPostId={activeFriendPostId}
         markerPulseId={markerPulseId}
         markerPulseKey={markerPulseKey}
+        saveTargetCoordinate={saveTarget}
         reduceMotionEnabled={reduceMotionEnabled}
         onMapPress={handleMapCanvasPress}
+        onMapLongPress={handleMapCanvasLongPress}
         onMapReady={() => {
           setIsMapReady(true);
         }}
@@ -1233,7 +1273,9 @@ export default function MapScreenIOS() {
                 : 'albums-outline'
           }
           actionLabel={
-            bottomOverlayKind === 'filtered-empty'
+            bottomOverlayKind === 'save-here'
+              ? t('map.saveHere', 'Save here')
+              : bottomOverlayKind === 'filtered-empty'
               ? t('map.clearFilters', 'Clear filters')
               : bottomOverlayKind === 'area-empty'
                 ? t('map.showAllResults', 'Show all results')
@@ -1242,7 +1284,9 @@ export default function MapScreenIOS() {
               : undefined
           }
           actionIcon={
-            bottomOverlayKind === 'filtered-empty'
+            bottomOverlayKind === 'save-here'
+              ? 'add-circle-outline'
+              : bottomOverlayKind === 'filtered-empty'
               ? 'close-circle-outline'
               : bottomOverlayKind === 'area-empty'
                 ? 'map-outline'
@@ -1251,7 +1295,9 @@ export default function MapScreenIOS() {
                 : undefined
           }
           actionTestID={
-            bottomOverlayKind === 'filtered-empty'
+            bottomOverlayKind === 'save-here'
+              ? 'map-save-here'
+              : bottomOverlayKind === 'filtered-empty'
               ? 'map-clear-filters'
               : bottomOverlayKind === 'area-empty'
                 ? 'map-show-all-results'
@@ -1260,6 +1306,11 @@ export default function MapScreenIOS() {
                 : undefined
           }
           onAction={() => {
+            if (bottomOverlayKind === 'save-here') {
+              handleSaveAtTarget();
+              return;
+            }
+
             if (bottomOverlayKind === 'filtered-empty') {
               handleClearActiveFilters();
               return;
