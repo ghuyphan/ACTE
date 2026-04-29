@@ -215,9 +215,11 @@ describe('useNotesRecapViewModel', () => {
     );
 
     await waitFor(() => {
-      expect(result.current.data?.monthEntries).toHaveLength(1);
+      expect(result.current.data?.monthEntries).toHaveLength(12);
     });
 
+    expect(result.current.data?.monthEntries[0]?.monthEntry.monthKey).toBe('2026-04');
+    expect(result.current.data?.monthEntries[1]?.monthEntry.monthKey).toBe('2026-03');
     expect(result.current.data?.recapsByKey.has('2026-04')).toBe(true);
     expect(result.current.isPreparing).toBe(false);
   });

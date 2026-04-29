@@ -290,6 +290,21 @@ export function useSettingsScreenModel() {
       const noteIdsToDelete = notes.map((note) => note.id);
       await deleteAllNotes();
 
+      if (user && !isOnline && noteIdsToDelete.length > 0) {
+        showAlert({
+          variant: 'warning',
+          title: t('settings.clearAllOfflineTitle', 'Deleted locally'),
+          message: t(
+            'settings.clearAllOfflineMsg',
+            'You are offline, so shared copies could not be removed yet. Connect to the internet and clear shared moments again if needed.'
+          ),
+          primaryAction: {
+            label: t('common.done', 'Done'),
+          },
+        });
+        return;
+      }
+
       if (user && isOnline && noteIdsToDelete.length > 0) {
         try {
           await deleteSharedNotes(noteIdsToDelete);

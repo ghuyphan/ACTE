@@ -1022,6 +1022,32 @@ export default function MapScreenIOS() {
       return;
     }
 
+    if (fitCoordinates.length === 1) {
+      const [coordinate] = fitCoordinates;
+      const baseRegion = settledRegion ?? visibleRegion ?? initialRegion;
+      animateToRegion(
+        {
+          latitude: coordinate.latitude,
+          longitude: coordinate.longitude,
+          latitudeDelta: Math.max(
+            MIN_ZOOM_DELTA,
+            Math.min(baseRegion.latitudeDelta, RECENTER_BUTTON_ZOOM_DELTA)
+          ),
+          longitudeDelta: Math.max(
+            MIN_ZOOM_DELTA,
+            Math.min(baseRegion.longitudeDelta, RECENTER_BUTTON_ZOOM_DELTA)
+          ),
+        },
+        0
+      );
+      hasAppliedInitialViewportRef.current = true;
+      return;
+    }
+
+    if (fitCoordinates.length === 0) {
+      return;
+    }
+
     hasAppliedInitialViewportRef.current = true;
   }, [
     animateToRegion,

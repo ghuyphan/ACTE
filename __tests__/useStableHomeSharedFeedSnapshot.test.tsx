@@ -47,6 +47,14 @@ function createParams(overrides: Partial<Parameters<typeof useStableHomeSharedFe
 }
 
 describe('useStableHomeSharedFeedSnapshot', () => {
+  beforeEach(() => {
+    jest.useRealTimers();
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
   it('freezes the initial shared snapshot once the home snapshot is ready', () => {
     const initialPost = buildSharedPost({ id: 'shared-1', text: 'Cached post' });
     const livePost = buildSharedPost({ id: 'shared-2', text: 'Live post' });
@@ -96,6 +104,38 @@ describe('useStableHomeSharedFeedSnapshot', () => {
     expect(result.current.pendingSharedPosts).toBeNull();
     expect(result.current.hasPendingSharedUpdates).toBe(false);
   });
+
+  it('can auto-promote pending shared updates after a caller-provided delay', () => {
+    jest.useFakeTimers();
+    const initialPost = buildSharedPost({ id: 'shared-1', text: 'Cached post' });
+    const livePost = buildSharedPost({ id: 'shared-2', text: 'Live post' });
+    const { result, rerender } = renderHook(
+      (params: ReturnType<typeof createParams>) => useStableHomeSharedFeedSnapshot(params),
+      {
+        initialProps: createParams({
+          autoPromoteDelayMs: 500,
+          sharedPosts: [initialPost],
+        }),
+      }
+    );
+
+    rerender(createParams({
+      autoPromoteDelayMs: 500,
+      sharedPosts: [livePost, initialPost],
+      startupInteractive: true,
+    }));
+
+    expect(result.current.presentedSharedPosts).toEqual([initialPost]);
+    expect(result.current.hasPendingSharedUpdates).toBe(true);
+
+    act(() => {
+      jest.advanceTimersByTime(500);
+    });
+
+    expect(result.current.presentedSharedPosts).toEqual([livePost, initialPost]);
+    expect(result.current.hasPendingSharedUpdates).toBe(false);
+  });
+
 
   it('renders the first shared posts that arrive after an empty startup snapshot', () => {
     const cachedPost = buildSharedPost({ id: 'shared-cached', text: 'Cached friend note' });

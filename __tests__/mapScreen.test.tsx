@@ -508,6 +508,31 @@ describe('MapScreen', () => {
     });
   });
 
+  it('fits late-arriving notes when the map mounted without coordinates', async () => {
+    mockLocation = null;
+    replaceMockNotes([]);
+    mockSharedPosts.splice(0, mockSharedPosts.length);
+
+    const { rerender } = render(<MapScreen />);
+
+    expect(mockFitToCoordinates).not.toHaveBeenCalled();
+
+    replaceMockNotes(defaultNotes);
+    rerender(<MapScreen />);
+
+    await waitFor(() => {
+      expect(mockFitToCoordinates).toHaveBeenCalledWith(
+        [
+          { latitude: 10.76, longitude: 106.66 },
+          { latitude: 10.8, longitude: 106.7 },
+        ],
+        expect.objectContaining({
+          animated: false,
+        })
+      );
+    });
+  });
+
   it('mounts the shared map experience on Android instead of the placeholder fallback', async () => {
     setPlatformOS('android');
 

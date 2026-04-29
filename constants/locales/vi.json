@@ -585,6 +585,8 @@
         "clearAllShortHint": "Xóa nhật ký đã lưu trên thiết bị này.",
         "clearAllWarningTitle": "Đã xóa trên máy",
         "clearAllWarningMsg": "Các trang nhật ký đã được dọn sạch khỏi thiết bị, nhưng một số bài chia sẻ vẫn chưa thể xóa ngay.",
+        "clearAllOfflineTitle": "Đã xóa trên máy",
+        "clearAllOfflineMsg": "Bạn đang ngoại tuyến nên chưa thể xóa các bản chia sẻ. Hãy kết nối internet và xóa lại các khoảnh khắc đã chia sẻ nếu cần.",
         "account": "Sao lưu & đồng bộ",
         "accountEntry": "Tài khoản",
         "profile": "Hồ sơ",

@@ -20,6 +20,13 @@ jest.mock('../hooks/useConnectivity', () => ({
   useConnectivity: () => mockUseConnectivity(),
 }));
 
+jest.mock('../hooks/useTheme', () => ({
+  useTheme: () => ({
+    appTheme: 'default',
+    isDark: false,
+  }),
+}));
+
 describe('useAppWidgetRefresh', () => {
   beforeEach(() => {
     jest.useFakeTimers();

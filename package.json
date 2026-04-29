@@ -13,9 +13,12 @@
     "expo:doctor": "npx expo-doctor",
     "audit:prod": "npm audit --omit=dev --audit-level=moderate",
     "supabase:functions:check": "deno check supabase/functions/*/index.ts",
+    "native:android:check": "./gradlew :app:compileDebugKotlin",
+    "native:ios:check": "xcodebuild -workspace ios/Noto.xcworkspace -scheme Noto -sdk iphonesimulator CODE_SIGNING_ALLOWED=NO ONLY_ACTIVE_ARCH=YES -quiet build",
+    "verify:native": "npm run native:android:check && npm run native:ios:check",
     "typecheck": "tsc --noEmit",
     "test": "jest",
-    "verify": "npm run lint:ci && npm run theme:audit && npm run typecheck && npm test -- --runInBand && npm run expo:doctor && npm run audit:prod",
+    "verify": "npm run lint:ci && npm run theme:audit && npm run typecheck && npm run supabase:functions:check && npm test -- --runInBand && npm run expo:doctor && npm run audit:prod",
     "update:preview": "npx eas-cli update --channel preview",
     "update:production": "npx eas-cli update --channel production"
   },

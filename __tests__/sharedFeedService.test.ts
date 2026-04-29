@@ -1337,6 +1337,73 @@ describe('sharedFeedService', () => {
     }
   });
 
+  it('refreshes subscription snapshots when the current user is removed from a shared post audience', async () => {
+    mockEnsureFriendMap(ownerUser.id).set(friendUser.id, {
+      display_name_snapshot: friendUser.username,
+      photo_url_snapshot: friendUser.photoURL,
+      friended_at: '2026-03-20T00:00:00.000Z',
+      last_shared_at: null,
+      created_by_invite_id: 'invite-1',
+    });
+    mockEnsureFriendMap(friendUser.id).set(ownerUser.id, {
+      display_name_snapshot: ownerUser.username,
+      photo_url_snapshot: ownerUser.photoURL,
+      friended_at: '2026-03-20T00:00:00.000Z',
+      last_shared_at: null,
+      created_by_invite_id: 'invite-1',
+    });
+
+    mockSessionUserId = ownerUser.id;
+    await createSharedPost(
+      ownerUser,
+      {
+        id: 'note-1',
+        type: 'text',
+        content: 'Private after removal',
+        locationName: 'Saigon',
+        latitude: 10.77,
+        longitude: 106.69,
+        moodEmoji: null,
+      } as any,
+      [friendUser.id]
+    );
+
+    mockSessionUserId = friendUser.id;
+    const snapshots: any[] = [];
+    const unsubscribe = subscribeToSharedFeed(friendUser, {
+      onSnapshot: (snapshot) => {
+        snapshots.push(snapshot);
+      },
+    });
+
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(snapshots.at(-1).sharedPosts).toHaveLength(1);
+
+      const sharedPostRow = Array.from(mockSharedPosts.values())[0];
+      sharedPostRow.audience_user_ids = [];
+
+      const sharedPostHandler = mockRealtimeHandlers.find((handler) => handler.table === 'shared_posts');
+      sharedPostHandler?.callback({
+        new: {
+          author_user_id: ownerUser.id,
+          audience_user_ids: [],
+        },
+        old: {
+          author_user_id: ownerUser.id,
+          audience_user_ids: [friendUser.id],
+        },
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 150));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(snapshots.at(-1).sharedPosts).toHaveLength(0);
+    } finally {
+      unsubscribe();
+    }
+  });
+
   it('preserves the paired motion clip extension when sharing a live photo note', async () => {
     mockEnsureFriendMap(ownerUser.id).set(friendUser.id, {
       display_name_snapshot: friendUser.username,

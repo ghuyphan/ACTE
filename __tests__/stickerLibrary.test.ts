@@ -138,7 +138,7 @@ describe('buildCreatedStickerLibrary', () => {
     expect(items).toHaveLength(2);
     expect(items.map((item) => item.id).sort()).toEqual([
       'asset-1:default',
-      'asset-1:stamp',
+      'asset-1:stamp:classic',
     ]);
   });
 

@@ -98,6 +98,22 @@ function patchBuildGradle(contents) {
     );
   }
 
+  if (!nextContents.includes("def easBuildProfile = readEnv('EAS_BUILD_PROFILE') ?: ''")) {
+    replaceOrThrow(
+      "def isEasBuild = (readEnv('EAS_BUILD') ?: 'false').toBoolean()\n",
+      "def isEasBuild = (readEnv('EAS_BUILD') ?: 'false').toBoolean()\ndef easBuildProfile = readEnv('EAS_BUILD_PROFILE') ?: ''\n",
+      'EAS build profile declaration'
+    );
+  }
+
+  if (!nextContents.includes('ACTE_ALLOW_DEBUG_SIGNED_RELEASE is only allowed')) {
+    replaceOrThrow(
+      "def releaseStoreFile = uploadStoreFilePath ? file(uploadStoreFilePath) : null\n\n",
+      `def releaseStoreFile = uploadStoreFilePath ? file(uploadStoreFilePath) : null\n\nif (allowDebugSignedRelease && (isEasBuild || easBuildProfile == 'production')) {\n    throw new GradleException("ACTE_ALLOW_DEBUG_SIGNED_RELEASE is only allowed for local non-production smoke builds.")\n}\n\n`,
+      'debug-signed release guard'
+    );
+  }
+
   if (!nextContents.includes('GOOGLE_MAPS_API_KEY: googleMapsApiKey')) {
     replaceOrThrow(
       /(        versionName "[^"]+"\n)(\n        buildConfigField "String", "REACT_NATIVE_RELEASE_LEVEL", [^\n]+)/,
@@ -121,6 +137,13 @@ function patchBuildGradle(contents) {
       /        release \{\n            \/\/ Caution! In production, you need to generate your own keystore file\.\n            \/\/ see https:\/\/reactnative\.dev\/docs\/signed-apk-android\.\n            signingConfig signingConfigs\.debug/,
       BUILD_GRADLE_RELEASE_SNIPPET,
       'release signing block'
+    );
+  }
+
+  if (nextContents.includes('} else if (allowDebugSignedRelease) {')) {
+    nextContents = nextContents.replace(
+      '} else if (allowDebugSignedRelease) {',
+      "} else if (allowDebugSignedRelease && !isEasBuild && easBuildProfile != 'production') {"
     );
   }
 

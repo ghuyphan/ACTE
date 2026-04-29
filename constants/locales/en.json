@@ -585,6 +585,8 @@
         "clearAllShortHint": "Deletes memories saved on this device.",
         "clearAllWarningTitle": "Deleted Locally",
         "clearAllWarningMsg": "Your memories have been cleared from this device, but shared items may take longer to delete.",
+        "clearAllOfflineTitle": "Deleted locally",
+        "clearAllOfflineMsg": "You are offline, so shared copies could not be removed yet. Connect to the internet and clear shared moments again if needed.",
         "account": "Backup & Sync",
         "accountEntry": "Account",
         "profile": "Profile",

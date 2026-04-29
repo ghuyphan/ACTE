@@ -903,15 +903,52 @@ function getSharedPostChangeField(
   return null;
 }
 
+function getSharedPostChangeFields(
+  payload: unknown,
+  field: 'author_user_id' | 'audience_user_ids'
+) {
+  if (typeof payload !== 'object' || !payload) {
+    return [];
+  }
+
+  const eventPayload = payload as {
+    new?: Record<string, unknown> | null;
+    old?: Record<string, unknown> | null;
+  };
+  const values: unknown[] = [];
+
+  if (eventPayload.new && field in eventPayload.new) {
+    values.push(eventPayload.new[field] ?? null);
+  }
+
+  if (eventPayload.old && field in eventPayload.old) {
+    values.push(eventPayload.old[field] ?? null);
+  }
+
+  if (values.length === 0) {
+    const fallbackValue = getSharedPostChangeField(payload, field);
+    if (fallbackValue !== null) {
+      values.push(fallbackValue);
+    }
+  }
+
+  return values;
+}
+
 function shouldRefreshForSharedPostChange(payload: unknown, userId: string) {
-  const authorUserId = getSharedPostChangeField(payload, 'author_user_id');
-  if (typeof authorUserId === 'string' && authorUserId.trim() === userId) {
+  const authorUserIds = getSharedPostChangeFields(payload, 'author_user_id');
+  if (authorUserIds.some((value) => typeof value === 'string' && value.trim() === userId)) {
     return true;
   }
 
-  const audienceUserIds = getSharedPostChangeField(payload, 'audience_user_ids');
-  if (Array.isArray(audienceUserIds)) {
-    return audienceUserIds.some((value) => typeof value === 'string' && value.trim() === userId);
+  const audienceUserIdsValues = getSharedPostChangeFields(payload, 'audience_user_ids');
+  for (const audienceUserIds of audienceUserIdsValues) {
+    if (
+      Array.isArray(audienceUserIds) &&
+      audienceUserIds.some((value) => typeof value === 'string' && value.trim() === userId)
+    ) {
+      return true;
+    }
   }
 
   return false;

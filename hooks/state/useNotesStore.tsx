@@ -576,8 +576,14 @@ function useNotesStoreValue(): { state: NotesStateValue; actions: NotesActionsVa
     }
 
     const scope = activeScopeRef.current;
+    const scopeRevision = activeScopeRevisionRef.current;
     const notesSnapshot = notesRef.current;
     const dbResults = await dbSearchNotes(trimmedQuery, scope);
+
+    if (!isCurrentScope(scope, scopeRevision)) {
+      return [];
+    }
+
     const fallbackMatches = filterNotesByQuery(notesSnapshot, trimmedQuery);
 
     if (fallbackMatches.length === 0) {
@@ -598,7 +604,7 @@ function useNotesStoreValue(): { state: NotesStateValue; actions: NotesActionsVa
     }
 
     return mergedResults;
-  }, []);
+  }, [isCurrentScope]);
 
   const deleteNote = useCallback(
     async (id: string) => {

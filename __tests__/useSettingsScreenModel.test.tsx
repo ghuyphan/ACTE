@@ -548,4 +548,38 @@ describe('useSettingsScreenModel', () => {
 
     expect(mockNotesState.deleteAllNotes).toHaveBeenCalledTimes(1);
   });
+
+  it('warns signed-in users that offline clear-all cannot remove shared copies', async () => {
+    mockNotesState.notes = [{ id: 'note-1' }, { id: 'note-2' }];
+    mockAuthState.user = {
+      id: 'user-1',
+      uid: 'user-1',
+      displayName: 'Huy',
+      email: 'huy@example.com',
+    };
+    mockConnectivityState.isOnline = false;
+
+    const { result } = renderHook(() => useSettingsScreenModel());
+
+    act(() => {
+      result.current.promptClearAll();
+    });
+    act(() => {
+      mockShowAlert.mock.calls[0][0].primaryAction.onPress();
+    });
+
+    const deleteAction = mockShowAlert.mock.calls[1][0].primaryAction;
+    await act(async () => {
+      await deleteAction.onPress();
+    });
+
+    expect(mockNotesState.deleteAllNotes).toHaveBeenCalledTimes(1);
+    expect(mockSharedFeedState.deleteSharedNotes).not.toHaveBeenCalled();
+    expect(mockShowAlert).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        title: 'Deleted locally',
+        message: expect.stringContaining('offline'),
+      })
+    );
+  });
 });

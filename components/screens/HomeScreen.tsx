@@ -3,7 +3,7 @@ import * as FileSystem from '../../utils/fileSystem';
 import * as Haptics from '../../hooks/useHaptics';
 import * as ImagePicker from 'expo-image-picker';
 import { Href, useLocalSearchParams, useRouter } from 'expo-router';
-import { memo, type ComponentProps, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { type ComponentProps, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   AppState,
@@ -16,26 +16,23 @@ import {
 import { PAYWALL_RESULT } from 'react-native-purchases-ui';
 import { useSharedValue } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import AppSheetAlert from '../sheets/AppSheetAlert';
 import CaptureAudienceStrip from '../home/CaptureAudienceStrip';
 import CaptureCard, { type CaptureCardHandle } from '../home/CaptureCard';
-import DualCaptureComposer, {
-  type DualCaptureComposeRequest,
-} from '../home/capture/DualCaptureComposer';
+import type { DualCaptureComposeRequest } from '../home/capture/DualCaptureComposer';
 import type { DualCameraPreviewHandle } from '../home/capture/DualCameraPreview';
 import {
   findHomeFeedItemIndex,
   getHomeFeedItemKey,
 } from '../home/feedItems';
 import HomeFeedEmptyState from '../home/HomeFeedEmptyState';
-import HomeHeaderSearch from '../home/HomeHeaderSearch';
 import NotesFeed from '../home/NotesFeed';
 import PlacePulseStrip from '../home/PlacePulseStrip';
 import SavedNotePolaroidReveal from '../home/SavedNotePolaroidReveal';
 import SharedPlacePulseStrip, {
   type SharedPlacePulseAvatar,
 } from '../home/SharedPlacePulseStrip';
-import SharedManageSheet from '../home/SharedManageSheet';
+import HomeFeedSurface from './home/HomeFeedSurface';
+import HomeScreenChrome from './home/HomeScreenChrome';
 import { useHomeFeedViewModel } from '../../hooks/app/useHomeFeedViewModel';
 import { useHomeRefresh } from '../../hooks/app/useHomeRefresh';
 import { useHomeSharedActions } from '../../hooks/app/useHomeSharedActions';
@@ -120,11 +117,6 @@ const SHARED_PLACE_PULSE_MAX_AVATARS = 3;
 const SHARED_PLACE_PULSE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 const EMPTY_SHARED_PLACE_PULSE_AVATARS: SharedPlacePulseAvatar[] = [];
 type SaveButtonState = 'idle' | 'saving' | 'success';
-type HomeFeedSurfaceProps = {
-  blurBackgroundColor: string;
-  notesFeedProps: ComponentProps<typeof NotesFeed>;
-  savedRevealProps: ComponentProps<typeof SavedNotePolaroidReveal>;
-};
 
 type PersistedCaptureDraft = CaptureDraftState & {
   version: 1;
@@ -166,22 +158,6 @@ function getRequiredPersistedCaptureDraftPhotoUris(draft: PersistedCaptureDraft)
     draft.cameraSubmode === 'dual' ? draft.dualSecondaryPhoto : null,
   ].filter((value): value is string => Boolean(value?.trim()));
 }
-
-const HomeFeedSurface = memo(function HomeFeedSurface({
-  blurBackgroundColor,
-  notesFeedProps,
-  savedRevealProps,
-}: HomeFeedSurfaceProps) {
-  return (
-    <>
-      <View style={[styles.blurTarget, { backgroundColor: blurBackgroundColor }]}>
-        <NotesFeed {...notesFeedProps} />
-      </View>
-
-      <SavedNotePolaroidReveal {...savedRevealProps} />
-    </>
-  );
-});
 
 function hasFiniteCoordinate(value: number | null | undefined): value is number {
   return typeof value === 'number' && Number.isFinite(value);
@@ -705,6 +681,7 @@ export default function HomeScreen() {
     sharedEnabled,
     sharedPosts,
     startupInteractive: homeFeedReady,
+    autoPromoteDelayMs: 1200,
     presentationScope: isFriendsFilterEnabled ? 'friends' : 'all',
   });
   const {
@@ -3121,77 +3098,75 @@ export default function HomeScreen() {
         notesFeedProps={notesFeedProps}
         savedRevealProps={savedRevealProps}
       />
-      <DualCaptureComposer
-        request={dualCaptureComposeRequest}
-        onComplete={handleDualCaptureComposeComplete}
-      />
-
-      <HomeHeaderSearch
-        topInset={insets.top}
-        isSearching={false}
-        searchAnim={searchAnim}
-        searchQuery=""
-        onSearchChange={() => {}}
-        onOpenSearch={() => {
-          router.push('/search' as Href);
+      <HomeScreenChrome
+        dualCaptureComposerProps={{
+          request: dualCaptureComposeRequest,
+          onComplete: handleDualCaptureComposeComplete,
         }}
-        onCloseSearch={() => {}}
-        showSearchButton={showLegacySearchButton}
-        showSharedButton
-        showNotesButton
-        onOpenShared={handleOpenSharedManage}
-        onOpenNotes={handleOpenNotes}
-        sharedButtonMode={settledSharedButtonMode}
-        sharedButtonActive={settledSharedButtonMode === 'filter' && isFriendsFilterEnabled}
-        sharedFilterValue={isFriendsFilterEnabled ? 'friends' : 'all'}
-        onChangeSharedFilter={(nextFilter) => {
-          void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-          setIsFriendsFilterEnabled(nextFilter === 'friends');
+        headerSearchProps={{
+          topInset: insets.top,
+          isSearching: false,
+          searchAnim,
+          searchQuery: '',
+          onSearchChange: () => {},
+          onOpenSearch: () => {
+            router.push('/search' as Href);
+          },
+          onCloseSearch: () => {},
+          showSearchButton: showLegacySearchButton,
+          showSharedButton: true,
+          showNotesButton: true,
+          onOpenShared: handleOpenSharedManage,
+          onOpenNotes: handleOpenNotes,
+          sharedButtonMode: settledSharedButtonMode,
+          sharedButtonActive: settledSharedButtonMode === 'filter' && isFriendsFilterEnabled,
+          sharedFilterValue: isFriendsFilterEnabled ? 'friends' : 'all',
+          onChangeSharedFilter: (nextFilter) => {
+            void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            setIsFriendsFilterEnabled(nextFilter === 'friends');
+          },
+          hasFriendsForFilter: friends.length > 0,
+          onToggleCaptureMode: handleToggleCaptureMode,
+          captureMode,
+          colors,
+          isDark,
+          t,
+          showDockedBlur: true,
         }}
-        hasFriendsForFilter={friends.length > 0}
-        onToggleCaptureMode={handleToggleCaptureMode}
-        captureMode={captureMode}
-        colors={colors}
-        isDark={isDark}
-        t={t}
-        showDockedBlur
+        sharedManageSheetProps={
+          showSharedManageSheet
+            ? {
+                visible: showSharedManageSheet,
+                friends,
+                activeInvite,
+                creatingInvite: inviteActionInFlight === 'create',
+                loading: sharedLoading,
+                onClose: dismissSharedManageSheet,
+                onCreateInvite: () => {
+                  void handleCreateInvite();
+                },
+                onShareInvite: () => {
+                  void handleShareInvite();
+                },
+                onRevokeInvite: () => {
+                  void handleRevokeInvite();
+                },
+                onOpenFriendSearch: () => {
+                  dismissSharedManageSheet();
+                  router.push('/friends/join' as Href);
+                },
+                onRemoveFriend: handleRemoveFriend,
+              }
+            : null
+        }
+        alertProps={alertProps}
       />
-
-      {showSharedManageSheet ? (
-        <SharedManageSheet
-          visible={showSharedManageSheet}
-          friends={friends}
-          activeInvite={activeInvite}
-          creatingInvite={inviteActionInFlight === 'create'}
-          loading={sharedLoading}
-          onClose={dismissSharedManageSheet}
-          onCreateInvite={() => {
-            void handleCreateInvite();
-          }}
-          onShareInvite={() => {
-            void handleShareInvite();
-          }}
-          onRevokeInvite={() => {
-            void handleRevokeInvite();
-          }}
-          onOpenFriendSearch={() => {
-            dismissSharedManageSheet();
-            router.push('/friends/join' as Href);
-          }}
-          onRemoveFriend={handleRemoveFriend}
-        />
-      ) : null}
-
-      {alertProps.visible ? <AppSheetAlert {...alertProps} /> : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
-  },
-  blurTarget: {
     flex: 1,
   },
   captureItemWrapper: {

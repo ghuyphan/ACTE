@@ -51,6 +51,7 @@ jest.mock('../hooks', () => {
     HapticsProvider: namedPassthrough('HapticsProvider'),
     NoteDetailSheetProvider: namedPassthrough('NoteDetailSheetProvider'),
     NotesProvider: namedPassthrough('NotesProvider'),
+    PolaroidExportCaptureProvider: namedPassthrough('PolaroidExportCaptureProvider'),
     SharedFeedProvider: namedPassthrough('SharedFeedProvider'),
     SubscriptionProvider: namedPassthrough('SubscriptionProvider'),
     SyncStatusProvider: namedPassthrough('SyncStatusProvider'),

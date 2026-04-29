@@ -8,6 +8,7 @@ const mockRouter = {
 };
 const mockAuthState = {
   isAuthAvailable: true,
+  isReady: true,
   user: { uid: 'user-1' } as { uid: string } | null,
 };
 
@@ -50,6 +51,7 @@ describe('detail routes', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockRouter.canGoBack.mockReturnValue(false);
+    mockAuthState.isReady = true;
     mockAuthState.user = { uid: 'user-1' };
   });
 

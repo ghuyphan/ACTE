@@ -267,6 +267,55 @@ describe('useNotesStore', () => {
     expect(mockDbSearchNotes).toHaveBeenCalledWith('coffee', 'user-42');
   });
 
+  it('drops stale search results when the active scope changes before search resolves', async () => {
+    const userOneNote = {
+      id: 'user-1-note',
+      type: 'text' as const,
+      content: 'Scoped coffee note',
+      locationName: 'District 1',
+      latitude: 10.7,
+      longitude: 106.6,
+      radius: 150,
+      isFavorite: false,
+      createdAt: '2026-04-01T00:00:00.000Z',
+      updatedAt: null,
+    };
+    const userTwoNote = {
+      ...userOneNote,
+      id: 'user-2-note',
+      content: 'Different account note',
+    };
+    const deferredSearch = createDeferred<Note[]>();
+
+    mockUseAuth.mockReturnValue({
+      user: { uid: 'user-1' },
+      isReady: true,
+    } as any);
+    mockGetNotesPageForScope.mockImplementation(async (scope: string) =>
+      scope === 'user-1' ? [userOneNote] : [userTwoNote]
+    );
+    mockGetAllNotesForScope.mockImplementation(async (scope: string) =>
+      scope === 'user-1' ? [userOneNote] : [userTwoNote]
+    );
+    mockDbSearchNotes.mockImplementationOnce(() => deferredSearch.promise);
+
+    const { result, rerender } = renderHook(() => useNotesStore(), { wrapper: TestWrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    const searchPromise = result.current.searchNotes('coffee');
+
+    mockUseAuth.mockReturnValue({
+      user: { uid: 'user-2' },
+      isReady: true,
+    } as any);
+    rerender(undefined);
+    await waitFor(() => expect(mockGetNotesPageForScope).toHaveBeenCalledWith('user-2', expect.anything()));
+
+    deferredSearch.resolve([userOneNote]);
+
+    await expect(searchPromise).resolves.toEqual([]);
+  });
+
   it('surfaces the newest notes first, then hydrates the full archive in the background', async () => {
     mockNotesDb = Array.from({ length: 30 }, (_, index) => ({
       id: `note-${index + 1}`,

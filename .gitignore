@@ -53,3 +53,4 @@ app-example
 /build-*.apk
 /build-*.aab
 **/android/build/
+**/android/.gradle/

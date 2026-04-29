@@ -81,6 +81,24 @@ describe('withExpoWidgetsBundleFix', () => {
     expect(project.hash.project.objects.PBXNativeTarget.WIDGET.buildPhases).toHaveLength(1);
   });
 
+  it('upgrades an existing widget bundle copy phase that only warns in Release', () => {
+    const project = createMockProject();
+    project.hash.project.objects.PBXShellScriptBuildPhase.PHASE_1 = {
+      name: '"Copy ExpoWidgets JS Bundle"',
+      shellScript: 'echo "warning: ExpoWidgets JS bundle source not found"',
+    };
+    project.hash.project.objects.PBXNativeTarget.WIDGET.buildPhases.push(
+      ref('PHASE_1', 'Copy ExpoWidgets JS Bundle')
+    );
+
+    expect(ensureBundleCopyPhase(project, '/repo')).toBe(true);
+
+    const phase = project.hash.project.objects.PBXShellScriptBuildPhase.PHASE_1;
+    expect(project.hash.project.objects.PBXNativeTarget.WIDGET.buildPhases).toHaveLength(1);
+    expect(phase.shellScript).toContain('if [ "$CONFIGURATION" = "Release" ]; then');
+    expect(phase.shellScript).toContain('exit 1');
+  });
+
   it('reports when the ExpoWidgetsTarget is absent', () => {
     const project = createMockProject();
     project.hash.project.objects.PBXNativeTarget = {};

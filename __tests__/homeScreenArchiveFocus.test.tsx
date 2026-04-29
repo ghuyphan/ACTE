@@ -525,7 +525,7 @@ describe('HomeScreen archive focus', () => {
     );
 
     act(() => {
-      jest.runAllTimers();
+      jest.advanceTimersByTime(0);
     });
 
     expect(latestNotesFeedProps?.items.map((item: any) => item.id)).toEqual([
@@ -534,6 +534,17 @@ describe('HomeScreen archive focus', () => {
       'note-old',
     ]);
     expect(mockScrollToOffset).not.toHaveBeenCalled();
+
+    act(() => {
+      jest.advanceTimersByTime(1200);
+    });
+
+    expect(latestNotesFeedProps?.items.map((item: any) => item.id)).toEqual([
+      'shared-new',
+      'shared-friend',
+      'note-new',
+      'note-old',
+    ]);
   });
 
   it('keeps the currently viewed card anchored when a newer note is inserted above it', async () => {

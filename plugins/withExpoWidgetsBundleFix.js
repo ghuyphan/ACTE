@@ -19,36 +19,8 @@ const SCRIPT_NAME = 'Copy ExpoWidgets JS Bundle';
 const normalize = (value) =>
     typeof value === 'string' ? value.replace(/^"(.*)"$/, '$1') : '';
 
-function ensureBundleCopyPhase(project, projectRoot) {
-    const targets = project.pbxNativeTargetSection();
-    let widgetTargetKey = null;
-
-    for (const key in targets) {
-        if (key.endsWith('_comment')) {
-            continue;
-        }
-        const name = normalize(targets[key]?.name);
-        const productName = normalize(targets[key]?.productName);
-        if (name === TARGET_NAME || productName === TARGET_NAME) {
-            widgetTargetKey = key;
-            break;
-        }
-    }
-
-    if (!widgetTargetKey) {
-        return false;
-    }
-
-    const buildPhases = targets[widgetTargetKey].buildPhases || [];
-    const alreadyAdded = buildPhases.some((phase) => {
-        const phaseObj = project.hash.project.objects['PBXShellScriptBuildPhase']?.[phase.value];
-        return normalize(phaseObj?.name) === SCRIPT_NAME;
-    });
-    if (alreadyAdded) {
-        return true;
-    }
-
-    const scriptContent = `
+function getBundleCopyScriptContent(projectRoot) {
+    return `
 # Fix: Copy ExpoWidgets JS bundle into the resource bundle directory
 DEST_DIR="\${TARGET_BUILD_DIR}/\${UNLOCALIZED_RESOURCES_FOLDER_PATH}/ExpoWidgets.bundle"
 PODS_JS_SOURCE="$PODS_CONFIGURATION_BUILD_DIR/ExpoWidgets/ExpoWidgets.bundle/ExpoWidgets.bundle"
@@ -77,6 +49,48 @@ elif [ -d "$DEST_DIR" ]; then
 	  fi
 	fi
 	`;
+}
+
+function ensureBundleCopyPhase(project, projectRoot) {
+    const targets = project.pbxNativeTargetSection();
+    let widgetTargetKey = null;
+
+    for (const key in targets) {
+        if (key.endsWith('_comment')) {
+            continue;
+        }
+        const name = normalize(targets[key]?.name);
+        const productName = normalize(targets[key]?.productName);
+        if (name === TARGET_NAME || productName === TARGET_NAME) {
+            widgetTargetKey = key;
+            break;
+        }
+    }
+
+    if (!widgetTargetKey) {
+        return false;
+    }
+
+    const buildPhases = targets[widgetTargetKey].buildPhases || [];
+    const scriptContent = getBundleCopyScriptContent(projectRoot);
+    const existingPhase = buildPhases
+        .map((phase) => project.hash.project.objects['PBXShellScriptBuildPhase']?.[phase.value])
+        .find((phaseObj) => normalize(phaseObj?.name) === SCRIPT_NAME);
+    if (existingPhase) {
+        const currentScript = normalize(existingPhase.shellScript);
+        if (!currentScript.includes('if [ "$CONFIGURATION" = "Release" ]; then')) {
+            existingPhase.shellScript = scriptContent;
+        }
+        return true;
+    }
+
+    const alreadyAdded = buildPhases.some((phase) => {
+        const phaseObj = project.hash.project.objects['PBXShellScriptBuildPhase']?.[phase.value];
+        return normalize(phaseObj?.name) === SCRIPT_NAME;
+    });
+    if (alreadyAdded) {
+        return true;
+    }
 
     project.addBuildPhase([], 'PBXShellScriptBuildPhase', SCRIPT_NAME, widgetTargetKey, {
         shellPath: '/bin/sh',

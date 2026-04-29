@@ -106,6 +106,7 @@ Production note:
 - `__tests__/`: Jest coverage for hooks, services, screens, widgets, and map logic.
 
 See [PROJECT_STRUCTURE.md](./PROJECT_STRUCTURE.md) for a fuller map.
+See [docs/architecture.md](./docs/architecture.md) for route, screen, hook, service, and native ownership boundaries.
 
 Compatibility note:
 
@@ -121,6 +122,7 @@ Compatibility note:
 ## Docs
 
 - [PROJECT_STRUCTURE.md](./PROJECT_STRUCTURE.md)
+- [docs/architecture.md](./docs/architecture.md)
 - [docs/release-checklist.md](./docs/release-checklist.md)
 - [docs/android-release.md](./docs/android-release.md)
 - [docs/supabase-setup.md](./docs/supabase-setup.md)

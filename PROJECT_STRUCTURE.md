@@ -135,7 +135,7 @@
 - `components/screens/plus/PlusScreen.tsx`: Subscription screen implementation.
 - `components/screens/profile/ProfileScreen.ios.tsx` and `components/screens/profile/ProfileScreen.android.tsx`: Platform-specific profile screens.
 - `components/screens/settings/SettingsScreen.ios.tsx` and `components/screens/settings/SettingsScreen.android.tsx`: Platform-specific settings screens.
-- `components/screens/MapScreen.ios.tsx` and `components/screens/MapScreen.android.tsx`: Platform-specific map screens.
+- `components/screens/MapScreen.tsx` and `components/screens/MapScreen.shared.tsx`: Map screen shell and shared map UI.
 - `hooks/state/useNotesStore.tsx`: Primary note mutation pipeline.
 - `hooks/useNotes.ts`: Public notes hook/provider entry point.
 - `hooks/app/useAppStartupBootstrap.ts`: Startup bootstrap, sync, and notification/widget prep.

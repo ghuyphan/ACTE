@@ -50,7 +50,7 @@ Noto is an Expo SDK 55 / React Native app for place-linked text notes and photo 
 - `components/screens/plus/PlusScreen.tsx`: `Noto Plus` upsell and purchase UI.
 - `components/screens/profile/ProfileScreen.ios.tsx` and `components/screens/profile/ProfileScreen.android.tsx`: Platform-specific profile/account UI.
 - `components/screens/settings/SettingsScreen.ios.tsx` and `components/screens/settings/SettingsScreen.android.tsx`: Platform-specific settings UI.
-- `components/screens/MapScreen.ios.tsx` and `components/screens/MapScreen.android.tsx`: Platform-specific map UI.
+- `components/screens/MapScreen.tsx` and `components/screens/MapScreen.shared.tsx`: Map screen shell and shared map UI.
 - `app.config.js`: Expo config, permissions, widgets, Google Maps wiring, build gating, custom plugins, and native IDs.
 - `services/database.ts`: SQLite schema, note model, local cache tables, and migrations.
 - `services/sharedFeedService.ts`: Friend invites, shared post CRUD, and shared feed refresh logic.
@@ -111,6 +111,7 @@ Noto is an Expo SDK 55 / React Native app for place-linked text notes and photo 
 
 - `README.md`: Quick start, supported env vars, high-level repo guide, and native working model.
 - `PROJECT_STRUCTURE.md`: Fuller route, directory, and entry-point map.
+- `docs/architecture.md`: Route, screen, hook, service, and native ownership boundaries.
 - `docs/release-checklist.md`: Release procedure and verification.
 - `docs/android-release.md`: Android release signing and build notes.
 - `docs/supabase-setup.md` and `docs/supabase-schema.md`: Supabase setup, tables, storage, functions, and migrations.

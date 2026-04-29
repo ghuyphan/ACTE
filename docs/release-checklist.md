@@ -69,7 +69,7 @@
 ## OTA / EAS Update
 
 - [ ] Publish store-bound builds from the intended EAS channel (`preview` or `production`).
-- [ ] For native changes, bump the Expo `version` in `app.config.js` before shipping a new build.
+- [ ] For native changes, bump `version` in `package.json` before shipping a new build; `app.config.js` uses that value for both `version` and `runtimeVersion`.
 - [ ] For JavaScript-only changes, publish an OTA update to the matching channel with `npm run update:preview` or `npm run update:production`.
 
 ## Quality Gates
@@ -77,4 +77,6 @@
 - [ ] `npm run lint:ci`
 - [ ] `npm run typecheck`
 - [ ] `npm test -- --runInBand`
+- [ ] `npm run supabase:functions:check`
+- [ ] For native/plugin/widget changes, run `npm run verify:native` on a machine with the generated native projects and platform toolchains available.
 - [ ] `npm run verify`

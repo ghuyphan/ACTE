@@ -5,7 +5,7 @@ Scope: repo-wide maintainability, DRY, folder complexity, public API sprawl, and
 ## Priority Findings
 
 ### P1 - Core services and screens are too monolithic
-The biggest maintenance risk in this repo is that several central modules have become catch-all implementations instead of bounded units. `services/database.ts:1` is a 2,031-line blend of schema, migrations, scope handling, CRUD, recap cache, and search. `services/syncService.ts:1` is even larger at 2,239 lines and mixes repository logic, remote sync, queue state, and deletion policy. `services/sharedFeedService.ts:1` and `services/noteStickers.ts:1` show the same pattern. On the UI side, `components/home/CaptureCard.tsx:1` is 1,401 lines and `components/screens/MapScreen.ios.tsx:1` is 1,060 lines.
+The biggest maintenance risk in this repo is that several central modules have become catch-all implementations instead of bounded units. `services/database.ts:1` is a 2,031-line blend of schema, migrations, scope handling, CRUD, recap cache, and search. `services/syncService.ts:1` is even larger at 2,239 lines and mixes repository logic, remote sync, queue state, and deletion policy. `services/sharedFeedService.ts:1` and `services/noteStickers.ts:1` show the same pattern. On the UI side, `components/home/CaptureCard.tsx:1` is 1,401 lines and the map surface is split across `components/screens/MapScreen.tsx:1` and `components/screens/MapScreen.shared.tsx:1`.
 
 This structure makes changes harder to reason about because unrelated behaviors live in the same file and share the same state. It also raises merge risk: small behavior changes often require touching large, highly coupled modules.
 
@@ -26,7 +26,7 @@ This is not broken, but it makes ownership hard to understand. New code has to g
 Suggested fix: pick one public surface for hooks and keep implementation files internal. If the wrapper is only for compatibility, document it or remove it once call sites are migrated.
 
 ### P2 - Platform screen variants are multiplying folder complexity
-The settings, profile, and map screens are each split into platform-specific shells with nearly identical responsibilities: `components/screens/settings/SettingsScreen.tsx:1`, `components/screens/settings/SettingsScreen.ios.tsx:1`, `components/screens/settings/SettingsScreen.android.tsx:1`; `components/screens/profile/ProfileScreen.tsx:1`, `components/screens/profile/ProfileScreen.ios.tsx:1`, `components/screens/profile/ProfileScreen.android.tsx:1`; and `components/screens/MapScreen.tsx:1`, `components/screens/MapScreen.ios.tsx:1`.
+The settings and profile screens are split into platform-specific shells with nearly identical responsibilities: `components/screens/settings/SettingsScreen.tsx:1`, `components/screens/settings/SettingsScreen.ios.tsx:1`, `components/screens/settings/SettingsScreen.android.tsx:1`; and `components/screens/profile/ProfileScreen.tsx:1`, `components/screens/profile/ProfileScreen.ios.tsx:1`, `components/screens/profile/ProfileScreen.android.tsx:1`. The map screen now uses `components/screens/MapScreen.tsx:1` with shared UI in `components/screens/MapScreen.shared.tsx:1`.
 
 This is understandable for platform-specific UI, but the current shape creates a lot of file hopping for small changes and encourages copy-paste variants. The Android and iOS versions of settings/profile both reimplement the same screen-level structure with different components.
 

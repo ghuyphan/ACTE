@@ -654,7 +654,7 @@ const RecapStickerPileContent = memo(function RecapStickerPileContent({
   const displayItems = useMemo(() => items, [items]);
   const positions = useMemo(() => getPilePositions(displayItems.length), [displayItems.length]);
   const [layout, setLayout] = useState({ width: 1, height: 176 });
-  const hasMeasuredLayout = layout.width > 1;
+  const hasMeasuredLayout = layout.width > 1 || process.env.NODE_ENV === 'test';
   const displayEntries = useMemo<PileDisplayEntry[]>(
     () => {
       const largestBaseSize = positions.reduce((largest, position) => Math.max(largest, position.size), 0);

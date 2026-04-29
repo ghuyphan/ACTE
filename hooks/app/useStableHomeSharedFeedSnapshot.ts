@@ -8,6 +8,7 @@ interface UseStableHomeSharedFeedSnapshotParams {
   sharedEnabled: boolean;
   sharedPosts: SharedPost[];
   startupInteractive: boolean;
+  autoPromoteDelayMs?: number | null;
   presentationScope?: string;
 }
 
@@ -55,6 +56,7 @@ export function useStableHomeSharedFeedSnapshot({
   sharedEnabled,
   sharedPosts,
   startupInteractive,
+  autoPromoteDelayMs = null,
   presentationScope = 'default',
 }: UseStableHomeSharedFeedSnapshotParams) {
   const resetKey = `${userUid?.trim() || 'signed-out'}:${sharedEnabled ? 'shared' : 'local'}:${presentationScope}`;
@@ -136,6 +138,20 @@ export function useStableHomeSharedFeedSnapshot({
 
     commitPresentedSnapshot(latestSharedPostsRef.current, latestSignatureRef.current);
   }, [commitPresentedSnapshot, promoteRequestId]);
+
+  useEffect(() => {
+    if (!pendingSharedPosts || autoPromoteDelayMs === null) {
+      return;
+    }
+
+    const timeoutId = setTimeout(() => {
+      commitPresentedSnapshot(latestSharedPostsRef.current, latestSignatureRef.current);
+    }, Math.max(autoPromoteDelayMs, 0));
+
+    return () => {
+      clearTimeout(timeoutId);
+    };
+  }, [autoPromoteDelayMs, commitPresentedSnapshot, pendingSharedPosts]);
 
   const hasPendingSharedUpdates = Boolean(pendingSharedPosts);
 

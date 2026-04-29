@@ -338,19 +338,19 @@ describe('NotesIndexScreen', () => {
     expect(getByText('No notes yet')).toBeTruthy();
   });
 
-  it('switches into recap mode for personal notes and shows the monthly summary', () => {
+  it('switches into recap mode for personal notes and shows the monthly summary', async () => {
     const { getByTestId, getByText, queryByText } = render(<NotesIndexScreen />);
 
     fireEvent.press(getByTestId('notes-mode-recap'));
 
-    expect(getByTestId('notes-recap-mode')).toBeTruthy();
+    await waitFor(() => expect(getByTestId('notes-recap-mode')).toBeTruthy());
     expect(getByText('March 2026')).toBeTruthy();
     expect(getByTestId('notes-recap-sticker-pile')).toBeTruthy();
     expect(getByText('Used this month')).toBeTruthy();
     expect(queryByText('Shared memory')).toBeNull();
   });
 
-  it('shows an overflow badge for multi-photo days and a note tile for text-only days', () => {
+  it('shows an overflow badge for multi-photo days and a note tile for text-only days', async () => {
     mockNotes.splice(
       0,
       mockNotes.length,
@@ -410,7 +410,9 @@ describe('NotesIndexScreen', () => {
 
     fireEvent.press(getByTestId('notes-mode-recap'));
 
-    expect(getByTestId('notes-recap-day-back-photo-2026-03-11').props.source).toBeTruthy();
+    await waitFor(() =>
+      expect(getByTestId('notes-recap-day-back-photo-2026-03-11').props.source).toBeTruthy()
+    );
     expect(getByTestId('notes-recap-day-front-photo-2026-03-11').props.source).toBeTruthy();
     expect(getByTestId('notes-recap-day-back-photo-2026-03-11').props.source).not.toEqual(
       getByTestId('notes-recap-day-front-photo-2026-03-11').props.source
@@ -429,12 +431,12 @@ describe('NotesIndexScreen', () => {
     expect(pillStyle.opacity).toBe(1);
   });
 
-  it('shows month items by default, filters to a tapped day, and clears when tapped again', () => {
+  it('shows month items by default, filters to a tapped day, and clears when tapped again', async () => {
     const { getByTestId, getByText, queryByText } = render(<NotesIndexScreen />);
 
     fireEvent.press(getByTestId('notes-mode-recap'));
 
-    expect(getByText('Used this month')).toBeTruthy();
+    await waitFor(() => expect(getByText('Used this month')).toBeTruthy());
 
     fireEvent.press(getByTestId('notes-recap-day-2026-03-11'));
 
@@ -447,11 +449,11 @@ describe('NotesIndexScreen', () => {
     expect(queryByText('Mar 11')).toBeNull();
   });
 
-  it('switches back to all mode and restores the note grid content', () => {
+  it('switches back to all mode and restores the note grid content', async () => {
     const { getByTestId, getByText } = render(<NotesIndexScreen />);
 
     fireEvent.press(getByTestId('notes-mode-recap'));
-    expect(getByTestId('notes-recap-mode')).toBeTruthy();
+    await waitFor(() => expect(getByTestId('notes-recap-mode')).toBeTruthy());
 
     fireEvent.press(getByTestId('notes-mode-all'));
 
@@ -460,7 +462,7 @@ describe('NotesIndexScreen', () => {
     expect(getByText('Shared memory')).toBeTruthy();
   });
 
-  it('lets the user switch recap months from the header', () => {
+  it('lets the user switch recap months from the header', async () => {
     mockNotes.splice(
       0,
       mockNotes.length,
@@ -494,7 +496,7 @@ describe('NotesIndexScreen', () => {
 
     fireEvent.press(getByTestId('notes-mode-recap'));
 
-    expect(getByText('April 2026')).toBeTruthy();
+    await waitFor(() => expect(getByText('April 2026')).toBeTruthy());
 
     fireEvent.press(getByTestId('notes-recap-previous-month'));
 
@@ -505,7 +507,7 @@ describe('NotesIndexScreen', () => {
     expect(getByText('April 2026')).toBeTruthy();
   });
 
-  it('lets the user go to an empty previous month even when notes only exist in the current month', () => {
+  it('lets the user go to an empty previous month even when notes only exist in the current month', async () => {
     mockNotes.splice(
       0,
       mockNotes.length,
@@ -526,6 +528,7 @@ describe('NotesIndexScreen', () => {
     const { getByTestId, getByText, queryByTestId } = render(<NotesIndexScreen />);
 
     fireEvent.press(getByTestId('notes-mode-recap'));
+    await waitFor(() => expect(getByTestId('notes-recap-previous-month')).toBeTruthy());
     fireEvent.press(getByTestId('notes-recap-previous-month'));
 
     expect(getByText('March 2026')).toBeTruthy();
