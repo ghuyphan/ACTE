@@ -11,7 +11,7 @@ import Reanimated, {
   withSpring,
   withTiming,
 } from 'react-native-reanimated';
-import type { MapClusterNode, MapPointGroup } from '../../hooks/map/mapDomain';
+import type { MapClusterNode } from '../../hooks/map/mapDomain';
 import type { ThemeColors } from '../../hooks/useTheme';
 import type { Note } from '../../services/database';
 import { getNotePhotoUri } from '../../services/photoStorage';
@@ -25,7 +25,6 @@ import {
 } from './mapMotion';
 import MapSharedPostCallout from './MapSharedPostCallout';
 import { photoOrbMinZoom, samePlaceSplitMinZoom } from './mapMarkerTokens';
-import MapSelectedNoteCallout from './MapSelectedNoteCallout';
 
 type SharedPostWithCoordinates = SharedPost & {
   latitude: number;
@@ -45,7 +44,6 @@ interface MapCanvasProps {
   friendMarkers: SharedPostWithCoordinates[];
   noteById: Map<string, Note>;
   selectedGroupId: string | null;
-  selectedGroup: MapPointGroup | null;
   selectedNote: Note | null;
   selectedFriendPostId: string | null;
   markerPulseId: string | null;
@@ -82,6 +80,7 @@ interface MarkerRenderItem {
   noteId: string | null;
   placeLabel: string | null;
   metaLabel: string | null;
+  markerLabelTestID?: string;
 }
 
 interface MarkerContentProps {
@@ -103,6 +102,7 @@ interface MarkerContentProps {
   onImageLoadEnd?: (key: string) => void;
   placeLabel?: string | null;
   metaLabel?: string | null;
+  markerLabelTestID?: string;
 }
 
 const ANDROID_MARKER_REFRESH_MS = {
@@ -299,6 +299,7 @@ const MarkerContent = memo(function MarkerContent({
   onImageLoadEnd,
   placeLabel,
   metaLabel,
+  markerLabelTestID,
 }: MarkerContentProps) {
   const activeProgress = useSharedValue(selected ? 1 : 0);
   const pulseProgress = useSharedValue(0);
@@ -498,6 +499,7 @@ const MarkerContent = memo(function MarkerContent({
         )}
         {placeLabel || metaLabel ? (
           <View
+            testID={markerLabelTestID}
             pointerEvents="none"
             style={[
               styles.markerLabelPill,
@@ -533,7 +535,6 @@ function MapCanvas({
   friendMarkers,
   noteById,
   selectedGroupId,
-  selectedGroup,
   selectedNote,
   selectedFriendPostId,
   markerPulseId,
@@ -599,6 +600,7 @@ function MapCanvas({
                 noteId: note.id,
                 placeLabel: currentZoom >= 14 ? getCompactPlaceLabel(note.locationName) : null,
                 metaLabel: currentZoom >= 15 ? getMarkerMetaLabel(note.createdAt) : null,
+                markerLabelTestID: `map-marker-label-${note.id}`,
               });
             });
 
@@ -640,6 +642,7 @@ function MapCanvas({
             (node.isCluster ? currentZoom >= 12 : currentZoom >= 15)
               ? getMarkerMetaLabel(node.lastCreatedAt)
               : null,
+          markerLabelTestID: representativeNote ? `map-marker-label-${representativeNote.id}` : undefined,
         });
       }
 
@@ -856,23 +859,15 @@ function MapCanvas({
           noteId,
           placeLabel,
           metaLabel,
+          markerLabelTestID,
         }) => {
-        const showSelectedCallout =
-          !preferLiteMarkers &&
-          !node.isCluster &&
-          Boolean(selectedGroup) &&
-          selectedGroup!.notes.length === 1 &&
-          Boolean(selectedNote) &&
-          node.groupId === selectedGroup!.id;
-        const markerZIndex = showSelectedCallout ? 30 : isSelected ? 20 : node.isCluster ? 5 : 10;
+        const markerZIndex = isSelected ? 20 : node.isCluster ? 5 : 10;
         const imageTrackingKey = getMarkerImageKey('own', key, photoUri);
         const markerRenderKey = isAndroid
           ? `${key}-${
-              showSelectedCallout
-                ? `callout-${selectedNote?.id ?? 'none'}`
-                : isSelected
-                  ? `selected-${noteId ?? node.groupId ?? key}`
-                  : 'idle'
+              isSelected
+                ? `selected-${noteId ?? node.groupId ?? key}`
+                : 'idle'
             }`
           : key;
 
@@ -898,13 +893,13 @@ function MapCanvas({
               key={markerRenderKey}
               testID={testID}
               coordinate={coordinate}
-              anchor={showSelectedCallout ? selectedCalloutAnchor : { x: 0.5, y: 0.5 }}
+              anchor={{ x: 0.5, y: 0.5 }}
               accessibilityLabel={node.isCluster ? `${formatMarkerCount(pointCount)} notes` : 'Map note marker'}
               zIndex={markerZIndex}
               tracksViewChanges={
                 pulseActive ||
                 reduceMotionEnabled ||
-                (!isAndroid && (showSelectedCallout || isSelected)) ||
+                (!isAndroid && isSelected) ||
                 (isAndroid &&
                   (androidShouldTrackMarkerViews ||
                     isImagePending(pendingMarkerImageKeys, imageTrackingKey)))
@@ -923,22 +918,7 @@ function MapCanvas({
                 }
               }}
             >
-              <View
-                style={[
-                  styles.markerWrap,
-                  showSelectedCallout ? styles.selectedMarkerHitArea : null,
-                ]}
-                collapsable={false}
-              >
-                {showSelectedCallout && selectedNote ? (
-                  <View pointerEvents="none" style={styles.selectedMarkerOverlay} collapsable={false}>
-                    <MapSelectedNoteCallout
-                      note={selectedNote}
-                      colors={colors}
-                      showOrb={false}
-                    />
-                  </View>
-                ) : null}
+              <View style={styles.markerWrap} collapsable={false}>
                 <MarkerContent
                   isCluster={node.isCluster}
                   pointCount={pointCount}
@@ -958,6 +938,7 @@ function MapCanvas({
                   onImageLoadEnd={handleMarkerImageLoadEnd}
                   placeLabel={placeLabel}
                   metaLabel={metaLabel}
+                  markerLabelTestID={markerLabelTestID}
                 />
               </View>
             </Marker>
@@ -1175,17 +1156,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     minWidth: 60,
     minHeight: 60,
-  },
-  selectedMarkerHitArea: {
-    minWidth: 212,
-    minHeight: 148,
-    justifyContent: 'flex-end',
-  },
-  selectedMarkerOverlay: {
-    position: 'absolute',
-    bottom: 52,
-    width: 204,
-    alignItems: 'center',
   },
   selectedFriendMarkerHitArea: {
     minWidth: 204,

@@ -1132,7 +1132,6 @@ export default function MapScreenIOS() {
         friendMarkers={friendMarkerPosts}
         noteById={noteById}
         selectedGroupId={selectedGroupId}
-        selectedGroup={selectedGroup}
         selectedNote={selectedNote}
         selectedFriendPostId={activeFriendPostId}
         markerPulseId={markerPulseId}

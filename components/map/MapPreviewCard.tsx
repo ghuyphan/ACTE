@@ -33,7 +33,6 @@ import {
 } from './overlayTokens';
 
 const PREVIEW_HORIZONTAL_INSET = 14;
-const PREVIEW_SURFACE_MAX_WIDTH = 356;
 const PREVIEW_MEDIA_SIZE = 48;
 const PREVIEW_ROW_GAP = 10;
 
@@ -107,7 +106,7 @@ export default function MapPreviewCard({
 
   const [isMounted, setIsMounted] = useState(visible);
   const fullSurfaceWidth = Math.max(0, windowWidth - PREVIEW_HORIZONTAL_INSET * 2);
-  const shellWidth = Math.min(fullSurfaceWidth, PREVIEW_SURFACE_MAX_WIDTH);
+  const shellWidth = fullSurfaceWidth;
   const nearbyPageWidth = Math.max(0, shellWidth - mapOverlayTokens.overlayPadding * 2);
 
   useEffect(() => {

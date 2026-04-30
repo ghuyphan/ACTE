@@ -562,7 +562,7 @@ describe('MapScreen', () => {
     fireEvent.press(getByTestId('leaf-marker-10.76000:106.66000'));
 
     await waitFor(() => {
-      expect(getByTestId('note-marker-text-1')).toBeTruthy();
+      expect(getByTestId('map-marker-label-text-1')).toBeTruthy();
     });
   });
 
@@ -587,7 +587,7 @@ describe('MapScreen', () => {
     fireEvent.press(getByTestId('leaf-marker-10.76000:106.66000'));
 
     await waitFor(() => {
-      expect(getByTestId('note-marker-text-1')).toBeTruthy();
+      expect(getByTestId('map-marker-label-text-1')).toBeTruthy();
     });
 
     act(() => {
@@ -599,7 +599,7 @@ describe('MapScreen', () => {
       });
     });
 
-    expect(getByTestId('note-marker-text-1')).toBeTruthy();
+    expect(getByTestId('map-marker-label-text-1')).toBeTruthy();
   });
 
   it('keeps Android marker view changes active through the refresh window, then settles', async () => {
@@ -624,7 +624,7 @@ describe('MapScreen', () => {
     fireEvent.press(getByTestId('leaf-marker-10.76000:106.66000'));
 
     await waitFor(() => {
-      expect(getByTestId('note-marker-text-1')).toBeTruthy();
+      expect(getByTestId('map-marker-label-text-1')).toBeTruthy();
       expect(getByTestId('leaf-marker-10.76000:106.66000').props.tracksViewChanges).toBe(true);
     });
 
@@ -633,7 +633,7 @@ describe('MapScreen', () => {
     });
 
     await waitFor(() => {
-      expect(getByTestId('note-marker-text-1')).toBeTruthy();
+      expect(getByTestId('map-marker-label-text-1')).toBeTruthy();
       expect(getByTestId('leaf-marker-10.76000:106.66000').props.tracksViewChanges).toBe(true);
     });
 
@@ -642,14 +642,14 @@ describe('MapScreen', () => {
     });
 
     await waitFor(() => {
-      expect(getByTestId('note-marker-text-1')).toBeTruthy();
+      expect(getByTestId('map-marker-label-text-1')).toBeTruthy();
       expect(getByTestId('leaf-marker-10.76000:106.66000').props.tracksViewChanges).toBe(false);
     });
 
     jest.useRealTimers();
   });
 
-  it('replaces the old Android selected callout when another marker is tapped', async () => {
+  it('replaces the selected Android marker label when another marker is tapped', async () => {
     setPlatformOS('android');
     replaceMockNotes([
       {
@@ -709,14 +709,14 @@ describe('MapScreen', () => {
     fireEvent.press(getByTestId('leaf-marker-10.76000:106.66000'));
 
     await waitFor(() => {
-      expect(getByTestId('note-marker-marker-a')).toBeTruthy();
+      expect(getByTestId('map-marker-label-marker-a')).toBeTruthy();
     });
 
     fireEvent.press(getByTestId('leaf-marker-10.76300:106.66300'));
 
     await waitFor(() => {
       expect(queryByTestId('note-marker-marker-a')).toBeNull();
-      expect(getByTestId('note-marker-marker-c')).toBeTruthy();
+      expect(getByTestId('map-marker-label-marker-c')).toBeTruthy();
     });
   });
 
@@ -1079,7 +1079,7 @@ describe('MapScreen', () => {
     fireEvent.press(marker);
 
     await waitFor(() => {
-      expect(getByTestId('note-marker-text-1')).toBeTruthy();
+      expect(getByTestId('map-marker-label-text-1')).toBeTruthy();
     });
 
     fireEvent.press(marker);
@@ -1151,8 +1151,48 @@ describe('MapScreen', () => {
     });
   });
 
-  it('shows an anchored selected preview above a single text marker', async () => {
-    const { getByTestId } = render(<MapScreen />);
+  it('does not show the old top callout when the marker label is hidden', async () => {
+    replaceMockNotes([
+      {
+        id: 'text-1',
+        type: 'text',
+        content: 'Text note one',
+        locationName: '',
+        latitude: 10.76,
+        longitude: 106.66,
+        radius: 150,
+        isFavorite: false,
+        createdAt: '2026-03-11T00:00:00.000Z',
+        updatedAt: null,
+      },
+    ]);
+
+    const { getByTestId, queryByTestId } = render(<MapScreen />);
+
+    act(() => {
+      getByTestId('map-canvas').props.onRegionChangeComplete({
+        latitude: 10.76,
+        longitude: 106.66,
+        latitudeDelta: 0.08,
+        longitudeDelta: 0.08,
+      });
+    });
+
+    fireEvent.press(getByTestId('leaf-marker-10.76000:106.66000'));
+
+    await waitFor(() => {
+      expect(getByTestId('map-preview-item-text-1')).toBeTruthy();
+      expect(queryByTestId('note-marker-text-1')).toBeNull();
+    });
+
+    expect(getByTestId('leaf-marker-10.76000:106.66000').props.anchor).toMatchObject({
+      x: 0.5,
+      y: 0.5,
+    });
+  });
+
+  it('uses the marker label instead of a selected callout when label text is visible', async () => {
+    const { getByTestId, queryByTestId } = render(<MapScreen />);
 
     act(() => {
       getByTestId('map-canvas').props.onRegionChangeComplete({
@@ -1166,14 +1206,14 @@ describe('MapScreen', () => {
     fireEvent.press(getByTestId('leaf-marker-10.76000:106.66000'));
 
     await waitFor(() => {
-      expect(getByTestId('note-marker-text-1')).toBeTruthy();
+      expect(getByTestId('map-marker-label-text-1')).toBeTruthy();
+      expect(queryByTestId('note-marker-text-1')).toBeNull();
     });
 
     expect(getByTestId('leaf-marker-10.76000:106.66000').props.anchor).toMatchObject({
       x: 0.5,
-      y: 0.86,
+      y: 0.5,
     });
-    expect(mockAnimateToRegion).not.toHaveBeenCalled();
   });
 
   it('keeps a tapped marker selected when a follow-up map press fires immediately after selection', async () => {
@@ -1195,14 +1235,14 @@ describe('MapScreen', () => {
     fireEvent.press(getByTestId('leaf-marker-10.76000:106.66000'));
 
     await waitFor(() => {
-      expect(getByTestId('note-marker-text-1')).toBeTruthy();
+      expect(getByTestId('map-marker-label-text-1')).toBeTruthy();
       expect(getByTestId('map-preview-item-text-1')).toBeTruthy();
     });
 
     now = 1100;
     fireEvent.press(getByTestId('mock-map-press'));
 
-    expect(getByTestId('note-marker-text-1')).toBeTruthy();
+    expect(getByTestId('map-marker-label-text-1')).toBeTruthy();
     expect(getByTestId('map-preview-item-text-1')).toBeTruthy();
 
     nowSpy.mockRestore();
@@ -1223,7 +1263,7 @@ describe('MapScreen', () => {
     fireEvent.press(getByTestId('leaf-marker-10.76000:106.66000'));
 
     await waitFor(() => {
-      expect(getByTestId('note-marker-text-1')).toBeTruthy();
+      expect(getByTestId('map-marker-label-text-1')).toBeTruthy();
     });
 
     act(() => {
@@ -1235,7 +1275,7 @@ describe('MapScreen', () => {
       });
     });
 
-    expect(getByTestId('note-marker-text-1')).toBeTruthy();
+    expect(getByTestId('map-marker-label-text-1')).toBeTruthy();
   });
 
   it('clears the selected map callout when the selected note disappears', async () => {
@@ -1253,7 +1293,7 @@ describe('MapScreen', () => {
     fireEvent.press(getByTestId('leaf-marker-10.76000:106.66000'));
 
     await waitFor(() => {
-      expect(getByTestId('note-marker-text-1')).toBeTruthy();
+      expect(getByTestId('map-marker-label-text-1')).toBeTruthy();
     });
 
     replaceMockNotes([
@@ -1284,7 +1324,7 @@ describe('MapScreen', () => {
     fireEvent.press(getByTestId('leaf-marker-10.76000:106.66000'));
 
     await waitFor(() => {
-      expect(getByTestId('note-marker-text-1')).toBeTruthy();
+      expect(getByTestId('map-marker-label-text-1')).toBeTruthy();
     });
 
     replaceMockNotes([]);
@@ -1314,7 +1354,7 @@ describe('MapScreen', () => {
     fireEvent.press(getByTestId('leaf-marker-10.76000:106.66000'));
 
     await waitFor(() => {
-      expect(getByTestId('note-marker-text-1')).toBeTruthy();
+      expect(getByTestId('map-marker-label-text-1')).toBeTruthy();
     });
 
     fireEvent.press(getByTestId('map-preview-item-text-1'));
@@ -1355,7 +1395,7 @@ describe('MapScreen', () => {
     fireEvent.press(getByTestId('leaf-marker-10.76000:106.66000'));
 
     await waitFor(() => {
-      expect(getByTestId('note-marker-text-1')).toBeTruthy();
+      expect(getByTestId('map-marker-label-text-1')).toBeTruthy();
       expect(getByTestId('map-preview-item-text-1')).toBeTruthy();
     });
 
