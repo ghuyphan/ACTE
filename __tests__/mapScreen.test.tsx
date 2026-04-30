@@ -337,16 +337,13 @@ describe('MapScreen', () => {
     expect(within(topHeader).getByTestId('map-filter-all')).toBeTruthy();
     expect(queryByTestId('map-count-badge')).toBeNull();
     expect(overlayHost).toBeTruthy();
-    expect(getByTestId('map-friends-chip')).toBeTruthy();
 
     expect(queryByText('2 notes')).toBeNull();
 
-    fireEvent.press(getByTestId('map-filter-photo'));
+    fireEvent.press(getByTestId('map-filter-recent'));
     await waitFor(() => {
-      expect(getByTestId('map-filter-clear-inline')).toBeTruthy();
+      expect(getByTestId('map-clear-filters')).toBeTruthy();
     });
-
-    fireEvent.press(getByTestId('map-filter-favorites'));
 
     await waitFor(() => {
       expect(getByText('No notes match these filters')).toBeTruthy();
@@ -461,8 +458,7 @@ describe('MapScreen', () => {
 
     const { getByTestId, findByText, queryByTestId, rerender } = render(<MapScreen />);
 
-    fireEvent.press(getByTestId('map-filter-photo'));
-    fireEvent.press(getByTestId('map-filter-favorites'));
+    fireEvent.press(getByTestId('map-filter-recent'));
 
     expect(await findByText('No notes match these filters')).toBeTruthy();
     expect(getByTestId('map-clear-filters')).toBeTruthy();
@@ -1055,11 +1051,11 @@ describe('MapScreen', () => {
       expect(mockOpenNoteDetail).not.toHaveBeenCalled();
     });
 
-    fireEvent.press(getByTestId('map-filter-text'));
+    fireEvent.press(getByTestId('map-filter-recent'));
 
     await waitFor(() => {
-      expect(queryByTestId('map-preview-item-text-1')).toBeNull();
-      expect(getByTestId('map-show-all-results')).toBeTruthy();
+      expect(queryByTestId('map-preview-item-photo-1')).toBeNull();
+      expect(getByTestId('map-clear-filters')).toBeTruthy();
     });
   });
 
@@ -1744,7 +1740,7 @@ describe('MapScreen', () => {
   it('shows friend memories in the preview container and opens shared detail', async () => {
     const { getByTestId, getByText, queryByTestId } = render(<MapScreen />);
 
-    fireEvent.press(getByTestId('map-friends-chip'));
+    fireEvent.press(getByTestId('friend-marker-shared-friend-1'));
 
     await waitFor(() => {
       expect(getByTestId('map-friends-preview-shell')).toBeTruthy();
@@ -1775,7 +1771,7 @@ describe('MapScreen', () => {
   it('recenters an off-center active friend preview before opening it', async () => {
     const { getByTestId, getByText } = render(<MapScreen />);
 
-    fireEvent.press(getByTestId('map-friends-chip'));
+    fireEvent.press(getByTestId('friend-marker-shared-friend-1'));
 
     await waitFor(() => {
       expect(getByTestId('map-friends-preview-shell')).toBeTruthy();
@@ -1835,7 +1831,7 @@ describe('MapScreen', () => {
 
     const { getAllByText, getByTestId, queryByText } = render(<MapScreen />);
 
-    fireEvent.press(getByTestId('map-friends-chip'));
+    fireEvent.press(getByTestId('friend-marker-shared-photo-1'));
 
     await waitFor(() => {
       expect(getByTestId('map-friends-preview-shell')).toBeTruthy();

@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import { Platform, StyleSheet, Text, View } from 'react-native';
-import MapView, { Marker, Region, type LongPressEvent } from 'react-native-maps';
+import MapView, { Marker, Polyline, Region, type LongPressEvent } from 'react-native-maps';
 import Reanimated, {
   interpolate,
   interpolateColor,
@@ -16,6 +16,7 @@ import type { ThemeColors } from '../../hooks/useTheme';
 import type { Note } from '../../services/database';
 import { getNotePhotoUri } from '../../services/photoStorage';
 import type { SharedPost } from '../../services/sharedFeedService';
+import { formatNoteTimestamp } from '../../utils/dateUtils';
 import {
   mapMotionDurations,
   mapMotionEasing,
@@ -50,6 +51,7 @@ interface MapCanvasProps {
   markerPulseId: string | null;
   markerPulseKey: number;
   saveTargetCoordinate?: { latitude: number; longitude: number } | null;
+  trailCoordinates?: { latitude: number; longitude: number }[];
   reduceMotionEnabled: boolean;
   onMapPress: () => void;
   onMapLongPress?: (coordinate: { latitude: number; longitude: number }) => void;
@@ -78,6 +80,8 @@ interface MarkerRenderItem {
   photoNoteId: string | null;
   photoUri: string | null;
   noteId: string | null;
+  placeLabel: string | null;
+  metaLabel: string | null;
 }
 
 interface MarkerContentProps {
@@ -97,6 +101,8 @@ interface MarkerContentProps {
   imageTrackingKey?: string | null;
   onImageLoadStart?: (key: string) => void;
   onImageLoadEnd?: (key: string) => void;
+  placeLabel?: string | null;
+  metaLabel?: string | null;
 }
 
 const ANDROID_MARKER_REFRESH_MS = {
@@ -147,6 +153,24 @@ function getSharedPostMarkerPhotoUri(post: SharedPost) {
     post.dualSecondaryPhotoLocalUri?.trim() ||
     null
   );
+}
+
+function getCompactPlaceLabel(value: string | null | undefined) {
+  const trimmed = value?.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  return trimmed.length > 18 ? `${trimmed.slice(0, 17).trim()}...` : trimmed;
+}
+
+function getMarkerMetaLabel(createdAt: string | null | undefined) {
+  if (!createdAt) {
+    return null;
+  }
+
+  const label = formatNoteTimestamp(createdAt, 'card');
+  return label ? `last ${label}` : null;
 }
 
 type MarkerImageKind = 'own' | 'friend-avatar' | 'friend-badge' | 'friend-post';
@@ -273,6 +297,8 @@ const MarkerContent = memo(function MarkerContent({
   imageTrackingKey,
   onImageLoadStart,
   onImageLoadEnd,
+  placeLabel,
+  metaLabel,
 }: MarkerContentProps) {
   const activeProgress = useSharedValue(selected ? 1 : 0);
   const pulseProgress = useSharedValue(0);
@@ -396,7 +422,7 @@ const MarkerContent = memo(function MarkerContent({
           haloStyle,
         ]}
       />
-      <Reanimated.View style={containerStyle}>
+      <Reanimated.View style={[styles.markerContentStack, containerStyle]}>
         {isCluster ? (
           <Reanimated.View
             style={[
@@ -470,6 +496,29 @@ const MarkerContent = memo(function MarkerContent({
             </Reanimated.View>
           </Reanimated.View>
         )}
+        {placeLabel || metaLabel ? (
+          <View
+            pointerEvents="none"
+            style={[
+              styles.markerLabelPill,
+              {
+                backgroundColor: cardBackgroundColor,
+                borderColor: `${accentColor}2E`,
+              },
+            ]}
+          >
+            {placeLabel ? (
+              <Text style={[styles.markerLabelText, { color: accentColor }]} numberOfLines={1}>
+                {placeLabel}
+              </Text>
+            ) : null}
+            {metaLabel ? (
+              <Text style={[styles.markerMetaText, { color: accentColor }]} numberOfLines={1}>
+                {metaLabel}
+              </Text>
+            ) : null}
+          </View>
+        ) : null}
       </Reanimated.View>
     </>
   );
@@ -490,6 +539,7 @@ function MapCanvas({
   markerPulseId,
   markerPulseKey,
   saveTargetCoordinate = null,
+  trailCoordinates = [],
   reduceMotionEnabled,
   onMapPress,
   onMapLongPress,
@@ -547,6 +597,8 @@ function MapCanvas({
                 photoNoteId: canShowPhotoThumbnail ? note.id : null,
                 photoUri: canShowPhotoThumbnail ? getNotePhotoUri(note) : null,
                 noteId: note.id,
+                placeLabel: currentZoom >= 14 ? getCompactPlaceLabel(note.locationName) : null,
+                metaLabel: currentZoom >= 15 ? getMarkerMetaLabel(note.createdAt) : null,
               });
             });
 
@@ -580,6 +632,14 @@ function MapCanvas({
           photoUri:
             canShowPhotoThumbnail && representativeNote ? getNotePhotoUri(representativeNote) : null,
           noteId: null,
+          placeLabel:
+            !node.isCluster && currentZoom >= 14
+              ? getCompactPlaceLabel(node.locationName ?? representativeNote?.locationName)
+              : null,
+          metaLabel:
+            (node.isCluster ? currentZoom >= 12 : currentZoom >= 15)
+              ? getMarkerMetaLabel(node.lastCreatedAt)
+              : null,
         });
       }
 
@@ -770,6 +830,17 @@ function MapCanvas({
       showsIndoorLevelPicker={false}
       userInterfaceStyle={isDark ? 'dark' : 'light'}
     >
+      {trailCoordinates.length > 1 ? (
+        <Polyline
+          testID="map-recap-trail"
+          coordinates={trailCoordinates}
+          strokeColor={`${palette.focus}8A`}
+          strokeWidth={3}
+          lineCap="round"
+          lineJoin="round"
+          zIndex={1}
+        />
+      ) : null}
       {markerRenderItems.map(
         ({
           key,
@@ -783,6 +854,8 @@ function MapCanvas({
           photoNoteId,
           photoUri,
           noteId,
+          placeLabel,
+          metaLabel,
         }) => {
         const showSelectedCallout =
           !preferLiteMarkers &&
@@ -883,6 +956,8 @@ function MapCanvas({
                   imageTrackingKey={imageTrackingKey}
                   onImageLoadStart={handleMarkerImageLoadStart}
                   onImageLoadEnd={handleMarkerImageLoadEnd}
+                  placeLabel={placeLabel}
+                  metaLabel={metaLabel}
                 />
               </View>
             </Marker>
@@ -1223,6 +1298,32 @@ const styles = StyleSheet.create({
   markerOrbWrap: {
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  markerContentStack: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  markerLabelPill: {
+    marginTop: 4,
+    maxWidth: 112,
+    borderRadius: 10,
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    alignItems: 'center',
+  },
+  markerLabelText: {
+    fontSize: 10,
+    lineHeight: 12,
+    fontWeight: '800',
+    fontFamily: 'Noto Sans',
+  },
+  markerMetaText: {
+    fontSize: 9,
+    lineHeight: 11,
+    fontWeight: '700',
+    fontFamily: 'Noto Sans',
+    opacity: 0.78,
   },
   singleMarker: {
     width: 38,

@@ -33,8 +33,9 @@ import {
 } from './overlayTokens';
 
 const PREVIEW_HORIZONTAL_INSET = 14;
-const PREVIEW_MEDIA_SIZE = 56;
-const PREVIEW_ROW_GAP = 12;
+const PREVIEW_SURFACE_MAX_WIDTH = 356;
+const PREVIEW_MEDIA_SIZE = 48;
+const PREVIEW_ROW_GAP = 10;
 
 type PreviewMode = 'group' | 'nearby';
 
@@ -106,7 +107,8 @@ export default function MapPreviewCard({
 
   const [isMounted, setIsMounted] = useState(visible);
   const fullSurfaceWidth = Math.max(0, windowWidth - PREVIEW_HORIZONTAL_INSET * 2);
-  const nearbyPageWidth = Math.max(0, fullSurfaceWidth - mapOverlayTokens.overlayPadding * 2);
+  const shellWidth = Math.min(fullSurfaceWidth, PREVIEW_SURFACE_MAX_WIDTH);
+  const nearbyPageWidth = Math.max(0, shellWidth - mapOverlayTokens.overlayPadding * 2);
 
   useEffect(() => {
     if (visible && !isMounted) {
@@ -312,7 +314,7 @@ export default function MapPreviewCard({
       handleVisible
       handleGestureHeight={24}
     >
-      <View style={[styles.surfaceHost, { width: fullSurfaceWidth }]} pointerEvents="box-none">
+      <View style={[styles.surfaceHost, { width: shellWidth }]} pointerEvents="box-none">
         <View
           style={[
             styles.surface,
@@ -606,33 +608,33 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   cardContent: {
-    paddingHorizontal: 12,
-    paddingTop: 12,
-    paddingBottom: 9,
+    paddingHorizontal: 10,
+    paddingTop: 10,
+    paddingBottom: 8,
   },
   previewList: {
     marginBottom: 0,
   },
   previewListShell: {
     position: 'relative',
-    marginBottom: 6,
+    marginBottom: 4,
   },
   previewListContent: {
     gap: 0,
   },
   previewPage: {
-    minHeight: 68,
+    minHeight: 58,
   },
   previewPageInner: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: PREVIEW_ROW_GAP,
-    minHeight: 68,
+    minHeight: 58,
   },
   mediaWrap: {
     width: PREVIEW_MEDIA_SIZE,
     height: PREVIEW_MEDIA_SIZE,
-    borderRadius: 16,
+    borderRadius: 13,
     overflow: 'hidden',
     flexShrink: 0,
   },
@@ -644,7 +646,7 @@ const styles = StyleSheet.create({
   photoThumb: {
     width: '100%',
     height: '100%',
-    borderRadius: 16,
+    borderRadius: 13,
     borderCurve: 'continuous',
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.12)',
@@ -652,7 +654,7 @@ const styles = StyleSheet.create({
   textThumb: {
     width: '100%',
     height: '100%',
-    borderRadius: 16,
+    borderRadius: 13,
     borderCurve: 'continuous',
     overflow: 'hidden',
     alignItems: 'center',
@@ -660,9 +662,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   textThumbPaper: {
-    width: 38,
-    height: 38,
-    borderRadius: 11,
+    width: 32,
+    height: 32,
+    borderRadius: 9,
     borderCurve: 'continuous',
     borderWidth: 1,
     paddingHorizontal: 7,
@@ -683,8 +685,8 @@ const styles = StyleSheet.create({
     width: '46%',
   },
   textThumbEmoji: {
-    fontSize: 25,
-    lineHeight: 30,
+    fontSize: 22,
+    lineHeight: 27,
   },
   eyebrow: {
     fontSize: 11,
@@ -694,15 +696,15 @@ const styles = StyleSheet.create({
     marginBottom: 1,
   },
   title: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '800',
-    lineHeight: 18,
+    lineHeight: 17,
     marginBottom: 2,
     fontFamily: 'Noto Sans',
   },
   content: {
-    fontSize: 12,
-    lineHeight: 16,
+    fontSize: 11,
+    lineHeight: 15,
     fontFamily: 'Noto Sans',
   },
   scrollFade: {
@@ -719,8 +721,8 @@ const styles = StyleSheet.create({
     right: 0,
   },
   actionButton: {
-    minHeight: 34,
-    paddingHorizontal: 12,
+    minHeight: 30,
+    paddingHorizontal: 10,
     borderRadius: 999,
     flexDirection: 'row',
     alignItems: 'center',
@@ -728,7 +730,7 @@ const styles = StyleSheet.create({
     flexShrink: 1,
   },
   actionText: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '700',
     fontFamily: 'Noto Sans',
     flexShrink: 1,

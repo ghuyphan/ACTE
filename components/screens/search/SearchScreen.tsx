@@ -52,6 +52,8 @@ type SearchAction =
   | { type: 'searchSucceeded'; query: string; results: Note[] }
   | { type: 'searchFailed'; query: string };
 
+const SEARCH_LOADING_DELAY_MS = 180;
+
 const initialSearchState: SearchState = {
   query: '',
   results: [],
@@ -90,6 +92,7 @@ export default function SearchScreen() {
   const router = useRouter();
   const [query, setQuery] = useState('');
   const [searchState, dispatchSearch] = useReducer(searchReducer, initialSearchState);
+  const [showDelayedSearchLoading, setShowDelayedSearchLoading] = useState(false);
   const [, startSearchTransition] = useTransition();
   const activeQuery = Platform.OS === 'android' ? androidTabSearchQuery : query;
   const deferredQuery = useDeferredValue(activeQuery);
@@ -147,12 +150,30 @@ export default function SearchScreen() {
       : [];
   const isSearching = searchState.status === 'searching';
   const searchFailed = hasQuery && searchState.status === 'failed';
-  const shouldShowSearchingState =
+  const hasPendingSearch =
     hasQuery &&
     !searchFailed &&
     (isSearching || searchState.query !== trimmedActiveQuery) &&
     visibleNotes.length === 0;
-  const shouldShowEmptyState = !searchFailed && !shouldShowSearchingState && visibleNotes.length === 0;
+  const shouldShowSearchingState = hasPendingSearch && showDelayedSearchLoading;
+  const shouldHoldSearchingState = hasPendingSearch && !showDelayedSearchLoading;
+  const shouldShowEmptyState =
+    !searchFailed && !hasPendingSearch && visibleNotes.length === 0;
+
+  useEffect(() => {
+    if (!hasPendingSearch) {
+      setShowDelayedSearchLoading(false);
+      return;
+    }
+
+    const timeout = setTimeout(() => {
+      setShowDelayedSearchLoading(true);
+    }, SEARCH_LOADING_DELAY_MS);
+
+    return () => {
+      clearTimeout(timeout);
+    };
+  }, [hasPendingSearch, trimmedActiveQuery]);
 
   const openNote = useCallback(
     (noteId: string) => {
@@ -375,6 +396,18 @@ export default function SearchScreen() {
             </Text>
           </View>
         </View>
+      ) : shouldHoldSearchingState ? (
+        <Pressable
+          onPress={dismissKeyboard}
+          style={[
+            styles.centerWrap,
+            styles.emptyScreen,
+            {
+              paddingTop: Platform.OS === 'android' ? insets.top + Layout.screenPadding : 10,
+              paddingBottom: insets.bottom + 20 + bottomTabOverlayInset,
+            },
+          ]}
+        />
       ) : shouldShowEmptyState ? (
         <Pressable
           onPress={dismissKeyboard}

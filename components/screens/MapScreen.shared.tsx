@@ -32,7 +32,7 @@ import {
 } from '../map/overlayTokens';
 import { useAuth } from '../../hooks/useAuth';
 import type { MapClusterNode } from '../../hooks/map/mapDomain';
-import { regionToZoom } from '../../hooks/map/mapDomain';
+import { getNearbyNoteItems, getRegionCenter, regionToZoom } from '../../hooks/map/mapDomain';
 import { useMapPreviewState } from '../../hooks/map/useMapPreviewState';
 import { useMapScreenState } from '../../hooks/map/useMapScreenState';
 import { useGeofence } from '../../hooks/useGeofence';
@@ -46,7 +46,6 @@ import type { SharedPost } from '../../services/sharedFeedService';
 import { showAppAlert } from '../../utils/alert';
 import { isOlderIOS } from '../../utils/platform';
 import { scheduleOnIdle } from '../../utils/scheduleOnIdle';
-import { Shadows } from '../../constants/theme';
 import NotoLoader from '../ui/NotoLoader';
 
 const MIN_ZOOM_DELTA = 0.002;
@@ -60,11 +59,8 @@ const NOTE_PREVIEW_REST_HEIGHT = 168;
 const NOTE_PREVIEW_EXPANDED_HEIGHT = 344;
 const FRIEND_PREVIEW_REST_HEIGHT = 152;
 const FRIEND_PREVIEW_EXPANDED_HEIGHT = 332;
-const STATUS_PREVIEW_FILTERED_HEIGHT = 116;
-const STATUS_PREVIEW_COLLAPSED_HEIGHT = 62;
-const STATUS_PREVIEW_EMPTY_HEIGHT = 48;
-const RECENTER_FAB_PREVIEW_GAP = 12;
-const RECENTER_FAB_BOTTOM_DEFAULT = 86;
+const LOCATE_FAB_PREVIEW_GAP = 12;
+const LOCATE_FAB_BOTTOM_DEFAULT = 132;
 
 type MapRegionChangeDetails = {
   isGesture?: boolean;
@@ -114,18 +110,6 @@ function isCoordinateComfortablyInRegion(region: Region, latitude: number, longi
   );
 }
 
-function getStatusPreviewHeight(kind: 'collapsed' | 'save-here' | 'filtered-empty' | 'no-notes' | 'area-empty') {
-  if (kind === 'filtered-empty') {
-    return STATUS_PREVIEW_FILTERED_HEIGHT;
-  }
-
-  if (kind === 'collapsed' || kind === 'save-here' || kind === 'area-empty') {
-    return STATUS_PREVIEW_COLLAPSED_HEIGHT;
-  }
-
-  return STATUS_PREVIEW_EMPTY_HEIGHT;
-}
-
 export default function MapScreenIOS() {
   const isAndroid = Platform.OS === 'android';
   const { t } = useTranslation();
@@ -135,7 +119,7 @@ export default function MapScreenIOS() {
   const reduceMotionEnabled = useReducedMotion();
   const { user } = useAuth();
   const { notes, loading } = useNotesStore();
-  const { enabled: sharedEnabled, sharedPosts } = useSharedFeedStore();
+  const { sharedPosts } = useSharedFeedStore();
   const shouldDeferMapWarmup =
     isAndroid || notes.length + sharedPosts.length >= HEAVY_MAP_WARMUP_DATASET_SIZE;
   const { location, requestForegroundLocation, openAppSettings } = useGeofence();
@@ -150,6 +134,7 @@ export default function MapScreenIOS() {
   const [settledRegion, setSettledRegion] = useState<Region | null>(null);
   const hasAppliedInitialViewportRef = useRef(false);
   const hasCenteredOnLocationRef = useRef(false);
+  const startedWithoutLocationRef = useRef(location == null);
   const markerPulseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const openFriendsPreviewTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingProgrammaticRegionRef = useRef<Region | null>(null);
@@ -173,7 +158,6 @@ export default function MapScreenIOS() {
   const {
     filterState,
     setFilterType,
-    toggleFavoritesOnly,
     clearFilters,
     initialRegion,
     visibleRegion,
@@ -194,7 +178,6 @@ export default function MapScreenIOS() {
     notesInVisibleRegion,
     filteredNotes,
     filteredCount,
-    hasActiveFilters,
   } = useMapScreenState({
     notes,
     location,
@@ -243,7 +226,6 @@ export default function MapScreenIOS() {
     revealNotesPreview,
     setActiveFriendPostId,
     showFriendsPreview,
-    toggleFriendsPreview,
     focusNearbyPreview,
     resetToNearbyPreview,
   } = useMapPreviewState({
@@ -296,9 +278,27 @@ export default function MapScreenIOS() {
     [activeFriendPost, initialRegion, settledRegion]
   );
   const friendsPreviewVisible = showFriendsPreview && friendPosts.length > 0;
-  const hasFriendLayer = sharedEnabled && friendPosts.length > 0;
   const hasOwnNotes = notes.length > 0;
   const hasNotesInVisibleRegion = notesInVisibleRegion.length > 0;
+  const areaPulseCount = notesInVisibleRegion.length || nearbyPreviewItems.length;
+  const areaPulseLabel =
+    areaPulseCount === 1
+      ? t('map.areaPulseOne', '1 nearby')
+      : t('map.areaPulseOther', '{{count}} nearby', { count: areaPulseCount });
+  const recapTrailCoordinates = useMemo(() => {
+    if (filterState.type !== 'recent') {
+      return [];
+    }
+
+    const trailNotes = [...(notesInVisibleRegion.length > 1 ? notesInVisibleRegion : filteredNotes)]
+      .sort((left, right) => new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime())
+      .slice(-16);
+
+    return trailNotes.map((note) => ({
+      latitude: note.latitude,
+      longitude: note.longitude,
+    }));
+  }, [filterState.type, filteredNotes, notesInVisibleRegion]);
   const shouldShowAreaEmptyState =
     mapUiReady &&
     visibleRegion != null &&
@@ -353,43 +353,37 @@ export default function MapScreenIOS() {
     bottomOverlayKind === 'no-notes' ||
     bottomOverlayKind === 'area-empty';
   const notesPreviewVisible = bottomOverlayKind === 'preview';
-  const recenterPreviewRestingOffset =
+  const locateButtonInStatusRow =
+    mapUiReady &&
+    isStatusOverlay &&
+    !friendsPreviewVisible &&
+    bottomOverlayKind !== 'filtered-empty';
+  const locateFabRestingOffset =
     notesPreviewVisible
-      ? NOTE_PREVIEW_REST_HEIGHT + RECENTER_FAB_PREVIEW_GAP
+      ? NOTE_PREVIEW_REST_HEIGHT + LOCATE_FAB_PREVIEW_GAP
       : friendsPreviewVisible
-        ? FRIEND_PREVIEW_REST_HEIGHT + RECENTER_FAB_PREVIEW_GAP
-        : isStatusOverlay
-          ? getStatusPreviewHeight(bottomOverlayKind) + RECENTER_FAB_PREVIEW_GAP
-          : RECENTER_FAB_BOTTOM_DEFAULT;
-  const recenterPreviewExpansionRange =
+        ? FRIEND_PREVIEW_REST_HEIGHT + LOCATE_FAB_PREVIEW_GAP
+        : LOCATE_FAB_BOTTOM_DEFAULT;
+  const locateFabExpansionRange =
     notesPreviewVisible
       ? NOTE_PREVIEW_EXPANDED_HEIGHT - NOTE_PREVIEW_REST_HEIGHT
       : friendsPreviewVisible
         ? FRIEND_PREVIEW_EXPANDED_HEIGHT - FRIEND_PREVIEW_REST_HEIGHT
       : 0;
-  const recenterAnchorsToPreview = notesPreviewVisible || friendsPreviewVisible || isStatusOverlay;
-  const recenterPreviewProgress = useSharedValue(recenterAnchorsToPreview ? 1 : 0);
   const previewExpansionProgress = useSharedValue(0);
-  const recenterRestingOffset = useSharedValue(recenterPreviewRestingOffset);
-  const recenterExpansionRange = useSharedValue(recenterPreviewExpansionRange);
+  const locateRestingOffset = useSharedValue(locateFabRestingOffset);
+  const locateExpansionRange = useSharedValue(locateFabExpansionRange);
 
   useEffect(() => {
-    recenterRestingOffset.value = reduceMotionEnabled
-      ? recenterPreviewRestingOffset
-      : withSpring(recenterPreviewRestingOffset, {
+    locateRestingOffset.value = reduceMotionEnabled
+      ? locateFabRestingOffset
+      : withSpring(locateFabRestingOffset, {
           damping: 24,
           stiffness: 220,
           mass: 0.86,
         });
 
-    recenterExpansionRange.value = recenterPreviewExpansionRange;
-    recenterPreviewProgress.value = reduceMotionEnabled
-      ? (recenterAnchorsToPreview ? 1 : 0)
-      : withSpring(recenterAnchorsToPreview ? 1 : 0, {
-          damping: 24,
-          stiffness: 220,
-          mass: 0.86,
-        });
+    locateExpansionRange.value = locateFabExpansionRange;
 
     if (!notesPreviewVisible && !friendsPreviewVisible) {
       previewExpansionProgress.value = reduceMotionEnabled
@@ -398,25 +392,21 @@ export default function MapScreenIOS() {
     }
   }, [
     friendsPreviewVisible,
+    locateExpansionRange,
+    locateFabExpansionRange,
+    locateFabRestingOffset,
+    locateRestingOffset,
     notesPreviewVisible,
     previewExpansionProgress,
-    recenterAnchorsToPreview,
-    recenterExpansionRange,
-    recenterPreviewExpansionRange,
-    recenterPreviewProgress,
-    recenterPreviewRestingOffset,
-    recenterRestingOffset,
     reduceMotionEnabled,
   ]);
 
   const recenterFabAnimatedStyle = useAnimatedStyle(() => {
-    const previewOffset =
-      RECENTER_FAB_BOTTOM_DEFAULT +
-      (recenterRestingOffset.value - RECENTER_FAB_BOTTOM_DEFAULT) * recenterPreviewProgress.value +
-      previewExpansionProgress.value * recenterExpansionRange.value * recenterPreviewProgress.value;
-
     return {
-      bottom: previewBottomOffset + previewOffset,
+      bottom:
+        previewBottomOffset +
+        locateRestingOffset.value +
+        previewExpansionProgress.value * locateExpansionRange.value,
     };
   }, [previewBottomOffset]);
 
@@ -553,13 +543,6 @@ export default function MapScreenIOS() {
     [revealNotesPreview, setFilterType]
   );
 
-  const handleToggleFavorites = useCallback(() => {
-    nearbyPreviewFocusGuardUntilRef.current = 0;
-    setSaveTarget(null);
-    revealNotesPreview({ resetToNearby: true });
-    toggleFavoritesOnly();
-  }, [revealNotesPreview, toggleFavoritesOnly]);
-
   const handleClearActiveFilters = useCallback(() => {
     nearbyPreviewFocusGuardUntilRef.current = 0;
     setSaveTarget(null);
@@ -679,6 +662,25 @@ export default function MapScreenIOS() {
       animated: !reduceMotionEnabled,
     });
   }, [animateToRegion, filteredNotes, reduceMotionEnabled]);
+
+  const handleSearchThisArea = useCallback(() => {
+    const baseRegion = visibleRegion ?? settledRegion ?? initialRegion;
+    const nearestItems = getNearbyNoteItems(filteredNotes, getRegionCenter(baseRegion), 12);
+
+    if (nearestItems.length === 0) {
+      fitToFilteredResults();
+      return;
+    }
+
+    focusNearbyPreview(nearestItems, nearestItems[0]?.note.id ?? null);
+  }, [
+    filteredNotes,
+    fitToFilteredResults,
+    focusNearbyPreview,
+    initialRegion,
+    settledRegion,
+    visibleRegion,
+  ]);
 
   const handleClusterPress = useCallback(
     (node: MapClusterNode) => {
@@ -898,18 +900,6 @@ export default function MapScreenIOS() {
     handleActivatePreviewNote(activePreviewNoteId);
   }, [activePreviewNoteId, handleActivatePreviewNote]);
 
-  const handleOpenFriendsLayer = useCallback(() => {
-    nearbyPreviewFocusGuardUntilRef.current = 0;
-    setSaveTarget(null);
-    resetToNearbyPreview();
-    if (!hasFriendLayer) {
-      return;
-    }
-
-    emitLightHaptic();
-    toggleFriendsPreview(friendPosts[0]?.id ?? null);
-  }, [emitLightHaptic, friendPosts, hasFriendLayer, resetToNearbyPreview, toggleFriendsPreview]);
-
   const handleDismissNotesPreview = useCallback(() => {
     nearbyPreviewFocusGuardUntilRef.current = 0;
     emitLightHaptic();
@@ -1007,6 +997,28 @@ export default function MapScreenIOS() {
 
   useEffect(() => {
     if (!mapUiReady || !isMapReady || !mapRef.current) {
+      return;
+    }
+
+    if (location && startedWithoutLocationRef.current && !hasCenteredOnLocationRef.current) {
+      const baseRegion = settledRegion ?? visibleRegion ?? initialRegion;
+      animateToRegion(
+        {
+          latitude: location.coords.latitude,
+          longitude: location.coords.longitude,
+          latitudeDelta: Math.max(
+            MIN_ZOOM_DELTA,
+            Math.min(baseRegion.latitudeDelta, RECENTER_BUTTON_ZOOM_DELTA)
+          ),
+          longitudeDelta: Math.max(
+            MIN_ZOOM_DELTA,
+            Math.min(baseRegion.longitudeDelta, RECENTER_BUTTON_ZOOM_DELTA)
+          ),
+        },
+        0
+      );
+      hasCenteredOnLocationRef.current = true;
+      startedWithoutLocationRef.current = false;
       return;
     }
 
@@ -1126,6 +1138,7 @@ export default function MapScreenIOS() {
         markerPulseId={markerPulseId}
         markerPulseKey={markerPulseKey}
         saveTargetCoordinate={saveTarget}
+        trailCoordinates={recapTrailCoordinates}
         reduceMotionEnabled={reduceMotionEnabled}
         onMapPress={handleMapCanvasPress}
         onMapLongPress={handleMapCanvasLongPress}
@@ -1144,85 +1157,71 @@ export default function MapScreenIOS() {
         <MapFilterBar
           filterState={filterState}
           onChangeType={handleChangeFilterType}
-          onToggleFavorites={handleToggleFavorites}
-          onClearFilters={handleClearActiveFilters}
           onInteraction={emitLightHaptic}
-          hasActiveFilters={hasActiveFilters}
-          reduceMotionEnabled={reduceMotionEnabled}
-          friendsChip={
-            hasFriendLayer
-              ? {
-                  active: friendsPreviewVisible,
-                  label: t('map.friendsChip', 'Friends'),
-                  onPress: handleOpenFriendsLayer,
-                  testID: 'map-friends-chip',
-                }
-              : null
-          }
         />
       </View>
 
-      <Reanimated.View
-        testID="map-recenter-wrapper"
-        style={[styles.fabContainer, recenterFabAnimatedStyle]}
-      >
-        <Pressable
-          accessibilityHint={t('map.recenterHint', 'Center the map on your current location')}
-          accessibilityLabel={t('map.recenter', 'Recenter map')}
-          accessibilityRole="button"
-          testID="map-recenter"
-          onPress={goToMyLocation}
-          style={({ pressed }) => [{ opacity: pressed ? 0.9 : 1 }]}
+      {!locateButtonInStatusRow ? (
+        <Reanimated.View
+          testID="map-recenter-wrapper"
+          style={[styles.fabContainer, recenterFabAnimatedStyle]}
         >
-          <View
-            style={[
-              styles.fab,
-              Platform.OS === 'android'
-                ? {
-                    borderWidth: 1,
-                    borderColor: getOverlayBorderColor(isDark, colors),
-                    backgroundColor: getOverlayFallbackColor(isDark, colors),
-                    shadowColor: colors.androidTabShellShadow,
-                  }
-                : null,
-              Platform.OS === 'android' ? styles.androidFabShadow : null,
-            ]}
+          <Pressable
+            accessibilityHint={t('map.recenterHint', 'Center the map on your current location')}
+            accessibilityLabel={t('map.recenter', 'Recenter map')}
+            accessibilityRole="button"
+            testID="map-recenter"
+            onPress={goToMyLocation}
+            style={({ pressed }) => [{ opacity: pressed ? 0.9 : 1 }]}
           >
-            <GlassView
-              pointerEvents="none"
-              style={StyleSheet.absoluteFill}
-              glassEffectStyle="regular"
-              colorScheme={isDark ? 'dark' : 'light'}
-              fallbackColor="transparent"
-              tintColor={colors.glassOverlaySurface}
-            />
-            {Platform.OS === 'android' ? (
-              <View
+            <View
+              style={[
+                styles.fab,
+                Platform.OS === 'android'
+                  ? {
+                      borderWidth: 1,
+                      borderColor: getOverlayBorderColor(isDark, colors),
+                      backgroundColor: getOverlayFallbackColor(isDark, colors),
+                    }
+                  : null,
+              ]}
+            >
+              <GlassView
                 pointerEvents="none"
-                style={[
-                  StyleSheet.absoluteFill,
-                  {
-                    borderRadius: mapOverlayTokens.floatingButtonSize / 2,
-                    backgroundColor: getOverlayScrimColor(isDark, colors),
-                  },
-                ]}
+                style={StyleSheet.absoluteFill}
+                glassEffectStyle="regular"
+                colorScheme={isDark ? 'dark' : 'light'}
+                fallbackColor="transparent"
+                tintColor={colors.glassOverlaySurface}
               />
-            ) : null}
-            {isOlderIOS ? (
-              <View
-                style={[
-                  StyleSheet.absoluteFill,
-                  {
-                    borderRadius: mapOverlayTokens.floatingButtonSize / 2,
-                    backgroundColor: getOverlayFallbackColor(isDark, colors),
-                  },
-                ]}
-              />
-            ) : null}
-            <Ionicons name="location" size={20} color={colors.primary} />
-          </View>
-        </Pressable>
-      </Reanimated.View>
+              {Platform.OS === 'android' ? (
+                <View
+                  pointerEvents="none"
+                  style={[
+                    StyleSheet.absoluteFill,
+                    {
+                      borderRadius: mapOverlayTokens.floatingButtonSize / 2,
+                      backgroundColor: getOverlayScrimColor(isDark, colors),
+                    },
+                  ]}
+                />
+              ) : null}
+              {isOlderIOS ? (
+                <View
+                  style={[
+                    StyleSheet.absoluteFill,
+                    {
+                      borderRadius: mapOverlayTokens.floatingButtonSize / 2,
+                      backgroundColor: getOverlayFallbackColor(isDark, colors),
+                    },
+                  ]}
+                />
+              ) : null}
+              <Ionicons name="location" size={20} color={colors.primary} />
+            </View>
+          </Pressable>
+        </Reanimated.View>
+      ) : null}
 
       {mapUiReady && notesPreviewVisible && !friendsPreviewVisible ? (
         <MapPreviewCard
@@ -1278,9 +1277,9 @@ export default function MapScreenIOS() {
               : bottomOverlayKind === 'filtered-empty'
               ? t('map.clearFilters', 'Clear filters')
               : bottomOverlayKind === 'area-empty'
-                ? t('map.showAllResults', 'Show all results')
+                ? t('map.searchArea', 'Search area')
               : bottomOverlayKind === 'collapsed'
-                ? t('map.showPreview', 'Nearby notes')
+                ? areaPulseLabel
               : undefined
           }
           actionIcon={
@@ -1289,9 +1288,9 @@ export default function MapScreenIOS() {
               : bottomOverlayKind === 'filtered-empty'
               ? 'close-circle-outline'
               : bottomOverlayKind === 'area-empty'
-                ? 'map-outline'
+                ? 'scan-outline'
               : bottomOverlayKind === 'collapsed'
-                ? 'chevron-up'
+                ? 'pulse-outline'
                 : undefined
           }
           actionTestID={
@@ -1317,7 +1316,7 @@ export default function MapScreenIOS() {
             }
 
             if (bottomOverlayKind === 'area-empty') {
-              fitToFilteredResults();
+              handleSearchThisArea();
               return;
             }
 
@@ -1325,6 +1324,17 @@ export default function MapScreenIOS() {
               revealNotesPreview();
             }
           }}
+          sideActionIcon={locateButtonInStatusRow ? 'location' : undefined}
+          sideActionAccessibilityHint={
+            locateButtonInStatusRow
+              ? t('map.recenterHint', 'Center the map on your current location')
+              : undefined
+          }
+          sideActionAccessibilityLabel={
+            locateButtonInStatusRow ? t('map.recenter', 'Recenter map') : undefined
+          }
+          sideActionTestID={locateButtonInStatusRow ? 'map-recenter' : undefined}
+          onSideAction={locateButtonInStatusRow ? goToMyLocation : undefined}
           onInteraction={emitLightHaptic}
           reduceMotionEnabled={reduceMotionEnabled}
         />
@@ -1387,7 +1397,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     overflow: 'hidden',
     borderWidth: 0,
-    ...mapOverlayTokens.overlayShadow,
+    shadowColor: 'transparent',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0,
+    shadowRadius: 0,
+    elevation: 0,
   },
   topHeader: {
     position: 'absolute',
@@ -1401,8 +1415,5 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 14,
     zIndex: 9,
-  },
-  androidFabShadow: {
-    ...Shadows.androidChrome,
   },
 });

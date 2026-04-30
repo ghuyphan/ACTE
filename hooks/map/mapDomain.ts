@@ -18,8 +18,10 @@ const MIN_LONGITUDE_DELTA = 0.000001;
 const EARTH_RADIUS_METERS = 6371000;
 const PREVIEW_REGION_SCALE = 1.15;
 const PREVIEW_ITEM_LIMIT = 12;
+const RECENT_FILTER_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
+const RECAP_FILTER_WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
 
-export type MapFilterType = 'all' | 'text' | 'photo';
+export type MapFilterType = 'all' | 'text' | 'recent' | 'photo' | 'recap';
 
 export interface MapFilterState {
   type: MapFilterType;
@@ -30,10 +32,12 @@ export interface MapPointGroup {
   id: string;
   latitude: number;
   longitude: number;
+  locationName: string | null;
   notes: Note[];
   primaryType: Note['type'];
   photoCount: number;
   textCount: number;
+  lastCreatedAt: string;
 }
 
 export interface ClusterPointProperties {
@@ -43,12 +47,14 @@ export interface ClusterPointProperties {
   photoCount: number;
   textCount: number;
   primaryType: Note['type'];
+  lastCreatedAt: string;
 }
 
 export interface ClusterAggregateProperties {
   noteCount: number;
   photoCount: number;
   textCount: number;
+  lastCreatedAt: string;
 }
 
 export interface MapClusterNode {
@@ -59,7 +65,9 @@ export interface MapClusterNode {
   pointCount: number;
   noteIds: string[];
   primaryType: Note['type'];
+  lastCreatedAt: string;
   groupId?: string;
+  locationName?: string | null;
   expansionZoom?: number;
 }
 
@@ -128,12 +136,37 @@ export function getInitialMapRegion(
 }
 
 export function applyMapFilters(notes: Note[], filterState: MapFilterState): Note[] {
+  const now = Date.now();
+
   return notes.filter((note) => {
-    if (filterState.type !== 'all' && note.type !== filterState.type) {
+    if (filterState.type === 'photo' && note.type !== 'photo') {
       return false;
     }
 
-    if (filterState.favoritesOnly && !note.isFavorite) {
+    if (filterState.type === 'text' && note.type !== 'text') {
+      return false;
+    }
+
+    if (filterState.type === 'recent') {
+      const createdAt = new Date(note.createdAt).getTime();
+      if (!Number.isFinite(createdAt) || now - createdAt > RECENT_FILTER_WINDOW_MS) {
+        return false;
+      }
+    }
+
+    if (filterState.type === 'recap') {
+      const createdAt = new Date(note.createdAt).getTime();
+      const isRecent = Number.isFinite(createdAt) && now - createdAt <= RECAP_FILTER_WINDOW_MS;
+      if (!note.isFavorite && note.type !== 'photo' && !isRecent) {
+        return false;
+      }
+    }
+
+    if (filterState.type === 'all' && filterState.favoritesOnly && !note.isFavorite) {
+      return false;
+    }
+
+    if (filterState.type !== 'all' && filterState.favoritesOnly && !note.isFavorite) {
       return false;
     }
 
@@ -156,6 +189,7 @@ export function buildMapPointGroups(notes: Note[]): MapPointGroup[] {
 
   return Array.from(grouped.entries()).map(([id, bucket]) => {
     const sortedNotes = [...bucket].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    const primaryNote = sortedNotes[0];
     let photoCount = 0;
     let latitudeSum = 0;
     let longitudeSum = 0;
@@ -175,10 +209,12 @@ export function buildMapPointGroups(notes: Note[]): MapPointGroup[] {
       id,
       latitude: latitudeSum / sortedNotes.length,
       longitude: longitudeSum / sortedNotes.length,
+      locationName: primaryNote?.locationName ?? null,
       notes: sortedNotes,
       primaryType: photoCount >= textCount ? 'photo' : 'text',
       photoCount,
       textCount,
+      lastCreatedAt: primaryNote?.createdAt ?? '',
     };
   });
 }
@@ -210,11 +246,15 @@ export function buildClusterIndex(groups: MapPointGroup[]): MapClusterIndex | nu
       noteCount: props.noteCount,
       photoCount: props.photoCount,
       textCount: props.textCount,
+      lastCreatedAt: props.lastCreatedAt,
     }),
     reduce: (accumulated, props) => {
       accumulated.noteCount += props.noteCount;
       accumulated.photoCount += props.photoCount;
       accumulated.textCount += props.textCount;
+      if (props.lastCreatedAt > accumulated.lastCreatedAt) {
+        accumulated.lastCreatedAt = props.lastCreatedAt;
+      }
     },
   });
 
@@ -231,6 +271,7 @@ export function buildClusterIndex(groups: MapPointGroup[]): MapClusterIndex | nu
       photoCount: group.photoCount,
       textCount: group.textCount,
       primaryType: group.primaryType,
+      lastCreatedAt: group.lastCreatedAt,
     },
   }));
 
@@ -279,7 +320,13 @@ export function getMapClusterNodes(
     const [longitude, latitude] = feature.geometry.coordinates;
 
     if (isClusterFeature(feature)) {
-      const { cluster_id: clusterId, point_count: pointCount, photoCount = 0, textCount = 0 } = feature.properties;
+      const {
+        cluster_id: clusterId,
+        point_count: pointCount,
+        photoCount = 0,
+        textCount = 0,
+        lastCreatedAt = '',
+      } = feature.properties;
       const expansionZoom = clusterIndex.getClusterExpansionZoom(clusterId);
 
       return {
@@ -290,6 +337,7 @@ export function getMapClusterNodes(
         pointCount,
         noteIds: [],
         primaryType: photoCount >= textCount ? 'photo' : 'text',
+        lastCreatedAt,
         expansionZoom,
       } satisfies MapClusterNode;
     }
@@ -306,7 +354,9 @@ export function getMapClusterNodes(
       pointCount,
       noteIds: properties.noteIds,
       primaryType: properties.primaryType,
+      lastCreatedAt: group?.lastCreatedAt ?? properties.lastCreatedAt,
       groupId: properties.groupId,
+      locationName: group?.locationName ?? null,
     } satisfies MapClusterNode;
   });
 }

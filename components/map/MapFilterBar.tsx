@@ -1,14 +1,12 @@
-import { Ionicons } from '@expo/vector-icons';
 import { GlassView } from '../ui/GlassView';
 import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useTheme } from '../../hooks/useTheme';
 import { isOlderIOS } from '../../utils/platform';
 import {
   getOverlayBorderColor,
   getOverlayFallbackColor,
-  getOverlayMutedFillColor,
   getOverlayScrimColor,
   mapOverlayTokens,
 } from './overlayTokens';
@@ -18,52 +16,36 @@ import { Shadows } from '../../constants/theme';
 interface MapFilterBarProps {
   filterState: MapFilterState;
   onChangeType: (type: MapFilterType) => void;
-  onToggleFavorites: () => void;
-  onClearFilters?: () => void;
   onInteraction?: () => void;
   top?: number;
-  hasActiveFilters?: boolean;
-  reduceMotionEnabled: boolean;
-  friendsChip?: {
-    active: boolean;
-    label: string;
-    onPress: () => void;
-    testID: string;
-  } | null;
 }
 
 interface FilterChipProps {
   label: string;
   active: boolean;
   onPress: () => void;
-  icon?: keyof typeof Ionicons.glyphMap;
   testID?: string;
 }
 
-function FilterChip({ label, active, onPress, icon, testID }: FilterChipProps) {
-  const { colors, isDark } = useTheme();
+function FilterChip({ label, active, onPress, testID }: FilterChipProps) {
+  const { colors } = useTheme();
   const isAndroid = Platform.OS === 'android';
-  const inactiveChipBackground = isAndroid
-    ? colors.androidTabShellMutedBackground
-    : getOverlayMutedFillColor(isDark, colors);
-  const inactiveChipBorderColor = isAndroid
-    ? colors.androidTabShellMutedBorder
-    : getOverlayBorderColor(isDark, colors);
   const chipBackground = active
     ? isAndroid
       ? colors.androidTabShellSelectedBackground
       : `${colors.primary}18`
-    : inactiveChipBackground;
+    : 'transparent';
   const chipBorderColor = active
     ? isAndroid
       ? colors.androidTabShellSelectedBorder
       : `${colors.primary}44`
-    : inactiveChipBorderColor;
+    : 'transparent';
   const chipContentColor = active ? colors.primary : colors.text;
 
   return (
     <Pressable
       testID={testID}
+      accessibilityLabel={label}
       accessibilityRole="button"
       accessibilityState={{ selected: active }}
       onPress={onPress}
@@ -77,14 +59,6 @@ function FilterChip({ label, active, onPress, icon, testID }: FilterChipProps) {
       ]}
       hitSlop={4}
     >
-      {icon ? (
-        <Ionicons
-          name={icon}
-          size={13}
-          color={active ? colors.primary : colors.secondaryText}
-          style={styles.chipIcon}
-        />
-      ) : null}
       <Text style={[styles.chipText, { color: chipContentColor }]} numberOfLines={1}>
         {label}
       </Text>
@@ -95,12 +69,8 @@ function FilterChip({ label, active, onPress, icon, testID }: FilterChipProps) {
 export default function MapFilterBar({
   filterState,
   onChangeType,
-  onToggleFavorites,
-  onClearFilters,
   onInteraction,
   top = 0,
-  hasActiveFilters = false,
-  friendsChip,
 }: MapFilterBarProps) {
   const { t } = useTranslation();
   const { colors, isDark } = useTheme();
@@ -119,18 +89,18 @@ export default function MapFilterBar({
         testID: 'map-filter-all',
       },
       {
-        id: 'text',
-        label: t('map.filterText', 'Text'),
-        active: filterState.type === 'text',
+        id: 'recent',
+        label: t('map.filterRecent', 'Recent'),
+        active: filterState.type === 'recent',
         onPress: () => {
           onInteraction?.();
-          onChangeType('text');
+          onChangeType('recent');
         },
-        testID: 'map-filter-text',
+        testID: 'map-filter-recent',
       },
       {
         id: 'photo',
-        label: t('map.filterPhoto', 'Photo'),
+        label: t('map.filterPhoto', 'Photos'),
         active: filterState.type === 'photo',
         onPress: () => {
           onInteraction?.();
@@ -138,24 +108,11 @@ export default function MapFilterBar({
         },
         testID: 'map-filter-photo',
       },
-      {
-        id: 'favorites',
-        label: t('map.filterFavorites', 'Favorites'),
-        icon: 'heart' as const,
-        active: filterState.favoritesOnly,
-        onPress: () => {
-          onInteraction?.();
-          onToggleFavorites();
-        },
-        testID: 'map-filter-favorites',
-      },
     ],
     [
-      filterState.favoritesOnly,
       filterState.type,
       onChangeType,
       onInteraction,
-      onToggleFavorites,
       t,
     ]
   );
@@ -207,98 +164,17 @@ export default function MapFilterBar({
         ) : null}
 
         <View style={styles.content}>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            style={styles.chipsScroll}
-            contentContainerStyle={styles.row}
-          >
+          <View style={styles.row}>
             {chips.map((chip) => (
               <FilterChip
                 key={chip.id}
                 label={chip.label}
                 active={chip.active}
-                icon={chip.icon}
                 onPress={chip.onPress}
                 testID={chip.testID}
               />
             ))}
-
-            {hasActiveFilters && onClearFilters ? (
-              <Pressable
-                testID="map-filter-clear-inline"
-                accessibilityRole="button"
-                onPress={() => {
-                  onInteraction?.();
-                  onClearFilters();
-                }}
-                style={({ pressed }) => [
-                  styles.inlineAction,
-                  {
-                    opacity: pressed ? 0.72 : 1,
-                    backgroundColor: isAndroid
-                      ? colors.androidTabShellMutedBackground
-                      : `${colors.primary}12`,
-                    borderColor: isAndroid
-                      ? colors.androidTabShellMutedBorder
-                      : `${colors.primary}24`,
-                  },
-                ]}
-              >
-                <Ionicons name="close-circle-outline" size={13} color={colors.primary} />
-                <Text style={[styles.inlineActionText, { color: colors.primary }]} numberOfLines={1}>
-                  {t('map.clearFilters', 'Clear')}
-                </Text>
-              </Pressable>
-            ) : null}
-
-            {friendsChip ? (
-              <Pressable
-                testID={friendsChip.testID}
-                accessibilityRole="button"
-                accessibilityState={{ selected: friendsChip.active }}
-                onPress={() => {
-                  onInteraction?.();
-                  friendsChip.onPress();
-                }}
-                style={({ pressed }) => [
-                  styles.inlineAction,
-                  {
-                    opacity: pressed ? 0.72 : 1,
-                    backgroundColor: friendsChip.active
-                      ? isAndroid
-                        ? colors.androidTabShellSelectedBackground
-                        : `${colors.primary}18`
-                      : isAndroid
-                        ? colors.androidTabShellMutedBackground
-                        : getOverlayMutedFillColor(isDark, colors),
-                    borderColor: friendsChip.active
-                      ? isAndroid
-                        ? colors.androidTabShellSelectedBorder
-                        : `${colors.primary}36`
-                      : isAndroid
-                        ? colors.androidTabShellMutedBorder
-                        : getOverlayBorderColor(isDark, colors),
-                  },
-                ]}
-              >
-                <Ionicons
-                  name="people-outline"
-                  size={13}
-                  color={friendsChip.active ? colors.primary : colors.secondaryText}
-                />
-                <Text
-                  style={[
-                    styles.inlineActionText,
-                    { color: friendsChip.active ? colors.primary : colors.text },
-                  ]}
-                  numberOfLines={1}
-                >
-                  {friendsChip.label}
-                </Text>
-              </Pressable>
-            ) : null}
-          </ScrollView>
+          </View>
         </View>
       </View>
     </View>
@@ -308,11 +184,13 @@ export default function MapFilterBar({
 const styles = StyleSheet.create({
   wrapper: {
     width: '100%',
+    alignItems: 'center',
   },
   container: {
     borderWidth: Platform.OS === 'android' ? 1 : StyleSheet.hairlineWidth,
     borderRadius: mapOverlayTokens.overlayRadius,
     overflow: 'hidden',
+    alignSelf: 'center',
     ...mapOverlayTokens.overlayShadow,
   },
   containerAndroidShadow: {
@@ -322,44 +200,21 @@ const styles = StyleSheet.create({
     borderRadius: mapOverlayTokens.overlayRadius,
   },
   content: {
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-  },
-  inlineAction: {
-    minHeight: 32,
-    paddingHorizontal: 11,
-    borderRadius: 16,
-    borderWidth: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    flexShrink: 1,
-  },
-  inlineActionText: {
-    fontSize: 12,
-    fontWeight: '700',
-    fontFamily: 'Noto Sans',
-    flexShrink: 1,
-  },
-  chipsScroll: {
-    width: '100%',
+    paddingHorizontal: 6,
+    paddingVertical: 6,
   },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    paddingRight: 8,
+    gap: 2,
   },
   chipOuter: {
     minHeight: 32,
     flexDirection: 'row',
     alignItems: 'center',
     borderRadius: 16,
-    paddingHorizontal: 12,
+    paddingHorizontal: 14,
     borderWidth: 1,
-  },
-  chipIcon: {
-    marginRight: 5,
   },
   chipText: {
     fontSize: 12,
