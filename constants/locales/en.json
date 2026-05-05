@@ -541,6 +541,8 @@
         "chatNotFoundBody": "This chat may no longer be available.",
         "chatEmptyHint": "Start with a quick reaction.",
         "chatComposerPlaceholder": "Reply to this memory",
+        "chatSending": "Sending...",
+        "chatSent": "Sent",
         "chatWithTitle": "Chat with {{name}}",
         "chatGroupTitle": "Memory chat",
         "chatHeaderSubtitle": "Replies stay with this memory.",

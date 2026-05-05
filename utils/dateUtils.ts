@@ -27,6 +27,48 @@ export function formatDate(date: Date | string, style: 'short' | 'long' = 'short
     return d.toLocaleDateString(locale, options);
 }
 
+function isSameLocalDate(left: Date, right: Date) {
+    return left.getFullYear() === right.getFullYear() &&
+        left.getMonth() === right.getMonth() &&
+        left.getDate() === right.getDate();
+}
+
+function startOfLocalDay(date: Date) {
+    return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+}
+
+export function formatChatTimestamp(date: Date | string, now = new Date()): string {
+    const d = typeof date === 'string' ? new Date(date) : date;
+
+    if (Number.isNaN(d.getTime())) {
+        return '';
+    }
+
+    const locale = getLocale();
+
+    if (isSameLocalDate(d, now)) {
+        return new Intl.DateTimeFormat(locale, {
+            hour: 'numeric',
+            minute: '2-digit',
+        }).format(d);
+    }
+
+    const dayDelta = Math.round((startOfLocalDay(now) - startOfLocalDay(d)) / DAY_MS);
+
+    if (dayDelta === 1) {
+        return i18n.language === 'vi' ? 'Hôm qua' : 'Yesterday';
+    }
+
+    if (dayDelta > 1 && dayDelta < 7) {
+        return new Intl.DateTimeFormat(locale, { weekday: 'short' }).format(d);
+    }
+
+    return new Intl.DateTimeFormat(locale, {
+        month: 'short',
+        day: 'numeric',
+    }).format(d);
+}
+
 type NoteTimestampStyle = 'card' | 'detail';
 
 const MINUTE_MS = 60 * 1000;

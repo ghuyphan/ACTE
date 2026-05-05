@@ -1,4 +1,10 @@
-import type { FriendConnection, FriendInvite, SharedFeedSnapshot, SharedPost } from './sharedFeedService';
+import type {
+  FriendConnection,
+  FriendInvite,
+  SharedFeedSnapshot,
+  SharedPost,
+  SharedPostResponse,
+} from './sharedFeedService';
 import {
   clearStoredActiveInvite,
   getStoredActiveInvite,
@@ -53,6 +59,17 @@ interface SharedPostRow {
   longitude: number | null;
   created_at: string;
   updated_at: string | null;
+}
+
+interface SharedPostResponseCacheRow {
+  id: string;
+  post_id: string;
+  author_uid: string;
+  author_display_name: string | null;
+  author_photo_url_snapshot: string | null;
+  emoji: string | null;
+  text: string;
+  created_at: string;
 }
 
 interface MetaRow {
@@ -222,6 +239,56 @@ function rowToSharedPost(row: SharedPostRow): SharedPost {
   };
 }
 
+function rowToSharedPostResponse(row: SharedPostResponseCacheRow): SharedPostResponse {
+  return {
+    id: row.id,
+    postId: row.post_id,
+    authorUid: row.author_uid,
+    authorDisplayName: row.author_display_name,
+    authorPhotoURLSnapshot: row.author_photo_url_snapshot,
+    emoji: row.emoji,
+    text: row.text,
+    createdAt: row.created_at,
+  };
+}
+
+async function insertCachedSharedPostResponse(
+  tx: SQLiteTransactionExecutor,
+  userUid: string,
+  response: SharedPostResponse
+) {
+  await tx.runAsync(
+    `INSERT INTO shared_post_responses_cache (
+      user_uid,
+      post_id,
+      id,
+      author_uid,
+      author_display_name,
+      author_photo_url_snapshot,
+      emoji,
+      text,
+      created_at
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(user_uid, post_id, id) DO UPDATE SET
+      author_uid = excluded.author_uid,
+      author_display_name = excluded.author_display_name,
+      author_photo_url_snapshot = excluded.author_photo_url_snapshot,
+      emoji = excluded.emoji,
+      text = excluded.text,
+      created_at = excluded.created_at`,
+    userUid,
+    response.postId,
+    response.id,
+    response.authorUid,
+    response.authorDisplayName,
+    response.authorPhotoURLSnapshot,
+    response.emoji,
+    response.text,
+    response.createdAt
+  );
+}
+
 export async function getCachedSharedFriends(userUid: string): Promise<FriendConnection[]> {
   const db = await getDB();
   const rows = await db.getAllAsync<FriendRow>(
@@ -357,6 +424,69 @@ export async function replaceCachedSharedPosts(userUid: string, posts: SharedPos
   });
 }
 
+export async function getCachedSharedPostResponses(
+  userUid: string,
+  postId: string
+): Promise<SharedPostResponse[]> {
+  const normalizedPostId = postId.trim();
+  if (!normalizedPostId) {
+    return [];
+  }
+
+  const db = await getDB();
+  const rows = await db.getAllAsync<SharedPostResponseCacheRow>(
+    `SELECT id,
+            post_id,
+            author_uid,
+            author_display_name,
+            author_photo_url_snapshot,
+            emoji,
+            text,
+            created_at
+     FROM shared_post_responses_cache
+     WHERE user_uid = ?
+       AND post_id = ?
+     ORDER BY created_at ASC
+     LIMIT 50`,
+    userUid,
+    normalizedPostId
+  );
+
+  return rows.map(rowToSharedPostResponse);
+}
+
+export async function replaceCachedSharedPostResponses(
+  userUid: string,
+  postId: string,
+  responses: SharedPostResponse[]
+): Promise<void> {
+  const normalizedPostId = postId.trim();
+  if (!normalizedPostId) {
+    return;
+  }
+
+  await withDatabaseTransaction(async (tx) => {
+    await tx.runAsync(
+      'DELETE FROM shared_post_responses_cache WHERE user_uid = ? AND post_id = ?',
+      userUid,
+      normalizedPostId
+    );
+
+    for (const response of responses) {
+      await insertCachedSharedPostResponse(tx, userUid, response);
+    }
+  });
+}
+
+export async function upsertCachedSharedPostResponse(
+  userUid: string,
+  response: SharedPostResponse
+): Promise<void> {
+  await withDatabaseTransaction(async (tx) => {
+    await insertCachedSharedPostResponse(tx, userUid, response);
+  });
+}
+
 export async function getCachedActiveInvite(userUid: string): Promise<FriendInvite | null> {
   return getStoredActiveInvite(userUid);
 }
@@ -403,6 +533,7 @@ export async function clearSharedFeedCache(userUid?: string | null): Promise<voi
     await withDatabaseTransaction(async (tx) => {
       await tx.runAsync('DELETE FROM shared_friends_cache');
       await tx.runAsync('DELETE FROM shared_posts_cache');
+      await tx.runAsync('DELETE FROM shared_post_responses_cache');
       await tx.runAsync('DELETE FROM shared_invites_cache');
       await tx.runAsync('DELETE FROM shared_feed_cache_meta');
     });
@@ -413,6 +544,7 @@ export async function clearSharedFeedCache(userUid?: string | null): Promise<voi
   await withDatabaseTransaction(async (tx) => {
     await tx.runAsync('DELETE FROM shared_friends_cache WHERE user_uid = ?', userUid);
     await tx.runAsync('DELETE FROM shared_posts_cache WHERE user_uid = ?', userUid);
+    await tx.runAsync('DELETE FROM shared_post_responses_cache WHERE user_uid = ?', userUid);
     await tx.runAsync('DELETE FROM shared_invites_cache WHERE user_uid = ?', userUid);
     await tx.runAsync('DELETE FROM shared_feed_cache_meta WHERE user_uid = ?', userUid);
   });

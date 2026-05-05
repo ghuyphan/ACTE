@@ -389,4 +389,149 @@ describe('send-social-notifications edge function', () => {
       })
     );
   });
+
+  it('still sends shared response notifications when social event RPCs fail', async () => {
+    const env = {
+      SUPABASE_URL: 'https://example.supabase.co',
+      SUPABASE_ANON_KEY: 'anon-key',
+      SUPABASE_SERVICE_ROLE_KEY: 'service-role-key',
+      EXPO_ACCESS_TOKEN: 'expo-token',
+    };
+    const rpc = jest.fn(async (functionName: string) => {
+      if (
+        functionName === 'claim_social_notification_event' ||
+        functionName === 'reserve_social_notification_delivery'
+      ) {
+        return {
+          data: null,
+          error: {
+            code: '42702',
+            message: 'column reference "resource_id" is ambiguous',
+          },
+        };
+      }
+
+      if (functionName === 'mark_social_notification_event_delivered') {
+        return { data: null, error: null };
+      }
+
+      throw new Error(`Unexpected rpc: ${functionName}`);
+    });
+    const adminClient = {
+      rpc,
+      from: (table: string) => {
+        if (table === 'shared_post_responses') {
+          return {
+            select: () => ({
+              eq: () => ({
+                eq: () => ({
+                  maybeSingle: jest.fn(async () => ({
+                    data: {
+                      id: 'response-1',
+                      post_id: 'post-1',
+                      author_user_id: 'actor-1',
+                      author_display_name: 'Mai',
+                      emoji: '💛',
+                      text: null,
+                    },
+                    error: null,
+                  })),
+                }),
+              }),
+            }),
+          };
+        }
+
+        if (table === 'shared_posts') {
+          return {
+            select: () => ({
+              eq: () => ({
+                maybeSingle: jest.fn(async () => ({
+                  data: {
+                    id: 'post-1',
+                    author_user_id: 'author-1',
+                    audience_user_ids: ['actor-1'],
+                    place_name: 'Da Nang',
+                  },
+                  error: null,
+                })),
+              }),
+            }),
+          };
+        }
+
+        if (table === 'device_push_tokens') {
+          return {
+            select: () => ({
+              in: jest.fn(async () => ({
+                data: [
+                  {
+                    user_id: 'author-1',
+                    expo_push_token: 'ExponentPushToken[author]',
+                    platform: 'android',
+                  },
+                ],
+                error: null,
+              })),
+            }),
+            delete: () => ({
+              in: jest.fn(async () => ({ error: null })),
+            }),
+          };
+        }
+
+        throw new Error(`Unexpected admin table ${table}`);
+      },
+    };
+    const userClient = {
+      auth: {
+        getUser: jest.fn(async () => ({
+          data: { user: { id: 'actor-1' } },
+          error: null,
+        })),
+      },
+    };
+    const createClient = jest.fn((_url: string, key: string) => {
+      if (key === env.SUPABASE_ANON_KEY) {
+        return userClient;
+      }
+
+      if (key === env.SUPABASE_SERVICE_ROLE_KEY) {
+        return adminClient;
+      }
+
+      throw new Error(`Unexpected key ${key}`);
+    });
+    const fetchMock = jest.fn(async (_url: string, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body ?? '[]')) as Array<{ to: string }>;
+      expect(body).toEqual([expect.objectContaining({ to: 'ExponentPushToken[author]' })]);
+      return Response.json({ data: [{ status: 'ok' }] });
+    }) as jest.MockedFunction<typeof fetch>;
+    const handler = loadSendSocialNotificationsHandler({
+      createClient,
+      env,
+      fetch: fetchMock,
+    });
+
+    const response = await handler(
+      new Request('https://example.com/send-social-notifications', {
+        method: 'POST',
+        headers: {
+          Authorization: 'Bearer user-jwt',
+        },
+        body: JSON.stringify({
+          type: 'shared_post_response_created',
+          responseId: 'response-1',
+        }),
+      })
+    );
+
+    await expect(response.json()).resolves.toEqual({
+      success: true,
+      recipients: 1,
+      delivered: 1,
+    });
+    expect(response.status).toBe(200);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
 });

@@ -541,6 +541,8 @@
         "chatNotFoundBody": "Cuộc trò chuyện này có thể không còn khả dụng.",
         "chatEmptyHint": "Bắt đầu bằng một phản ứng nhanh.",
         "chatComposerPlaceholder": "Trả lời kỷ niệm này",
+        "chatSending": "Đang gửi...",
+        "chatSent": "Đã gửi",
         "chatWithTitle": "Trò chuyện với {{name}}",
         "chatGroupTitle": "Trò chuyện kỷ niệm",
         "chatHeaderSubtitle": "Phản hồi sẽ nằm cùng kỷ niệm này.",

@@ -425,7 +425,11 @@ async function reserveNotificationRecipients(
   });
 
   if (error) {
-    throw error;
+    console.warn(
+      'Failed to reserve social notification recipients; sending without throttle reservation:',
+      error
+    );
+    return normalizedRecipientUserIds;
   }
 
   return Array.from(
@@ -486,7 +490,15 @@ async function claimNotificationEvent(
   });
 
   if (error) {
-    throw error;
+    console.warn('Failed to claim social notification event; sending without idempotency claim:', error);
+    return {
+      resource_id:
+        options.type === 'friend_accepted'
+          ? options.recipientUserId
+          : options.resourceId,
+      recipient_user_id:
+        options.type === 'friend_accepted' ? options.recipientUserId : null,
+    } satisfies ClaimedNotificationEvent;
   }
 
   const row = Array.isArray(data) ? data[0] : data;
@@ -522,7 +534,7 @@ async function releaseNotificationEvent(
   });
 
   if (error) {
-    throw error;
+    console.warn('Failed to release social notification event claim:', error);
   }
 }
 
@@ -539,7 +551,7 @@ async function markNotificationEventDelivered(
   });
 
   if (error) {
-    throw error;
+    console.warn('Failed to mark social notification event delivered:', error);
   }
 }
 

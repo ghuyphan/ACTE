@@ -35,8 +35,11 @@ import {
 import {
   cacheSharedFeedSnapshot,
   clearSharedFeedCache,
+  getCachedSharedPostResponses,
   getCachedSharedFeedSnapshot,
   patchCachedSharedPostMedia,
+  replaceCachedSharedPostResponses,
+  upsertCachedSharedPostResponse,
 } from '../services/sharedFeedCache';
 import { getNotePairedVideoUri } from '../services/livePhotoStorage';
 import { subscribeToDeletedNotes } from '../services/noteMutationEvents';
@@ -1583,9 +1586,16 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
         return post;
       },
       getSharedPostResponses: async (postId: string) => {
-        requireOnline();
         const activeUser = requireUser();
-        return fetchPostResponses(activeUser, postId);
+        if (!isOnline) {
+          return getCachedSharedPostResponses(activeUser.uid, postId);
+        }
+
+        const responses = await fetchPostResponses(activeUser, postId);
+        void replaceCachedSharedPostResponses(activeUser.uid, postId, responses).catch((error) => {
+          console.warn('Failed to persist shared response cache:', error);
+        });
+        return responses;
       },
       subscribeToSharedPostResponses: (
         postId: string,
@@ -1595,9 +1605,41 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
           onStatus?: (status: 'connecting' | 'connected' | 'disconnected') => void;
         }
       ) => {
-        requireOnline();
         const activeUser = requireUser();
-        return subscribeToPostResponses(activeUser, postId, options);
+        let disposed = false;
+        void getCachedSharedPostResponses(activeUser.uid, postId)
+          .then((cachedResponses) => {
+            if (!disposed && (cachedResponses.length > 0 || !isOnline)) {
+              void options.onResponses(cachedResponses);
+            }
+          })
+          .catch(() => undefined);
+
+        if (!isOnline) {
+          options.onStatus?.('disconnected');
+          return () => {
+            disposed = true;
+          };
+        }
+
+        const unsubscribe = subscribeToPostResponses(activeUser, postId, {
+          ...options,
+          onResponses: async (responses) => {
+            await replaceCachedSharedPostResponses(activeUser.uid, postId, responses).catch(
+              (error) => {
+                console.warn('Failed to persist shared response cache:', error);
+              }
+            );
+            if (!disposed) {
+              await options.onResponses(responses);
+            }
+          },
+        });
+
+        return () => {
+          disposed = true;
+          unsubscribe();
+        };
       },
       createSharedPostResponse: async (
         postId: string,
@@ -1605,7 +1647,11 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
       ) => {
         requireOnline();
         const activeUser = requireUser();
-        return createPostResponse(activeUser, postId, input);
+        const response = await createPostResponse(activeUser, postId, input);
+        void upsertCachedSharedPostResponse(activeUser.uid, response).catch((error) => {
+          console.warn('Failed to persist shared response cache:', error);
+        });
+        return response;
       },
       updateSharedNote: async (note: Note) => {
         requireOnline();

@@ -1,16 +1,17 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { Stack, useRouter } from 'expo-router';
+import { FlashList } from '@shopify/flash-list';
 import { useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Layout } from '../../../constants/theme';
 import { useAuth } from '../../../hooks/useAuth';
 import { useSharedFeedStore } from '../../../hooks/useSharedFeed';
 import { useTheme } from '../../../hooks/useTheme';
 import type { SharedPost } from '../../../services/sharedFeedService';
-import { formatDate } from '../../../utils/dateUtils';
+import { formatChatTimestamp } from '../../../utils/dateUtils';
 import NotoLoader from '../../ui/NotoLoader';
 
 function getThreadPreview(post: SharedPost, t: ReturnType<typeof useTranslation>['t']) {
@@ -69,6 +70,60 @@ export default function SharedChatsScreen() {
     },
     [friendById, t, user?.uid]
   );
+  const renderThreadItem = useCallback(
+    ({ item: post }: { item: SharedPost }) => {
+      const participant = getThreadParticipant(post);
+      const avatarLabel = participant.label.replace(/^@/, '').charAt(0).toUpperCase();
+      return (
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => {
+            router.push(`/shared/chat/${post.id}` as any);
+          }}
+          style={({ pressed }) => [
+            styles.threadRow,
+            {
+              backgroundColor: colors.surface,
+              borderColor: colors.border,
+              opacity: pressed ? 0.86 : 1,
+            },
+          ]}
+        >
+          {participant.photoUri ? (
+            <Image
+              source={{ uri: participant.photoUri }}
+              style={styles.avatar}
+              contentFit="cover"
+            />
+          ) : (
+            <View style={[styles.avatar, { backgroundColor: colors.primarySoft }]}>
+              <Text style={[styles.avatarLabel, { color: colors.primary }]}>
+                {avatarLabel}
+              </Text>
+            </View>
+          )}
+          <View style={styles.threadCopy}>
+            <Text numberOfLines={1} style={[styles.threadTitle, { color: colors.text }]}>
+              {participant.label}
+            </Text>
+            <Text
+              numberOfLines={1}
+              style={[styles.threadPreview, { color: colors.secondaryText }]}
+            >
+              {getThreadPreview(post, t)}
+            </Text>
+          </View>
+          <View style={styles.threadMeta}>
+            <Text style={[styles.threadTime, { color: colors.secondaryText }]}>
+              {formatChatTimestamp(post.createdAt)}
+            </Text>
+          </View>
+          <Ionicons name="chevron-forward" size={16} color={colors.secondaryText} />
+        </Pressable>
+      );
+    },
+    [colors, getThreadParticipant, router, t]
+  );
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -102,69 +157,18 @@ export default function SharedChatsScreen() {
           </View>
         </View>
       ) : (
-        <ScrollView
+        <FlashList
+          data={threads}
+          keyExtractor={(item) => item.id}
+          renderItem={renderThreadItem}
+          ItemSeparatorComponent={() => <View style={styles.threadSeparator} />}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{
             paddingTop: insets.top + 76,
             paddingBottom: insets.bottom + 32,
             paddingHorizontal: Layout.screenPadding,
           }}
-        >
-          <View style={styles.threadList}>
-            {threads.map((post) => {
-              const participant = getThreadParticipant(post);
-              const avatarLabel = participant.label.replace(/^@/, '').charAt(0).toUpperCase();
-              return (
-                <Pressable
-                  key={post.id}
-                  accessibilityRole="button"
-                  onPress={() => {
-                    router.push(`/shared/chat/${post.id}` as any);
-                  }}
-                  style={({ pressed }) => [
-                    styles.threadRow,
-                    {
-                      backgroundColor: colors.surface,
-                      borderColor: colors.border,
-                      opacity: pressed ? 0.86 : 1,
-                    },
-                  ]}
-                >
-                  {participant.photoUri ? (
-                    <Image
-                      source={{ uri: participant.photoUri }}
-                      style={styles.avatar}
-                      contentFit="cover"
-                    />
-                  ) : (
-                    <View style={[styles.avatar, { backgroundColor: colors.primarySoft }]}>
-                      <Text style={[styles.avatarLabel, { color: colors.primary }]}>
-                        {avatarLabel}
-                      </Text>
-                    </View>
-                  )}
-                  <View style={styles.threadCopy}>
-                    <Text numberOfLines={1} style={[styles.threadTitle, { color: colors.text }]}>
-                      {participant.label}
-                    </Text>
-                    <Text
-                      numberOfLines={1}
-                      style={[styles.threadPreview, { color: colors.secondaryText }]}
-                    >
-                      {getThreadPreview(post, t)}
-                    </Text>
-                  </View>
-                  <View style={styles.threadMeta}>
-                    <Text style={[styles.threadTime, { color: colors.secondaryText }]}>
-                      {formatDate(post.createdAt, 'short')}
-                    </Text>
-                  </View>
-                  <Ionicons name="chevron-forward" size={16} color={colors.secondaryText} />
-                </Pressable>
-              );
-            })}
-          </View>
-        </ScrollView>
+        />
       )}
     </View>
   );
@@ -214,8 +218,8 @@ const styles = StyleSheet.create({
     marginTop: 8,
     maxWidth: 280,
   },
-  threadList: {
-    gap: 10,
+  threadSeparator: {
+    height: 10,
   },
   threadRow: {
     minHeight: 78,

@@ -815,6 +815,20 @@ export async function getDB(): Promise<SQLite.SQLiteDatabase> {
       );
       CREATE INDEX IF NOT EXISTS idx_shared_posts_cache_user_created ON shared_posts_cache(user_uid, created_at DESC);
       CREATE INDEX IF NOT EXISTS idx_shared_posts_cache_user_source_note ON shared_posts_cache(user_uid, source_note_id);
+      CREATE TABLE IF NOT EXISTS shared_post_responses_cache (
+        user_uid TEXT NOT NULL,
+        post_id TEXT NOT NULL,
+        id TEXT NOT NULL,
+        author_uid TEXT NOT NULL,
+        author_display_name TEXT,
+        author_photo_url_snapshot TEXT,
+        emoji TEXT,
+        text TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL,
+        PRIMARY KEY (user_uid, post_id, id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_shared_post_responses_cache_user_post_created
+        ON shared_post_responses_cache(user_uid, post_id, created_at ASC);
       CREATE TABLE IF NOT EXISTS shared_invites_cache (
         user_uid TEXT PRIMARY KEY NOT NULL,
         id TEXT NOT NULL,
@@ -1136,6 +1150,7 @@ export async function getDB(): Promise<SQLite.SQLiteDatabase> {
                     DROP TABLE IF EXISTS rooms_cache_meta;
                     DROP TABLE IF EXISTS shared_friends_cache;
                     DROP TABLE IF EXISTS shared_posts_cache;
+                    DROP TABLE IF EXISTS shared_post_responses_cache;
                     DROP TABLE IF EXISTS shared_invites_cache;
                     DROP TABLE IF EXISTS shared_feed_cache_meta;
                 `);
@@ -1254,6 +1269,24 @@ export async function getDB(): Promise<SQLite.SQLiteDatabase> {
             );
             await database.execAsync(
                 `CREATE INDEX IF NOT EXISTS idx_shared_posts_cache_user_source_note ON shared_posts_cache(user_uid, source_note_id)`
+            );
+            await database.execAsync(
+                `CREATE TABLE IF NOT EXISTS shared_post_responses_cache (
+                    user_uid TEXT NOT NULL,
+                    post_id TEXT NOT NULL,
+                    id TEXT NOT NULL,
+                    author_uid TEXT NOT NULL,
+                    author_display_name TEXT,
+                    author_photo_url_snapshot TEXT,
+                    emoji TEXT,
+                    text TEXT NOT NULL DEFAULT '',
+                    created_at TEXT NOT NULL,
+                    PRIMARY KEY (user_uid, post_id, id)
+                )`
+            );
+            await database.execAsync(
+                `CREATE INDEX IF NOT EXISTS idx_shared_post_responses_cache_user_post_created
+                 ON shared_post_responses_cache(user_uid, post_id, created_at ASC)`
             );
             await database.execAsync(
                 `CREATE TABLE IF NOT EXISTS shared_invites_cache (
