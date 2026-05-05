@@ -8,6 +8,10 @@ type SocialNotificationRequest =
   | {
       type: 'shared_post_created';
       postId: string;
+    }
+  | {
+      type: 'shared_post_response_created';
+      responseId: string;
     };
 
 type SocialNotificationResponse =
@@ -61,6 +65,15 @@ type SharedPostRow = {
   audience_user_ids: string[] | null;
   type: 'text' | 'photo';
   place_name: string | null;
+};
+
+type SharedPostResponseRow = {
+  id: string;
+  post_id: string;
+  author_user_id: string;
+  author_display_name: string | null;
+  emoji: string | null;
+  text: string | null;
 };
 
 type ClaimedNotificationEvent = {
@@ -281,6 +294,76 @@ async function loadSharedPostPayload(
   };
 }
 
+async function loadSharedPostResponsePayload(
+  adminClient: ReturnType<typeof createClient>,
+  actorUserId: string,
+  responseId: string
+) {
+  const normalizedResponseId = responseId.trim();
+  if (!normalizedResponseId) {
+    throw new Error('Response required.');
+  }
+
+  const { data: response, error: responseError } = await adminClient
+    .from('shared_post_responses')
+    .select('id, post_id, author_user_id, author_display_name, emoji, text')
+    .eq('id', normalizedResponseId)
+    .eq('author_user_id', actorUserId)
+    .maybeSingle();
+
+  if (responseError) {
+    throw responseError;
+  }
+
+  if (!response) {
+    throw new Error('Response not found.');
+  }
+
+  const typedResponse = response as SharedPostResponseRow;
+  const { data: post, error: postError } = await adminClient
+    .from('shared_posts')
+    .select('id, author_user_id, audience_user_ids, place_name')
+    .eq('id', typedResponse.post_id)
+    .maybeSingle();
+
+  if (postError) {
+    throw postError;
+  }
+
+  if (!post) {
+    throw new Error('Shared post not found.');
+  }
+
+  const typedPost = post as Pick<
+    SharedPostRow,
+    'id' | 'author_user_id' | 'audience_user_ids' | 'place_name'
+  >;
+  const recipientUserIds =
+    typedPost.author_user_id && typedPost.author_user_id !== actorUserId
+      ? [typedPost.author_user_id]
+      : [];
+  const actorDisplayName = normalizeDisplayName(typedResponse.author_display_name);
+  const text = typedResponse.text?.trim() ?? '';
+  const emoji = typedResponse.emoji?.trim() ?? '';
+  const body = text
+    ? text
+    : emoji
+      ? `${emoji} reacted to your memory.`
+      : 'Open Noto to see their response.';
+
+  return {
+    recipientUserIds,
+    title: `${actorDisplayName} responded to your memory`,
+    body,
+    data: {
+      route: `/shared/chat/${typedPost.id}`,
+      sharedPostId: typedPost.id,
+      responseId: typedResponse.id,
+      notificationType: 'shared-response',
+    },
+  };
+}
+
 async function loadPushTargets(
   adminClient: ReturnType<typeof createClient>,
   userIds: string[]
@@ -385,11 +468,19 @@ async function claimNotificationEvent(
         actorUserId: string;
         resourceId: string;
       }
+    | {
+        type: 'shared_post_response_created';
+        actorUserId: string;
+        resourceId: string;
+      }
 ) {
   const { data, error } = await adminClient.rpc('claim_social_notification_event', {
     event_type_input: options.type,
     actor_user_id_input: options.actorUserId,
-    resource_id_input: options.type === 'shared_post_created' ? options.resourceId : null,
+    resource_id_input:
+      options.type === 'shared_post_created' || options.type === 'shared_post_response_created'
+        ? options.resourceId
+        : null,
     recipient_user_id_input:
       options.type === 'friend_accepted' ? options.recipientUserId : null,
   });
@@ -595,6 +686,20 @@ Deno.serve(async (request) => {
                   })
                 );
               })()
+            : body.type === 'shared_post_response_created'
+              ? (() => {
+                  const responseId = body.responseId?.trim() ?? '';
+                  return loadSharedPostResponsePayload(adminClient, user.id, responseId).then(
+                    async (responsePayload) => ({
+                      claimedEvent: await claimNotificationEvent(adminClient, {
+                        type: 'shared_post_response_created',
+                        actorUserId: user.id,
+                        resourceId: responseId,
+                      }),
+                      payload: responsePayload,
+                    })
+                  );
+                })()
             : Promise.resolve(null)
       );
 

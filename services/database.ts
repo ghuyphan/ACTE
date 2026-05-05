@@ -186,7 +186,7 @@ let dbInitPromise: Promise<SQLite.SQLiteDatabase> | null = null;
 let dbGeneration = 0;
 let transactionQueue: Promise<void> = Promise.resolve();
 let androidDatabaseQueue: Promise<void> = Promise.resolve();
-const APP_SCHEMA_VERSION = 18;
+const APP_SCHEMA_VERSION = 19;
 const DATABASE_NAME = 'acte_notes.db';
 export const LOCAL_NOTES_SCOPE = '__local__';
 const ACTIVE_NOTES_SCOPE_STORAGE_KEY = 'notes.activeScope';
@@ -772,6 +772,7 @@ export async function getDB(): Promise<SQLite.SQLiteDatabase> {
         friend_uid TEXT NOT NULL,
         username_snapshot TEXT,
         display_name_snapshot TEXT,
+        friend_nickname TEXT,
         photo_url_snapshot TEXT,
         friended_at TEXT NOT NULL,
         last_shared_at TEXT,
@@ -1146,6 +1147,7 @@ export async function getDB(): Promise<SQLite.SQLiteDatabase> {
                     friend_uid TEXT NOT NULL,
                     username_snapshot TEXT,
                     display_name_snapshot TEXT,
+                    friend_nickname TEXT,
                     photo_url_snapshot TEXT,
                     friended_at TEXT NOT NULL,
                     last_shared_at TEXT,
@@ -1162,6 +1164,9 @@ export async function getDB(): Promise<SQLite.SQLiteDatabase> {
             const sharedFriendsCacheColumns = sharedFriendsCacheInfo.map((col) => col.name);
             if (!sharedFriendsCacheColumns.includes('username_snapshot')) {
                 await database.execAsync(`ALTER TABLE shared_friends_cache ADD COLUMN username_snapshot TEXT`);
+            }
+            if (!sharedFriendsCacheColumns.includes('friend_nickname')) {
+                await database.execAsync(`ALTER TABLE shared_friends_cache ADD COLUMN friend_nickname TEXT`);
             }
             await database.execAsync(
                 `CREATE TABLE IF NOT EXISTS shared_posts_cache (

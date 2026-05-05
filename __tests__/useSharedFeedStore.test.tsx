@@ -55,6 +55,7 @@ const mockRefreshSharedFeed = jest.fn();
 const mockRemoveFriend = jest.fn();
 const mockRevokeFriendInvite = jest.fn();
 const mockSubscribeToSharedFeed = jest.fn();
+const mockUpdateFriendNickname = jest.fn();
 const mockUpdateSharedPost = jest.fn();
 const mockGetCachedSharedFeedSnapshot = jest.fn();
 const mockCacheSharedFeedSnapshot = jest.fn();
@@ -106,6 +107,7 @@ jest.mock('../services/sharedFeedService', () => ({
   removeFriend: (...args: unknown[]) => mockRemoveFriend(...args),
   revokeFriendInvite: (...args: unknown[]) => mockRevokeFriendInvite(...args),
   subscribeToSharedFeed: (...args: unknown[]) => mockSubscribeToSharedFeed(...args),
+  updateFriendNickname: (...args: unknown[]) => mockUpdateFriendNickname(...args),
   updateSharedPost: (...args: unknown[]) => mockUpdateSharedPost(...args),
 }));
 
@@ -261,6 +263,16 @@ describe('useSharedFeedStore', () => {
     mockDeleteSharedPost.mockResolvedValue(undefined);
     mockFindOwnedSharedPostIdsForNote.mockResolvedValue([]);
     mockRevokeFriendInvite.mockResolvedValue(undefined);
+    mockUpdateFriendNickname.mockResolvedValue({
+      userId: 'friend-1',
+      username: 'lan',
+      displayNameSnapshot: 'Lan',
+      nickname: 'Bestie',
+      photoURLSnapshot: null,
+      friendedAt: '2026-03-21T00:00:00.000Z',
+      lastSharedAt: null,
+      createdByInviteId: null,
+    });
     mockUpdateSharedPost.mockResolvedValue(undefined);
     mockCacheSharedFeedSnapshot.mockResolvedValue(undefined);
     mockClearSharedFeedCache.mockResolvedValue(undefined);

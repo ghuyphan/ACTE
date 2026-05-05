@@ -5,6 +5,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Layout } from '../../../constants/theme';
 import type { ThemeColors } from '../../../hooks/useTheme';
 import NotoLoader from '../../ui/NotoLoader';
+import TextFieldEditSheet from '../../sheets/TextFieldEditSheet';
 import ProfileAvatar from './ProfileAvatar';
 import {
   buildProfileSections,
@@ -327,6 +328,22 @@ export default function ProfileScreenAndroid() {
         title={model.t('profile.usernameSheetTitle', 'Choose your username')}
         subtitle={model.t('profile.usernameSheetSubtitle', 'This will be your short in-app name.')}
         saveLabel={model.t('profile.usernameSave', 'Save username')}
+      />
+      <TextFieldEditSheet
+        visible={model.isNameSheetVisible}
+        value={model.nameDraft}
+        errorMessage={model.nameErrorMessage}
+        helperText={model.nameHelperText}
+        isSaving={model.isSavingName}
+        onChangeValue={model.setNameDraft}
+        onClose={model.closeNameEditor}
+        onSave={model.saveName}
+        title={model.t('profile.nameSheetTitle', 'Update your name')}
+        subtitle={model.t('profile.nameSheetSubtitle', 'Friends will see this when you share memories.')}
+        saveLabel={model.t('profile.nameSave', 'Save name')}
+        placeholder={model.t('profile.namePlaceholder', 'Your name')}
+        autoComplete="name"
+        testIDPrefix="profile-name"
       />
     </View>
   );

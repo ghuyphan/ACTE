@@ -31,6 +31,9 @@ export default function SharedPostDetailRoute() {
       key={id}
       postId={id}
       visible={visible}
+      onOpenChat={(postId) => {
+        router.push(`/shared/chat/${postId}` as any);
+      }}
       onClose={() => {
         setVisible(false);
       }}

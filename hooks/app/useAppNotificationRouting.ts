@@ -33,6 +33,9 @@ export function useAppNotificationRouting() {
       if (notificationType === 'friend-accepted') {
         prepareForExternalNavigation();
         router.dismissTo(`/(tabs)?openSharedManageAt=${encodeURIComponent(notificationId)}` as any);
+      } else if (notificationType === 'shared-response' && sharedPostId && typeof sharedPostId === 'string') {
+        prepareForExternalNavigation();
+        router.push(`/shared/chat/${sharedPostId}` as any);
       } else if (noteId && typeof noteId === 'string') {
         focusFeedTargetFromExternalEntry({ kind: 'note', id: noteId });
       } else if (sharedPostId && typeof sharedPostId === 'string') {

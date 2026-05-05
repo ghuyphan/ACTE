@@ -16,6 +16,7 @@ interface FriendRow {
   friend_uid: string;
   username_snapshot: string | null;
   display_name_snapshot: string | null;
+  friend_nickname: string | null;
   photo_url_snapshot: string | null;
   friended_at: string;
   last_shared_at: string | null;
@@ -164,6 +165,7 @@ function rowToFriend(row: FriendRow): FriendConnection {
     userId: row.friend_uid,
     username: row.username_snapshot,
     displayNameSnapshot: row.display_name_snapshot,
+    nickname: row.friend_nickname,
     photoURLSnapshot: row.photo_url_snapshot,
     friendedAt: row.friended_at,
     lastSharedAt: row.last_shared_at,
@@ -244,16 +246,18 @@ export async function replaceCachedSharedFriends(userUid: string, friends: Frien
           friend_uid,
           username_snapshot,
           display_name_snapshot,
+          friend_nickname,
           photo_url_snapshot,
           friended_at,
           last_shared_at,
           created_by_invite_id
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         userUid,
         friend.userId,
         friend.username ?? null,
         friend.displayNameSnapshot,
+        friend.nickname ?? null,
         friend.photoURLSnapshot,
         friend.friendedAt,
         friend.lastSharedAt,
@@ -480,16 +484,18 @@ export async function cacheSharedFeedSnapshot(
           friend_uid,
           username_snapshot,
           display_name_snapshot,
+          friend_nickname,
           photo_url_snapshot,
           friended_at,
           last_shared_at,
           created_by_invite_id
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         userUid,
         friend.userId,
         friend.username ?? null,
         friend.displayNameSnapshot,
+        friend.nickname ?? null,
         friend.photoURLSnapshot,
         friend.friendedAt,
         friend.lastSharedAt,

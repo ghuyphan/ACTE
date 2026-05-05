@@ -286,20 +286,50 @@ export default function HomeScreen() {
     loading: sharedLoading,
     ready: sharedReady,
     initialLoadComplete: sharedInitialLoadComplete = true,
-    friends,
-    sharedPosts,
+    friends = [],
+    friendGroups = [],
+    sharedPosts = [],
     ownedSharedNoteIds: sharedOwnedNoteIds,
     activeInvite,
     refreshSharedFeed,
     createFriendInvite,
     revokeFriendInvite,
     removeFriend,
+    updateFriendNickname = async () => undefined,
+    createFriendGroup = async () => undefined,
+    updateFriendGroup = async () => undefined,
+    deleteFriendGroup = async () => undefined,
     createSharedPost,
   } = useSharedFeedStore();
   const captureAudienceFriends = useMemo(
     () => friends.filter((friend) => friend.userId !== user?.uid),
     [friends, user?.uid]
   );
+  const captureAudienceGroups = useMemo(
+    () => friendGroups.filter((group) => group.memberUserIds.length > 0),
+    [friendGroups]
+  );
+  const sharedPostsWithFriendNicknames = useMemo(() => {
+    const nicknameByFriendUid = new Map(
+      friends
+        .map((friend) => [friend.userId, friend.nickname?.trim() || null] as const)
+        .filter((entry): entry is readonly [string, string] => Boolean(entry[1]))
+    );
+
+    if (nicknameByFriendUid.size === 0) {
+      return sharedPosts;
+    }
+
+    return sharedPosts.map((post) => {
+      const nickname = nicknameByFriendUid.get(post.authorUid);
+      return nickname
+        ? {
+            ...post,
+            authorDisplayName: nickname,
+          }
+        : post;
+    });
+  }, [friends, sharedPosts]);
   const {
     bootstrapState: syncBootstrapState,
     requestSync,
@@ -711,7 +741,7 @@ export default function HomeScreen() {
     userUid: user?.uid,
     notesPhase,
     sharedEnabled,
-    sharedPosts,
+    sharedPosts: sharedPostsWithFriendNicknames,
     startupInteractive: homeFeedReady,
     autoPromoteDelayMs: 1200,
     presentationScope: isFriendsFilterEnabled ? 'friends' : 'all',
@@ -1362,10 +1392,17 @@ export default function HomeScreen() {
       return;
     }
 
-    if (!captureAudienceFriends.some((friend) => friend.userId === selectedSharedAudienceUserId)) {
+    const selectedGroupId = selectedSharedAudienceUserId.startsWith('group:')
+      ? selectedSharedAudienceUserId.slice('group:'.length)
+      : null;
+    const selectedAudienceExists = selectedGroupId
+      ? captureAudienceGroups.some((group) => group.id === selectedGroupId)
+      : captureAudienceFriends.some((friend) => friend.userId === selectedSharedAudienceUserId);
+
+    if (!selectedAudienceExists) {
       setSelectedSharedAudienceUserId(null);
     }
-  }, [captureAudienceFriends, selectedSharedAudienceUserId]);
+  }, [captureAudienceFriends, captureAudienceGroups, selectedSharedAudienceUserId]);
 
   useFocusEffect(
     useCallback(() => {
@@ -1402,7 +1439,7 @@ export default function HomeScreen() {
       const targetExistsInHomeData =
         target.kind === 'note'
           ? notes.some((note) => note.id === target.id)
-          : sharedPosts.some(
+          : sharedPostsWithFriendNicknames.some(
               (post) =>
                 post.id === target.id &&
                 (!sharedEnabled || !user?.uid || post.authorUid !== user.uid)
@@ -1454,7 +1491,7 @@ export default function HomeScreen() {
     requestPromoteSharedPosts,
     sharedEnabled,
     sharedLoading,
-    sharedPosts,
+    sharedPostsWithFriendNicknames,
     snapHeight,
     user?.uid,
     visibleFeedItems,
@@ -1697,7 +1734,7 @@ export default function HomeScreen() {
     };
     const minimumCreatedAt = Date.now() - SHARED_PLACE_PULSE_MAX_AGE_MS;
 
-    const nearbySharedPosts = sharedPosts
+    const nearbySharedPosts = sharedPostsWithFriendNicknames
       .filter((post) => {
         if (user?.uid && post.authorUid === user.uid) {
           return false;
@@ -1756,7 +1793,7 @@ export default function HomeScreen() {
       avatars,
       overflowCount: Math.max(uniqueNearbyAuthorIds.size - avatars.length, 0),
     };
-  }, [captureTarget, location, sharedEnabled, sharedPosts, sharedReady, user?.uid]);
+  }, [captureTarget, location, sharedEnabled, sharedPostsWithFriendNicknames, sharedReady, user?.uid]);
 
   const handlePlacePulsePress = useCallback(() => {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -1829,6 +1866,7 @@ export default function HomeScreen() {
       return (
         <CaptureAudienceStrip
           friends={captureAudienceFriends}
+          friendGroups={captureAudienceGroups}
           selectedFriendUid={selectedSharedAudienceUserId}
           onSelectFriendUid={setSelectedSharedAudienceUserId}
           t={t}
@@ -1883,6 +1921,7 @@ export default function HomeScreen() {
   }, [
     captureTarget,
     captureAudienceFriends,
+    captureAudienceGroups,
     handlePlacePulsePress,
     handleSharedPlacePulsePress,
     location,
@@ -2566,9 +2605,21 @@ export default function HomeScreen() {
             shareOutcome = 'no-friends';
           } else {
             try {
+              const selectedGroupId = selectedSharedAudienceUserId?.startsWith('group:')
+                ? selectedSharedAudienceUserId.slice('group:'.length)
+                : null;
+              const selectedGroup = selectedGroupId
+                ? captureAudienceGroups.find((group) => group.id === selectedGroupId)
+                : null;
+              const selectedAudienceUserIds = selectedGroup
+                ? selectedGroup.memberUserIds
+                : selectedSharedAudienceUserId
+                  ? [selectedSharedAudienceUserId]
+                  : undefined;
+
               await createSharedPost(
                 createdNote,
-                selectedSharedAudienceUserId ? [selectedSharedAudienceUserId] : undefined
+                selectedAudienceUserIds
               );
               shareOutcome = 'shared';
             } catch (shareError) {
@@ -2665,6 +2716,7 @@ export default function HomeScreen() {
     promptHologramSaveChoice,
     captureTarget,
     createSharedPost,
+    captureAudienceGroups,
     captureAudienceFriends.length,
     selectedSharedAudienceUserId,
     tier,
@@ -3165,8 +3217,13 @@ export default function HomeScreen() {
           },
           onCloseSearch: () => {},
           showSearchButton: showLegacySearchButton,
+          showMessagesButton: Boolean(sharedEnabled && user),
+          showMessagesIndicator: sharedPostsWithFriendNicknames.length > 0,
           showSharedButton: true,
           showNotesButton: true,
+          onOpenMessages: () => {
+            router.push('/shared/chats' as Href);
+          },
           onOpenShared: handleOpenSharedManage,
           onOpenNotes: handleOpenNotes,
           sharedButtonMode: settledSharedButtonMode,
@@ -3189,6 +3246,7 @@ export default function HomeScreen() {
             ? {
                 visible: showSharedManageSheet,
                 friends,
+                friendGroups,
                 activeInvite,
                 creatingInvite: inviteActionInFlight === 'create',
                 loading: sharedLoading,
@@ -3207,6 +3265,10 @@ export default function HomeScreen() {
                   router.push('/friends/join' as Href);
                 },
                 onRemoveFriend: handleRemoveFriend,
+                onUpdateFriendNickname: updateFriendNickname,
+                onCreateFriendGroup: createFriendGroup,
+                onUpdateFriendGroup: updateFriendGroup,
+                onDeleteFriendGroup: deleteFriendGroup,
               }
             : null
         }

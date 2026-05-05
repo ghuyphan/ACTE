@@ -16,7 +16,12 @@ import {
 } from '../services/database';
 import { purgeLocalAccountScope } from '../services/accountCleanup';
 import { clearGeofenceRegions } from '../services/geofenceService';
-import { updateOwnUsername, updateOwnPhotoURL, upsertPublicUserProfile } from '../services/publicProfileService';
+import {
+  updateOwnDisplayName,
+  updateOwnUsername,
+  updateOwnPhotoURL,
+  upsertPublicUserProfile,
+} from '../services/publicProfileService';
 import { clearSharedFeedCache } from '../services/sharedFeedCache';
 import { unregisterCurrentSocialPushToken } from '../services/socialPushService';
 import { AppUser, deriveUsernameCandidate, mapSupabaseUser } from '../utils/appUser';
@@ -44,6 +49,7 @@ interface AuthContextValue {
   signInWithEmail: (email: string, password: string) => Promise<AuthActionResult>;
   registerWithEmail: (input: EmailRegistrationInput) => Promise<AuthActionResult>;
   sendPasswordReset: (email: string) => Promise<AuthActionResult>;
+  updateDisplayName: (displayName: string | null) => Promise<AuthActionResult>;
   updateUsername: (username: string) => Promise<AuthActionResult>;
   updateAvatar: (photoURL: string | null) => Promise<AuthActionResult>;
   deleteAccount: () => Promise<AuthActionResult>;
@@ -948,6 +954,62 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           return {
             status: 'error',
             message: mapAuthErrorMessage(error),
+          };
+        }
+      },
+      updateDisplayName: async (displayName: string | null) => {
+        if (!isSupabaseAuthAvailable()) {
+          return getUnavailableResult('auth');
+        }
+
+        const supabase = getSupabase();
+        if (!supabase) {
+          return getUnavailableResult('auth');
+        }
+
+        if (!user) {
+          return {
+            status: 'unavailable',
+            message: i18n.t('profile.nameUnavailable', 'Sign in to update your name.'),
+          };
+        }
+
+        try {
+          const normalizedDisplayName = displayName?.trim() || null;
+          const { error } = await supabase.auth.updateUser({
+            data: {
+              display_name: normalizedDisplayName,
+              displayName: normalizedDisplayName,
+              full_name: normalizedDisplayName,
+              name: normalizedDisplayName,
+            },
+          });
+          if (error) {
+            throw error;
+          }
+
+          const profile = await updateOwnDisplayName({
+            userUid: user.id,
+            displayName: normalizedDisplayName,
+          });
+
+          setUser((currentUser) =>
+            currentUser
+              ? {
+                  ...currentUser,
+                  displayName: profile.displayName,
+                }
+              : currentUser
+          );
+
+          return { status: 'success' };
+        } catch (error) {
+          return {
+            status: 'error',
+            message: getSupabaseErrorMessage(error) || i18n.t(
+              'profile.nameSaveFailed',
+              'We could not update your name right now.'
+            ),
           };
         }
       },

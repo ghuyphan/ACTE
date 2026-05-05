@@ -47,6 +47,15 @@ jest.mock('../components/shared/SharedPostDetailSheet', () => {
   };
 });
 
+jest.mock('../components/screens/shared/SharedPostChatScreen', () => {
+  const React = require('react');
+  const { Text } = require('react-native');
+
+  return function MockSharedPostChatScreen(props: { postId: string }) {
+    return <Text testID="shared-chat-screen">{props.postId}</Text>;
+  };
+});
+
 describe('detail routes', () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -88,6 +97,21 @@ describe('detail routes', () => {
       pathname: '/auth',
       params: {
         returnTo: '/shared/post-1',
+      },
+    });
+  });
+
+  it('routes signed-out shared chat deep links through auth with a return route', () => {
+    mockAuthState.user = null;
+    mockUseLocalSearchParams.mockReturnValue({ id: 'post-1' });
+    const SharedPostChatRoute = require('../app/shared/chat/[id]').default;
+
+    render(<SharedPostChatRoute />);
+
+    expect(mockRouter.replace).toHaveBeenCalledWith({
+      pathname: '/auth',
+      params: {
+        returnTo: '/shared/chat/post-1',
       },
     });
   });

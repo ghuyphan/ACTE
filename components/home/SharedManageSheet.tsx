@@ -1,27 +1,58 @@
 import { Ionicons } from '@expo/vector-icons';
 import { BottomSheetFlatList } from '@gorhom/bottom-sheet';
 import { Image } from 'expo-image';
+import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Dimensions, FlatList, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Dimensions, FlatList, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Sheet, Typography } from '../../constants/theme';
 import { useTheme } from '../../hooks/useTheme';
-import { FriendConnection, FriendInvite } from '../../services/sharedFeedService';
+import { FriendConnection, FriendGroup, FriendInvite } from '../../services/sharedFeedService';
 import AppSheet from '../sheets/AppSheet';
 import AppSheetScaffold from '../sheets/AppSheetScaffold';
 import SheetFooterButton from '../sheets/SheetFooterButton';
+import TextFieldEditSheet from '../sheets/TextFieldEditSheet';
+import PrimaryButton from '../ui/PrimaryButton';
 
-const ESTIMATED_FRIEND_ROW_HEIGHT = 86;
+const ESTIMATED_FRIEND_ROW_HEIGHT = 68;
 const FIXED_SHEET_HEIGHT = Math.min(Sheet.maxHeight, Math.round(Dimensions.get('window').height * 0.82));
 const FriendsList = Platform.OS === 'android' ? BottomSheetFlatList : FlatList;
 
-function formatConnectedCopy(connectedOnLabel: string, friendedAt: string) {
-  return `${connectedOnLabel} ${new Date(friendedAt).toLocaleDateString()}`;
+function formatConnectedCopy(template: string, friendedAt: string, locale?: string) {
+  const date = new Date(friendedAt);
+  const dateLabel = Number.isNaN(date.getTime())
+    ? ''
+    : new Intl.DateTimeFormat(locale, {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+      }).format(date);
+
+  return template.replace('{{date}}', dateLabel).trim();
 }
 
-function resolveFriendLabels(friend: FriendConnection, friendFallback: string, connectedOnLabel: string) {
+function resolveFriendLabels(
+  friend: FriendConnection,
+  friendFallback: string,
+  connectedCopyTemplate: string,
+  locale?: string
+) {
+  const normalizedNickname = friend.nickname?.trim() || null;
   const normalizedDisplayName = friend.displayNameSnapshot?.trim() || null;
   const normalizedUsername = friend.username?.trim().toLowerCase() || null;
-  const connectedCopy = formatConnectedCopy(connectedOnLabel, friend.friendedAt);
+  const connectedCopy = formatConnectedCopy(connectedCopyTemplate, friend.friendedAt, locale);
+  const publicLabel = normalizedDisplayName
+    ? normalizedDisplayName
+    : normalizedUsername
+      ? `@${normalizedUsername}`
+      : friendFallback;
+
+  if (normalizedNickname) {
+    return {
+      title: normalizedNickname,
+      meta: `${publicLabel} • ${connectedCopy}`,
+    };
+  }
+
   const hasDistinctDisplayName =
     Boolean(normalizedDisplayName) &&
     Boolean(normalizedUsername) &&
@@ -173,13 +204,18 @@ function InviteActionsCard({
   );
 }
 
-function FriendsSectionHeader({ count }: { count: number }) {
+function FriendsSectionHeader({ count, compactTop = false }: { count: number; compactTop?: boolean }) {
   const { colors, isDark } = useTheme();
   const { t } = useTranslation();
   const softFill = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)';
 
   return (
-    <View style={styles.sectionHeaderRow}>
+    <View
+      style={[
+        styles.sectionHeaderRow,
+        compactTop ? styles.sectionHeaderCompactTop : styles.sectionHeaderTop,
+      ]}
+    >
       <Text style={[styles.sectionTitle, { color: colors.text }]}>
         {t('shared.friendsListTitle', 'Your friends')}
       </Text>
@@ -187,6 +223,68 @@ function FriendsSectionHeader({ count }: { count: number }) {
         <Text style={[styles.countPillText, { color: colors.text }]}>{count}</Text>
       </View>
     </View>
+  );
+}
+
+function GroupsSectionHeader({ onCreateGroup }: { onCreateGroup: () => void }) {
+  const { colors, isDark } = useTheme();
+  const { t } = useTranslation();
+  const softFill = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)';
+
+  return (
+    <View style={[styles.sectionHeaderRow, styles.groupsHeaderTop]}>
+      <Text style={[styles.sectionTitle, { color: colors.text }]}>
+        {t('shared.friendGroupsTitle', 'Groups')}
+      </Text>
+      <Pressable
+        accessibilityRole="button"
+        onPress={onCreateGroup}
+        style={({ pressed }) => [
+          styles.addGroupButton,
+          { backgroundColor: softFill, opacity: pressed ? 0.86 : 1 },
+        ]}
+      >
+        <Ionicons name="add" size={18} color={colors.text} />
+      </Pressable>
+    </View>
+  );
+}
+
+function GroupRow({
+  group,
+  memberCount,
+  onPress,
+}: {
+  group: FriendGroup;
+  memberCount: number;
+  onPress: (group: FriendGroup) => void;
+}) {
+  const { colors, isDark } = useTheme();
+  const softFill = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)';
+  const { t } = useTranslation();
+
+  return (
+    <Pressable
+      accessibilityRole="button"
+      onPress={() => onPress(group)}
+      style={({ pressed }) => [
+        styles.groupRow,
+        { backgroundColor: softFill, opacity: pressed ? 0.9 : 1 },
+      ]}
+    >
+      <View style={[styles.groupIcon, { backgroundColor: colors.primarySoft }]}>
+        <Ionicons name="people-outline" size={18} color={colors.primary} />
+      </View>
+      <View style={styles.friendCopy}>
+        <Text numberOfLines={1} style={[styles.friendName, { color: colors.text }]}>
+          {group.name}
+        </Text>
+        <Text numberOfLines={1} style={[styles.friendMeta, { color: colors.secondaryText }]}>
+          {t('shared.friendGroupMembersCount', '{{count}} friends', { count: memberCount })}
+        </Text>
+      </View>
+      <Ionicons name="chevron-forward" size={18} color={colors.secondaryText} />
+    </Pressable>
   );
 }
 
@@ -226,30 +324,26 @@ function EmptyFriendsState({
 function FriendRow({
   friend,
   friendFallback,
-  connectedOnLabel,
+  connectedCopyTemplate,
+  locale,
   onRemoveFriend,
+  onEditNickname,
 }: {
   friend: FriendConnection;
   friendFallback: string;
-  connectedOnLabel: string;
+  connectedCopyTemplate: string;
+  locale?: string;
   onRemoveFriend: (friendUid: string) => void;
+  onEditNickname: (friend: FriendConnection) => void;
 }) {
   const { colors, isDark } = useTheme();
   const softFill = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)';
-  const outlineColor = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)';
-  const labels = resolveFriendLabels(friend, friendFallback, connectedOnLabel);
-  const avatarSeed = (friend.username || friend.displayNameSnapshot || friendFallback).trim();
+  const labels = resolveFriendLabels(friend, friendFallback, connectedCopyTemplate, locale);
+  const avatarSeed = (friend.nickname || friend.username || friend.displayNameSnapshot || friendFallback).trim();
   const avatarLabel = avatarSeed.charAt(0).toUpperCase();
 
   return (
-    <View
-      style={[
-        styles.friendRow,
-        {
-          borderBottomColor: outlineColor,
-        },
-      ]}
-    >
+    <View style={styles.friendRow}>
       {friend.photoURLSnapshot ? (
         <Image
           source={{ uri: friend.photoURLSnapshot }}
@@ -270,16 +364,30 @@ function FriendRow({
         </Text>
       </View>
       <Pressable
-        onPress={() => onRemoveFriend(friend.userId)}
+        accessibilityLabel={labels.title}
+        accessibilityRole="button"
+        onPress={() => onEditNickname(friend)}
         style={({ pressed }) => [
-          styles.removeButton,
+          styles.iconButton,
           {
             backgroundColor: softFill,
             opacity: pressed ? 0.92 : 1,
           },
         ]}
       >
-        <Ionicons name="close-outline" size={24} color={colors.secondaryText} />
+        <Ionicons name="pencil-outline" size={18} color={colors.secondaryText} />
+      </Pressable>
+      <Pressable
+        onPress={() => onRemoveFriend(friend.userId)}
+        style={({ pressed }) => [
+          styles.iconButton,
+          {
+            backgroundColor: softFill,
+            opacity: pressed ? 0.92 : 1,
+          },
+        ]}
+      >
+        <Ionicons name="close-outline" size={21} color={colors.secondaryText} />
       </Pressable>
     </View>
   );
@@ -288,6 +396,7 @@ function FriendRow({
 export default function SharedManageSheet(props: {
   visible: boolean;
   friends: FriendConnection[];
+  friendGroups: FriendGroup[];
   activeInvite: FriendInvite | null;
   creatingInvite?: boolean;
   loading: boolean;
@@ -297,11 +406,17 @@ export default function SharedManageSheet(props: {
   onRevokeInvite: () => void;
   onOpenFriendSearch: () => void;
   onRemoveFriend: (friendUid: string) => void;
+  onUpdateFriendNickname: (friendUid: string, nickname: string | null) => Promise<void>;
+  onCreateFriendGroup: (input: { name: string; memberUserIds: string[] }) => Promise<void>;
+  onUpdateFriendGroup: (groupId: string, input: { name: string; memberUserIds: string[] }) => Promise<void>;
+  onDeleteFriendGroup: (groupId: string) => Promise<void>;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const { colors } = useTheme();
   const {
     visible,
     friends,
+    friendGroups,
     activeInvite,
     creatingInvite = false,
     loading,
@@ -311,7 +426,21 @@ export default function SharedManageSheet(props: {
     onRevokeInvite,
     onOpenFriendSearch,
     onRemoveFriend,
+    onUpdateFriendNickname,
+    onCreateFriendGroup,
+    onUpdateFriendGroup,
+    onDeleteFriendGroup,
   } = props;
+  const [nicknameFriend, setNicknameFriend] = useState<FriendConnection | null>(null);
+  const [nicknameDraft, setNicknameDraft] = useState('');
+  const [nicknameErrorMessage, setNicknameErrorMessage] = useState<string | null>(null);
+  const [isSavingNickname, setIsSavingNickname] = useState(false);
+  const [editingGroup, setEditingGroup] = useState<FriendGroup | null>(null);
+  const [isGroupEditorVisible, setIsGroupEditorVisible] = useState(false);
+  const [groupNameDraft, setGroupNameDraft] = useState('');
+  const [groupMemberDraft, setGroupMemberDraft] = useState<string[]>([]);
+  const [groupErrorMessage, setGroupErrorMessage] = useState<string | null>(null);
+  const [isSavingGroup, setIsSavingGroup] = useState(false);
 
   const emptyLoadingBody = t('shared.refreshingFriends', 'Refreshing your shared circle...');
   const emptyBody = t(
@@ -319,73 +448,372 @@ export default function SharedManageSheet(props: {
     'Invite someone to start a simple shared feed on Home.'
   );
   const friendFallback = t('shared.friendFallback', 'Friend');
-  const connectedOnLabel = t('shared.connectedOn', 'Connected');
+  const connectedCopyTemplate = t('shared.friendsSince', 'Friends since {{date}}');
   const horizontalPadding =
     Platform.OS === 'ios' ? Sheet.ios.horizontalPadding : Sheet.android.horizontalPadding;
+  const friendLabelById = useMemo(() => {
+    const labels = new Map<string, string>();
+    for (const friend of friends) {
+      labels.set(
+        friend.userId,
+        resolveFriendLabels(friend, friendFallback, connectedCopyTemplate, i18n.language).title
+      );
+    }
+    return labels;
+  }, [connectedCopyTemplate, friendFallback, friends, i18n.language]);
+  const normalizedNicknameDraft = nicknameDraft.trim();
+  const currentNickname = nicknameFriend?.nickname?.trim() ?? '';
+  const canSaveNickname =
+    Boolean(nicknameFriend) &&
+    !isSavingNickname &&
+    normalizedNicknameDraft.length <= 40 &&
+    normalizedNicknameDraft !== currentNickname;
+
+  useEffect(() => {
+    if (!visible) {
+      setNicknameFriend(null);
+      setNicknameDraft('');
+      setNicknameErrorMessage(null);
+      setIsGroupEditorVisible(false);
+      setEditingGroup(null);
+      setGroupNameDraft('');
+      setGroupMemberDraft([]);
+      setGroupErrorMessage(null);
+    }
+  }, [visible]);
+
+  const openNicknameEditor = (friend: FriendConnection) => {
+    setNicknameFriend(friend);
+    setNicknameDraft(friend.nickname ?? '');
+    setNicknameErrorMessage(null);
+  };
+
+  const closeNicknameEditor = () => {
+    if (isSavingNickname) {
+      return;
+    }
+
+    setNicknameFriend(null);
+    setNicknameDraft('');
+    setNicknameErrorMessage(null);
+  };
+
+  const saveNickname = async () => {
+    if (!nicknameFriend || !canSaveNickname) {
+      if (normalizedNicknameDraft.length > 40) {
+        setNicknameErrorMessage(t('shared.friendNicknameTooLong', 'Use 40 characters or fewer.'));
+      }
+      return;
+    }
+
+    setIsSavingNickname(true);
+    setNicknameErrorMessage(null);
+    try {
+      await onUpdateFriendNickname(nicknameFriend.userId, normalizedNicknameDraft || null);
+      setNicknameFriend(null);
+      setNicknameDraft('');
+    } catch (error) {
+      setNicknameErrorMessage(
+        error instanceof Error
+          ? error.message
+          : t('shared.friendNicknameSaveFailed', 'Could not update nickname.')
+      );
+    } finally {
+      setIsSavingNickname(false);
+    }
+  };
+
+  const openGroupEditor = (group: FriendGroup | null = null) => {
+    setEditingGroup(group);
+    setGroupNameDraft(group?.name ?? '');
+    setGroupMemberDraft(group?.memberUserIds ?? []);
+    setGroupErrorMessage(null);
+    setIsGroupEditorVisible(true);
+  };
+
+  const closeGroupEditor = () => {
+    if (isSavingGroup) {
+      return;
+    }
+
+    setIsGroupEditorVisible(false);
+    setEditingGroup(null);
+    setGroupNameDraft('');
+    setGroupMemberDraft([]);
+    setGroupErrorMessage(null);
+  };
+
+  const toggleGroupMember = (friendUid: string) => {
+    setGroupMemberDraft((current) =>
+      current.includes(friendUid)
+        ? current.filter((memberUid) => memberUid !== friendUid)
+        : [...current, friendUid]
+    );
+  };
+
+  const saveGroup = async () => {
+    const name = groupNameDraft.trim();
+    if (!name) {
+      setGroupErrorMessage(t('shared.friendGroupNameRequired', 'Add a group name.'));
+      return;
+    }
+    if (name.length > 40) {
+      setGroupErrorMessage(t('shared.friendGroupNameTooLong', 'Use 40 characters or fewer.'));
+      return;
+    }
+    if (groupMemberDraft.length === 0) {
+      setGroupErrorMessage(t('shared.friendGroupMembersRequired', 'Choose at least one friend.'));
+      return;
+    }
+
+    setIsSavingGroup(true);
+    setGroupErrorMessage(null);
+    try {
+      const input = { name, memberUserIds: groupMemberDraft };
+      if (editingGroup) {
+        await onUpdateFriendGroup(editingGroup.id, input);
+      } else {
+        await onCreateFriendGroup(input);
+      }
+      setIsGroupEditorVisible(false);
+      setEditingGroup(null);
+      setGroupNameDraft('');
+      setGroupMemberDraft([]);
+    } catch (error) {
+      setGroupErrorMessage(
+        error instanceof Error
+          ? error.message
+          : t('shared.friendGroupSaveFailed', 'Could not save group.')
+      );
+    } finally {
+      setIsSavingGroup(false);
+    }
+  };
+
+  const deleteGroup = async () => {
+    if (!editingGroup || isSavingGroup) {
+      return;
+    }
+
+    setIsSavingGroup(true);
+    setGroupErrorMessage(null);
+    try {
+      await onDeleteFriendGroup(editingGroup.id);
+      setIsGroupEditorVisible(false);
+      setEditingGroup(null);
+      setGroupNameDraft('');
+      setGroupMemberDraft([]);
+    } catch (error) {
+      setGroupErrorMessage(
+        error instanceof Error
+          ? error.message
+          : t('shared.friendGroupDeleteFailed', 'Could not delete group.')
+      );
+    } finally {
+      setIsSavingGroup(false);
+    }
+  };
 
   return (
-    <AppSheet
-      visible={visible}
-      onClose={onClose}
-      androidDynamicSizing={false}
-      androidInitialIndex={0}
-      androidSnapPoints={[FIXED_SHEET_HEIGHT]}
-      androidContentContainerStyle={styles.androidSheetContainer}
-      fitToContents={false}
-    >
-      <AppSheetScaffold
-        headerVariant="standard"
-        title={t('shared.manageTitle', 'Friends')}
-        footer={<SheetFooterButton label={t('common.done', 'Done')} onPress={onClose} />}
-        useHorizontalPadding={false}
-        contentBottomPaddingWhenFooter={0}
-        footerTopSpacing={12}
-        style={styles.sheetScaffold}
-        contentContainerStyle={styles.sheetBody}
+    <>
+      <AppSheet
+        visible={visible}
+        onClose={onClose}
+        androidDynamicSizing={false}
+        androidInitialIndex={0}
+        androidSnapPoints={[FIXED_SHEET_HEIGHT]}
+        androidContentContainerStyle={styles.androidSheetContainer}
+        fitToContents={false}
       >
-        <View style={[styles.fixedContent, { paddingHorizontal: horizontalPadding }]}>
-          <InviteActionsCard
-            activeInvite={activeInvite}
-            creatingInvite={creatingInvite}
-            onCreateInvite={onCreateInvite}
-            onShareInvite={onShareInvite}
-            onRevokeInvite={onRevokeInvite}
-            onOpenFriendSearch={onOpenFriendSearch}
-          />
-          <FriendsSectionHeader count={friends.length} />
-        </View>
-        <View style={styles.listShell}>
-          <FriendsList<FriendConnection>
-            data={friends}
-            keyExtractor={(item) => item.userId}
-            renderItem={({ item }) => (
-              <FriendRow
-                friend={item}
-                friendFallback={friendFallback}
-                connectedOnLabel={connectedOnLabel}
-                onRemoveFriend={onRemoveFriend}
+        <AppSheetScaffold
+          headerVariant="standard"
+          title={t('shared.manageTitle', 'Friends')}
+          footer={<SheetFooterButton label={t('common.done', 'Done')} onPress={onClose} />}
+          useHorizontalPadding={false}
+          contentBottomPaddingWhenFooter={0}
+          footerTopSpacing={12}
+          style={styles.sheetScaffold}
+          contentContainerStyle={styles.sheetBody}
+        >
+          <View style={[styles.fixedContent, { paddingHorizontal: horizontalPadding }]}>
+            <InviteActionsCard
+              activeInvite={activeInvite}
+              creatingInvite={creatingInvite}
+              onCreateInvite={onCreateInvite}
+              onShareInvite={onShareInvite}
+              onRevokeInvite={onRevokeInvite}
+              onOpenFriendSearch={onOpenFriendSearch}
+            />
+            <GroupsSectionHeader onCreateGroup={() => openGroupEditor(null)} />
+            {friendGroups.length > 0 ? (
+              <View style={styles.groupList}>
+                {friendGroups.map((group) => (
+                  <GroupRow
+                    key={group.id}
+                    group={group}
+                    memberCount={group.memberUserIds.length}
+                    onPress={openGroupEditor}
+                  />
+                ))}
+              </View>
+            ) : null}
+            <FriendsSectionHeader count={friends.length} compactTop={friendGroups.length === 0} />
+          </View>
+          <View style={styles.listShell}>
+            <FriendsList<FriendConnection>
+              data={friends}
+              keyExtractor={(item) => item.userId}
+              renderItem={({ item }) => (
+                <FriendRow
+                  friend={item}
+                  friendFallback={friendFallback}
+                  connectedCopyTemplate={connectedCopyTemplate}
+                  locale={i18n.language}
+                  onRemoveFriend={onRemoveFriend}
+                  onEditNickname={openNicknameEditor}
+                />
+              )}
+              ListEmptyComponent={(
+                <EmptyFriendsState
+                  loading={loading}
+                  emptyLoadingBody={emptyLoadingBody}
+                  emptyBody={emptyBody}
+                />
+              )}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+              initialNumToRender={12}
+              maxToRenderPerBatch={10}
+              windowSize={5}
+              contentContainerStyle={[
+                styles.listContent,
+                { paddingHorizontal: horizontalPadding },
+              ]}
+            />
+          </View>
+        </AppSheetScaffold>
+      </AppSheet>
+      <TextFieldEditSheet
+        visible={Boolean(nicknameFriend)}
+        value={nicknameDraft}
+        errorMessage={nicknameErrorMessage}
+        helperText={t('shared.friendNicknameHint', 'Only you will see this nickname.')}
+        isSaving={isSavingNickname}
+        onChangeValue={setNicknameDraft}
+        onClose={closeNicknameEditor}
+        onSave={saveNickname}
+        title={t('shared.friendNicknameSheetTitle', 'Friend nickname')}
+        subtitle={
+          nicknameFriend
+            ? resolveFriendLabels(
+                nicknameFriend,
+                friendFallback,
+                connectedCopyTemplate,
+                i18n.language
+              ).meta
+            : undefined
+        }
+        saveLabel={t('shared.friendNicknameSave', 'Save nickname')}
+        placeholder={t('shared.friendNicknamePlaceholder', 'Add nickname')}
+        autoComplete="name"
+        testIDPrefix="friend-nickname"
+      />
+      <AppSheet
+        visible={isGroupEditorVisible}
+        onClose={closeGroupEditor}
+        androidKeyboardInputMode="adjustPan"
+      >
+        <AppSheetScaffold
+          headerVariant="standard"
+          title={
+            editingGroup
+              ? t('shared.friendGroupEditTitle', 'Edit group')
+              : t('shared.friendGroupCreateTitle', 'New group')
+          }
+          subtitle={t('shared.friendGroupSheetSubtitle', 'Pick friends once, then share to them from Home.')}
+          footer={
+            <View style={styles.groupFooter}>
+              <PrimaryButton
+                label={t('shared.friendGroupSave', 'Save group')}
+                onPress={saveGroup}
+                loading={isSavingGroup}
+                testID="friend-group-save-button"
               />
-            )}
-            ListEmptyComponent={(
-              <EmptyFriendsState
-                loading={loading}
-                emptyLoadingBody={emptyLoadingBody}
-                emptyBody={emptyBody}
-              />
-            )}
-            keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}
-            initialNumToRender={12}
-            maxToRenderPerBatch={10}
-            windowSize={5}
-            contentContainerStyle={[
-              styles.listContent,
-              { paddingHorizontal: horizontalPadding },
+              {editingGroup ? (
+                <Pressable
+                  onPress={deleteGroup}
+                  disabled={isSavingGroup}
+                  style={({ pressed }) => [
+                    styles.deleteGroupButton,
+                    { opacity: isSavingGroup ? 0.5 : pressed ? 0.78 : 1 },
+                  ]}
+                >
+                  <Text style={[styles.deleteGroupText, { color: colors.danger }]}>
+                    {t('shared.friendGroupDelete', 'Delete group')}
+                  </Text>
+                </Pressable>
+              ) : null}
+            </View>
+          }
+        >
+          <TextInput
+            value={groupNameDraft}
+            onChangeText={setGroupNameDraft}
+            placeholder={t('shared.friendGroupNamePlaceholder', 'Group name')}
+            placeholderTextColor={colors.secondaryText}
+            autoCapitalize="words"
+            style={[
+              styles.groupNameInput,
+              {
+                backgroundColor: colors.surface,
+                borderColor: groupErrorMessage ? colors.danger : colors.border,
+                color: colors.text,
+              },
             ]}
+            testID="friend-group-name-input"
           />
-        </View>
-      </AppSheetScaffold>
-    </AppSheet>
+          <Text
+            style={[
+              styles.groupHelperText,
+              { color: groupErrorMessage ? colors.danger : colors.secondaryText },
+            ]}
+          >
+            {groupErrorMessage ?? t('shared.friendGroupMembersHint', 'Choose the friends in this group.')}
+          </Text>
+          <View style={styles.groupMembers}>
+            {friends.map((friend) => {
+              const selected = groupMemberDraft.includes(friend.userId);
+              const label = friendLabelById.get(friend.userId) ?? friendFallback;
+              return (
+                <Pressable
+                  key={friend.userId}
+                  accessibilityRole="checkbox"
+                  accessibilityState={{ checked: selected }}
+                  onPress={() => toggleGroupMember(friend.userId)}
+                  style={({ pressed }) => [
+                    styles.memberChoice,
+                    {
+                      backgroundColor: selected ? colors.primarySoft : colors.surface,
+                      borderColor: selected ? `${colors.primary}66` : colors.border,
+                      opacity: pressed ? 0.86 : 1,
+                    },
+                  ]}
+                >
+                  <Text numberOfLines={1} style={[styles.memberChoiceText, { color: colors.text }]}>
+                    {label}
+                  </Text>
+                  <Ionicons
+                    name={selected ? 'checkmark-circle' : 'ellipse-outline'}
+                    size={20}
+                    color={selected ? colors.primary : colors.secondaryText}
+                  />
+                </Pressable>
+              );
+            })}
+          </View>
+        </AppSheetScaffold>
+      </AppSheet>
+    </>
   );
 }
 
@@ -414,18 +842,26 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: 12,
-    marginTop: 28,
-    marginBottom: 14,
+    marginBottom: 10,
+  },
+  sectionHeaderTop: {
+    marginTop: 20,
+  },
+  sectionHeaderCompactTop: {
+    marginTop: 10,
+  },
+  groupsHeaderTop: {
+    marginTop: 18,
   },
   sectionTitle: {
-    fontSize: 18,
-    lineHeight: 22,
+    fontSize: 17,
+    lineHeight: 21,
     fontWeight: '800',
   },
   inviteCard: {
-    borderRadius: 24,
+    borderRadius: 20,
     borderWidth: 1,
-    padding: 16,
+    padding: 12,
   },
   inviteCardHeader: {
     flexDirection: 'row',
@@ -433,8 +869,8 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   inviteCardIcon: {
-    width: 36,
-    height: 36,
+    width: 32,
+    height: 32,
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
@@ -444,51 +880,51 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   inviteCardTitle: {
-    fontSize: 16,
-    lineHeight: 20,
+    fontSize: 15,
+    lineHeight: 19,
     fontWeight: '800',
   },
   inviteCardBody: {
     ...Typography.body,
-    marginTop: 4,
-    fontSize: 14,
-    lineHeight: 20,
+    marginTop: 2,
+    fontSize: 13,
+    lineHeight: 18,
   },
   inviteActionsRow: {
-    marginTop: 14,
+    marginTop: 10,
     flexDirection: 'row',
-    gap: 10,
+    gap: 8,
   },
   searchFriendAction: {
-    marginTop: 12,
-    minHeight: 48,
+    marginTop: 8,
+    minHeight: 42,
     borderRadius: 999,
     borderWidth: 1,
-    paddingHorizontal: 16,
+    paddingHorizontal: 14,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
   },
   searchFriendActionText: {
-    fontSize: 14,
-    lineHeight: 18,
+    fontSize: 13,
+    lineHeight: 17,
     fontWeight: '700',
   },
   primaryInviteAction: {
     flex: 1,
     minWidth: 0,
-    minHeight: 48,
+    minHeight: 42,
     borderRadius: 999,
-    paddingHorizontal: 16,
+    paddingHorizontal: 14,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
   },
   primaryInviteActionText: {
-    fontSize: 14,
-    lineHeight: 18,
+    fontSize: 13,
+    lineHeight: 17,
     fontWeight: '700',
     color: '#1C1C1E',
     flexShrink: 1,
@@ -496,16 +932,16 @@ const styles = StyleSheet.create({
   secondaryInviteAction: {
     flex: 1,
     minWidth: 0,
-    minHeight: 48,
+    minHeight: 42,
     borderRadius: 999,
     borderWidth: 1,
-    paddingHorizontal: 16,
+    paddingHorizontal: 14,
     alignItems: 'center',
     justifyContent: 'center',
   },
   secondaryInviteActionText: {
-    fontSize: 14,
-    lineHeight: 18,
+    fontSize: 13,
+    lineHeight: 17,
     fontWeight: '700',
     flexShrink: 1,
   },
@@ -520,6 +956,32 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 14,
     fontWeight: '700',
+  },
+  addGroupButton: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  groupList: {
+    gap: 8,
+    marginBottom: 2,
+  },
+  groupRow: {
+    minHeight: 58,
+    borderRadius: 18,
+    paddingHorizontal: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  groupIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   emptyText: {
     ...Typography.body,
@@ -547,26 +1009,25 @@ const styles = StyleSheet.create({
   friendRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 10,
     minHeight: ESTIMATED_FRIEND_ROW_HEIGHT,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    paddingVertical: 10,
+    paddingVertical: 7,
   },
   avatarImage: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
   },
   avatarFallback: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
   },
   avatarLabel: {
     ...Typography.body,
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '700',
   },
   friendCopy: {
@@ -576,20 +1037,68 @@ const styles = StyleSheet.create({
   },
   friendName: {
     ...Typography.body,
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '700',
   },
   friendMeta: {
     ...Typography.body,
-    fontSize: 13,
-    lineHeight: 18,
+    fontSize: 12,
+    lineHeight: 16,
   },
-  removeButton: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
+  iconButton: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,
+  },
+  groupFooter: {
+    width: '100%',
+    gap: 8,
+  },
+  deleteGroupButton: {
+    minHeight: 42,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  deleteGroupText: {
+    fontSize: 14,
+    lineHeight: 18,
+    fontWeight: '700',
+  },
+  groupNameInput: {
+    minHeight: 54,
+    borderRadius: 16,
+    borderWidth: 1,
+    paddingHorizontal: 16,
+    ...Typography.body,
+  },
+  groupHelperText: {
+    ...Typography.body,
+    fontSize: 14,
+    lineHeight: 20,
+    marginTop: 10,
+  },
+  groupMembers: {
+    marginTop: 14,
+    gap: 8,
+  },
+  memberChoice: {
+    minHeight: 48,
+    borderRadius: 16,
+    borderWidth: 1,
+    paddingHorizontal: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  memberChoiceText: {
+    flex: 1,
+    minWidth: 0,
+    ...Typography.body,
+    fontSize: 15,
+    fontWeight: '700',
   },
 });

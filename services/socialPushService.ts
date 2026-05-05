@@ -51,6 +51,10 @@ export type SocialNotificationEvent =
   | {
       type: 'shared_post_created';
       postId: string;
+    }
+  | {
+      type: 'shared_post_response_created';
+      responseId: string;
     };
 
 type SocialNotificationResponse =

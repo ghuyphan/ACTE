@@ -6,21 +6,30 @@ import {
   addFriendByUsername as addFriendByUsernameRemote,
   acceptFriendInvite as acceptInvite,
   createFriendInvite as createInvite,
+  createFriendGroup as createGroup,
   createSharedPost as createPost,
+  createSharedPostResponse as createPostResponse,
+  deleteFriendGroup as removeGroup,
   deleteOwnedSharedPostsForNotes,
   deleteSharedPost as deletePost,
   findFriendByUsername as findFriendByUsernameRemote,
+  FriendGroup,
   FriendSearchResult,
   findOwnedSharedPostIdsForNote,
   FriendConnection,
   FriendInvite,
+  getSharedPostResponses as fetchPostResponses,
   getSharedFeedErrorMessage,
   invalidateSharedFeedRefresh,
   refreshSharedFeed as fetchSharedFeed,
   removeFriend as deleteFriend,
   revokeFriendInvite as revokeInvite,
   SharedPost,
+  SharedPostResponse,
   subscribeToSharedFeed,
+  subscribeToSharedPostResponses as subscribeToPostResponses,
+  updateFriendGroup as saveGroup,
+  updateFriendNickname as saveFriendNickname,
   updateSharedPost as updatePost,
 } from '../services/sharedFeedService';
 import {
@@ -52,6 +61,7 @@ import { useStartupInteraction } from './app/useHomeStartupReady';
 import { useAuth } from './useAuth';
 import { useConnectivity } from './useConnectivity';
 import { logStartupEvent, traceStartupAsync } from '../utils/startupTrace';
+import { applyFriendNicknamesToSharedPosts } from '../utils/sharedDisplayNames';
 
 export type SharedFeedLoadPhase = 'bootstrapping' | 'cache-ready' | 'ready' | 'refreshing';
 
@@ -64,6 +74,7 @@ interface SharedFeedStoreValue {
   dataSource: 'live' | 'cache';
   lastUpdatedAt: string | null;
   friends: FriendConnection[];
+  friendGroups: FriendGroup[];
   sharedPosts: SharedPost[];
   ownedSharedNoteIds: string[];
   activeInvite: FriendInvite | null;
@@ -74,7 +85,24 @@ interface SharedFeedStoreValue {
   findFriendByUsername: (username: string) => Promise<FriendSearchResult>;
   addFriendByUsername: (username: string) => Promise<void>;
   removeFriend: (friendUid: string) => Promise<void>;
+  updateFriendNickname: (friendUid: string, nickname: string | null) => Promise<void>;
+  createFriendGroup: (input: { name: string; memberUserIds: string[] }) => Promise<void>;
+  updateFriendGroup: (groupId: string, input: { name: string; memberUserIds: string[] }) => Promise<void>;
+  deleteFriendGroup: (groupId: string) => Promise<void>;
   createSharedPost: (note: Note, audienceUserIds?: string[]) => Promise<SharedPost>;
+  getSharedPostResponses: (postId: string) => Promise<SharedPostResponse[]>;
+  subscribeToSharedPostResponses: (
+    postId: string,
+    options: {
+      onResponses: (responses: SharedPostResponse[]) => void | Promise<void>;
+      onError?: (error: unknown) => void;
+      onStatus?: (status: 'connecting' | 'connected' | 'disconnected') => void;
+    }
+  ) => () => void;
+  createSharedPostResponse: (
+    postId: string,
+    input: { emoji?: string | null; text?: string | null }
+  ) => Promise<SharedPostResponse>;
   updateSharedNote: (note: Note) => Promise<void>;
   deleteSharedNote: (noteId: string) => Promise<void>;
   deleteSharedNotes: (noteIds: string[]) => Promise<void>;
@@ -87,6 +115,7 @@ const SHARED_MEDIA_HYDRATION_CONCURRENCY = 3;
 
 type SharedFeedSnapshotState = {
   friends: FriendConnection[];
+  friendGroups?: FriendGroup[];
   sharedPosts: SharedPost[];
   activeInvite: FriendInvite | null;
   ownedSharedNoteIds?: string[];
@@ -302,6 +331,7 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
   const { isOnline } = useConnectivity();
   const { startupInteractive } = useStartupInteraction();
   const [friends, setFriends] = useState<FriendConnection[]>([]);
+  const [friendGroups, setFriendGroups] = useState<FriendGroup[]>([]);
   const [sharedPosts, setSharedPosts] = useState<SharedPost[]>([]);
   const [ownedSharedNoteIds, setOwnedSharedNoteIds] = useState<string[]>([]);
   const [activeInvite, setActiveInvite] = useState<FriendInvite | null>(null);
@@ -310,6 +340,7 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
     initialSharedFeedLoadState
   );
   const friendsRef = useRef<FriendConnection[]>([]);
+  const friendGroupsRef = useRef<FriendGroup[]>([]);
   const sharedPostsRef = useRef<SharedPost[]>([]);
   const ownedSharedNoteIdsRef = useRef<string[]>([]);
   const activeInviteRef = useRef<FriendInvite | null>(null);
@@ -354,6 +385,7 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
     (
       snapshot: {
         friends: FriendConnection[];
+        friendGroups?: FriendGroup[];
         sharedPosts: SharedPost[];
         activeInvite: FriendInvite | null;
         ownedSharedNoteIds?: string[];
@@ -373,11 +405,14 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
             ])
           : derivedOwnedSharedNoteIds;
 
+      const nextFriendGroups = snapshot.friendGroups ?? friendGroupsRef.current;
       friendsRef.current = snapshot.friends;
+      friendGroupsRef.current = nextFriendGroups;
       sharedPostsRef.current = snapshot.sharedPosts;
       ownedSharedNoteIdsRef.current = nextOwnedSharedNoteIds;
       activeInviteRef.current = snapshot.activeInvite;
       setFriends(snapshot.friends);
+      setFriendGroups(nextFriendGroups);
       setSharedPosts(snapshot.sharedPosts);
       setOwnedSharedNoteIds(nextOwnedSharedNoteIds);
       setActiveInvite(snapshot.activeInvite);
@@ -390,6 +425,7 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
     (
       snapshot: {
         friends: FriendConnection[];
+        friendGroups?: FriendGroup[];
         sharedPosts: SharedPost[];
         activeInvite: FriendInvite | null;
         ownedSharedNoteIds?: string[];
@@ -434,6 +470,7 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
     ) => {
       const nextSnapshot = snapshot ?? {
         friends: friendsRef.current,
+        friendGroups: friendGroupsRef.current,
         sharedPosts: sharedPostsRef.current,
         activeInvite: activeInviteRef.current,
         ownedSharedNoteIds: ownedSharedNoteIdsRef.current,
@@ -769,6 +806,7 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
       userUid: string,
       snapshot: {
         friends: FriendConnection[];
+        friendGroups?: FriendGroup[];
         sharedPosts: SharedPost[];
         activeInvite: FriendInvite | null;
         ownedSharedNoteIds?: string[];
@@ -879,6 +917,7 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
       commitSnapshot(
         {
           friends: [],
+          friendGroups: [],
           sharedPosts: [],
           activeInvite: null,
           ownedSharedNoteIds: [],
@@ -1011,6 +1050,7 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
       commitSnapshot(
         {
           friends: [],
+          friendGroups: [],
           sharedPosts: [],
           activeInvite: null,
           ownedSharedNoteIds: [],
@@ -1249,6 +1289,10 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
       );
     }
   }, [isOnline]);
+  const presentedSharedPosts = useMemo(
+    () => applyFriendNicknamesToSharedPosts(sharedPosts, friends, user?.uid ?? null),
+    [friends, sharedPosts, user?.uid]
+  );
 
   return useMemo<SharedFeedStoreValue>(
     () => ({
@@ -1260,7 +1304,8 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
       dataSource,
       lastUpdatedAt,
       friends,
-      sharedPosts,
+      friendGroups,
+      sharedPosts: presentedSharedPosts,
       ownedSharedNoteIds,
       activeInvite,
       refreshSharedFeed: refreshAll,
@@ -1418,6 +1463,98 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
         );
         void refreshAll({ force: true }).catch(() => undefined);
       },
+      updateFriendNickname: async (friendUid: string, nickname: string | null) => {
+        requireOnline();
+        const activeUser = requireUser();
+        const sessionId = sharedFeedSessionRef.current;
+        const connection = await saveFriendNickname(activeUser, friendUid, nickname);
+        if (!isCurrentSharedFeedSession(sessionId, activeUser.uid)) {
+          return;
+        }
+        const nextFriends = upsertFriendConnection(friendsRef.current, connection);
+        commitSnapshotAndPersist(
+          activeUser.uid,
+          {
+            friends: nextFriends,
+            sharedPosts: sharedPostsRef.current,
+            activeInvite: activeInviteRef.current,
+            ownedSharedNoteIds: ownedSharedNoteIdsRef.current,
+          },
+          new Date().toISOString()
+        );
+        void refreshAll({ force: true }).catch(() => undefined);
+      },
+      createFriendGroup: async (input: { name: string; memberUserIds: string[] }) => {
+        requireOnline();
+        const activeUser = requireUser();
+        const sessionId = sharedFeedSessionRef.current;
+        const group = await createGroup(activeUser, input);
+        if (!isCurrentSharedFeedSession(sessionId, activeUser.uid)) {
+          return;
+        }
+
+        const nextGroups = [...friendGroupsRef.current, group];
+        commitSnapshotAndPersist(
+          activeUser.uid,
+          {
+            friends: friendsRef.current,
+            friendGroups: nextGroups,
+            sharedPosts: sharedPostsRef.current,
+            activeInvite: activeInviteRef.current,
+            ownedSharedNoteIds: ownedSharedNoteIdsRef.current,
+          },
+          new Date().toISOString()
+        );
+      },
+      updateFriendGroup: async (
+        groupId: string,
+        input: { name: string; memberUserIds: string[] }
+      ) => {
+        requireOnline();
+        const activeUser = requireUser();
+        const sessionId = sharedFeedSessionRef.current;
+        const group = await saveGroup(activeUser, groupId, input);
+        if (!isCurrentSharedFeedSession(sessionId, activeUser.uid)) {
+          return;
+        }
+
+        const nextGroups = friendGroupsRef.current.map((item) =>
+          item.id === group.id ? group : item
+        );
+        commitSnapshotAndPersist(
+          activeUser.uid,
+          {
+            friends: friendsRef.current,
+            friendGroups: nextGroups,
+            sharedPosts: sharedPostsRef.current,
+            activeInvite: activeInviteRef.current,
+            ownedSharedNoteIds: ownedSharedNoteIdsRef.current,
+          },
+          new Date().toISOString()
+        );
+      },
+      deleteFriendGroup: async (groupId: string) => {
+        requireOnline();
+        const activeUser = requireUser();
+        const sessionId = sharedFeedSessionRef.current;
+        await removeGroup(activeUser, groupId);
+        if (!isCurrentSharedFeedSession(sessionId, activeUser.uid)) {
+          return;
+        }
+
+        const nextGroups = friendGroupsRef.current.filter((group) => group.id !== groupId);
+        commitSnapshotAndPersist(
+          activeUser.uid,
+          {
+            friends: friendsRef.current,
+            friendGroups: nextGroups,
+            sharedPosts: sharedPostsRef.current,
+            activeInvite: activeInviteRef.current,
+            ownedSharedNoteIds: ownedSharedNoteIdsRef.current,
+          },
+          new Date().toISOString()
+        );
+      },
       createSharedPost: async (note: Note, audienceUserIds?: string[]) => {
         requireOnline();
         const activeUser = requireUser();
@@ -1444,6 +1581,31 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
           new Date().toISOString()
         );
         return post;
+      },
+      getSharedPostResponses: async (postId: string) => {
+        requireOnline();
+        const activeUser = requireUser();
+        return fetchPostResponses(activeUser, postId);
+      },
+      subscribeToSharedPostResponses: (
+        postId: string,
+        options: {
+          onResponses: (responses: SharedPostResponse[]) => void | Promise<void>;
+          onError?: (error: unknown) => void;
+          onStatus?: (status: 'connecting' | 'connected' | 'disconnected') => void;
+        }
+      ) => {
+        requireOnline();
+        const activeUser = requireUser();
+        return subscribeToPostResponses(activeUser, postId, options);
+      },
+      createSharedPostResponse: async (
+        postId: string,
+        input: { emoji?: string | null; text?: string | null }
+      ) => {
+        requireOnline();
+        const activeUser = requireUser();
+        return createPostResponse(activeUser, postId, input);
       },
       updateSharedNote: async (note: Note) => {
         requireOnline();
@@ -1576,6 +1738,7 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
       dataSource,
       enabled,
       friends,
+      friendGroups,
       phase,
       initialLoadComplete,
       isOnline,
@@ -1589,7 +1752,7 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
       requireOnline,
       requireUser,
       resolveOwnedPostIdsForNote,
-      sharedPosts,
+      presentedSharedPosts,
       ownedSharedNoteIds,
     ]
   );

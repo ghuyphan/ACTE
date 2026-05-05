@@ -60,12 +60,14 @@ import {
 } from './remoteArtifactUtils';
 import {
   getOwnedSharedNoteIdsFromPosts,
+  normalizeOwnedSharedNoteIds,
 } from './sharedFeedOwnership';
 
 export interface FriendConnection {
   userId: string;
   username: string | null;
   displayNameSnapshot: string | null;
+  nickname: string | null;
   photoURLSnapshot: string | null;
   friendedAt: string;
   lastSharedAt: string | null;
@@ -84,6 +86,14 @@ export interface FriendInvite {
   acceptedAt: string | null;
   expiresAt: string | null;
   url: string;
+}
+
+export interface FriendGroup {
+  id: string;
+  name: string;
+  memberUserIds: string[];
+  createdAt: string;
+  updatedAt: string | null;
 }
 
 export interface FriendSearchResult {
@@ -128,8 +138,20 @@ export interface SharedPost {
   updatedAt: string | null;
 }
 
+export interface SharedPostResponse {
+  id: string;
+  postId: string;
+  authorUid: string;
+  authorDisplayName: string | null;
+  authorPhotoURLSnapshot: string | null;
+  emoji: string | null;
+  text: string;
+  createdAt: string;
+}
+
 export interface SharedFeedSnapshot {
   friends: FriendConnection[];
+  friendGroups: FriendGroup[];
   sharedPosts: SharedPost[];
   activeInvite: FriendInvite | null;
   ownedSharedNoteIds?: string[];
@@ -144,6 +166,7 @@ interface FriendshipRow {
   user_id: string;
   friend_user_id: string;
   display_name_snapshot: string | null;
+  friend_nickname?: string | null;
   photo_url_snapshot: string | null;
   friended_at: string;
   last_shared_at: string | null;
@@ -172,6 +195,19 @@ interface FriendInviteRow {
   expires_at: string | null;
 }
 
+interface FriendGroupRow {
+  id: string;
+  owner_user_id: string;
+  name: string;
+  created_at: string;
+  updated_at: string | null;
+}
+
+interface FriendGroupMemberRow {
+  group_id: string;
+  friend_user_id: string;
+}
+
 interface SharedPostRow {
   id: string;
   author_user_id: string;
@@ -198,6 +234,17 @@ interface SharedPostRow {
   longitude: number | null;
   created_at: string;
   updated_at: string | null;
+}
+
+interface SharedPostResponseRow {
+  id: string;
+  post_id: string;
+  author_user_id: string;
+  author_display_name: string | null;
+  author_photo_url_snapshot: string | null;
+  emoji: string | null;
+  text: string | null;
+  created_at: string;
 }
 
 interface SharedPostTombstoneRow {
@@ -570,6 +617,7 @@ function mapFriend(row: FriendshipRow): FriendConnection {
     userId: row.friend_user_id,
     username: null,
     displayNameSnapshot: row.display_name_snapshot ?? null,
+    nickname: row.friend_nickname?.trim() || null,
     photoURLSnapshot: row.photo_url_snapshot ?? null,
     friendedAt: row.friended_at,
     lastSharedAt: row.last_shared_at ?? null,
@@ -585,6 +633,29 @@ function mapFriendSearchResult(row: FriendSearchRow): FriendSearchResult {
     photoURL: row.photo_url ?? null,
     isSelf: Boolean(row.is_self),
     alreadyFriends: Boolean(row.already_friends),
+  };
+}
+
+function mapFriendGroup(row: FriendGroupRow, memberUserIds: string[]): FriendGroup {
+  return {
+    id: row.id,
+    name: row.name.trim(),
+    memberUserIds,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at ?? null,
+  };
+}
+
+function mapSharedPostResponse(row: SharedPostResponseRow): SharedPostResponse {
+  return {
+    id: row.id,
+    postId: row.post_id,
+    authorUid: row.author_user_id,
+    authorDisplayName: row.author_display_name ?? null,
+    authorPhotoURLSnapshot: row.author_photo_url_snapshot ?? null,
+    emoji: row.emoji?.trim() || null,
+    text: row.text?.trim() ?? '',
+    createdAt: row.created_at,
   };
 }
 
@@ -1013,7 +1084,7 @@ async function getFriendsForUser(userUid: string) {
   const { data, error } = await requireSupabase()
     .from('friendships')
     .select(
-      'user_id, friend_user_id, display_name_snapshot, photo_url_snapshot, friended_at, last_shared_at, created_by_invite_id'
+      'user_id, friend_user_id, display_name_snapshot, friend_nickname, photo_url_snapshot, friended_at, last_shared_at, created_by_invite_id'
     )
     .eq('user_id', userUid)
     .order('friended_at', { ascending: true });
@@ -1041,6 +1112,47 @@ async function getFriendsForUser(userUid: string) {
         return friendship;
       }
     })
+  );
+}
+
+async function getFriendGroupsForUser(userUid: string): Promise<FriendGroup[]> {
+  const supabase = requireSupabase();
+  const [groupsResponse, membersResponse] = await Promise.all([
+    supabase
+      .from('friend_groups')
+      .select('id, owner_user_id, name, created_at, updated_at')
+      .eq('owner_user_id', userUid)
+      .order('created_at', { ascending: true }),
+    supabase
+      .from('friend_group_members')
+      .select('group_id, friend_user_id')
+      .eq('owner_user_id', userUid),
+  ]);
+
+  if (groupsResponse.error) {
+    throw groupsResponse.error;
+  }
+
+  if (membersResponse.error) {
+    throw membersResponse.error;
+  }
+
+  const memberIdsByGroupId = new Map<string, string[]>();
+  for (const row of (membersResponse.data ?? []) as FriendGroupMemberRow[]) {
+    const groupId = row.group_id?.trim();
+    const friendUserId = row.friend_user_id?.trim();
+    if (!groupId || !friendUserId) {
+      continue;
+    }
+
+    memberIdsByGroupId.set(groupId, [
+      ...(memberIdsByGroupId.get(groupId) ?? []),
+      friendUserId,
+    ]);
+  }
+
+  return ((groupsResponse.data ?? []) as FriendGroupRow[]).map((row) =>
+    mapFriendGroup(row, Array.from(new Set(memberIdsByGroupId.get(row.id) ?? [])))
   );
 }
 
@@ -1128,8 +1240,9 @@ async function performSharedFeedRefresh(user: AppUser): Promise<SharedFeedSnapsh
 
   const friends = await getFriendsForUser(user.id);
 
-  const [activeInvite, ownedSharedNoteIds, postsResponse] = await Promise.all([
+  const [activeInvite, friendGroups, ownedSharedNoteIds, postsResponse] = await Promise.all([
     getActiveFriendInvite(user),
+    getFriendGroupsForUser(user.id),
     getOwnedSharedSourceNoteIds(user.id, friends),
     requireSupabase()
       .from('shared_posts')
@@ -1151,6 +1264,7 @@ async function performSharedFeedRefresh(user: AppUser): Promise<SharedFeedSnapsh
 
   const snapshot = {
     friends,
+    friendGroups,
     sharedPosts,
     activeInvite,
     ownedSharedNoteIds,
@@ -1275,6 +1389,26 @@ export function subscribeToSharedFeed(
         schema: 'public',
         table: 'friend_invites',
         filter: `inviter_user_id=eq.${user.id}`,
+      },
+      () => scheduleRefresh({ force: true })
+    )
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'friend_groups',
+        filter: `owner_user_id=eq.${user.id}`,
+      },
+      () => scheduleRefresh({ force: true })
+    )
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'friend_group_members',
+        filter: `owner_user_id=eq.${user.id}`,
       },
       () => scheduleRefresh({ force: true })
     )
@@ -1469,6 +1603,188 @@ export async function removeFriend(user: AppUser, friendUid: string): Promise<vo
   }
 }
 
+export async function updateFriendNickname(
+  user: AppUser,
+  friendUid: string,
+  nickname: string | null
+): Promise<FriendConnection> {
+  await ensureSupabaseSessionMatchesUser(user.id);
+  invalidateSharedFeedRefresh(user.id);
+
+  const normalizedFriendUid = friendUid.trim();
+  if (!normalizedFriendUid) {
+    throw new Error('Friend required.');
+  }
+
+  const normalizedNickname = nickname?.trim() || null;
+  const { data, error } = await requireSupabase().rpc('update_friend_nickname', {
+    target_friend_user_id: normalizedFriendUid,
+    nickname: normalizedNickname,
+  });
+
+  if (error) {
+    throw error;
+  }
+
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row) {
+    throw new Error('Friend not found.');
+  }
+
+  const connection = mapFriend(row as FriendshipRow);
+  const profile = await getUserProfileSnapshot(connection.userId);
+
+  return {
+    ...connection,
+    username: profile.username ?? connection.username,
+    displayNameSnapshot: profile.displayNameSnapshot ?? connection.displayNameSnapshot,
+    photoURLSnapshot: profile.photoURLSnapshot ?? connection.photoURLSnapshot,
+  };
+}
+
+function normalizeFriendGroupName(name: string) {
+  return name.trim().replace(/\s+/g, ' ');
+}
+
+async function assertFriendGroupMembers(userUid: string, memberUserIds: string[]) {
+  const normalizedMemberUserIds = normalizeOwnedSharedNoteIds(memberUserIds).filter(
+    (memberUserId) => memberUserId !== userUid
+  );
+  if (normalizedMemberUserIds.length === 0) {
+    throw new Error('Choose at least one friend.');
+  }
+
+  const friendUserIdSet = new Set((await getFriendsForUser(userUid)).map((friend) => friend.userId));
+  const invalidMember = normalizedMemberUserIds.find((memberUserId) => !friendUserIdSet.has(memberUserId));
+  if (invalidMember) {
+    throw new Error('Groups can only include connected friends.');
+  }
+
+  return normalizedMemberUserIds;
+}
+
+async function replaceFriendGroupMembers(
+  userUid: string,
+  groupId: string,
+  memberUserIds: string[]
+) {
+  const supabase = requireSupabase();
+  const deleteResponse = await supabase
+    .from('friend_group_members')
+    .delete()
+    .eq('owner_user_id', userUid)
+    .eq('group_id', groupId);
+
+  if (deleteResponse.error) {
+    throw deleteResponse.error;
+  }
+
+  const rows = memberUserIds.map((friendUserId) => ({
+    owner_user_id: userUid,
+    group_id: groupId,
+    friend_user_id: friendUserId,
+  }));
+  const insertResponse = await supabase.from('friend_group_members').insert(rows);
+
+  if (insertResponse.error) {
+    throw insertResponse.error;
+  }
+}
+
+export async function createFriendGroup(
+  user: AppUser,
+  input: { name: string; memberUserIds: string[] }
+): Promise<FriendGroup> {
+  await ensureSupabaseSessionMatchesUser(user.id);
+  invalidateSharedFeedRefresh(user.id);
+
+  const name = normalizeFriendGroupName(input.name);
+  if (!name) {
+    throw new Error('Group name required.');
+  }
+
+  if (name.length > 40) {
+    throw new Error('Group name must be 40 characters or fewer.');
+  }
+
+  const memberUserIds = await assertFriendGroupMembers(user.id, input.memberUserIds);
+  const now = getNowIso();
+  const row: FriendGroupRow = {
+    id: `friend-group-${Date.now()}-${Crypto.randomUUID().slice(0, 8)}`,
+    owner_user_id: user.id,
+    name,
+    created_at: now,
+    updated_at: null,
+  };
+  const { error } = await requireSupabase().from('friend_groups').insert(row);
+  if (error) {
+    throw error;
+  }
+
+  await replaceFriendGroupMembers(user.id, row.id, memberUserIds);
+  return mapFriendGroup(row, memberUserIds);
+}
+
+export async function updateFriendGroup(
+  user: AppUser,
+  groupId: string,
+  input: { name: string; memberUserIds: string[] }
+): Promise<FriendGroup> {
+  await ensureSupabaseSessionMatchesUser(user.id);
+  invalidateSharedFeedRefresh(user.id);
+
+  const normalizedGroupId = groupId.trim();
+  const name = normalizeFriendGroupName(input.name);
+  if (!normalizedGroupId) {
+    throw new Error('Group required.');
+  }
+
+  if (!name) {
+    throw new Error('Group name required.');
+  }
+
+  if (name.length > 40) {
+    throw new Error('Group name must be 40 characters or fewer.');
+  }
+
+  const memberUserIds = await assertFriendGroupMembers(user.id, input.memberUserIds);
+  const updatedAt = getNowIso();
+  const { data, error } = await requireSupabase()
+    .from('friend_groups')
+    .update({ name, updated_at: updatedAt })
+    .eq('id', normalizedGroupId)
+    .eq('owner_user_id', user.id)
+    .select('id, owner_user_id, name, created_at, updated_at')
+    .single<FriendGroupRow>();
+
+  if (error) {
+    throw error;
+  }
+
+  await replaceFriendGroupMembers(user.id, normalizedGroupId, memberUserIds);
+  return mapFriendGroup(data, memberUserIds);
+}
+
+export async function deleteFriendGroup(user: AppUser, groupId: string): Promise<void> {
+  await ensureSupabaseSessionMatchesUser(user.id);
+  invalidateSharedFeedRefresh(user.id);
+
+  const normalizedGroupId = groupId.trim();
+  if (!normalizedGroupId) {
+    return;
+  }
+
+  const { error } = await requireSupabase()
+    .from('friend_groups')
+    .delete()
+    .eq('id', normalizedGroupId)
+    .eq('owner_user_id', user.id);
+
+  if (error) {
+    throw error;
+  }
+}
+
 export async function addFriendByUsername(
   user: AppUser,
   username: string
@@ -1642,6 +1958,174 @@ export async function createSharedPost(
     });
     throw error;
   }
+}
+
+export async function getSharedPostResponses(
+  user: AppUser,
+  postId: string
+): Promise<SharedPostResponse[]> {
+  await ensureSupabaseSessionMatchesUser(user.id);
+
+  const normalizedPostId = postId.trim();
+  if (!normalizedPostId) {
+    return [];
+  }
+
+  const { data, error } = await requireSupabase()
+    .from('shared_post_responses')
+    .select('id, post_id, author_user_id, author_display_name, author_photo_url_snapshot, emoji, text, created_at')
+    .eq('post_id', normalizedPostId)
+    .order('created_at', { ascending: true })
+    .limit(50);
+
+  if (error) {
+    throw error;
+  }
+
+  return ((data ?? []) as SharedPostResponseRow[]).map(mapSharedPostResponse);
+}
+
+export function subscribeToSharedPostResponses(
+  user: AppUser,
+  postId: string,
+  options: {
+    onResponses: (responses: SharedPostResponse[]) => void | Promise<void>;
+    onError?: (error: unknown) => void;
+    onStatus?: (status: 'connecting' | 'connected' | 'disconnected') => void;
+  }
+) {
+  const normalizedPostId = postId.trim();
+  if (!normalizedPostId) {
+    return () => undefined;
+  }
+
+  const supabase = requireSupabase();
+  let disposed = false;
+  let refreshTimer: ReturnType<typeof setTimeout> | null = null;
+  let refreshInFlight: Promise<void> | null = null;
+  let refreshQueued = false;
+
+  const refresh = () => {
+    if (disposed) {
+      return;
+    }
+
+    if (refreshInFlight) {
+      refreshQueued = true;
+      return;
+    }
+
+    refreshInFlight = getSharedPostResponses(user, normalizedPostId)
+      .then((responses) => {
+        if (!disposed) {
+          options.onResponses(responses);
+        }
+      })
+      .catch((error) => {
+        if (!disposed) {
+          options.onError?.(error);
+        }
+      })
+      .finally(() => {
+        refreshInFlight = null;
+        if (!disposed && refreshQueued) {
+          refreshQueued = false;
+          scheduleRefresh();
+        }
+      });
+  };
+
+  const scheduleRefresh = () => {
+    if (refreshTimer) {
+      clearTimeout(refreshTimer);
+    }
+
+    refreshTimer = setTimeout(() => {
+      refreshTimer = null;
+      refresh();
+    }, 100);
+  };
+
+  options.onStatus?.('connecting');
+  const channel = supabase
+    .channel(`shared-post-responses:${normalizedPostId}`)
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'shared_post_responses',
+        filter: `post_id=eq.${normalizedPostId}`,
+      },
+      () => scheduleRefresh()
+    )
+    .subscribe((status) => {
+      if (disposed) {
+        return;
+      }
+
+      options.onStatus?.(status === 'SUBSCRIBED' ? 'connected' : 'connecting');
+    });
+
+  refresh();
+
+  return () => {
+    disposed = true;
+    options.onStatus?.('disconnected');
+    if (refreshTimer) {
+      clearTimeout(refreshTimer);
+    }
+    void supabase.removeChannel(channel);
+  };
+}
+
+export async function createSharedPostResponse(
+  user: AppUser,
+  postId: string,
+  input: { emoji?: string | null; text?: string | null }
+): Promise<SharedPostResponse> {
+  await ensureSupabaseSessionMatchesUser(user.id);
+
+  const normalizedPostId = postId.trim();
+  if (!normalizedPostId) {
+    throw new Error('Shared post required.');
+  }
+
+  const emoji = input.emoji?.trim() || null;
+  const text = input.text?.trim() || '';
+  if (!emoji && !text) {
+    throw new Error('Add a reaction or a short reply.');
+  }
+
+  if (text.length > 160) {
+    throw new Error('Use 160 characters or fewer.');
+  }
+
+  const id = `shared-response-${Date.now()}-${Crypto.randomUUID().slice(0, 8)}`;
+  const record: SharedPostResponseRow = {
+    id,
+    post_id: normalizedPostId,
+    author_user_id: user.id,
+    author_display_name: getDisplayName(user),
+    author_photo_url_snapshot: user.photoURL ?? null,
+    emoji,
+    text,
+    created_at: getNowIso(),
+  };
+
+  const { error } = await requireSupabase().from('shared_post_responses').insert(record);
+  if (error) {
+    throw error;
+  }
+
+  void sendSocialNotificationEvent({
+    type: 'shared_post_response_created',
+    responseId: id,
+  }).catch((notificationError) => {
+    console.warn('[shared-feed] Failed to send shared response notification:', notificationError);
+  });
+
+  return mapSharedPostResponse(record);
 }
 
 export async function updateSharedPost(

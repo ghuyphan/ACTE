@@ -16,7 +16,15 @@ import { createLegalLinkActions, getLegalLinkAvailability } from '../shared/lega
 export function useProfileScreenModel() {
   const { t } = useTranslation();
   const { colors, isDark } = useTheme();
-  const { user, isAuthAvailable, deleteAccount, signOut, updateAvatar, updateUsername } = useAuth();
+  const {
+    user,
+    isAuthAvailable,
+    deleteAccount,
+    signOut,
+    updateAvatar,
+    updateDisplayName,
+    updateUsername,
+  } = useAuth();
   const { isOnline } = useConnectivity();
   const { tier } = useSubscription();
   const router = useRouter();
@@ -25,10 +33,14 @@ export function useProfileScreenModel() {
   const legalLinkActions = useMemo(createLegalLinkActions, []);
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
+  const [isNameSheetVisible, setIsNameSheetVisible] = useState(false);
+  const [isSavingName, setIsSavingName] = useState(false);
   const [isUsernameSheetVisible, setIsUsernameSheetVisible] = useState(false);
   const [isSavingUsername, setIsSavingUsername] = useState(false);
   const [isUpdatingAvatar, setIsUpdatingAvatar] = useState(false);
   const [isUsernameCopied, setIsUsernameCopied] = useState(false);
+  const [nameDraft, setNameDraft] = useState('');
+  const [nameErrorMessage, setNameErrorMessage] = useState<string | null>(null);
   const [usernameDraft, setUsernameDraft] = useState('');
   const [usernameErrorMessage, setUsernameErrorMessage] = useState<string | null>(null);
   const [transitionUser, setTransitionUser] = useState(user);
@@ -63,6 +75,13 @@ export function useProfileScreenModel() {
 
   const displayUser = user ?? (isTransitioningAccount ? transitionUser : null);
   const canEditUsername = Boolean(displayUser && !displayUser.usernameSetAt);
+
+  useEffect(() => {
+    if (!isNameSheetVisible) {
+      setNameDraft(displayUser?.displayName ?? '');
+      setNameErrorMessage(null);
+    }
+  }, [displayUser?.displayName, isNameSheetVisible]);
 
   useEffect(() => {
     if (!isUsernameSheetVisible) {
@@ -105,6 +124,11 @@ export function useProfileScreenModel() {
     normalizedUsernameDraft.length > 0 &&
     normalizedUsernameDraft !== (displayUser?.username ?? '');
   const canEditAvatar = Boolean(displayUser) && !isTransitioningAccount && !isUpdatingAvatar;
+  const normalizedNameDraft = nameDraft.trim();
+  const canSubmitName =
+    Boolean(displayUser) &&
+    !isSavingName &&
+    normalizedNameDraft !== (displayUser?.displayName ?? '');
 
   const openSignIn = () => {
     router.replace({
@@ -125,6 +149,26 @@ export function useProfileScreenModel() {
     setIsUsernameSheetVisible(true);
   };
 
+  const openNameEditor = () => {
+    if (!displayUser || isSavingName) {
+      return;
+    }
+
+    setNameDraft(displayUser.displayName ?? '');
+    setNameErrorMessage(null);
+    setIsNameSheetVisible(true);
+  };
+
+  const closeNameEditor = () => {
+    if (isSavingName) {
+      return;
+    }
+
+    setIsNameSheetVisible(false);
+    setNameErrorMessage(null);
+    setNameDraft(displayUser?.displayName ?? '');
+  };
+
   const closeUsernameEditor = () => {
     if (isSavingUsername) {
       return;
@@ -133,6 +177,36 @@ export function useProfileScreenModel() {
     setIsUsernameSheetVisible(false);
     setUsernameErrorMessage(null);
     setUsernameDraft(displayUser?.username ?? '');
+  };
+
+  const saveName = async () => {
+    if (!displayUser || !canSubmitName) {
+      return;
+    }
+
+    if (isProfileOffline) {
+      setNameErrorMessage(null);
+      showAppAlert(offlineActionTitle, offlineActionBody);
+      return;
+    }
+
+    setIsSavingName(true);
+    setNameErrorMessage(null);
+
+    try {
+      const result = await updateDisplayName(normalizedNameDraft || null);
+      if (result.status !== 'success') {
+        setNameErrorMessage(
+          result.message ?? t('profile.nameSaveFailed', 'We could not update your name right now.')
+        );
+        return;
+      }
+
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setIsNameSheetVisible(false);
+    } finally {
+      setIsSavingName(false);
+    }
   };
 
   const copyUsername = useCallback(async () => {
@@ -395,6 +469,7 @@ export function useProfileScreenModel() {
     avatarLabel,
     canEditUsername,
     colors,
+    closeNameEditor,
     closeUsernameEditor,
     canEditAvatar,
     copyUsername,
@@ -403,13 +478,19 @@ export function useProfileScreenModel() {
     isAuthAvailable,
     isDark,
     isDeletingAccount,
+    isNameSheetVisible,
+    isSavingName,
     isSigningOut,
     isSavingUsername,
     isUpdatingAvatar,
     isUsernameCopied,
     isUsernameSheetVisible,
     membershipLabel,
+    nameDraft,
+    nameErrorMessage,
+    nameHelperText: t('profile.nameHint', 'This is the name friends see when you share.'),
     openSignIn,
+    openNameEditor,
     openUsernameEditor,
     profileName,
     profileSecondaryLabel,
@@ -420,7 +501,9 @@ export function useProfileScreenModel() {
     usernameHelperText: canEditUsername
       ? t('profile.usernameHint', 'Choose carefully. You can change your username once.')
       : t('profile.usernameLockedHint', 'Your username has already been set.'),
+    setNameDraft,
     setUsernameDraft,
+    saveName,
     saveUsername,
     user: displayUser,
     handleDeleteAccount,

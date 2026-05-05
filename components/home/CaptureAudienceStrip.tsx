@@ -4,11 +4,12 @@ import type { TFunction } from 'i18next';
 import { memo, useCallback, useMemo } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useTheme } from '../../hooks/useTheme';
-import type { FriendConnection } from '../../services/sharedFeedService';
+import type { FriendConnection, FriendGroup } from '../../services/sharedFeedService';
 import CaptureFooterFrame from './CaptureFooterFrame';
 
 interface CaptureAudienceStripProps {
   friends: FriendConnection[];
+  friendGroups?: FriendGroup[];
   selectedFriendUid: string | null;
   onSelectFriendUid: (friendUid: string | null) => void;
   t: TFunction;
@@ -22,6 +23,7 @@ type AudienceItem = {
   isAllChip: boolean;
   avatarPhotoUrl?: string | null;
   avatarLabel?: string;
+  iconName?: React.ComponentProps<typeof Ionicons>['name'];
 };
 
 interface AudienceChipProps {
@@ -31,11 +33,17 @@ interface AudienceChipProps {
   accessibilityLabel: string;
   avatarPhotoUrl?: string | null;
   avatarLabel?: string;
+  iconName?: React.ComponentProps<typeof Ionicons>['name'];
   isAllChip?: boolean;
   onSelectFriendUid: (friendUid: string | null) => void;
 }
 
 function getFriendLabel(friend: FriendConnection, fallback: string) {
+  const nickname = friend.nickname?.trim();
+  if (nickname) {
+    return nickname.split(/\s+/)[0] ?? nickname;
+  }
+
   const username = friend.username?.trim();
   if (username) {
     return `@${username.replace(/^@+/, '')}`;
@@ -56,6 +64,7 @@ const AudienceChip = memo(function AudienceChip({
   accessibilityLabel,
   avatarPhotoUrl = null,
   avatarLabel = '',
+  iconName,
   isAllChip = false,
   onSelectFriendUid,
 }: AudienceChipProps) {
@@ -105,6 +114,21 @@ const AudienceChip = memo(function AudienceChip({
               color={selected ? '#1C1C1E' : colors.captureGlassText}
             />
           </View>
+        ) : iconName ? (
+          <View
+            style={[
+              styles.friendAvatar,
+              {
+                backgroundColor: selected ? colors.primarySoft : 'rgba(255,255,255,0.08)',
+              },
+            ]}
+          >
+            <Ionicons
+              name={iconName}
+              size={15}
+              color={selected ? colors.primary : colors.captureGlassText}
+            />
+          </View>
         ) : avatarPhotoUrl ? (
           <Image source={{ uri: avatarPhotoUrl }} style={styles.friendAvatar} contentFit="cover" />
         ) : (
@@ -147,6 +171,7 @@ const AudienceChip = memo(function AudienceChip({
 
 function CaptureAudienceStrip({
   friends,
+  friendGroups = [],
   selectedFriendUid,
   onSelectFriendUid,
   t,
@@ -161,6 +186,16 @@ function CaptureAudienceStrip({
         selected: selectedFriendUid == null,
         isAllChip: true,
       },
+      ...friendGroups.map((group) => ({
+        id: `group:${group.id}`,
+        label: group.name,
+        accessibilityLabel: t('capture.shareAudienceGroupA11y', 'Share with {{name}}', {
+          name: group.name,
+        }),
+        selected: selectedFriendUid === `group:${group.id}`,
+        isAllChip: false,
+        iconName: 'people-outline' as const,
+      })),
       ...friends.map((friend) => {
         const label = getFriendLabel(friend, friendFallback);
         return {
@@ -176,7 +211,7 @@ function CaptureAudienceStrip({
         };
       }),
     ],
-    [friendFallback, friends, selectedFriendUid, t]
+    [friendFallback, friendGroups, friends, selectedFriendUid, t]
   );
 
   return (
@@ -198,6 +233,7 @@ function CaptureAudienceStrip({
               accessibilityLabel={item.accessibilityLabel}
               avatarPhotoUrl={item.isAllChip ? null : item.avatarPhotoUrl}
               avatarLabel={item.isAllChip ? undefined : item.avatarLabel}
+              iconName={item.iconName}
               isAllChip={item.isAllChip}
               onSelectFriendUid={onSelectFriendUid}
             />

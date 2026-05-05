@@ -127,4 +127,34 @@ describe('useAppNotificationRouting', () => {
       expect(mockClearLastNotificationResponseAsync).toHaveBeenCalledTimes(1);
     });
   });
+
+  it('opens the chat screen for shared response notifications', async () => {
+    const notificationResponse = {
+      notification: {
+        request: {
+          identifier: 'shared-response-1',
+          content: {
+            data: {
+              notificationType: 'shared-response',
+              sharedPostId: 'shared-42',
+              responseId: 'response-42',
+              route: '/shared/chat/shared-42',
+            },
+          },
+        },
+      },
+    } as unknown as Notifications.NotificationResponse;
+
+    mockGetLastNotificationResponseAsync.mockResolvedValue(notificationResponse);
+    mockRootNavigationState = { key: 'root-ready' };
+
+    renderHook(() => useAppNotificationRouting());
+
+    await waitFor(() => {
+      expect(mockCloseNoteDetail).toHaveBeenCalledTimes(1);
+      expect(mockPush).toHaveBeenCalledWith('/shared/chat/shared-42');
+      expect(mockRequestFeedFocus).not.toHaveBeenCalled();
+      expect(mockClearLastNotificationResponseAsync).toHaveBeenCalledTimes(1);
+    });
+  });
 });

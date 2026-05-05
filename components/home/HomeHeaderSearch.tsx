@@ -73,8 +73,11 @@ interface HomeHeaderSearchProps {
   onOpenSearch: () => void;
   onCloseSearch: () => void;
   showSearchButton?: boolean;
+  showMessagesButton?: boolean;
+  showMessagesIndicator?: boolean;
   showSharedButton?: boolean;
   showNotesButton?: boolean;
+  onOpenMessages?: () => void;
   onOpenShared?: () => void;
   onOpenNotes?: (origin?: NotesRouteTransitionRect) => void;
   sharedButtonMode?: "manage" | "filter";
@@ -114,8 +117,11 @@ export default function HomeHeaderSearch({
   onOpenSearch,
   onCloseSearch,
   showSearchButton = true,
+  showMessagesButton = false,
+  showMessagesIndicator = false,
   showSharedButton = false,
   showNotesButton = false,
+  onOpenMessages,
   onOpenShared,
   onOpenNotes,
   sharedButtonMode = "manage",
@@ -420,6 +426,66 @@ export default function HomeHeaderSearch({
           })}
         </Button>
       </Host>
+    );
+  };
+
+  const renderMessagesButton = () => {
+    if (!showMessagesButton || !onOpenMessages) {
+      return null;
+    }
+
+    const messagesLabel = t("shared.chatsTitle", "Chats");
+
+    if (Platform.OS === "android") {
+      return (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={messagesLabel}
+          hitSlop={HEADER_BUTTON_HIT_SLOP}
+          onPress={onOpenMessages}
+          pressRetentionOffset={HEADER_BUTTON_PRESS_RETENTION_OFFSET}
+          style={({ pressed }) => [
+            styles.iconButton,
+            styles.androidHeaderActionButton,
+            {
+              backgroundColor: androidHeaderControlBackgroundColor,
+              borderColor: androidHeaderControlBorderColor,
+            },
+            pressed ? styles.headerButtonPressed : null,
+          ]}
+        >
+          <Ionicons
+            name="chatbubble-ellipses-outline"
+            size={20}
+            color={androidHeaderControlForegroundColor}
+          />
+          {showMessagesIndicator ? (
+            <View style={[styles.messageIndicatorDot, { backgroundColor: colors.primary }]} />
+          ) : null}
+        </Pressable>
+      );
+    }
+
+    return (
+      <View style={styles.messageButtonHost}>
+        <Host
+          matchContents
+          colorScheme={isDark ? "dark" : "light"}
+          style={styles.swiftHeaderControlHost}
+        >
+          <Button
+            onPress={onOpenMessages}
+            modifiers={getHeaderControlModifiers(messagesLabel)}
+          >
+            {renderHeaderControlLabel("bubble.left.and.bubble.right", messagesLabel, "regular", {
+              iconOnly: true,
+            })}
+          </Button>
+        </Host>
+        {showMessagesIndicator ? (
+          <View style={[styles.messageIndicatorDot, { backgroundColor: colors.primary }]} />
+        ) : null}
+      </View>
     );
   };
 
@@ -732,6 +798,7 @@ export default function HomeHeaderSearch({
             <View style={styles.headerSlotGroup}>
               {renderNotesButton()}
               {showSearchButton ? renderSearchButton() : null}
+              {renderMessagesButton()}
             </View>
           </View>
           <View style={[styles.headerSlot, styles.headerSlotCenter]}>
@@ -937,6 +1004,17 @@ const styles = StyleSheet.create({
   },
   sharedButtonContainer: {
     position: "relative",
+  },
+  messageButtonHost: {
+    position: "relative",
+  },
+  messageIndicatorDot: {
+    position: "absolute",
+    top: 6,
+    right: 5,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
   },
   searchHeader: {
     paddingHorizontal: 20,

@@ -47,6 +47,8 @@ export function buildProfileSections(model: ProfileScreenModel): {
         icon: 'name',
         title: model.t('profile.name', 'Name'),
         value: model.user.displayName || model.t('profile.noName', 'Noto account'),
+        onPress: model.openNameEditor,
+        loading: model.isSavingName,
       },
     ];
 

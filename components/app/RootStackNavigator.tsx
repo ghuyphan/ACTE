@@ -53,6 +53,7 @@ export default function RootStackNavigator({
       />
       <Stack.Screen name="notes/stickers" options={rootScreenOptions.stickerLibrary} />
       <Stack.Screen name="shared/index" />
+      <Stack.Screen name="shared/chats" />
       <Stack.Screen
         name="shared/[id]"
         options={{
@@ -60,6 +61,7 @@ export default function RootStackNavigator({
           animation: 'none',
         }}
       />
+      <Stack.Screen name="shared/chat/[id]" />
     </Stack>
   );
 }

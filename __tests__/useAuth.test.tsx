@@ -58,6 +58,16 @@ const mockUpdateOwnUsername = jest.fn<
   photoURL: 'https://example.com/avatar.jpg',
   updatedAt: '2026-04-11T00:00:00.000Z',
 }));
+const mockUpdateOwnDisplayName = jest.fn<
+  Promise<{ displayName: string | null; username: string | null; usernameSetAt: string | null; photoURL: string | null; updatedAt: string }>,
+  [any]
+>(async (input) => ({
+  displayName: input?.displayName ?? null,
+  username: 'huy',
+  usernameSetAt: '2026-04-11T08:00:00.000Z',
+  photoURL: 'https://example.com/avatar.jpg',
+  updatedAt: '2026-04-11T00:00:00.000Z',
+}));
 const mockUpdateOwnPhotoURL = jest.fn<
   Promise<{ displayName: string | null; username: string | null; usernameSetAt: string | null; photoURL: string | null; updatedAt: string }>,
   [any]
@@ -154,6 +164,10 @@ const mockResetPasswordForEmail = jest.fn(async (_email?: string, _options?: unk
 
   return { error: null };
 });
+const mockUpdateUser = jest.fn(async (_input?: unknown) => ({
+  data: {},
+  error: null,
+}));
 const mockSupabaseSignOut = jest.fn<Promise<{ error: Error | null }>, [unknown?]>(
   async () => ({ error: null })
 );
@@ -202,6 +216,7 @@ jest.mock('../constants/auth', () => ({
 
 jest.mock('../services/publicProfileService', () => ({
   upsertPublicUserProfile: (input: unknown) => mockUpsertPublicUserProfile(input),
+  updateOwnDisplayName: (input: unknown) => mockUpdateOwnDisplayName(input),
   updateOwnUsername: (input: unknown) => mockUpdateOwnUsername(input),
   updateOwnPhotoURL: (input: unknown) => mockUpdateOwnPhotoURL(input),
 }));
@@ -240,6 +255,7 @@ const mockSupabaseClient = {
     signUp: (input: { email: string; password: string; options?: { data?: Record<string, unknown> } }) =>
       mockSignUp(input),
     resetPasswordForEmail: (email: string, options: unknown) => mockResetPasswordForEmail(email, options),
+    updateUser: (input: unknown) => mockUpdateUser(input),
     signOut: (options?: unknown) => mockSupabaseSignOut(options),
   },
   functions: {
@@ -300,6 +316,8 @@ describe('useAuth', () => {
     mockAuthState.webClientId = 'client-id.apps.googleusercontent.com';
     mockAuthState.iosClientId = 'ios-client-id.apps.googleusercontent.com';
     mockInvokeFunction.mockResolvedValue({ data: { success: true }, error: null });
+    mockUpdateUser.mockClear();
+    mockUpdateOwnDisplayName.mockClear();
     mockUpdateOwnUsername.mockClear();
     mockUpdateOwnPhotoURL.mockClear();
     mockHasScopeOwnedData.mockResolvedValue(true);

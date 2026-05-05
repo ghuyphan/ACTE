@@ -583,6 +583,33 @@ jest.mock('../utils/supabase', () => ({
         return { data: null, error: null };
       }
 
+      if (name === 'update_friend_nickname') {
+        const currentUserId = mockSessionUserId;
+        const friendUserId = String(params.target_friend_user_id);
+        const friendship = mockEnsureFriendMap(currentUserId).get(friendUserId);
+        if (!friendship) {
+          return { data: null, error: new Error('Friend not found.') };
+        }
+
+        const friend_nickname = String(params.nickname ?? '').trim() || null;
+        const nextFriendship = {
+          ...friendship,
+          friend_nickname,
+        };
+        mockEnsureFriendMap(currentUserId).set(friendUserId, nextFriendship);
+
+        return {
+          data: [
+            {
+              user_id: currentUserId,
+              friend_user_id: friendUserId,
+              ...nextFriendship,
+            },
+          ],
+          error: null,
+        };
+      }
+
       return { data: null, error: null };
     },
     channel: jest.fn(() => {
@@ -792,6 +819,33 @@ jest.mock('../utils/supabase', () => ({
         return { data: null, error: null };
       }
 
+      if (name === 'update_friend_nickname') {
+        const currentUserId = mockSessionUserId;
+        const friendUserId = String(params.target_friend_user_id);
+        const friendship = mockEnsureFriendMap(currentUserId).get(friendUserId);
+        if (!friendship) {
+          return { data: null, error: new Error('Friend not found.') };
+        }
+
+        const friend_nickname = String(params.nickname ?? '').trim() || null;
+        const nextFriendship = {
+          ...friendship,
+          friend_nickname,
+        };
+        mockEnsureFriendMap(currentUserId).set(friendUserId, nextFriendship);
+
+        return {
+          data: [
+            {
+              user_id: currentUserId,
+              friend_user_id: friendUserId,
+              ...nextFriendship,
+            },
+          ],
+          error: null,
+        };
+      }
+
       return { data: null, error: null };
     },
     channel: jest.fn(() => ({
@@ -866,6 +920,7 @@ import {
   removeFriend,
   refreshSharedFeed,
   subscribeToSharedFeed,
+  updateFriendNickname,
 } from '../services/sharedFeedService';
 
 const ownerUser = {
@@ -1046,6 +1101,25 @@ describe('sharedFeedService', () => {
         display_name_snapshot: ownerUser.username,
       })
     );
+  });
+
+  it('updates a per-user friend nickname', async () => {
+    await addFriendByUsername(ownerUser, friendUser.username);
+
+    const connection = await updateFriendNickname(ownerUser, friendUser.id, '  Bestie  ');
+
+    expect(connection).toEqual(
+      expect.objectContaining({
+        userId: friendUser.id,
+        nickname: 'Bestie',
+      })
+    );
+    expect(mockEnsureFriendMap(ownerUser.id).get(friendUser.id)).toEqual(
+      expect.objectContaining({
+        friend_nickname: 'Bestie',
+      })
+    );
+    expect(mockEnsureFriendMap(friendUser.id).get(ownerUser.id).friend_nickname).toBeUndefined();
   });
 
   it('creates a shared photo post and returns it in the refreshed feed', async () => {

@@ -55,7 +55,23 @@ Directional friendship rows. Mutual friendships are represented as two rows.
 
 - Primary key: `(user_id, friend_user_id)`
 - Foreign keys: both user ids reference `auth.users(id)`
-- Important fields: profile snapshots, `friended_at`, `last_shared_at`, invite provenance
+- Important fields: profile snapshots, optional per-user `friend_nickname`, `friended_at`, `last_shared_at`, invite provenance
+
+### `public.friend_groups`
+
+User-owned sharing shortcuts. A group belongs only to its owner and expands to normal shared-post audience ids.
+
+- Primary key: `id`
+- Foreign keys: `owner_user_id -> auth.users(id)`
+- Important fields: `name`, created/updated timestamps
+
+### `public.friend_group_members`
+
+Membership rows for user-owned friend groups.
+
+- Primary key: `(group_id, friend_user_id)`
+- Foreign keys: `group_id -> public.friend_groups(id)`, `(owner_user_id, friend_user_id) -> public.friendships(user_id, friend_user_id)`
+- Important fields: group owner and friend user id
 
 ### `public.shared_posts`
 
@@ -74,6 +90,14 @@ Deleted shared-post marker.
 - Primary key: `post_id`
 - Foreign keys: `author_user_id -> auth.users(id)`
 - Important fields: `deleted_at`
+
+### `public.shared_post_responses`
+
+Lightweight emoji/text responses attached to a shared post.
+
+- Primary key: `id`
+- Foreign keys: `post_id -> public.shared_posts(id)`, `author_user_id -> auth.users(id)`
+- Important fields: author snapshots, optional emoji, short response text, `created_at`
 
 ### `public.device_push_tokens`
 

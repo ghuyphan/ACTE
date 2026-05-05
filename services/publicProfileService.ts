@@ -225,6 +225,34 @@ export async function updateOwnUsername(input: {
   return mapPublicUserProfile(data);
 }
 
+export async function updateOwnDisplayName(input: {
+  userUid: string;
+  displayName: string | null;
+}): Promise<PublicUserProfile> {
+  const supabase = getSupabase();
+  if (!supabase) {
+    throw new Error('Shared feed is unavailable in this build.');
+  }
+
+  const normalizedDisplayName = input.displayName?.trim() || null;
+
+  const { data, error } = await supabase
+    .from('profiles')
+    .update({
+      display_name: normalizedDisplayName,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', input.userUid)
+    .select('id, display_name, username, username_set_at, photo_url, updated_at')
+    .single<ProfileRow>();
+
+  if (error) {
+    throw error;
+  }
+
+  return mapPublicUserProfile(data);
+}
+
 export async function updateOwnPhotoURL(input: {
   userUid: string;
   photoURL: string | null;

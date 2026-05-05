@@ -26,6 +26,7 @@ const mockAuthState = {
   deleteAccount: jest.fn(async () => ({ status: 'success' })),
   signOut: jest.fn(async () => undefined),
   updateAvatar: jest.fn(async () => ({ status: 'success' })),
+  updateDisplayName: jest.fn(async () => ({ status: 'success' })),
   updateUsername: jest.fn(async () => ({ status: 'success' })),
 };
 
