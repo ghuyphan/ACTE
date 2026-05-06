@@ -23,19 +23,32 @@ export default function SharedIndexScreen() {
   const { isReady: authReady, user } = useAuth();
   const { enableFromPrompt, isLoading: isSocialPushLoading, status: socialPushStatus } =
     useSocialPushPermission();
-  const { dataSource, enabled, lastUpdatedAt, loading, sharedPosts } = useSharedFeedStore();
+  const {
+    createSharedPostResponse,
+    dataSource,
+    enabled,
+    lastUpdatedAt,
+    loading,
+    sharedPosts,
+  } = useSharedFeedStore();
 
   const sortedPosts = useMemo(
     () => [...sharedPosts].sort((left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime()),
     [sharedPosts]
   );
   const estimatedSharedCardHeight = useMemo(
-    () => width - (Layout.screenPadding - 8) * 2 + 84,
+    () => width - (Layout.screenPadding - 8) * 2 + 142,
     [width]
   );
   const handlePressSharedPost = useCallback(
     (postId: string) => {
       router.push(`/shared/${postId}` as any);
+    },
+    [router]
+  );
+  const handleOpenSharedPostChat = useCallback(
+    (postId: string) => {
+      router.push(`/shared/chat/${postId}` as any);
     },
     [router]
   );
@@ -47,12 +60,15 @@ export default function SharedIndexScreen() {
         t={t}
         containerStyle={styles.cardRow}
         showSharedBadge={user?.uid === item.authorUid}
+        showResponseComposer
+        onOpenChat={handleOpenSharedPostChat}
+        onSendResponse={createSharedPostResponse}
         onPress={() => {
           handlePressSharedPost(item.id);
         }}
       />
     ),
-    [colors, handlePressSharedPost, t, user?.uid]
+    [colors, createSharedPostResponse, handleOpenSharedPostChat, handlePressSharedPost, t, user?.uid]
   );
   const cacheBanner =
     dataSource === 'cache' ? (

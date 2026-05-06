@@ -12,7 +12,12 @@ import { useSharedFeedStore } from '../../../hooks/useSharedFeed';
 import { useTheme } from '../../../hooks/useTheme';
 import type { SharedPost } from '../../../services/sharedFeedService';
 import { formatChatTimestamp } from '../../../utils/dateUtils';
-import NotoLoader from '../../ui/NotoLoader';
+
+const CHAT_LIST_SKELETON_ROWS = [
+  { key: 'first', titleWidth: '46%', previewWidth: '68%' },
+  { key: 'second', titleWidth: '38%', previewWidth: '54%' },
+  { key: 'third', titleWidth: '52%', previewWidth: '62%' },
+] as const;
 
 function getThreadPreview(post: SharedPost, t: ReturnType<typeof useTranslation>['t']) {
   if (post.type === 'photo') {
@@ -24,6 +29,10 @@ function getThreadPreview(post: SharedPost, t: ReturnType<typeof useTranslation>
   }
 
   return post.text || t('shared.chatThreadNote', 'Shared note');
+}
+
+function getThreadIconName(post: SharedPost) {
+  return post.type === 'photo' ? 'image-outline' : 'document-text-outline';
 }
 
 export default function SharedChatsScreen() {
@@ -83,25 +92,37 @@ export default function SharedChatsScreen() {
           style={({ pressed }) => [
             styles.threadRow,
             {
-              backgroundColor: colors.surface,
-              borderColor: colors.border,
+              backgroundColor: pressed ? colors.surface : 'transparent',
               opacity: pressed ? 0.86 : 1,
             },
           ]}
         >
-          {participant.photoUri ? (
-            <Image
-              source={{ uri: participant.photoUri }}
-              style={styles.avatar}
-              contentFit="cover"
-            />
-          ) : (
-            <View style={[styles.avatar, { backgroundColor: colors.primarySoft }]}>
-              <Text style={[styles.avatarLabel, { color: colors.primary }]}>
-                {avatarLabel}
-              </Text>
+          <View>
+            {participant.photoUri ? (
+              <Image
+                source={{ uri: participant.photoUri }}
+                style={styles.avatar}
+                contentFit="cover"
+              />
+            ) : (
+              <View style={[styles.avatar, { backgroundColor: colors.primarySoft }]}>
+                <Text style={[styles.avatarLabel, { color: colors.primary }]}>
+                  {avatarLabel}
+                </Text>
+              </View>
+            )}
+            <View
+              style={[
+                styles.threadKindBadge,
+                {
+                  backgroundColor: colors.background,
+                  borderColor: colors.border,
+                },
+              ]}
+            >
+              <Ionicons name={getThreadIconName(post)} size={12} color={colors.primary} />
             </View>
-          )}
+          </View>
           <View style={styles.threadCopy}>
             <Text numberOfLines={1} style={[styles.threadTitle, { color: colors.text }]}>
               {participant.label}
@@ -117,12 +138,68 @@ export default function SharedChatsScreen() {
             <Text style={[styles.threadTime, { color: colors.secondaryText }]}>
               {formatChatTimestamp(post.createdAt)}
             </Text>
+            <Ionicons name="chevron-forward" size={16} color={colors.secondaryText} />
           </View>
-          <Ionicons name="chevron-forward" size={16} color={colors.secondaryText} />
         </Pressable>
       );
     },
     [colors, getThreadParticipant, router, t]
+  );
+  const renderLoadingThreads = useCallback(
+    () => (
+      <View
+        style={[
+          styles.skeletonList,
+          {
+            paddingTop: insets.top + 68,
+            paddingBottom: insets.bottom + 32,
+            paddingHorizontal: Layout.screenPadding,
+          },
+        ]}
+        pointerEvents="none"
+      >
+        {CHAT_LIST_SKELETON_ROWS.map((row) => (
+          <View key={row.key}>
+            <View style={styles.threadRow}>
+              <View style={[styles.avatar, { backgroundColor: colors.primarySoft }]} />
+              <View style={styles.threadCopy}>
+                <View
+                  style={[
+                    styles.skeletonLine,
+                    {
+                      width: row.titleWidth,
+                      backgroundColor: colors.primarySoft,
+                    },
+                  ]}
+                />
+                <View
+                  style={[
+                    styles.skeletonLine,
+                    styles.skeletonPreviewLine,
+                    {
+                      width: row.previewWidth,
+                      backgroundColor: colors.primarySoft,
+                    },
+                  ]}
+                />
+              </View>
+              <View style={styles.threadMeta}>
+                <View
+                  style={[
+                    styles.skeletonTimeLine,
+                    {
+                      backgroundColor: colors.primarySoft,
+                    },
+                  ]}
+                />
+              </View>
+            </View>
+            <View style={[styles.threadSeparator, { backgroundColor: colors.border }]} />
+          </View>
+        ))}
+      </View>
+    ),
+    [colors.border, colors.primarySoft, insets.bottom, insets.top]
   );
 
   return (
@@ -139,9 +216,7 @@ export default function SharedChatsScreen() {
         }}
       />
       {!authReady || loading ? (
-        <View style={styles.center}>
-          <NotoLoader variant="note" color={colors.primary} />
-        </View>
+        renderLoadingThreads()
       ) : threads.length === 0 ? (
         <View style={styles.emptyScreen}>
           <View style={styles.emptyState}>
@@ -161,10 +236,12 @@ export default function SharedChatsScreen() {
           data={threads}
           keyExtractor={(item) => item.id}
           renderItem={renderThreadItem}
-          ItemSeparatorComponent={() => <View style={styles.threadSeparator} />}
+          ItemSeparatorComponent={() => (
+            <View style={[styles.threadSeparator, { backgroundColor: colors.border }]} />
+          )}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{
-            paddingTop: insets.top + 76,
+            paddingTop: insets.top + 68,
             paddingBottom: insets.bottom + 32,
             paddingHorizontal: Layout.screenPadding,
           }}
@@ -218,23 +295,40 @@ const styles = StyleSheet.create({
     marginTop: 8,
     maxWidth: 280,
   },
-  threadSeparator: {
+  skeletonList: {
+    flex: 1,
+    opacity: 0.78,
+  },
+  skeletonLine: {
+    height: 13,
+    borderRadius: 7,
+  },
+  skeletonPreviewLine: {
+    height: 11,
+    marginTop: 4,
+  },
+  skeletonTimeLine: {
+    width: 34,
     height: 10,
+    borderRadius: 5,
+  },
+  threadSeparator: {
+    height: StyleSheet.hairlineWidth,
+    marginLeft: 66,
   },
   threadRow: {
-    minHeight: 78,
-    borderRadius: 22,
-    borderWidth: StyleSheet.hairlineWidth,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    minHeight: 76,
+    borderRadius: 16,
+    paddingHorizontal: 8,
+    paddingVertical: 12,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 9,
+    gap: 12,
   },
   avatar: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
+    width: 50,
+    height: 50,
+    borderRadius: 25,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -243,6 +337,17 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     fontWeight: '900',
     fontFamily: 'Noto Sans',
+  },
+  threadKindBadge: {
+    position: 'absolute',
+    right: -2,
+    bottom: -2,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: StyleSheet.hairlineWidth,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   threadCopy: {
     flex: 1,
@@ -262,6 +367,8 @@ const styles = StyleSheet.create({
   },
   threadMeta: {
     alignItems: 'flex-end',
+    justifyContent: 'center',
+    gap: 7,
   },
   threadTime: {
     fontSize: 11,

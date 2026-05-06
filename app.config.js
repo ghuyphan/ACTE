@@ -1,6 +1,7 @@
 const { existsSync } = require('node:fs');
 const { version: appVersion } = require('./package.json');
 
+const defaultEasProjectId = '82e9519b-f89b-466e-af4d-697349535c13';
 const googleMapsAndroidApiKey = process.env.EXPO_PUBLIC_GOOGLE_MAPS_ANDROID_API_KEY;
 const easProjectIdFromEnv = process.env.EXPO_PUBLIC_EAS_PROJECT_ID?.trim() ?? '';
 const googleIosClientId = process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID?.trim() ?? '';
@@ -19,7 +20,7 @@ const allowProductionWithoutBilling =
 const easAndroidGoogleServicesFile = process.env.GOOGLE_SERVICES_JSON?.trim();
 const easIosGoogleServicesFile = process.env.GOOGLE_SERVICE_INFO_PLIST?.trim();
 const isEasBuild = process.env.EAS_BUILD?.trim() === 'true';
-const easProjectId = easProjectIdFromEnv;
+const easProjectId = easProjectIdFromEnv || defaultEasProjectId;
 const easUpdateUrl = easProjectId ? `https://u.expo.dev/${easProjectId}` : undefined;
 const supportUrl = process.env.EXPO_PUBLIC_SUPPORT_URL?.trim() ?? '';
 const supportEmail = process.env.EXPO_PUBLIC_SUPPORT_EMAIL?.trim() ?? '';

@@ -10,7 +10,7 @@ Auth-linked profile row keyed by `auth.users.id`.
 
 - Primary key: `id`
 - Foreign keys: `id -> auth.users(id)`
-- Important fields: `username`, `display_name`, `photo_url`, `username_set_at`, `updated_at`
+- Important fields: `username`, `display_name`, `photo_url`, `username_set_at`, `last_seen_at`, `updated_at`
 - Constraints: username is required, lower-case/number/dot/underscore only, 1-20 chars
 
 ### `public.notes`
@@ -96,8 +96,8 @@ Deleted shared-post marker.
 Lightweight emoji/text responses attached to a shared post.
 
 - Primary key: `id`
-- Foreign keys: `post_id -> public.shared_posts(id)`, `author_user_id -> auth.users(id)`
-- Important fields: author snapshots, optional emoji, short response text, `created_at`
+- Foreign keys: `post_id -> public.shared_posts(id)`, `author_user_id -> auth.users(id)`, optional `reply_to_response_id -> public.shared_post_responses(id)`
+- Important fields: author snapshots, optional emoji, short response text, optional reply target, `created_at`
 
 ### `public.device_push_tokens`
 

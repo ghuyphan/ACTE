@@ -69,6 +69,7 @@ interface SharedPostResponseCacheRow {
   author_photo_url_snapshot: string | null;
   emoji: string | null;
   text: string;
+  reply_to_response_id: string | null;
   created_at: string;
 }
 
@@ -248,6 +249,7 @@ function rowToSharedPostResponse(row: SharedPostResponseCacheRow): SharedPostRes
     authorPhotoURLSnapshot: row.author_photo_url_snapshot,
     emoji: row.emoji,
     text: row.text,
+    replyToResponseId: row.reply_to_response_id,
     createdAt: row.created_at,
   };
 }
@@ -267,15 +269,17 @@ async function insertCachedSharedPostResponse(
       author_photo_url_snapshot,
       emoji,
       text,
+      reply_to_response_id,
       created_at
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(user_uid, post_id, id) DO UPDATE SET
       author_uid = excluded.author_uid,
       author_display_name = excluded.author_display_name,
       author_photo_url_snapshot = excluded.author_photo_url_snapshot,
       emoji = excluded.emoji,
       text = excluded.text,
+      reply_to_response_id = excluded.reply_to_response_id,
       created_at = excluded.created_at`,
     userUid,
     response.postId,
@@ -285,6 +289,7 @@ async function insertCachedSharedPostResponse(
     response.authorPhotoURLSnapshot,
     response.emoji,
     response.text,
+    response.replyToResponseId ?? null,
     response.createdAt
   );
 }
@@ -442,6 +447,7 @@ export async function getCachedSharedPostResponses(
             author_photo_url_snapshot,
             emoji,
             text,
+            reply_to_response_id,
             created_at
      FROM shared_post_responses_cache
      WHERE user_uid = ?

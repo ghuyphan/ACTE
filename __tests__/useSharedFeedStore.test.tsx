@@ -54,8 +54,10 @@ const mockFindOwnedSharedPostIdsForNote = jest.fn();
 const mockRefreshSharedFeed = jest.fn();
 const mockRemoveFriend = jest.fn();
 const mockRevokeFriendInvite = jest.fn();
+const mockSubscribeToFriendPresence = jest.fn();
 const mockSubscribeToSharedFeed = jest.fn();
 const mockUpdateFriendNickname = jest.fn();
+const mockUpdateOwnPresenceLastSeen = jest.fn();
 const mockUpdateSharedPost = jest.fn();
 const mockGetCachedSharedFeedSnapshot = jest.fn();
 const mockGetCachedSharedPostResponses = jest.fn();
@@ -112,8 +114,10 @@ jest.mock('../services/sharedFeedService', () => ({
   refreshSharedFeed: (...args: unknown[]) => mockRefreshSharedFeed(...args),
   removeFriend: (...args: unknown[]) => mockRemoveFriend(...args),
   revokeFriendInvite: (...args: unknown[]) => mockRevokeFriendInvite(...args),
+  subscribeToFriendPresence: (...args: unknown[]) => mockSubscribeToFriendPresence(...args),
   subscribeToSharedFeed: (...args: unknown[]) => mockSubscribeToSharedFeed(...args),
   updateFriendNickname: (...args: unknown[]) => mockUpdateFriendNickname(...args),
+  updateOwnPresenceLastSeen: (...args: unknown[]) => mockUpdateOwnPresenceLastSeen(...args),
   updateSharedPost: (...args: unknown[]) => mockUpdateSharedPost(...args),
 }));
 
@@ -230,6 +234,7 @@ describe('useSharedFeedStore', () => {
     mockGetCachedSharedFeedSnapshot.mockImplementation(async () => mockCachedSnapshot);
     mockGetCachedSharedPostResponses.mockResolvedValue([]);
     mockRefreshSharedFeed.mockImplementation(async () => mockRefreshSnapshot);
+    mockUpdateOwnPresenceLastSeen.mockResolvedValue(undefined);
     mockDownloadPhotoFromStorage.mockImplementation(
       async (_bucket: string, _path: string, _localId: string, options?: { preferCachedOnly?: boolean }) =>
         options?.preferCachedOnly ? null : 'file:///shared/friend-photo-1.jpg'
@@ -239,6 +244,10 @@ describe('useSharedFeedStore', () => {
         options?.preferCachedOnly ? null : 'file:///shared/friend-photo-1.mov'
     );
     latestSharedFeedSubscriptionHandlers = null;
+    mockSubscribeToFriendPresence.mockImplementation((_user: unknown, _friendUserIds: unknown, options: any) => {
+      options?.onPresence?.({});
+      return () => undefined;
+    });
     mockSubscribeToSharedFeed.mockImplementation((_user: unknown, handlers: any) => {
       latestSharedFeedSubscriptionHandlers = handlers;
       return () => undefined;

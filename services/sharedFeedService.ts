@@ -146,8 +146,18 @@ export interface SharedPostResponse {
   authorPhotoURLSnapshot: string | null;
   emoji: string | null;
   text: string;
+  replyToResponseId?: string | null;
   createdAt: string;
 }
+
+export type FriendPresenceStatus = 'online' | 'offline' | 'unknown';
+
+export interface FriendPresenceState {
+  status: FriendPresenceStatus;
+  lastSeenAt: string | null;
+}
+
+export type FriendPresenceSnapshot = Record<string, FriendPresenceState>;
 
 export interface SharedFeedSnapshot {
   friends: FriendConnection[];
@@ -159,6 +169,11 @@ export interface SharedFeedSnapshot {
 
 interface SubscribeToSharedFeedOptions {
   onSnapshot: (snapshot: SharedFeedSnapshot) => void;
+  onError?: (error: unknown) => void;
+}
+
+interface SubscribeToFriendPresenceOptions {
+  onPresence: (presence: FriendPresenceSnapshot) => void;
   onError?: (error: unknown) => void;
 }
 
@@ -244,6 +259,7 @@ interface SharedPostResponseRow {
   author_photo_url_snapshot: string | null;
   emoji: string | null;
   text: string | null;
+  reply_to_response_id?: string | null;
   created_at: string;
 }
 
@@ -655,6 +671,7 @@ function mapSharedPostResponse(row: SharedPostResponseRow): SharedPostResponse {
     authorPhotoURLSnapshot: row.author_photo_url_snapshot ?? null,
     emoji: row.emoji?.trim() || null,
     text: row.text?.trim() ?? '',
+    replyToResponseId: row.reply_to_response_id?.trim() || null,
     createdAt: row.created_at,
   };
 }
@@ -1168,11 +1185,11 @@ async function getOwnedSharedSourceNoteIds(userUid: string, friends?: FriendConn
 
   const currentFriends = friends ?? await getFriendsForUser(userUid);
   return getOwnedSharedNoteIdsFromPosts(
-    ((data ?? []) as Array<{
+    ((data ?? []) as {
       author_user_id?: string | null;
       audience_user_ids?: string[] | null;
       source_note_id?: string | null;
-    }>).map((row) => ({
+    }[]).map((row) => ({
       authorUid: row.author_user_id ?? userUid,
       audienceUserIds: Array.isArray(row.audience_user_ids) ? row.audience_user_ids : [],
       sourceNoteId: row.source_note_id ?? null,
@@ -1973,7 +1990,7 @@ export async function getSharedPostResponses(
 
   const { data, error } = await requireSupabase()
     .from('shared_post_responses')
-    .select('id, post_id, author_user_id, author_display_name, author_photo_url_snapshot, emoji, text, created_at')
+    .select('id, post_id, author_user_id, author_display_name, author_photo_url_snapshot, emoji, text, reply_to_response_id, created_at')
     .eq('post_id', normalizedPostId)
     .order('created_at', { ascending: true })
     .limit(50);
@@ -1983,6 +2000,163 @@ export async function getSharedPostResponses(
   }
 
   return ((data ?? []) as SharedPostResponseRow[]).map(mapSharedPostResponse);
+}
+
+function getOnlinePresenceKeys(state: Record<string, unknown>) {
+  const onlineKeys = new Set<string>();
+  for (const [key, presences] of Object.entries(state)) {
+    if (Array.isArray(presences) && presences.length > 0) {
+      onlineKeys.add(key);
+    }
+  }
+
+  return onlineKeys;
+}
+
+async function getFriendLastSeenMap(friendUserIds: string[]) {
+  const supabase = requireSupabase();
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('id, last_seen_at')
+    .in('id', friendUserIds);
+
+  if (error) {
+    if (isSupabaseSchemaMismatchError(error)) {
+      return new Map<string, string>();
+    }
+
+    throw error;
+  }
+
+  const rows = (data ?? []) as { id?: string | null; last_seen_at?: string | null }[];
+  return new Map(
+    rows.flatMap((row) =>
+      row.id && row.last_seen_at ? [[row.id, row.last_seen_at] as const] : []
+    )
+  );
+}
+
+export async function updateOwnPresenceLastSeen(user: AppUser) {
+  const now = getNowIso();
+  const { error } = await requireSupabase()
+    .from('profiles')
+    .update({
+      last_seen_at: now,
+      updated_at: now,
+    })
+    .eq('id', user.uid || user.id);
+
+  if (error && !isSupabaseSchemaMismatchError(error)) {
+    throw error;
+  }
+}
+
+export function subscribeToFriendPresence(
+  user: AppUser,
+  friendUserIds: string[],
+  options: SubscribeToFriendPresenceOptions
+) {
+  const ownUserId = user.uid || user.id;
+  const normalizedFriendUserIds = Array.from(
+    new Set(
+      friendUserIds
+        .map((friendUserId) => friendUserId.trim())
+        .filter((friendUserId) => friendUserId.length > 0 && friendUserId !== ownUserId)
+    )
+  );
+
+  if (normalizedFriendUserIds.length === 0) {
+    options.onPresence({});
+    return () => undefined;
+  }
+
+  const supabase = requireSupabase();
+  const friendUserIdSet = new Set(normalizedFriendUserIds);
+  const lastSeenByUserId = new Map<string, string>();
+  let disposed = false;
+
+  const channel = supabase.channel('shared-friend-presence', {
+    config: {
+      presence: {
+        key: ownUserId,
+      },
+    },
+  });
+
+  const emitPresence = () => {
+    if (disposed) {
+      return;
+    }
+
+    const onlineUserIds = getOnlinePresenceKeys(channel.presenceState() as Record<string, unknown>);
+    const snapshot = normalizedFriendUserIds.reduce<FriendPresenceSnapshot>(
+      (nextSnapshot, friendUserId) => {
+        const isOnline = onlineUserIds.has(friendUserId);
+        nextSnapshot[friendUserId] = {
+          status: isOnline ? 'online' : 'offline',
+          lastSeenAt: isOnline ? null : lastSeenByUserId.get(friendUserId) ?? null,
+        };
+        return nextSnapshot;
+      },
+      {}
+    );
+
+    options.onPresence(snapshot);
+  };
+
+  void getFriendLastSeenMap(normalizedFriendUserIds)
+    .then((lastSeenByUserIdSnapshot) => {
+      for (const [friendUserId, lastSeenAt] of lastSeenByUserIdSnapshot) {
+        lastSeenByUserId.set(friendUserId, lastSeenAt);
+      }
+      emitPresence();
+    })
+    .catch((error) => {
+      if (!disposed) {
+        options.onError?.(error);
+      }
+    });
+
+  const rememberOffline = (presenceKey: unknown) => {
+    const friendUserId = typeof presenceKey === 'string' ? presenceKey : '';
+    if (friendUserIdSet.has(friendUserId)) {
+      lastSeenByUserId.set(friendUserId, getNowIso());
+    }
+  };
+
+  channel
+    .on('presence', { event: 'sync' }, emitPresence)
+    .on('presence', { event: 'join' }, emitPresence)
+    .on('presence', { event: 'leave' }, ({ key }) => {
+      rememberOffline(key);
+      emitPresence();
+    })
+    .subscribe((status) => {
+      if (disposed) {
+        return;
+      }
+
+      if (status === 'SUBSCRIBED') {
+        void channel
+          .track({
+            user_id: ownUserId,
+            online_at: getNowIso(),
+          })
+          .then(() => emitPresence())
+          .catch((error) => {
+            if (!disposed) {
+              options.onError?.(error);
+            }
+          });
+      }
+    });
+
+  return () => {
+    disposed = true;
+    void updateOwnPresenceLastSeen(user).catch(() => undefined);
+    void channel.untrack();
+    void supabase.removeChannel(channel);
+  };
 }
 
 export function subscribeToSharedPostResponses(
@@ -2082,7 +2256,7 @@ export function subscribeToSharedPostResponses(
 export async function createSharedPostResponse(
   user: AppUser,
   postId: string,
-  input: { emoji?: string | null; text?: string | null }
+  input: { emoji?: string | null; text?: string | null; replyToResponseId?: string | null }
 ): Promise<SharedPostResponse> {
   await ensureSupabaseSessionMatchesUser(user.id);
 
@@ -2093,6 +2267,7 @@ export async function createSharedPostResponse(
 
   const emoji = input.emoji?.trim() || null;
   const text = input.text?.trim() || '';
+  const replyToResponseId = input.replyToResponseId?.trim() || null;
   if (!emoji && !text) {
     throw new Error('Add a reaction or a short reply.');
   }
@@ -2110,6 +2285,7 @@ export async function createSharedPostResponse(
     author_photo_url_snapshot: user.photoURL ?? null,
     emoji,
     text,
+    reply_to_response_id: replyToResponseId,
     created_at: getNowIso(),
   };
 
@@ -2318,14 +2494,14 @@ export async function deleteOwnedSharedPostsForNotes(
     throw error;
   }
 
-  const rows = (data ?? []) as Array<{
+  const rows = (data ?? []) as {
     id: string;
     photo_path?: string | null;
     dual_primary_photo_path?: string | null;
     dual_secondary_photo_path?: string | null;
     paired_video_path?: string | null;
     sticker_placements_json?: string | null;
-  }>;
+  }[];
   if (rows.length === 0) {
     return [];
   }

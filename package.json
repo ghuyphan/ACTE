@@ -19,8 +19,8 @@
     "typecheck": "tsc --noEmit",
     "test": "jest",
     "verify": "npm run lint:ci && npm run theme:audit && npm run typecheck && npm run supabase:functions:check && npm test -- --runInBand && npm run expo:doctor && npm run audit:prod",
-    "update:preview": "npx eas-cli update --channel preview",
-    "update:production": "npx eas-cli update --channel production"
+    "update:preview": "eas update --channel preview --environment preview",
+    "update:production": "eas update --channel production --environment production"
   },
   "dependencies": {
     "@expo-google-fonts/noto-sans": "^0.4.2",
@@ -54,7 +54,7 @@
     "expo-linking": "~55.0.7",
     "expo-localization": "^55.0.8",
     "expo-location": "~55.1.2",
-    "expo-media-library": "~55.0.15",
+    "expo-media-library": "~55.0.16",
     "expo-notifications": "~55.0.10",
     "expo-router": "~55.0.3",
     "expo-secure-store": "^55.0.9",

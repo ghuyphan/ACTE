@@ -824,6 +824,7 @@ export async function getDB(): Promise<SQLite.SQLiteDatabase> {
         author_photo_url_snapshot TEXT,
         emoji TEXT,
         text TEXT NOT NULL DEFAULT '',
+        reply_to_response_id TEXT,
         created_at TEXT NOT NULL,
         PRIMARY KEY (user_uid, post_id, id)
       );
@@ -1280,10 +1281,18 @@ export async function getDB(): Promise<SQLite.SQLiteDatabase> {
                     author_photo_url_snapshot TEXT,
                     emoji TEXT,
                     text TEXT NOT NULL DEFAULT '',
+                    reply_to_response_id TEXT,
                     created_at TEXT NOT NULL,
                     PRIMARY KEY (user_uid, post_id, id)
                 )`
             );
+            const sharedResponseCacheInfo = await database.getAllAsync<{ name: string }>(
+                `PRAGMA table_info(shared_post_responses_cache)`
+            );
+            const sharedResponseCacheColumns = sharedResponseCacheInfo.map((col) => col.name);
+            if (!sharedResponseCacheColumns.includes('reply_to_response_id')) {
+                await database.execAsync(`ALTER TABLE shared_post_responses_cache ADD COLUMN reply_to_response_id TEXT`);
+            }
             await database.execAsync(
                 `CREATE INDEX IF NOT EXISTS idx_shared_post_responses_cache_user_post_created
                  ON shared_post_responses_cache(user_uid, post_id, created_at ASC)`

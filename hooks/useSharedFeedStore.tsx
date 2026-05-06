@@ -18,6 +18,7 @@ import {
   findOwnedSharedPostIdsForNote,
   FriendConnection,
   FriendInvite,
+  FriendPresenceSnapshot,
   getSharedPostResponses as fetchPostResponses,
   getSharedFeedErrorMessage,
   invalidateSharedFeedRefresh,
@@ -26,10 +27,12 @@ import {
   revokeFriendInvite as revokeInvite,
   SharedPost,
   SharedPostResponse,
+  subscribeToFriendPresence,
   subscribeToSharedFeed,
   subscribeToSharedPostResponses as subscribeToPostResponses,
   updateFriendGroup as saveGroup,
   updateFriendNickname as saveFriendNickname,
+  updateOwnPresenceLastSeen,
   updateSharedPost as updatePost,
 } from '../services/sharedFeedService';
 import {
@@ -77,6 +80,7 @@ interface SharedFeedStoreValue {
   dataSource: 'live' | 'cache';
   lastUpdatedAt: string | null;
   friends: FriendConnection[];
+  friendPresence: FriendPresenceSnapshot;
   friendGroups: FriendGroup[];
   sharedPosts: SharedPost[];
   ownedSharedNoteIds: string[];
@@ -104,7 +108,7 @@ interface SharedFeedStoreValue {
   ) => () => void;
   createSharedPostResponse: (
     postId: string,
-    input: { emoji?: string | null; text?: string | null }
+    input: { emoji?: string | null; text?: string | null; replyToResponseId?: string | null }
   ) => Promise<SharedPostResponse>;
   updateSharedNote: (note: Note) => Promise<void>;
   deleteSharedNote: (noteId: string) => Promise<void>;
@@ -334,6 +338,7 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
   const { isOnline } = useConnectivity();
   const { startupInteractive } = useStartupInteraction();
   const [friends, setFriends] = useState<FriendConnection[]>([]);
+  const [friendPresence, setFriendPresence] = useState<FriendPresenceSnapshot>({});
   const [friendGroups, setFriendGroups] = useState<FriendGroup[]>([]);
   const [sharedPosts, setSharedPosts] = useState<SharedPost[]>([]);
   const [ownedSharedNoteIds, setOwnedSharedNoteIds] = useState<string[]>([]);
@@ -1201,6 +1206,26 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
     user?.uid,
   ]);
 
+  const friendPresenceUserIds = useMemo(
+    () => friends.map((friend) => friend.userId).filter(Boolean).sort(),
+    [friends]
+  );
+  const friendPresenceKey = friendPresenceUserIds.join('|');
+
+  useEffect(() => {
+    if (!enabled || !user || !isOnline || friendPresenceUserIds.length === 0) {
+      setFriendPresence({});
+      return;
+    }
+
+    return subscribeToFriendPresence(user, friendPresenceUserIds, {
+      onPresence: setFriendPresence,
+      onError: (error) => {
+        console.warn('Friend presence subscription failed:', getSharedFeedErrorMessage(error));
+      },
+    });
+  }, [enabled, friendPresenceKey, friendPresenceUserIds, isOnline, user]);
+
   useEffect(() => {
     const activeUserUid = userRef.current?.uid ?? null;
     if (!enabled || !activeUserUid || !ready || !startupInteractive || sharedPosts.length === 0) {
@@ -1232,6 +1257,9 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
 
     const subscription = AppState.addEventListener('change', (nextState) => {
       if (nextState !== 'active') {
+        if (isOnline) {
+          void updateOwnPresenceLastSeen(user).catch(() => undefined);
+        }
         return;
       }
 
@@ -1307,6 +1335,7 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
       dataSource,
       lastUpdatedAt,
       friends,
+      friendPresence,
       friendGroups,
       sharedPosts: presentedSharedPosts,
       ownedSharedNoteIds,
@@ -1643,7 +1672,7 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
       },
       createSharedPostResponse: async (
         postId: string,
-        input: { emoji?: string | null; text?: string | null }
+        input: { emoji?: string | null; text?: string | null; replyToResponseId?: string | null }
       ) => {
         requireOnline();
         const activeUser = requireUser();
@@ -1784,6 +1813,7 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
       dataSource,
       enabled,
       friends,
+      friendPresence,
       friendGroups,
       phase,
       initialLoadComplete,

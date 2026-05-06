@@ -300,6 +300,7 @@ export default function HomeScreen() {
     updateFriendGroup = async () => undefined,
     deleteFriendGroup = async () => undefined,
     createSharedPost,
+    createSharedPostResponse,
   } = useSharedFeedStore();
   const captureAudienceFriends = useMemo(
     () => friends.filter((friend) => friend.userId !== user?.uid),
@@ -2909,6 +2910,13 @@ export default function HomeScreen() {
     [router]
   );
 
+  const openSharedPostChat = useCallback(
+    (postId: string) => {
+      router.push(`/shared/chat/${postId}` as any);
+    },
+    [router]
+  );
+
   const handleCaptureTextEntryFocusChange = useCallback((focused: boolean) => {
     setIsCaptureTextEntryFocused(focused);
 
@@ -3141,6 +3149,8 @@ export default function HomeScreen() {
       snapHeight,
       onOpenNote: openNote,
       onOpenSharedPost: openSharedPost,
+      onOpenSharedPostChat: openSharedPostChat,
+      onSendSharedPostResponse: createSharedPostResponse,
       colors,
       t,
       onSettledArchiveItemChange: handleSettledArchiveItemChange,
@@ -3164,8 +3174,10 @@ export default function HomeScreen() {
       isLivePhotoCaptureInProgress,
       isScreenFocused,
       markHomeFeedReady,
+      createSharedPostResponse,
       openNote,
       openSharedPost,
+      openSharedPostChat,
       ownedSharedNoteIds,
       shouldLockCaptureInteractions,
       shouldLockCapturePage,

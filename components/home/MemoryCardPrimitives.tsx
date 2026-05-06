@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { TFunction } from 'i18next';
 import { Image } from 'expo-image';
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Linking, Platform, Pressable, StyleProp, StyleSheet, Text, useWindowDimensions, View, ViewStyle } from 'react-native';
+import { Linking, Platform, Pressable, StyleProp, StyleSheet, Text, TextInput, useWindowDimensions, View, ViewStyle } from 'react-native';
 import Animated, {
   Easing,
   useAnimatedStyle,
@@ -51,6 +51,11 @@ type MemoryColors = {
   primarySoft?: string;
 };
 
+type SharedPostResponseDraft = {
+  emoji: string | null;
+  text: string | null;
+};
+
 interface NoteMemoryCardProps {
   note: Note;
   colors: MemoryColors;
@@ -72,6 +77,10 @@ interface SharedPostMemoryCardProps {
   isActive?: boolean;
   showSharedBadge?: boolean;
   metadataFullWidth?: boolean;
+  showResponseComposer?: boolean;
+  onOpenChat?: (postId: string) => void;
+  onSendResponse?: (postId: string, input: SharedPostResponseDraft) => Promise<unknown>;
+  responseComposerOffsetTop?: number;
 }
 
 const RENDER_SIGNATURE_SEPARATOR = '\u001f';
@@ -768,16 +777,150 @@ export function NoteMemoryCard({
   return noteCardBody;
 }
 
+function SharedPostInlineResponseComposer({
+  postId,
+  colors,
+  t,
+  onOpenChat,
+  onSendResponse,
+}: {
+  postId: string;
+  colors: MemoryColors;
+  t: TFunction;
+  onOpenChat?: (postId: string) => void;
+  onSendResponse: (postId: string, input: SharedPostResponseDraft) => Promise<unknown>;
+}) {
+  const [draft, setDraft] = useState('');
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isSending, setIsSending] = useState(false);
+
+  const sendResponse = useCallback(
+    async (emoji?: string) => {
+      if (isSending) {
+        return;
+      }
+
+      const text = draft.trim();
+      if (!emoji && !text) {
+        return;
+      }
+
+      setIsSending(true);
+      setErrorMessage(null);
+      try {
+        await onSendResponse(postId, {
+          emoji: emoji ?? null,
+          text: emoji ? null : text,
+        });
+        if (!emoji) {
+          setDraft('');
+        }
+        void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      } catch (error) {
+        setErrorMessage(
+          error instanceof Error
+            ? error.message
+            : t('shared.responseSendFailed', 'Could not send response.')
+        );
+      } finally {
+        setIsSending(false);
+      }
+    },
+    [draft, isSending, onSendResponse, postId, t]
+  );
+
+  return (
+    <View style={styles.sharedReplyWrap}>
+      <MetadataSurface style={[styles.metadataPill, styles.sharedReplyComposer]}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={t('shared.quickHeartResponse', 'Send heart response')}
+          onPress={() => {
+            void sendResponse('💛');
+          }}
+          disabled={isSending}
+          style={({ pressed }) => [
+            styles.sharedReplyEmojiButton,
+            {
+              opacity: isSending ? 0.5 : pressed ? 0.82 : 1,
+            },
+          ]}
+        >
+          <Text style={styles.sharedReplyEmoji}>💛</Text>
+        </Pressable>
+        <TextInput
+          value={draft}
+          onChangeText={setDraft}
+          placeholder={t('shared.responsePlaceholder', 'Write a quick response')}
+          placeholderTextColor={colors.secondaryText}
+          maxLength={160}
+          returnKeyType="send"
+          style={[styles.sharedReplyInput, { color: colors.text }]}
+          onSubmitEditing={() => {
+            void sendResponse();
+          }}
+        />
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={t('common.send', 'Send')}
+          onPress={() => {
+            void sendResponse();
+          }}
+          disabled={isSending || !draft.trim()}
+          style={({ pressed }) => [
+            styles.sharedReplyIconButton,
+            {
+              opacity: isSending || !draft.trim() ? 0.42 : pressed ? 0.72 : 1,
+            },
+          ]}
+        >
+          <Ionicons
+            name="send"
+            size={14}
+            color={draft.trim() ? colors.primary : colors.secondaryText}
+          />
+        </Pressable>
+        {onOpenChat ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={t('shared.openChat', 'Open chat')}
+            onPress={() => {
+              onOpenChat(postId);
+            }}
+            style={({ pressed }) => [
+              styles.sharedReplyChatButton,
+              {
+                opacity: pressed ? 0.72 : 1,
+              },
+            ]}
+          >
+            <Ionicons name="chatbubble-ellipses-outline" size={15} color={colors.secondaryText} />
+          </Pressable>
+        ) : null}
+      </MetadataSurface>
+      {errorMessage ? (
+        <Text style={[styles.sharedReplyError, { color: colors.danger }]} numberOfLines={2}>
+          {errorMessage}
+        </Text>
+      ) : null}
+    </View>
+  );
+}
+
 export function SharedPostMemoryCard({
   post,
   colors,
   t,
   onPress,
+  onOpenChat,
+  onSendResponse,
   cardSize,
   containerStyle,
   isActive = false,
   showSharedBadge = false,
   metadataFullWidth = false,
+  showResponseComposer = false,
+  responseComposerOffsetTop = 52,
 }: SharedPostMemoryCardProps) {
   const { width } = useWindowDimensions();
   const now = useRelativeTimeNow();
@@ -888,6 +1031,17 @@ export function SharedPostMemoryCard({
           </MetadataContainer>
         )}
       </View>
+      {showResponseComposer && onSendResponse ? (
+        <View style={{ paddingTop: responseComposerOffsetTop }}>
+          <SharedPostInlineResponseComposer
+            postId={post.id}
+            colors={colors}
+            t={t}
+            onOpenChat={onOpenChat}
+            onSendResponse={onSendResponse}
+          />
+        </View>
+      ) : null}
     </View>
   );
 
@@ -994,6 +1148,64 @@ const styles = StyleSheet.create({
   },
   sharedCardWrap: {
     alignSelf: 'center',
+  },
+  sharedReplyWrap: {
+    width: '72%',
+    maxWidth: 286,
+    minWidth: 218,
+    alignSelf: 'center',
+    gap: 4,
+  },
+  sharedReplyComposer: {
+    width: '100%',
+    maxWidth: '100%',
+    minHeight: 34,
+    paddingLeft: 9,
+    paddingRight: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  sharedReplyEmojiButton: {
+    width: 20,
+    height: 24,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sharedReplyEmoji: {
+    fontSize: 15,
+    lineHeight: 18,
+  },
+  sharedReplyInput: {
+    flex: 1,
+    minWidth: 0,
+    height: 30,
+    paddingVertical: 0,
+    fontSize: 11,
+    lineHeight: 13,
+    fontWeight: '700',
+    fontFamily: 'Noto Sans',
+  },
+  sharedReplyIconButton: {
+    width: 21,
+    height: 26,
+    borderRadius: 13,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sharedReplyChatButton: {
+    width: 21,
+    height: 26,
+    borderRadius: 13,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sharedReplyError: {
+    paddingHorizontal: 8,
+    fontSize: 11,
+    lineHeight: 15,
+    fontFamily: 'Noto Sans',
   },
   sharedBadge: {
     position: 'absolute',

@@ -85,11 +85,18 @@ const AnimatedSharedPostCard = memo(function AnimatedSharedPostCard({
   colors,
   t,
   onOpenSharedPost,
+  onOpenSharedPostChat,
+  onSendSharedPostResponse,
   isActive,
 }: {
   item: SharedPost;
   index: number;
   onOpenSharedPost?: (postId: string) => void;
+  onOpenSharedPostChat?: (postId: string) => void;
+  onSendSharedPostResponse?: (
+    postId: string,
+    input: { emoji: string | null; text: string | null }
+  ) => Promise<unknown>;
   colors: {
     primary: string;
     text: string;
@@ -97,6 +104,7 @@ const AnimatedSharedPostCard = memo(function AnimatedSharedPostCard({
     danger: string;
     card: string;
     border?: string;
+    primarySoft?: string;
   };
   t: TFunction;
   isActive: boolean;
@@ -106,9 +114,12 @@ const AnimatedSharedPostCard = memo(function AnimatedSharedPostCard({
       <SharedPostMemoryCard
         post={item}
         onPress={onOpenSharedPost ? () => onOpenSharedPost(item.id) : undefined}
+        onOpenChat={onOpenSharedPostChat}
+        onSendResponse={onSendSharedPostResponse}
         colors={colors}
         t={t}
         isActive={isActive}
+        showResponseComposer
       />
     </View>
   );
@@ -117,6 +128,8 @@ const AnimatedSharedPostCard = memo(function AnimatedSharedPostCard({
   prevProps.colors === nextProps.colors &&
   prevProps.t === nextProps.t &&
   prevProps.onOpenSharedPost === nextProps.onOpenSharedPost &&
+  prevProps.onOpenSharedPostChat === nextProps.onOpenSharedPostChat &&
+  prevProps.onSendSharedPostResponse === nextProps.onSendSharedPostResponse &&
   getSharedPostMemoryCardRenderSignature(prevProps.item) ===
     getSharedPostMemoryCardRenderSignature(nextProps.item) &&
   prevProps.isActive === nextProps.isActive
@@ -140,6 +153,11 @@ interface NotesFeedProps {
   snapHeight: number;
   onOpenNote: (noteId: string) => void;
   onOpenSharedPost?: (postId: string) => void;
+  onOpenSharedPostChat?: (postId: string) => void;
+  onSendSharedPostResponse?: (
+    postId: string,
+    input: { emoji: string | null; text: string | null }
+  ) => Promise<unknown>;
   colors: {
     primary: string;
     text: string;
@@ -147,6 +165,7 @@ interface NotesFeedProps {
     danger: string;
     card: string;
     border?: string;
+    primarySoft?: string;
   };
   t: TFunction;
   onCaptureVisibilityChange?: (isVisible: boolean) => void;
@@ -176,6 +195,8 @@ export default function NotesFeed({
   snapHeight,
   onOpenNote,
   onOpenSharedPost,
+  onOpenSharedPostChat,
+  onSendSharedPostResponse,
   colors,
   t,
   onCaptureVisibilityChange,
@@ -584,7 +605,7 @@ export default function NotesFeed({
               {
                 height: snapHeight,
                 paddingTop: topInset + Layout.headerHeight - DOCKED_HEADER_CONTENT_OVERLAP,
-                paddingBottom: pageBottomInset,
+                paddingBottom: pageBottomInset + 36,
               },
             ]}
           >
@@ -593,6 +614,8 @@ export default function NotesFeed({
                 item={item.post}
                 index={index}
                 onOpenSharedPost={onOpenSharedPost}
+                onOpenSharedPostChat={onOpenSharedPostChat}
+                onSendSharedPostResponse={onSendSharedPostResponse}
                 colors={colors}
                 t={t}
                 isActive={isActive}
@@ -632,6 +655,8 @@ export default function NotesFeed({
       colors,
       onOpenNote,
       onOpenSharedPost,
+      onOpenSharedPostChat,
+      onSendSharedPostResponse,
       ownedSharedNoteIdSet,
       screenActive,
       snapHeight,
