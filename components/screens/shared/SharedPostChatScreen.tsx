@@ -39,6 +39,7 @@ type SharedPostChatScreenProps = {
 };
 
 type ChatResponseGroup = {
+  type: 'group';
   id: string;
   authorUid: string;
   authorDisplayName: string | null;
@@ -47,6 +48,14 @@ type ChatResponseGroup = {
   createdAt: string;
 };
 
+type ChatDaySeparator = {
+  type: 'day';
+  id: string;
+  label: string;
+};
+
+type ChatListItem = ChatResponseGroup | ChatDaySeparator;
+
 type ReplyPreview = {
   authorLabel: string;
   body: string;
@@ -54,7 +63,6 @@ type ReplyPreview = {
 
 type ReactionOverlay = {
   response: SharedPostResponse;
-  isSelf: boolean;
   pageX: number;
   pageY: number;
 } | null;
@@ -66,6 +74,18 @@ const RESPONSE_SKELETON_ROWS = [
   { key: 'self-medium', isSelf: true, width: '50%', minHeight: 40 },
 ] as const;
 const QUICK_RESPONSES = ['💛', '🥹', '✨', '😂'] as const;
+const RESPONSE_PAGE_SIZE = 50;
+const responseSnapshotByPostId = new Map<string, SharedPostResponse[]>();
+const hydratedResponsePostIds = new Set<string>();
+
+function getRememberedResponses(postId: string) {
+  return responseSnapshotByPostId.get(postId) ?? [];
+}
+
+function rememberResponses(postId: string, responses: SharedPostResponse[]) {
+  responseSnapshotByPostId.set(postId, responses);
+  hydratedResponsePostIds.add(postId);
+}
 
 function ResponseSkeletonRows({
   colors,
@@ -117,12 +137,14 @@ function ResponseSkeletonRows({
 
 function ReplyableBubble({
   children,
+  iconColor,
   isSelf,
   onReply,
   onLongPress,
   style,
 }: {
   children: ReactNode;
+  iconColor: string;
   isSelf: boolean;
   onReply: () => void;
   onLongPress: (event: GestureResponderEvent) => void;
@@ -130,6 +152,11 @@ function ReplyableBubble({
 }) {
   const translateX = useRef(new Animated.Value(0)).current;
   const swipeDirection = isSelf ? -1 : 1;
+  const iconOpacity = translateX.interpolate({
+    inputRange: isSelf ? [-54, -18, 0] : [0, 18, 54],
+    outputRange: isSelf ? [1, 0, 0] : [0, 0, 1],
+    extrapolate: 'clamp',
+  });
   const panResponder = useRef(
     PanResponder.create({
       onMoveShouldSetPanResponder: (_, gestureState) =>
@@ -161,6 +188,16 @@ function ReplyableBubble({
       {...panResponder.panHandlers}
       style={{ transform: [{ translateX }] }}
     >
+      <Animated.View
+        pointerEvents="none"
+        style={[
+          styles.replySwipeHint,
+          isSelf ? styles.selfReplySwipeHint : styles.friendReplySwipeHint,
+          { opacity: iconOpacity },
+        ]}
+      >
+        <Ionicons name="return-up-back" size={18} color={iconColor} />
+      </Animated.View>
       <Pressable onLongPress={onLongPress} delayLongPress={260} style={style}>
         {children}
       </Pressable>
@@ -188,12 +225,58 @@ function isReactionOnlyResponse(response: SharedPostResponse) {
   return Boolean(response.emoji && response.text.trim().length === 0);
 }
 
-function groupConsecutiveResponses(responses: SharedPostResponse[]): ChatResponseGroup[] {
-  const groups: ChatResponseGroup[] = [];
+function getDayKey(value: string) {
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) {
+    return 'unknown';
+  }
+
+  return `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
+}
+
+function formatDaySeparatorLabel(value: string, t: ReturnType<typeof useTranslation>['t']) {
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) {
+    return '';
+  }
+
+  const now = new Date();
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const startOfDate = new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+  const dayDelta = Math.round((startOfToday - startOfDate) / 86400000);
+  if (dayDelta === 0) {
+    return t('common.today', 'Today');
+  }
+  if (dayDelta === 1) {
+    return t('common.yesterday', 'Yesterday');
+  }
+
+  return new Intl.DateTimeFormat(undefined, {
+    month: 'short',
+    day: 'numeric',
+  }).format(date);
+}
+
+function groupConsecutiveResponses(
+  responses: SharedPostResponse[],
+  t: ReturnType<typeof useTranslation>['t']
+): ChatListItem[] {
+  const groups: ChatListItem[] = [];
+  let currentDayKey: string | null = null;
 
   for (const response of responses) {
+    const responseDayKey = getDayKey(response.createdAt);
+    if (responseDayKey !== currentDayKey) {
+      currentDayKey = responseDayKey;
+      groups.push({
+        type: 'day',
+        id: `day:${responseDayKey}`,
+        label: formatDaySeparatorLabel(response.createdAt, t),
+      });
+    }
+
     const previousGroup = groups[groups.length - 1];
-    if (previousGroup?.authorUid === response.authorUid) {
+    if (previousGroup?.type === 'group' && previousGroup.authorUid === response.authorUid) {
       previousGroup.responses.push(response);
       previousGroup.createdAt = response.createdAt;
       previousGroup.id = `${previousGroup.responses[0]?.id ?? response.id}:${response.id}`;
@@ -201,6 +284,7 @@ function groupConsecutiveResponses(responses: SharedPostResponse[]): ChatRespons
     }
 
     groups.push({
+      type: 'group',
       id: response.id,
       authorUid: response.authorUid,
       authorDisplayName: response.authorDisplayName,
@@ -278,12 +362,20 @@ function areResponseListsEqual(
 
   return left.every((leftResponse, index) => {
     const rightResponse = right[index];
+    const leftReactionSignature = (leftResponse.reactions ?? [])
+      .map((reaction) => `${reaction.id}:${reaction.authorUid}:${reaction.emoji}:${reaction.createdAt}`)
+      .join('|');
+    const rightReactionSignature = (rightResponse?.reactions ?? [])
+      .map((reaction) => `${reaction.id}:${reaction.authorUid}:${reaction.emoji}:${reaction.createdAt}`)
+      .join('|');
     return (
       rightResponse &&
       leftResponse.id === rightResponse.id &&
       leftResponse.authorUid === rightResponse.authorUid &&
       leftResponse.emoji === rightResponse.emoji &&
       leftResponse.text === rightResponse.text &&
+      leftResponse.replyToResponseId === rightResponse.replyToResponseId &&
+      leftReactionSignature === rightReactionSignature &&
       leftResponse.createdAt === rightResponse.createdAt
     );
   });
@@ -386,17 +478,29 @@ export default function SharedPostChatScreen({ postId }: SharedPostChatScreenPro
     loading,
     refreshSharedFeed,
     sharedPosts = [],
-    getSharedPostResponses = async () => [],
+    getSharedPostResponsesPage = async () => [],
     subscribeToSharedPostResponses,
     updateFriendNickname = async () => undefined,
+    createSharedPostResponseReaction = async () => {
+      throw new Error(t('shared.responseSendFailed', 'Could not send response.'));
+    },
+    markSharedThreadRead = async () => null,
     createSharedPostResponse = async () => {
       throw new Error(t('shared.responseSendFailed', 'Could not send response.'));
     },
   } = useSharedFeedStore();
-  const [responses, setResponses] = useState<SharedPostResponse[]>([]);
+  const [responses, setResponses] = useState<SharedPostResponse[]>(() =>
+    getRememberedResponses(postId)
+  );
   const [draft, setDraft] = useState('');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [isLoadingResponses, setIsLoadingResponses] = useState(true);
+  const [isLoadingResponses, setIsLoadingResponses] = useState(
+    () => !hydratedResponsePostIds.has(postId)
+  );
+  const [isLoadingOlderResponses, setIsLoadingOlderResponses] = useState(false);
+  const [hasOlderResponses, setHasOlderResponses] = useState(
+    () => getRememberedResponses(postId).length >= RESPONSE_PAGE_SIZE
+  );
   const [isSending, setIsSending] = useState(false);
   const [isNicknameEditorVisible, setIsNicknameEditorVisible] = useState(false);
   const [nicknameDraft, setNicknameDraft] = useState('');
@@ -404,13 +508,15 @@ export default function SharedPostChatScreen({ postId }: SharedPostChatScreenPro
   const [isSavingNickname, setIsSavingNickname] = useState(false);
   const [replyTarget, setReplyTarget] = useState<SharedPostResponse | null>(null);
   const [reactionOverlay, setReactionOverlay] = useState<ReactionOverlay>(null);
-  const listRef = useRef<FlashListRef<ChatResponseGroup> | null>(null);
+  const [highlightedResponseId, setHighlightedResponseId] = useState<string | null>(null);
+  const listRef = useRef<FlashListRef<ChatListItem> | null>(null);
   const pendingResponsesRef = useRef<Map<string, SharedPostResponse>>(new Map());
   const initialHydrationSettledRef = useRef(false);
   const previousResponseCountRef = useRef(0);
+  const reactionOverlayProgress = useRef(new Animated.Value(0)).current;
 
   const post = sharedPosts.find((item) => item.id === postId) ?? null;
-  const responseGroups = useMemo(() => groupConsecutiveResponses(responses), [responses]);
+  const responseGroups = useMemo(() => groupConsecutiveResponses(responses, t), [responses, t]);
   const responseById = useMemo(
     () => new Map(responses.map((response) => [response.id, response] as const)),
     [responses]
@@ -461,6 +567,16 @@ export default function SharedPostChatScreen({ postId }: SharedPostChatScreenPro
     },
     [getAuthorLabel, responseById]
   );
+
+  useEffect(() => {
+    Animated.spring(reactionOverlayProgress, {
+      toValue: reactionOverlay ? 1 : 0,
+      useNativeDriver: true,
+      damping: 16,
+      stiffness: 260,
+      mass: 0.7,
+    }).start();
+  }, [reactionOverlay, reactionOverlayProgress]);
 
   const postAuthorLabel = post
     ? getAuthorLabel(post.authorUid, post.authorDisplayName)
@@ -569,22 +685,32 @@ export default function SharedPostChatScreen({ postId }: SharedPostChatScreenPro
   const shouldShowHeaderPresence = Boolean(post && participantIds.length <= 1);
   const applyRemoteResponses = useCallback((nextResponses: SharedPostResponse[]) => {
     setResponses((current) => {
-      const next = mergeResponses(nextResponses, Array.from(pendingResponsesRef.current.values()));
+      const next = mergeResponses(
+        [...current, ...nextResponses],
+        Array.from(pendingResponsesRef.current.values())
+      );
+      rememberResponses(postId, next);
       return areResponseListsEqual(current, next) ? current : next;
     });
-  }, []);
+  }, [postId]);
 
   useEffect(() => {
+    const rememberedResponses = getRememberedResponses(postId);
     initialHydrationSettledRef.current = false;
     previousResponseCountRef.current = 0;
-    setIsLoadingResponses(true);
+    pendingResponsesRef.current.clear();
+    setResponses(rememberedResponses);
+    setIsLoadingResponses(!hydratedResponsePostIds.has(postId));
+    setHasOlderResponses(rememberedResponses.length >= RESPONSE_PAGE_SIZE);
+    setIsLoadingOlderResponses(false);
     setErrorMessage(null);
     if (!subscribeToSharedPostResponses) {
       let cancelled = false;
-      void getSharedPostResponses(postId)
+      void getSharedPostResponsesPage(postId, { limit: RESPONSE_PAGE_SIZE })
         .then((nextResponses) => {
           if (!cancelled) {
             applyRemoteResponses(nextResponses);
+            setHasOlderResponses(nextResponses.length >= RESPONSE_PAGE_SIZE);
           }
         })
         .catch((error) => {
@@ -611,6 +737,7 @@ export default function SharedPostChatScreen({ postId }: SharedPostChatScreenPro
       return subscribeToSharedPostResponses(postId, {
         onResponses: (nextResponses) => {
           applyRemoteResponses(nextResponses);
+          setHasOlderResponses((current) => current || nextResponses.length >= RESPONSE_PAGE_SIZE);
           setIsLoadingResponses(false);
         },
         onError: (error) => {
@@ -632,7 +759,13 @@ export default function SharedPostChatScreen({ postId }: SharedPostChatScreenPro
     }
 
     return undefined;
-  }, [applyRemoteResponses, getSharedPostResponses, postId, subscribeToSharedPostResponses, t]);
+  }, [
+    applyRemoteResponses,
+    getSharedPostResponsesPage,
+    postId,
+    subscribeToSharedPostResponses,
+    t,
+  ]);
 
   useEffect(() => {
     if (!post && !loading) {
@@ -656,6 +789,15 @@ export default function SharedPostChatScreen({ postId }: SharedPostChatScreenPro
     initialHydrationSettledRef.current = true;
     previousResponseCountRef.current = responses.length;
   }, [responses.length]);
+
+  useEffect(() => {
+    if (isLoadingResponses) {
+      return;
+    }
+
+    const lastResponse = responses[responses.length - 1] ?? null;
+    void markSharedThreadRead(postId, lastResponse?.id ?? null).catch(() => undefined);
+  }, [isLoadingResponses, markSharedThreadRead, postId, responses]);
 
   const openNicknameEditor = useCallback(() => {
     if (!primaryFriend) {
@@ -735,6 +877,7 @@ export default function SharedPostChatScreen({ postId }: SharedPostChatScreenPro
       pendingResponsesRef.current.set(optimisticId, optimisticResponse);
       setResponses((current) => {
         const next = mergeResponses(current, [optimisticResponse]);
+        rememberResponses(post.id, next);
         return areResponseListsEqual(current, next) ? current : next;
       });
       if (!emoji) {
@@ -759,11 +902,16 @@ export default function SharedPostChatScreen({ postId }: SharedPostChatScreenPro
             current.filter((item) => item.id !== optimisticId),
             [response]
           );
+          rememberResponses(post.id, next);
           return areResponseListsEqual(current, next) ? current : next;
         });
       } catch (error) {
         pendingResponsesRef.current.delete(optimisticId);
-        setResponses((current) => current.filter((item) => item.id !== optimisticId));
+        setResponses((current) => {
+          const next = current.filter((item) => item.id !== optimisticId);
+          rememberResponses(post.id, next);
+          return next;
+        });
         if (!emoji) {
           setDraft(text);
         }
@@ -781,6 +929,160 @@ export default function SharedPostChatScreen({ postId }: SharedPostChatScreenPro
     },
     [createSharedPostResponse, draft, isSending, post, replyTarget, t, user]
   );
+
+  const sendReaction = useCallback(
+    async (targetResponse: SharedPostResponse, emoji: string) => {
+      if (!post || !user?.uid) {
+        return;
+      }
+
+      const optimisticReaction = {
+        id: `local-shared-response-reaction-${Date.now()}`,
+        postId: post.id,
+        responseId: targetResponse.id,
+        authorUid: user.uid,
+        authorDisplayName: user ? getUserSocialName(user) : t('shared.chatYou', 'You'),
+        authorPhotoURLSnapshot: user.photoURL ?? null,
+        emoji,
+        createdAt: new Date().toISOString(),
+      };
+      setReactionOverlay(null);
+      setResponses((current) => {
+        const next = current.map((response) =>
+          response.id === targetResponse.id
+            ? {
+                ...response,
+                reactions: [
+                  ...(response.reactions ?? []).filter(
+                    (reaction) => reaction.authorUid !== user.uid
+                  ),
+                  optimisticReaction,
+                ],
+              }
+            : response
+        );
+        rememberResponses(post.id, next);
+        return next;
+      });
+
+      try {
+        const reaction = await createSharedPostResponseReaction(post.id, targetResponse.id, emoji);
+        setResponses((current) => {
+          const next = current.map((response) =>
+            response.id === targetResponse.id
+              ? {
+                  ...response,
+                  reactions: [
+                    ...(response.reactions ?? []).filter(
+                      (item) =>
+                        item.authorUid !== reaction.authorUid &&
+                        item.id !== optimisticReaction.id
+                    ),
+                    reaction,
+                  ],
+                }
+              : response
+          );
+          rememberResponses(post.id, next);
+          return next;
+        });
+      } catch (error) {
+        setResponses((current) => {
+          const next = current.map((response) =>
+            response.id === targetResponse.id
+              ? {
+                  ...response,
+                  reactions: (response.reactions ?? []).filter(
+                    (reaction) => reaction.id !== optimisticReaction.id
+                  ),
+                }
+              : response
+          );
+          rememberResponses(post.id, next);
+          return next;
+        });
+        setErrorMessage(
+          error instanceof Error
+            ? error.message
+            : t('shared.responseSendFailed', 'Could not send response.')
+        );
+      }
+    },
+    [createSharedPostResponseReaction, post, t, user]
+  );
+
+  const scrollToResponse = useCallback(
+    (responseId: string | null | undefined) => {
+      if (!responseId) {
+        return;
+      }
+
+      const itemIndex = responseGroups.findIndex(
+        (item) =>
+          item.type === 'group' &&
+          item.responses.some((response) => response.id === responseId)
+      );
+      if (itemIndex < 0) {
+        return;
+      }
+
+      setHighlightedResponseId(responseId);
+      listRef.current?.scrollToIndex({
+        index: itemIndex,
+        animated: true,
+        viewPosition: 0.45,
+      });
+      setTimeout(() => setHighlightedResponseId(null), 1200);
+    },
+    [responseGroups]
+  );
+
+  const loadOlderResponses = useCallback(() => {
+    if (isLoadingOlderResponses || isLoadingResponses || !hasOlderResponses || responses.length === 0) {
+      return;
+    }
+
+    const oldestResponse = responses[0];
+    if (!oldestResponse) {
+      return;
+    }
+
+    setIsLoadingOlderResponses(true);
+    void getSharedPostResponsesPage(postId, {
+      limit: RESPONSE_PAGE_SIZE,
+      beforeCreatedAt: oldestResponse.createdAt,
+    })
+      .then((olderResponses) => {
+        setHasOlderResponses(olderResponses.length >= RESPONSE_PAGE_SIZE);
+        if (olderResponses.length === 0) {
+          return;
+        }
+
+        setResponses((current) => {
+          const next = mergeResponses([...olderResponses, ...current], []);
+          rememberResponses(postId, next);
+          return areResponseListsEqual(current, next) ? current : next;
+        });
+      })
+      .catch((error) => {
+        setErrorMessage(
+          error instanceof Error
+            ? error.message
+            : t('shared.responseLoadFailed', 'Could not load responses.')
+        );
+      })
+      .finally(() => {
+        setIsLoadingOlderResponses(false);
+      });
+  }, [
+    getSharedPostResponsesPage,
+    hasOlderResponses,
+    isLoadingOlderResponses,
+    isLoadingResponses,
+    postId,
+    responses,
+    t,
+  ]);
 
   const openMemory = useCallback(() => {
     router.push(`/shared/${postId}` as any);
@@ -870,7 +1172,18 @@ export default function SharedPostChatScreen({ postId }: SharedPostChatScreenPro
     [colors.border, colors.primarySoft, colors.surface]
   );
   const renderResponseItem = useCallback(
-    ({ item: group }: { item: ChatResponseGroup }) => {
+    ({ item }: { item: ChatListItem }) => {
+      if (item.type === 'day') {
+        return (
+          <View style={styles.daySeparatorWrap}>
+            <Text style={[styles.daySeparatorText, { color: colors.secondaryText }]}>
+              {item.label}
+            </Text>
+          </View>
+        );
+      }
+
+      const group = item;
       const isSelf = group.authorUid === user?.uid;
       const authorLabel = getAuthorLabel(group.authorUid, group.authorDisplayName);
       const avatarLabel = authorLabel
@@ -926,6 +1239,8 @@ export default function SharedPostChatScreen({ postId }: SharedPostChatScreenPro
                 const isLastInGroup = responseIndex === group.responses.length - 1;
                 const isReactionOnly = isReactionOnlyResponse(response);
                 const replyPreview = getResponseReplyPreview(response);
+                const reactions = response.reactions ?? [];
+                const isHighlighted = highlightedResponseId === response.id;
                 return (
                   <View
                     key={response.id}
@@ -933,6 +1248,7 @@ export default function SharedPostChatScreen({ postId }: SharedPostChatScreenPro
                   >
                     <ReplyableBubble
                       isSelf={isSelf}
+                      iconColor={colors.secondaryText}
                       onReply={() => {
                         setReplyTarget(response);
                         setReactionOverlay(null);
@@ -940,7 +1256,6 @@ export default function SharedPostChatScreen({ postId }: SharedPostChatScreenPro
                       onLongPress={(event) => {
                         setReactionOverlay({
                           response,
-                          isSelf,
                           pageX: event.nativeEvent.pageX,
                           pageY: event.nativeEvent.pageY,
                         });
@@ -955,12 +1270,21 @@ export default function SharedPostChatScreen({ postId }: SharedPostChatScreenPro
                         !isSelf && !isLastInGroup ? styles.friendBubbleGroupedBottom : null,
                         {
                           backgroundColor: isSelf ? colors.primary : colors.surface,
-                          borderColor: isSelf ? 'transparent' : colors.border,
+                          borderColor: isHighlighted
+                            ? colors.primary
+                            : isSelf
+                              ? 'transparent'
+                              : colors.border,
                         },
                       ]}
                     >
                     {replyPreview ? (
-                      <View
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel={t('shared.chatJumpToReply', 'Jump to replied message')}
+                        onPress={() => {
+                          scrollToResponse(response.replyToResponseId);
+                        }}
                         style={[
                           styles.replyPreviewBubble,
                           {
@@ -988,7 +1312,7 @@ export default function SharedPostChatScreen({ postId }: SharedPostChatScreenPro
                         >
                           {replyPreview.body}
                         </Text>
-                      </View>
+                      </Pressable>
                     ) : null}
                     <Text
                       android_hyphenationFrequency="normal"
@@ -1002,6 +1326,22 @@ export default function SharedPostChatScreen({ postId }: SharedPostChatScreenPro
                       {formatResponseBody(response)}
                     </Text>
                     </ReplyableBubble>
+                    {reactions.length > 0 ? (
+                      <View
+                        style={[
+                          styles.reactionChip,
+                          isSelf ? styles.selfReactionChip : styles.friendReactionChip,
+                          {
+                            backgroundColor: colors.surface,
+                            borderColor: colors.border,
+                          },
+                        ]}
+                      >
+                        <Text style={styles.reactionChipText}>
+                          {reactions.map((reaction) => reaction.emoji).join(' ')}
+                        </Text>
+                      </View>
+                    ) : null}
                   </View>
                 );
               })}
@@ -1038,6 +1378,8 @@ export default function SharedPostChatScreen({ postId }: SharedPostChatScreenPro
       colors,
       getAuthorLabel,
       getResponseReplyPreview,
+      highlightedResponseId,
+      scrollToResponse,
       t,
       user?.uid,
     ]
@@ -1230,6 +1572,9 @@ export default function SharedPostChatScreen({ postId }: SharedPostChatScreenPro
             ItemSeparatorComponent={() => <View style={styles.messageSeparator} />}
             ListFooterComponent={isThreadHydrating ? renderResponseLoadingFooter : undefined}
             ListEmptyComponent={isThreadHydrating ? null : renderEmptyThread}
+            maintainVisibleContentPosition={{ disabled: true }}
+            onStartReached={loadOlderResponses}
+            onStartReachedThreshold={0.2}
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
             contentContainerStyle={[
@@ -1338,7 +1683,7 @@ export default function SharedPostChatScreen({ postId }: SharedPostChatScreenPro
             style={StyleSheet.absoluteFill}
             onPress={() => setReactionOverlay(null)}
           />
-          <View
+          <Animated.View
             style={[
               styles.reactionTray,
               {
@@ -1347,6 +1692,15 @@ export default function SharedPostChatScreen({ postId }: SharedPostChatScreenPro
                 width: reactionOverlayWidth,
                 backgroundColor: colors.surface,
                 borderColor: colors.border,
+                opacity: reactionOverlayProgress,
+                transform: [
+                  {
+                    scale: reactionOverlayProgress.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [0.92, 1],
+                    }),
+                  },
+                ],
               },
             ]}
           >
@@ -1354,8 +1708,11 @@ export default function SharedPostChatScreen({ postId }: SharedPostChatScreenPro
               <Pressable
                 key={reactionEmoji}
                 accessibilityRole="button"
+                accessibilityLabel={t('shared.chatReactWith', 'React with {{emoji}}', {
+                  emoji: reactionEmoji,
+                })}
                 onPress={() => {
-                  void sendResponse(reactionEmoji, reactionOverlay.response.id);
+                  void sendReaction(reactionOverlay.response, reactionEmoji);
                 }}
                 style={({ pressed }) => [
                   styles.reactionTrayButton,
@@ -1365,7 +1722,7 @@ export default function SharedPostChatScreen({ postId }: SharedPostChatScreenPro
                 <Text style={styles.reactionTrayText}>{reactionEmoji}</Text>
               </Pressable>
             ))}
-          </View>
+          </Animated.View>
         </View>
       ) : null}
       <TextFieldEditSheet
@@ -1618,6 +1975,22 @@ const styles = StyleSheet.create({
   messageSeparator: {
     height: 6,
   },
+  daySeparatorWrap: {
+    width: '100%',
+    alignSelf: 'stretch',
+    alignItems: 'center',
+    paddingVertical: 10,
+  },
+  daySeparatorText: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 10,
+    fontSize: 11,
+    lineHeight: 14,
+    fontWeight: '800',
+    fontFamily: 'Noto Sans',
+    overflow: 'hidden',
+  },
   messageRow: {
     width: '100%',
     flexDirection: 'row',
@@ -1654,6 +2027,18 @@ const styles = StyleSheet.create({
     maxWidth: '100%',
     gap: 5,
     position: 'relative',
+  },
+  replySwipeHint: {
+    position: 'absolute',
+    top: '50%',
+    marginTop: -9,
+  },
+  selfReplySwipeHint: {
+    left: -30,
+  },
+  friendReplySwipeHint: {
+    right: -30,
+    transform: [{ scaleX: -1 }],
   },
   messageAvatar: {
     width: 28,
@@ -1721,6 +2106,33 @@ const styles = StyleSheet.create({
   replyPreviewBody: {
     fontSize: 11,
     lineHeight: 14,
+    fontFamily: 'Noto Sans',
+  },
+  reactionChip: {
+    minHeight: 24,
+    minWidth: 32,
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    marginTop: -6,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 1,
+  },
+  selfReactionChip: {
+    alignSelf: 'flex-end',
+    marginRight: 6,
+  },
+  friendReactionChip: {
+    alignSelf: 'flex-start',
+    marginLeft: 6,
+  },
+  reactionChipText: {
+    fontSize: 13,
+    lineHeight: 17,
     fontFamily: 'Noto Sans',
   },
   reactionTray: {

@@ -541,6 +541,8 @@
         "chatOriginalNote": "Đã chia sẻ một ghi chú.",
         "chatNotFoundBody": "Cuộc trò chuyện này có thể không còn khả dụng.",
         "chatEmptyHint": "Bắt đầu bằng một phản ứng nhanh.",
+        "chatJumpToReply": "Chuyển tới tin nhắn được trả lời",
+        "chatReactWith": "Thả {{emoji}}",
         "chatComposerPlaceholder": "Trả lời kỷ niệm này",
         "chatSending": "Đang gửi...",
         "chatSent": "Đã gửi",

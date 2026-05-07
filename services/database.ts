@@ -830,6 +830,44 @@ export async function getDB(): Promise<SQLite.SQLiteDatabase> {
       );
       CREATE INDEX IF NOT EXISTS idx_shared_post_responses_cache_user_post_created
         ON shared_post_responses_cache(user_uid, post_id, created_at ASC);
+      CREATE TABLE IF NOT EXISTS shared_post_response_reactions_cache (
+        user_uid TEXT NOT NULL,
+        post_id TEXT NOT NULL,
+        response_id TEXT NOT NULL,
+        id TEXT NOT NULL,
+        author_uid TEXT NOT NULL,
+        author_display_name TEXT,
+        author_photo_url_snapshot TEXT,
+        emoji TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        PRIMARY KEY (user_uid, response_id, author_uid)
+      );
+      CREATE INDEX IF NOT EXISTS idx_shared_post_response_reactions_cache_user_post
+        ON shared_post_response_reactions_cache(user_uid, post_id, response_id);
+      CREATE TABLE IF NOT EXISTS shared_thread_summaries_cache (
+        user_uid TEXT NOT NULL,
+        post_id TEXT NOT NULL,
+        latest_response_id TEXT,
+        latest_response_created_at TEXT,
+        latest_activity_at TEXT,
+        latest_activity_author_uid TEXT,
+        latest_activity_author_display_name TEXT,
+        latest_activity_author_photo_url_snapshot TEXT,
+        latest_activity_text TEXT,
+        latest_activity_emoji TEXT,
+        latest_activity_kind TEXT CHECK(latest_activity_kind IN ('response', 'reaction')),
+        updated_at TEXT NOT NULL,
+        PRIMARY KEY (user_uid, post_id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_shared_thread_summaries_cache_user_activity
+        ON shared_thread_summaries_cache(user_uid, latest_activity_at DESC);
+      CREATE TABLE IF NOT EXISTS shared_thread_read_state (
+        user_uid TEXT NOT NULL,
+        post_id TEXT NOT NULL,
+        last_read_response_id TEXT,
+        last_read_at TEXT NOT NULL,
+        PRIMARY KEY (user_uid, post_id)
+      );
       CREATE TABLE IF NOT EXISTS shared_invites_cache (
         user_uid TEXT PRIMARY KEY NOT NULL,
         id TEXT NOT NULL,
@@ -1152,6 +1190,9 @@ export async function getDB(): Promise<SQLite.SQLiteDatabase> {
                     DROP TABLE IF EXISTS shared_friends_cache;
                     DROP TABLE IF EXISTS shared_posts_cache;
                     DROP TABLE IF EXISTS shared_post_responses_cache;
+                    DROP TABLE IF EXISTS shared_post_response_reactions_cache;
+                    DROP TABLE IF EXISTS shared_thread_summaries_cache;
+                    DROP TABLE IF EXISTS shared_thread_read_state;
                     DROP TABLE IF EXISTS shared_invites_cache;
                     DROP TABLE IF EXISTS shared_feed_cache_meta;
                 `);
@@ -1296,6 +1337,54 @@ export async function getDB(): Promise<SQLite.SQLiteDatabase> {
             await database.execAsync(
                 `CREATE INDEX IF NOT EXISTS idx_shared_post_responses_cache_user_post_created
                  ON shared_post_responses_cache(user_uid, post_id, created_at ASC)`
+            );
+            await database.execAsync(
+                `CREATE TABLE IF NOT EXISTS shared_post_response_reactions_cache (
+                    user_uid TEXT NOT NULL,
+                    post_id TEXT NOT NULL,
+                    response_id TEXT NOT NULL,
+                    id TEXT NOT NULL,
+                    author_uid TEXT NOT NULL,
+                    author_display_name TEXT,
+                    author_photo_url_snapshot TEXT,
+                    emoji TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    PRIMARY KEY (user_uid, response_id, author_uid)
+                )`
+            );
+            await database.execAsync(
+                `CREATE INDEX IF NOT EXISTS idx_shared_post_response_reactions_cache_user_post
+                 ON shared_post_response_reactions_cache(user_uid, post_id, response_id)`
+            );
+            await database.execAsync(
+                `CREATE TABLE IF NOT EXISTS shared_thread_summaries_cache (
+                    user_uid TEXT NOT NULL,
+                    post_id TEXT NOT NULL,
+                    latest_response_id TEXT,
+                    latest_response_created_at TEXT,
+                    latest_activity_at TEXT,
+                    latest_activity_author_uid TEXT,
+                    latest_activity_author_display_name TEXT,
+                    latest_activity_author_photo_url_snapshot TEXT,
+                    latest_activity_text TEXT,
+                    latest_activity_emoji TEXT,
+                    latest_activity_kind TEXT CHECK(latest_activity_kind IN ('response', 'reaction')),
+                    updated_at TEXT NOT NULL,
+                    PRIMARY KEY (user_uid, post_id)
+                )`
+            );
+            await database.execAsync(
+                `CREATE INDEX IF NOT EXISTS idx_shared_thread_summaries_cache_user_activity
+                 ON shared_thread_summaries_cache(user_uid, latest_activity_at DESC)`
+            );
+            await database.execAsync(
+                `CREATE TABLE IF NOT EXISTS shared_thread_read_state (
+                    user_uid TEXT NOT NULL,
+                    post_id TEXT NOT NULL,
+                    last_read_response_id TEXT,
+                    last_read_at TEXT NOT NULL,
+                    PRIMARY KEY (user_uid, post_id)
+                )`
             );
             await database.execAsync(
                 `CREATE TABLE IF NOT EXISTS shared_invites_cache (

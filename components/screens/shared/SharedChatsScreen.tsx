@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { Stack, useRouter } from 'expo-router';
 import { FlashList } from '@shopify/flash-list';
-import { useCallback, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -10,7 +10,8 @@ import { Layout } from '../../../constants/theme';
 import { useAuth } from '../../../hooks/useAuth';
 import { useSharedFeedStore } from '../../../hooks/useSharedFeed';
 import { useTheme } from '../../../hooks/useTheme';
-import type { SharedPost } from '../../../services/sharedFeedService';
+import type { SharedPost, SharedThreadSummary } from '../../../services/sharedFeedService';
+import type { SharedThreadReadState } from '../../../services/sharedFeedCache';
 import { formatChatTimestamp } from '../../../utils/dateUtils';
 
 const CHAT_LIST_SKELETON_ROWS = [
@@ -18,6 +19,23 @@ const CHAT_LIST_SKELETON_ROWS = [
   { key: 'second', titleWidth: '38%', previewWidth: '54%' },
   { key: 'third', titleWidth: '52%', previewWidth: '62%' },
 ] as const;
+const cachedThreadSummaryByPostId = new Map<string, SharedThreadSummary>();
+const cachedReadStateByUserUid = new Map<string, Record<string, SharedThreadReadState>>();
+
+function getCachedThreadSummaries(postIds: readonly string[]) {
+  return Object.fromEntries(
+    postIds.flatMap((postId) => {
+      const summary = cachedThreadSummaryByPostId.get(postId);
+      return summary ? [[postId, summary] as const] : [];
+    })
+  );
+}
+
+function rememberThreadSummaries(summaries: readonly SharedThreadSummary[]) {
+  for (const summary of summaries) {
+    cachedThreadSummaryByPostId.set(summary.postId, summary);
+  }
+}
 
 function getThreadPreview(post: SharedPost, t: ReturnType<typeof useTranslation>['t']) {
   if (post.type === 'photo') {
@@ -35,13 +53,46 @@ function getThreadIconName(post: SharedPost) {
   return post.type === 'photo' ? 'image-outline' : 'document-text-outline';
 }
 
+function getSummaryBody(summary: SharedThreadSummary) {
+  return [summary.latestActivityEmoji, summary.latestActivityText].filter(Boolean).join(' ').trim();
+}
+
+function isSummaryUnread(
+  summary: SharedThreadSummary | null | undefined,
+  readState: SharedThreadReadState | null | undefined,
+  currentUserUid: string | null | undefined
+) {
+  if (!summary?.latestActivityAt || summary.latestActivityAuthorUid === currentUserUid) {
+    return false;
+  }
+
+  const lastReadAt = readState?.lastReadAt ? new Date(readState.lastReadAt).getTime() : 0;
+  return new Date(summary.latestActivityAt).getTime() > lastReadAt;
+}
+
 export default function SharedChatsScreen() {
   const { t } = useTranslation();
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { isReady: authReady, user } = useAuth();
-  const { friends = [], loading, sharedPosts = [] } = useSharedFeedStore();
+  const {
+    friends = [],
+    loading,
+    sharedPosts = [],
+    getSharedPostThreadSummaries = async () => [],
+    getSharedThreadReadStates = async () => [],
+  } = useSharedFeedStore();
+  const [threadSummaryByPostId, setThreadSummaryByPostId] = useState<
+    Record<string, SharedThreadSummary>
+  >(() => getCachedThreadSummaries(sharedPosts.map((post) => post.id)));
+  const [readStateByPostId, setReadStateByPostId] = useState<
+    Record<string, SharedThreadReadState>
+  >(() => (user?.uid ? cachedReadStateByUserUid.get(user.uid) ?? {} : {}));
+  const threadPostIdsKey = useMemo(
+    () => sharedPosts.map((post) => post.id).join('|'),
+    [sharedPosts]
+  );
   const friendById = useMemo(() => {
     const next = new Map<string, (typeof friends)[number]>();
     for (const friend of friends) {
@@ -49,12 +100,61 @@ export default function SharedChatsScreen() {
     }
     return next;
   }, [friends]);
+  useEffect(() => {
+    const postIds = threadPostIdsKey ? threadPostIdsKey.split('|') : [];
+    if (!authReady || !user?.uid || postIds.length === 0) {
+      if (postIds.length === 0) {
+        setThreadSummaryByPostId({});
+        setReadStateByPostId({});
+      }
+      return;
+    }
+
+    setThreadSummaryByPostId((current) => ({
+      ...getCachedThreadSummaries(postIds),
+      ...current,
+    }));
+    setReadStateByPostId(cachedReadStateByUserUid.get(user.uid) ?? {});
+
+    let cancelled = false;
+    void Promise.all([
+      getSharedPostThreadSummaries(postIds).catch(() => []),
+      getSharedThreadReadStates().catch(() => []),
+    ]).then(([summaries, readStates]) => {
+      if (cancelled) {
+        return;
+      }
+
+      rememberThreadSummaries(summaries);
+      const nextReadStateByPostId = Object.fromEntries(
+        readStates.map((readState) => [readState.postId, readState])
+      );
+      cachedReadStateByUserUid.set(user.uid, nextReadStateByPostId);
+      setThreadSummaryByPostId(Object.fromEntries(summaries.map((summary) => [summary.postId, summary])));
+      setReadStateByPostId(nextReadStateByPostId);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    authReady,
+    getSharedPostThreadSummaries,
+    getSharedThreadReadStates,
+    threadPostIdsKey,
+    user?.uid,
+  ]);
+
   const threads = useMemo(
     () =>
-      [...sharedPosts].sort(
-        (left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime()
-      ),
-    [sharedPosts]
+      [...sharedPosts].sort((left, right) => {
+        const leftSummary = threadSummaryByPostId[left.id];
+        const rightSummary = threadSummaryByPostId[right.id];
+        const leftTime = new Date(leftSummary?.latestActivityAt ?? left.createdAt).getTime();
+        const rightTime = new Date(rightSummary?.latestActivityAt ?? right.createdAt).getTime();
+        return rightTime - leftTime;
+      }),
+    [sharedPosts, threadSummaryByPostId]
   );
   const getThreadParticipant = useCallback(
     (post: SharedPost) => {
@@ -83,6 +183,24 @@ export default function SharedChatsScreen() {
     ({ item: post }: { item: SharedPost }) => {
       const participant = getThreadParticipant(post);
       const avatarLabel = participant.label.replace(/^@/, '').charAt(0).toUpperCase();
+      const summary = threadSummaryByPostId[post.id] ?? null;
+      const hasUnread = isSummaryUnread(summary, readStateByPostId[post.id], user?.uid);
+      const unreadCount = hasUnread ? 1 : 0;
+      const latestAuthor =
+        summary?.latestActivityAuthorUid && summary.latestActivityAuthorUid === user?.uid
+          ? t('shared.chatYou', 'You')
+          : summary?.latestActivityAuthorUid
+            ? getThreadParticipant({
+                ...post,
+                authorUid: summary.latestActivityAuthorUid,
+                authorDisplayName: summary.latestActivityAuthorDisplayName,
+                authorPhotoURLSnapshot: summary.latestActivityAuthorPhotoURLSnapshot,
+              }).label
+            : null;
+      const latestPreview = summary?.latestActivityAt
+        ? `${latestAuthor}: ${getSummaryBody(summary)}`
+        : getThreadPreview(post, t);
+      const latestTimestamp = summary?.latestActivityAt ?? post.createdAt;
       return (
         <Pressable
           accessibilityRole="button"
@@ -124,26 +242,56 @@ export default function SharedChatsScreen() {
             </View>
           </View>
           <View style={styles.threadCopy}>
-            <Text numberOfLines={1} style={[styles.threadTitle, { color: colors.text }]}>
+            <Text
+              numberOfLines={1}
+              style={[
+                styles.threadTitle,
+                hasUnread ? styles.threadTitleUnread : null,
+                { color: colors.text },
+              ]}
+            >
               {participant.label}
             </Text>
             <Text
               numberOfLines={1}
-              style={[styles.threadPreview, { color: colors.secondaryText }]}
+              style={[
+                styles.threadPreview,
+                hasUnread ? styles.threadPreviewUnread : null,
+                { color: hasUnread ? colors.text : colors.secondaryText },
+              ]}
             >
-              {getThreadPreview(post, t)}
+              {latestPreview}
             </Text>
+            {summary?.latestActivityAt ? (
+              <Text
+                numberOfLines={1}
+                style={[styles.threadMemoryContext, { color: colors.secondaryText }]}
+              >
+                {getThreadPreview(post, t)}
+              </Text>
+            ) : null}
           </View>
           <View style={styles.threadMeta}>
             <Text style={[styles.threadTime, { color: colors.secondaryText }]}>
-              {formatChatTimestamp(post.createdAt)}
+              {formatChatTimestamp(latestTimestamp)}
             </Text>
-            <Ionicons name="chevron-forward" size={16} color={colors.secondaryText} />
+            {hasUnread ? (
+              <View style={styles.unreadWrap}>
+                <View style={[styles.unreadDot, { backgroundColor: colors.primary }]} />
+                {unreadCount > 1 ? (
+                  <Text style={[styles.unreadCount, { color: colors.primary }]}>
+                    {unreadCount > 9 ? '9+' : unreadCount}
+                  </Text>
+                ) : null}
+              </View>
+            ) : (
+              <Ionicons name="chevron-forward" size={16} color={colors.secondaryText} />
+            )}
           </View>
         </Pressable>
       );
     },
-    [colors, getThreadParticipant, router, t]
+    [colors, getThreadParticipant, readStateByPostId, router, t, threadSummaryByPostId, user?.uid]
   );
   const renderLoadingThreads = useCallback(
     () => (
@@ -215,7 +363,7 @@ export default function SharedChatsScreen() {
           headerBackButtonMenuEnabled: false,
         }}
       />
-      {!authReady || loading ? (
+      {!authReady || (loading && threads.length === 0) ? (
         renderLoadingThreads()
       ) : threads.length === 0 ? (
         <View style={styles.emptyScreen}>
@@ -360,9 +508,20 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     fontFamily: 'Noto Sans',
   },
+  threadTitleUnread: {
+    fontWeight: '900',
+  },
   threadPreview: {
     fontSize: 13,
     lineHeight: 18,
+    fontFamily: 'Noto Sans',
+  },
+  threadPreviewUnread: {
+    fontWeight: '800',
+  },
+  threadMemoryContext: {
+    fontSize: 11,
+    lineHeight: 15,
     fontFamily: 'Noto Sans',
   },
   threadMeta: {
@@ -373,6 +532,24 @@ const styles = StyleSheet.create({
   threadTime: {
     fontSize: 11,
     lineHeight: 14,
+    fontFamily: 'Noto Sans',
+  },
+  unreadWrap: {
+    minHeight: 18,
+    minWidth: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 2,
+  },
+  unreadDot: {
+    width: 9,
+    height: 9,
+    borderRadius: 4.5,
+  },
+  unreadCount: {
+    fontSize: 10,
+    lineHeight: 12,
+    fontWeight: '900',
     fontFamily: 'Noto Sans',
   },
 });

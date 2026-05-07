@@ -9,6 +9,7 @@ import {
   createFriendGroup as createGroup,
   createSharedPost as createPost,
   createSharedPostResponse as createPostResponse,
+  createSharedPostResponseReaction as createPostResponseReaction,
   deleteFriendGroup as removeGroup,
   deleteOwnedSharedPostsForNotes,
   deleteSharedPost as deletePost,
@@ -19,7 +20,8 @@ import {
   FriendConnection,
   FriendInvite,
   FriendPresenceSnapshot,
-  getSharedPostResponses as fetchPostResponses,
+  getSharedPostResponsesPage as fetchPostResponsesPage,
+  getSharedPostThreadSummaries as fetchPostThreadSummaries,
   getSharedFeedErrorMessage,
   invalidateSharedFeedRefresh,
   refreshSharedFeed as fetchSharedFeed,
@@ -27,6 +29,8 @@ import {
   revokeFriendInvite as revokeInvite,
   SharedPost,
   SharedPostResponse,
+  SharedPostResponseReaction,
+  SharedThreadSummary,
   subscribeToFriendPresence,
   subscribeToSharedFeed,
   subscribeToSharedPostResponses as subscribeToPostResponses,
@@ -39,10 +43,17 @@ import {
   cacheSharedFeedSnapshot,
   clearSharedFeedCache,
   getCachedSharedPostResponses,
+  getCachedSharedPostResponsesPage,
   getCachedSharedFeedSnapshot,
+  getCachedSharedThreadReadStates,
+  getCachedSharedThreadSummaries,
+  markCachedSharedThreadRead,
   patchCachedSharedPostMedia,
   replaceCachedSharedPostResponses,
+  replaceCachedSharedThreadSummaries,
   upsertCachedSharedPostResponse,
+  upsertCachedSharedPostResponseReaction,
+  type SharedThreadReadState,
 } from '../services/sharedFeedCache';
 import { getNotePairedVideoUri } from '../services/livePhotoStorage';
 import { subscribeToDeletedNotes } from '../services/noteMutationEvents';
@@ -98,6 +109,11 @@ interface SharedFeedStoreValue {
   deleteFriendGroup: (groupId: string) => Promise<void>;
   createSharedPost: (note: Note, audienceUserIds?: string[]) => Promise<SharedPost>;
   getSharedPostResponses: (postId: string) => Promise<SharedPostResponse[]>;
+  getSharedPostResponsesPage: (
+    postId: string,
+    options?: { limit?: number; beforeCreatedAt?: string | null }
+  ) => Promise<SharedPostResponse[]>;
+  getSharedPostThreadSummaries: (postIds: string[]) => Promise<SharedThreadSummary[]>;
   subscribeToSharedPostResponses: (
     postId: string,
     options: {
@@ -110,6 +126,16 @@ interface SharedFeedStoreValue {
     postId: string,
     input: { emoji?: string | null; text?: string | null; replyToResponseId?: string | null }
   ) => Promise<SharedPostResponse>;
+  createSharedPostResponseReaction: (
+    postId: string,
+    responseId: string,
+    emoji: string
+  ) => Promise<SharedPostResponseReaction>;
+  getSharedThreadReadStates: () => Promise<SharedThreadReadState[]>;
+  markSharedThreadRead: (
+    postId: string,
+    lastReadResponseId: string | null
+  ) => Promise<SharedThreadReadState | null>;
   updateSharedNote: (note: Note) => Promise<void>;
   deleteSharedNote: (noteId: string) => Promise<void>;
   deleteSharedNotes: (noteIds: string[]) => Promise<void>;
@@ -1418,7 +1444,6 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
           },
           new Date().toISOString()
         );
-        void refreshAll({ force: true }).catch(() => undefined);
       },
       findFriendByUsername: async (username: string) => {
         requireOnline();
@@ -1620,11 +1645,60 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
           return getCachedSharedPostResponses(activeUser.uid, postId);
         }
 
-        const responses = await fetchPostResponses(activeUser, postId);
+        const responses = await fetchPostResponsesPage(activeUser, postId);
         void replaceCachedSharedPostResponses(activeUser.uid, postId, responses).catch((error) => {
           console.warn('Failed to persist shared response cache:', error);
         });
         return responses;
+      },
+      getSharedPostResponsesPage: async (
+        postId: string,
+        options?: { limit?: number; beforeCreatedAt?: string | null }
+      ) => {
+        const activeUser = requireUser();
+        if (!isOnline) {
+          return getCachedSharedPostResponsesPage(activeUser.uid, postId, options);
+        }
+
+        const responses = await fetchPostResponsesPage(activeUser, postId, options);
+        if (options?.beforeCreatedAt) {
+          void Promise.all(
+            responses.map((response) => upsertCachedSharedPostResponse(activeUser.uid, response))
+          ).catch((error) => {
+            console.warn('Failed to persist shared response page cache:', error);
+          });
+        } else {
+          void replaceCachedSharedPostResponses(activeUser.uid, postId, responses).catch((error) => {
+            console.warn('Failed to persist shared response cache:', error);
+          });
+        }
+        return responses;
+      },
+      getSharedPostThreadSummaries: async (postIds: string[]) => {
+        const activeUser = requireUser();
+        const normalizedPostIds = Array.from(
+          new Set(postIds.map((postId) => postId.trim()).filter(Boolean))
+        );
+        if (normalizedPostIds.length === 0) {
+          return [];
+        }
+
+        if (!isOnline) {
+          return getCachedSharedThreadSummaries(activeUser.uid, normalizedPostIds);
+        }
+
+        const cachedSummaries = await getCachedSharedThreadSummaries(
+          activeUser.uid,
+          normalizedPostIds
+        ).catch(() => []);
+        const summaries = await fetchPostThreadSummaries(activeUser, normalizedPostIds);
+        void replaceCachedSharedThreadSummaries(activeUser.uid, summaries).catch((error) => {
+          console.warn('Failed to persist shared thread summary cache:', error);
+        });
+        if (summaries.length === 0 && cachedSummaries.length > 0) {
+          return cachedSummaries;
+        }
+        return summaries;
       },
       subscribeToSharedPostResponses: (
         postId: string,
@@ -1681,6 +1755,27 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
           console.warn('Failed to persist shared response cache:', error);
         });
         return response;
+      },
+      createSharedPostResponseReaction: async (
+        postId: string,
+        responseId: string,
+        emoji: string
+      ) => {
+        requireOnline();
+        const activeUser = requireUser();
+        const reaction = await createPostResponseReaction(activeUser, postId, responseId, emoji);
+        void upsertCachedSharedPostResponseReaction(activeUser.uid, reaction).catch((error) => {
+          console.warn('Failed to persist shared response reaction cache:', error);
+        });
+        return reaction;
+      },
+      getSharedThreadReadStates: async () => {
+        const activeUser = requireUser();
+        return getCachedSharedThreadReadStates(activeUser.uid);
+      },
+      markSharedThreadRead: async (postId: string, lastReadResponseId: string | null) => {
+        const activeUser = requireUser();
+        return markCachedSharedThreadRead(activeUser.uid, postId, lastReadResponseId);
       },
       updateSharedNote: async (note: Note) => {
         requireOnline();

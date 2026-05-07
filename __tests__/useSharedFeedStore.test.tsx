@@ -61,6 +61,9 @@ const mockUpdateOwnPresenceLastSeen = jest.fn();
 const mockUpdateSharedPost = jest.fn();
 const mockGetCachedSharedFeedSnapshot = jest.fn();
 const mockGetCachedSharedPostResponses = jest.fn();
+const mockGetCachedSharedPostResponsesPage = jest.fn();
+const mockGetCachedSharedThreadSummaries = jest.fn();
+const mockReplaceCachedSharedThreadSummaries = jest.fn();
 const mockCacheSharedFeedSnapshot = jest.fn();
 const mockClearSharedFeedCache = jest.fn();
 const mockPatchCachedSharedPostMedia = jest.fn();
@@ -94,9 +97,15 @@ jest.mock('../services/sharedFeedCache', () => ({
   cacheSharedFeedSnapshot: (...args: unknown[]) => mockCacheSharedFeedSnapshot(...args),
   getCachedSharedFeedSnapshot: (...args: unknown[]) => mockGetCachedSharedFeedSnapshot(...args),
   getCachedSharedPostResponses: (...args: unknown[]) => mockGetCachedSharedPostResponses(...args),
+  getCachedSharedPostResponsesPage: (...args: unknown[]) =>
+    mockGetCachedSharedPostResponsesPage(...args),
+  getCachedSharedThreadSummaries: (...args: unknown[]) =>
+    mockGetCachedSharedThreadSummaries(...args),
   clearSharedFeedCache: (...args: unknown[]) => mockClearSharedFeedCache(...args),
   patchCachedSharedPostMedia: (...args: unknown[]) => mockPatchCachedSharedPostMedia(...args),
   replaceCachedSharedPostResponses: (...args: unknown[]) => mockReplaceCachedSharedPostResponses(...args),
+  replaceCachedSharedThreadSummaries: (...args: unknown[]) =>
+    mockReplaceCachedSharedThreadSummaries(...args),
   replaceCachedActiveInvite: (...args: unknown[]) => mockReplaceCachedActiveInvite(...args),
   upsertCachedSharedPostResponse: (...args: unknown[]) => mockUpsertCachedSharedPostResponse(...args),
 }));
@@ -110,6 +119,8 @@ jest.mock('../services/sharedFeedService', () => ({
   findOwnedSharedPostIdsForNote: (...args: unknown[]) => mockFindOwnedSharedPostIdsForNote(...args),
   getSharedFeedErrorMessage: (error: unknown) =>
     error instanceof Error ? error.message : typeof error === 'string' ? error : 'unknown error',
+  getSharedPostResponsesPage: jest.fn(async () => []),
+  getSharedPostThreadSummaries: jest.fn(async () => []),
   invalidateSharedFeedRefresh: jest.fn(),
   refreshSharedFeed: (...args: unknown[]) => mockRefreshSharedFeed(...args),
   removeFriend: (...args: unknown[]) => mockRemoveFriend(...args),
@@ -233,6 +244,9 @@ describe('useSharedFeedStore', () => {
     };
     mockGetCachedSharedFeedSnapshot.mockImplementation(async () => mockCachedSnapshot);
     mockGetCachedSharedPostResponses.mockResolvedValue([]);
+    mockGetCachedSharedPostResponsesPage.mockResolvedValue([]);
+    mockGetCachedSharedThreadSummaries.mockResolvedValue([]);
+    mockReplaceCachedSharedThreadSummaries.mockResolvedValue(undefined);
     mockRefreshSharedFeed.mockImplementation(async () => mockRefreshSnapshot);
     mockUpdateOwnPresenceLastSeen.mockResolvedValue(undefined);
     mockDownloadPhotoFromStorage.mockImplementation(

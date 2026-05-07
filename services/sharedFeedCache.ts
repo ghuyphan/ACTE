@@ -4,6 +4,8 @@ import type {
   SharedFeedSnapshot,
   SharedPost,
   SharedPostResponse,
+  SharedPostResponseReaction,
+  SharedThreadSummary,
 } from './sharedFeedService';
 import {
   clearStoredActiveInvite,
@@ -73,10 +75,53 @@ interface SharedPostResponseCacheRow {
   created_at: string;
 }
 
+interface SharedPostResponseReactionCacheRow {
+  id: string;
+  post_id: string;
+  response_id: string;
+  author_uid: string;
+  author_display_name: string | null;
+  author_photo_url_snapshot: string | null;
+  emoji: string;
+  created_at: string;
+}
+
+export interface SharedThreadReadState {
+  postId: string;
+  userUid: string;
+  lastReadResponseId: string | null;
+  lastReadAt: string;
+}
+
+interface SharedThreadReadStateRow {
+  post_id: string;
+  user_uid: string;
+  last_read_response_id: string | null;
+  last_read_at: string;
+}
+
+interface SharedThreadSummaryRow {
+  post_id: string;
+  latest_response_id: string | null;
+  latest_response_created_at: string | null;
+  latest_activity_at: string | null;
+  latest_activity_author_uid: string | null;
+  latest_activity_author_display_name: string | null;
+  latest_activity_author_photo_url_snapshot: string | null;
+  latest_activity_text: string | null;
+  latest_activity_emoji: string | null;
+  latest_activity_kind: SharedThreadSummary['latestActivityKind'];
+  updated_at: string;
+}
+
 interface MetaRow {
   last_updated_at: string | null;
   owned_shared_note_ids: string | null;
 }
+
+type SQLiteReader = {
+  getAllAsync<T>(sql: string, ...args: unknown[]): Promise<T[]>;
+};
 
 const SHARED_POST_CACHE_COLUMNS = [
   'user_uid',
@@ -250,7 +295,108 @@ function rowToSharedPostResponse(row: SharedPostResponseCacheRow): SharedPostRes
     emoji: row.emoji,
     text: row.text,
     replyToResponseId: row.reply_to_response_id,
+    reactions: [],
     createdAt: row.created_at,
+  };
+}
+
+function rowToSharedPostResponseReaction(
+  row: SharedPostResponseReactionCacheRow
+): SharedPostResponseReaction {
+  return {
+    id: row.id,
+    postId: row.post_id,
+    responseId: row.response_id,
+    authorUid: row.author_uid,
+    authorDisplayName: row.author_display_name,
+    authorPhotoURLSnapshot: row.author_photo_url_snapshot,
+    emoji: row.emoji,
+    createdAt: row.created_at,
+  };
+}
+
+function rowToSharedThreadReadState(row: SharedThreadReadStateRow): SharedThreadReadState {
+  return {
+    postId: row.post_id,
+    userUid: row.user_uid,
+    lastReadResponseId: row.last_read_response_id,
+    lastReadAt: row.last_read_at,
+  };
+}
+
+function rowToSharedThreadSummary(row: SharedThreadSummaryRow): SharedThreadSummary {
+  return {
+    postId: row.post_id,
+    latestResponseId: row.latest_response_id,
+    latestResponseCreatedAt: row.latest_response_created_at,
+    latestActivityAt: row.latest_activity_at,
+    latestActivityAuthorUid: row.latest_activity_author_uid,
+    latestActivityAuthorDisplayName: row.latest_activity_author_display_name,
+    latestActivityAuthorPhotoURLSnapshot: row.latest_activity_author_photo_url_snapshot,
+    latestActivityText: row.latest_activity_text,
+    latestActivityEmoji: row.latest_activity_emoji,
+    latestActivityKind: row.latest_activity_kind,
+    updatedAt: row.updated_at,
+  };
+}
+
+function deriveSharedThreadSummaryFromResponses(
+  postId: string,
+  responses: SharedPostResponse[],
+  updatedAt = new Date().toISOString()
+): SharedThreadSummary {
+  const latestResponse = responses[responses.length - 1] ?? null;
+  const latestActivity = responses.reduce<{
+    authorUid: string;
+    authorDisplayName: string | null;
+    authorPhotoURLSnapshot: string | null;
+    text: string | null;
+    emoji: string | null;
+    kind: 'response' | 'reaction';
+    createdAt: string;
+  } | null>((latest, response) => {
+    const responseActivity = {
+      authorUid: response.authorUid,
+      authorDisplayName: response.authorDisplayName,
+      authorPhotoURLSnapshot: response.authorPhotoURLSnapshot,
+      text: response.text || null,
+      emoji: response.emoji,
+      kind: 'response' as const,
+      createdAt: response.createdAt,
+    };
+    const reactionActivities = (response.reactions ?? []).map((reaction) => ({
+      authorUid: reaction.authorUid,
+      authorDisplayName: reaction.authorDisplayName,
+      authorPhotoURLSnapshot: reaction.authorPhotoURLSnapshot,
+      text: null,
+      emoji: reaction.emoji,
+      kind: 'reaction' as const,
+      createdAt: reaction.createdAt,
+    }));
+
+    return [responseActivity, ...reactionActivities].reduce((currentLatest, activity) => {
+      if (!currentLatest) {
+        return activity;
+      }
+
+      return new Date(activity.createdAt).getTime() > new Date(currentLatest.createdAt).getTime()
+        ? activity
+        : currentLatest;
+    }, latest);
+  }, null);
+
+  return {
+    postId,
+    latestResponseId: latestResponse?.id ?? null,
+    latestResponseCreatedAt: latestResponse?.createdAt ?? null,
+    latestActivityAt: latestActivity?.createdAt ?? null,
+    latestActivityAuthorUid: latestActivity?.authorUid ?? null,
+    latestActivityAuthorDisplayName: latestActivity?.authorDisplayName ?? null,
+    latestActivityAuthorPhotoURLSnapshot: latestActivity?.authorPhotoURLSnapshot ?? null,
+    latestActivityText: latestActivity?.text ?? null,
+    latestActivityEmoji: latestActivity?.emoji ?? null,
+    latestActivityKind: latestActivity?.kind ?? null,
+    updatedAt,
   };
 }
 
@@ -291,6 +437,181 @@ async function insertCachedSharedPostResponse(
     response.text,
     response.replyToResponseId ?? null,
     response.createdAt
+  );
+}
+
+async function insertCachedSharedPostResponseReaction(
+  tx: SQLiteTransactionExecutor,
+  userUid: string,
+  reaction: SharedPostResponseReaction
+) {
+  await tx.runAsync(
+    `INSERT INTO shared_post_response_reactions_cache (
+      user_uid,
+      post_id,
+      response_id,
+      id,
+      author_uid,
+      author_display_name,
+      author_photo_url_snapshot,
+      emoji,
+      created_at
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(user_uid, response_id, author_uid) DO UPDATE SET
+      id = excluded.id,
+      post_id = excluded.post_id,
+      author_display_name = excluded.author_display_name,
+      author_photo_url_snapshot = excluded.author_photo_url_snapshot,
+      emoji = excluded.emoji,
+      created_at = excluded.created_at`,
+    userUid,
+    reaction.postId,
+    reaction.responseId,
+    reaction.id,
+    reaction.authorUid,
+    reaction.authorDisplayName,
+    reaction.authorPhotoURLSnapshot,
+    reaction.emoji,
+    reaction.createdAt
+  );
+}
+
+async function selectCachedSharedPostResponses(
+  reader: SQLiteReader,
+  userUid: string,
+  postId: string,
+  options?: { limit?: number; beforeCreatedAt?: string | null }
+) {
+  const normalizedPostId = postId.trim();
+  if (!normalizedPostId) {
+    return [];
+  }
+
+  const limit = Math.max(1, Math.min(options?.limit ?? 50, 100));
+  const beforeCreatedAt = options?.beforeCreatedAt?.trim() || null;
+  const rows = beforeCreatedAt
+    ? await reader.getAllAsync<SharedPostResponseCacheRow>(
+        `SELECT id,
+                post_id,
+                author_uid,
+                author_display_name,
+                author_photo_url_snapshot,
+                emoji,
+                text,
+                reply_to_response_id,
+                created_at
+         FROM shared_post_responses_cache
+         WHERE user_uid = ?
+           AND post_id = ?
+           AND created_at < ?
+         ORDER BY created_at DESC
+         LIMIT ?`,
+        userUid,
+        normalizedPostId,
+        beforeCreatedAt,
+        limit
+      )
+    : await reader.getAllAsync<SharedPostResponseCacheRow>(
+        `SELECT id,
+                post_id,
+                author_uid,
+                author_display_name,
+                author_photo_url_snapshot,
+                emoji,
+                text,
+                reply_to_response_id,
+                created_at
+         FROM shared_post_responses_cache
+         WHERE user_uid = ?
+           AND post_id = ?
+         ORDER BY created_at DESC
+         LIMIT ?`,
+        userUid,
+        normalizedPostId,
+        limit
+      );
+
+  const responses = rows.map(rowToSharedPostResponse).reverse();
+  const responseIds = responses.map((response) => response.id);
+  if (responseIds.length === 0) {
+    return responses;
+  }
+
+  const placeholders = responseIds.map(() => '?').join(', ');
+  const reactionRows = await reader.getAllAsync<SharedPostResponseReactionCacheRow>(
+    `SELECT id,
+            post_id,
+            response_id,
+            author_uid,
+            author_display_name,
+            author_photo_url_snapshot,
+            emoji,
+            created_at
+     FROM shared_post_response_reactions_cache
+     WHERE user_uid = ?
+       AND response_id IN (${placeholders})
+     ORDER BY created_at ASC`,
+    userUid,
+    ...responseIds
+  );
+  const reactionsByResponseId = new Map<string, SharedPostResponseReaction[]>();
+  for (const reaction of reactionRows.map(rowToSharedPostResponseReaction)) {
+    const current = reactionsByResponseId.get(reaction.responseId) ?? [];
+    current.push(reaction);
+    reactionsByResponseId.set(reaction.responseId, current);
+  }
+
+  return responses.map((response) => ({
+    ...response,
+    reactions: reactionsByResponseId.get(response.id) ?? [],
+  }));
+}
+
+async function upsertCachedSharedThreadSummaryInTransaction(
+  tx: SQLiteTransactionExecutor,
+  userUid: string,
+  summary: SharedThreadSummary
+) {
+  await tx.runAsync(
+    `INSERT INTO shared_thread_summaries_cache (
+      user_uid,
+      post_id,
+      latest_response_id,
+      latest_response_created_at,
+      latest_activity_at,
+      latest_activity_author_uid,
+      latest_activity_author_display_name,
+      latest_activity_author_photo_url_snapshot,
+      latest_activity_text,
+      latest_activity_emoji,
+      latest_activity_kind,
+      updated_at
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(user_uid, post_id) DO UPDATE SET
+      latest_response_id = excluded.latest_response_id,
+      latest_response_created_at = excluded.latest_response_created_at,
+      latest_activity_at = excluded.latest_activity_at,
+      latest_activity_author_uid = excluded.latest_activity_author_uid,
+      latest_activity_author_display_name = excluded.latest_activity_author_display_name,
+      latest_activity_author_photo_url_snapshot = excluded.latest_activity_author_photo_url_snapshot,
+      latest_activity_text = excluded.latest_activity_text,
+      latest_activity_emoji = excluded.latest_activity_emoji,
+      latest_activity_kind = excluded.latest_activity_kind,
+      updated_at = excluded.updated_at`,
+    userUid,
+    summary.postId,
+    summary.latestResponseId,
+    summary.latestResponseCreatedAt,
+    summary.latestActivityAt,
+    summary.latestActivityAuthorUid,
+    summary.latestActivityAuthorDisplayName,
+    summary.latestActivityAuthorPhotoURLSnapshot,
+    summary.latestActivityText,
+    summary.latestActivityEmoji,
+    summary.latestActivityKind,
+    summary.updatedAt
   );
 }
 
@@ -433,32 +754,79 @@ export async function getCachedSharedPostResponses(
   userUid: string,
   postId: string
 ): Promise<SharedPostResponse[]> {
-  const normalizedPostId = postId.trim();
-  if (!normalizedPostId) {
-    return [];
-  }
-
   const db = await getDB();
-  const rows = await db.getAllAsync<SharedPostResponseCacheRow>(
-    `SELECT id,
-            post_id,
-            author_uid,
-            author_display_name,
-            author_photo_url_snapshot,
-            emoji,
-            text,
-            reply_to_response_id,
-            created_at
-     FROM shared_post_responses_cache
-     WHERE user_uid = ?
-       AND post_id = ?
-     ORDER BY created_at ASC
-     LIMIT 50`,
-    userUid,
-    normalizedPostId
-  );
+  return selectCachedSharedPostResponses(db, userUid, postId);
+}
 
-  return rows.map(rowToSharedPostResponse);
+export async function getCachedSharedPostResponsesPage(
+  userUid: string,
+  postId: string,
+  options: { limit?: number; beforeCreatedAt?: string | null } = {}
+): Promise<SharedPostResponse[]> {
+  const db = await getDB();
+  return selectCachedSharedPostResponses(db, userUid, postId, options);
+}
+
+export async function getCachedSharedThreadSummaries(
+  userUid: string,
+  postIds?: string[]
+): Promise<SharedThreadSummary[]> {
+  const db = await getDB();
+  const normalizedPostIds = postIds
+    ? Array.from(new Set(postIds.map((postId) => postId.trim()).filter(Boolean)))
+    : [];
+
+  const rows =
+    postIds && normalizedPostIds.length === 0
+      ? []
+      : normalizedPostIds.length > 0
+        ? await db.getAllAsync<SharedThreadSummaryRow>(
+            `SELECT post_id,
+                    latest_response_id,
+                    latest_response_created_at,
+                    latest_activity_at,
+                    latest_activity_author_uid,
+                    latest_activity_author_display_name,
+                    latest_activity_author_photo_url_snapshot,
+                    latest_activity_text,
+                    latest_activity_emoji,
+                    latest_activity_kind,
+                    updated_at
+             FROM shared_thread_summaries_cache
+             WHERE user_uid = ?
+               AND post_id IN (${normalizedPostIds.map(() => '?').join(', ')})`,
+            userUid,
+            ...normalizedPostIds
+          )
+        : await db.getAllAsync<SharedThreadSummaryRow>(
+            `SELECT post_id,
+                    latest_response_id,
+                    latest_response_created_at,
+                    latest_activity_at,
+                    latest_activity_author_uid,
+                    latest_activity_author_display_name,
+                    latest_activity_author_photo_url_snapshot,
+                    latest_activity_text,
+                    latest_activity_emoji,
+                    latest_activity_kind,
+                    updated_at
+             FROM shared_thread_summaries_cache
+             WHERE user_uid = ?`,
+            userUid
+          );
+
+  return rows.map(rowToSharedThreadSummary);
+}
+
+export async function replaceCachedSharedThreadSummaries(
+  userUid: string,
+  summaries: SharedThreadSummary[]
+): Promise<void> {
+  await withDatabaseTransaction(async (tx) => {
+    for (const summary of summaries) {
+      await upsertCachedSharedThreadSummaryInTransaction(tx, userUid, summary);
+    }
+  });
 }
 
 export async function replaceCachedSharedPostResponses(
@@ -477,10 +845,23 @@ export async function replaceCachedSharedPostResponses(
       userUid,
       normalizedPostId
     );
+    await tx.runAsync(
+      'DELETE FROM shared_post_response_reactions_cache WHERE user_uid = ? AND post_id = ?',
+      userUid,
+      normalizedPostId
+    );
 
     for (const response of responses) {
       await insertCachedSharedPostResponse(tx, userUid, response);
+      for (const reaction of response.reactions ?? []) {
+        await insertCachedSharedPostResponseReaction(tx, userUid, reaction);
+      }
     }
+    await upsertCachedSharedThreadSummaryInTransaction(
+      tx,
+      userUid,
+      deriveSharedThreadSummaryFromResponses(normalizedPostId, responses)
+    );
   });
 }
 
@@ -490,7 +871,103 @@ export async function upsertCachedSharedPostResponse(
 ): Promise<void> {
   await withDatabaseTransaction(async (tx) => {
     await insertCachedSharedPostResponse(tx, userUid, response);
+    for (const reaction of response.reactions ?? []) {
+      await insertCachedSharedPostResponseReaction(tx, userUid, reaction);
+    }
+    const currentResponses = await selectCachedSharedPostResponses(tx, userUid, response.postId);
+    const nextResponses = currentResponses.some((item) => item.id === response.id)
+      ? currentResponses.map((item) => (item.id === response.id ? response : item))
+      : [...currentResponses, response].sort(
+          (left, right) =>
+            new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime()
+        );
+    await upsertCachedSharedThreadSummaryInTransaction(
+      tx,
+      userUid,
+      deriveSharedThreadSummaryFromResponses(response.postId, nextResponses)
+    );
   });
+}
+
+export async function upsertCachedSharedPostResponseReaction(
+  userUid: string,
+  reaction: SharedPostResponseReaction
+): Promise<void> {
+  await withDatabaseTransaction(async (tx) => {
+    await insertCachedSharedPostResponseReaction(tx, userUid, reaction);
+    const currentResponses = await selectCachedSharedPostResponses(tx, userUid, reaction.postId);
+    const nextResponses = currentResponses.map((response) =>
+      response.id === reaction.responseId
+        ? {
+            ...response,
+            reactions: [
+              ...(response.reactions ?? []).filter((item) => item.authorUid !== reaction.authorUid),
+              reaction,
+            ],
+          }
+        : response
+    );
+    await upsertCachedSharedThreadSummaryInTransaction(
+      tx,
+      userUid,
+      deriveSharedThreadSummaryFromResponses(reaction.postId, nextResponses)
+    );
+  });
+}
+
+export async function getCachedSharedThreadReadStates(
+  userUid: string
+): Promise<SharedThreadReadState[]> {
+  const db = await getDB();
+  const rows = await db.getAllAsync<SharedThreadReadStateRow>(
+    `SELECT post_id,
+            user_uid,
+            last_read_response_id,
+            last_read_at
+     FROM shared_thread_read_state
+     WHERE user_uid = ?`,
+    userUid
+  );
+
+  return rows.map(rowToSharedThreadReadState);
+}
+
+export async function markCachedSharedThreadRead(
+  userUid: string,
+  postId: string,
+  lastReadResponseId: string | null,
+  readAt = new Date().toISOString()
+): Promise<SharedThreadReadState | null> {
+  const normalizedPostId = postId.trim();
+  if (!normalizedPostId) {
+    return null;
+  }
+
+  await withDatabaseTransaction(async (tx) => {
+    await tx.runAsync(
+      `INSERT INTO shared_thread_read_state (
+        user_uid,
+        post_id,
+        last_read_response_id,
+        last_read_at
+      )
+      VALUES (?, ?, ?, ?)
+      ON CONFLICT(user_uid, post_id) DO UPDATE SET
+        last_read_response_id = excluded.last_read_response_id,
+        last_read_at = excluded.last_read_at`,
+      userUid,
+      normalizedPostId,
+      lastReadResponseId,
+      readAt
+    );
+  });
+
+  return {
+    postId: normalizedPostId,
+    userUid,
+    lastReadResponseId,
+    lastReadAt: readAt,
+  };
 }
 
 export async function getCachedActiveInvite(userUid: string): Promise<FriendInvite | null> {
@@ -540,6 +1017,9 @@ export async function clearSharedFeedCache(userUid?: string | null): Promise<voi
       await tx.runAsync('DELETE FROM shared_friends_cache');
       await tx.runAsync('DELETE FROM shared_posts_cache');
       await tx.runAsync('DELETE FROM shared_post_responses_cache');
+      await tx.runAsync('DELETE FROM shared_post_response_reactions_cache');
+      await tx.runAsync('DELETE FROM shared_thread_summaries_cache');
+      await tx.runAsync('DELETE FROM shared_thread_read_state');
       await tx.runAsync('DELETE FROM shared_invites_cache');
       await tx.runAsync('DELETE FROM shared_feed_cache_meta');
     });
@@ -551,6 +1031,9 @@ export async function clearSharedFeedCache(userUid?: string | null): Promise<voi
     await tx.runAsync('DELETE FROM shared_friends_cache WHERE user_uid = ?', userUid);
     await tx.runAsync('DELETE FROM shared_posts_cache WHERE user_uid = ?', userUid);
     await tx.runAsync('DELETE FROM shared_post_responses_cache WHERE user_uid = ?', userUid);
+    await tx.runAsync('DELETE FROM shared_post_response_reactions_cache WHERE user_uid = ?', userUid);
+    await tx.runAsync('DELETE FROM shared_thread_summaries_cache WHERE user_uid = ?', userUid);
+    await tx.runAsync('DELETE FROM shared_thread_read_state WHERE user_uid = ?', userUid);
     await tx.runAsync('DELETE FROM shared_invites_cache WHERE user_uid = ?', userUid);
     await tx.runAsync('DELETE FROM shared_feed_cache_meta WHERE user_uid = ?', userUid);
   });

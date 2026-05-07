@@ -147,7 +147,33 @@ export interface SharedPostResponse {
   emoji: string | null;
   text: string;
   replyToResponseId?: string | null;
+  reactions?: SharedPostResponseReaction[];
   createdAt: string;
+}
+
+export interface SharedPostResponseReaction {
+  id: string;
+  postId: string;
+  responseId: string;
+  authorUid: string;
+  authorDisplayName: string | null;
+  authorPhotoURLSnapshot: string | null;
+  emoji: string;
+  createdAt: string;
+}
+
+export interface SharedThreadSummary {
+  postId: string;
+  latestResponseId: string | null;
+  latestResponseCreatedAt: string | null;
+  latestActivityAt: string | null;
+  latestActivityAuthorUid: string | null;
+  latestActivityAuthorDisplayName: string | null;
+  latestActivityAuthorPhotoURLSnapshot: string | null;
+  latestActivityText: string | null;
+  latestActivityEmoji: string | null;
+  latestActivityKind: 'response' | 'reaction' | null;
+  updatedAt: string;
 }
 
 export type FriendPresenceStatus = 'online' | 'offline' | 'unknown';
@@ -261,6 +287,30 @@ interface SharedPostResponseRow {
   text: string | null;
   reply_to_response_id?: string | null;
   created_at: string;
+}
+
+interface SharedPostResponseReactionRow {
+  id: string;
+  post_id: string;
+  response_id: string;
+  author_user_id: string;
+  author_display_name: string | null;
+  author_photo_url_snapshot: string | null;
+  emoji: string;
+  created_at: string;
+}
+
+interface SharedThreadSummaryRow {
+  post_id: string;
+  latest_response_id: string | null;
+  latest_response_created_at: string | null;
+  latest_activity_at: string | null;
+  latest_activity_author_user_id: string | null;
+  latest_activity_author_display_name: string | null;
+  latest_activity_author_photo_url_snapshot: string | null;
+  latest_activity_text: string | null;
+  latest_activity_emoji: string | null;
+  latest_activity_kind: 'response' | 'reaction' | null;
 }
 
 interface SharedPostTombstoneRow {
@@ -672,7 +722,98 @@ function mapSharedPostResponse(row: SharedPostResponseRow): SharedPostResponse {
     emoji: row.emoji?.trim() || null,
     text: row.text?.trim() ?? '',
     replyToResponseId: row.reply_to_response_id?.trim() || null,
+    reactions: [],
     createdAt: row.created_at,
+  };
+}
+
+function mapSharedPostResponseReaction(
+  row: SharedPostResponseReactionRow
+): SharedPostResponseReaction {
+  return {
+    id: row.id,
+    postId: row.post_id,
+    responseId: row.response_id,
+    authorUid: row.author_user_id,
+    authorDisplayName: row.author_display_name ?? null,
+    authorPhotoURLSnapshot: row.author_photo_url_snapshot ?? null,
+    emoji: row.emoji.trim(),
+    createdAt: row.created_at,
+  };
+}
+
+function mapSharedThreadSummary(row: SharedThreadSummaryRow): SharedThreadSummary {
+  return {
+    postId: row.post_id,
+    latestResponseId: row.latest_response_id ?? null,
+    latestResponseCreatedAt: row.latest_response_created_at ?? null,
+    latestActivityAt: row.latest_activity_at ?? null,
+    latestActivityAuthorUid: row.latest_activity_author_user_id ?? null,
+    latestActivityAuthorDisplayName: row.latest_activity_author_display_name ?? null,
+    latestActivityAuthorPhotoURLSnapshot: row.latest_activity_author_photo_url_snapshot ?? null,
+    latestActivityText: row.latest_activity_text ?? null,
+    latestActivityEmoji: row.latest_activity_emoji ?? null,
+    latestActivityKind: row.latest_activity_kind ?? null,
+    updatedAt: getNowIso(),
+  };
+}
+
+function getLatestActivityFromResponses(
+  postId: string,
+  responses: SharedPostResponse[]
+): SharedThreadSummary {
+  const latestResponse = responses[responses.length - 1] ?? null;
+  const latestActivity = responses.reduce<{
+    authorUid: string;
+    authorDisplayName: string | null;
+    authorPhotoURLSnapshot: string | null;
+    text: string | null;
+    emoji: string | null;
+    kind: 'response' | 'reaction';
+    createdAt: string;
+  } | null>((latest, response) => {
+    const responseActivity = {
+      authorUid: response.authorUid,
+      authorDisplayName: response.authorDisplayName,
+      authorPhotoURLSnapshot: response.authorPhotoURLSnapshot,
+      text: response.text || null,
+      emoji: response.emoji,
+      kind: 'response' as const,
+      createdAt: response.createdAt,
+    };
+    const reactionActivities = (response.reactions ?? []).map((reaction) => ({
+      authorUid: reaction.authorUid,
+      authorDisplayName: reaction.authorDisplayName,
+      authorPhotoURLSnapshot: reaction.authorPhotoURLSnapshot,
+      text: null,
+      emoji: reaction.emoji,
+      kind: 'reaction' as const,
+      createdAt: reaction.createdAt,
+    }));
+
+    return [responseActivity, ...reactionActivities].reduce((currentLatest, activity) => {
+      if (!currentLatest) {
+        return activity;
+      }
+
+      return new Date(activity.createdAt).getTime() > new Date(currentLatest.createdAt).getTime()
+        ? activity
+        : currentLatest;
+    }, latest);
+  }, null);
+
+  return {
+    postId,
+    latestResponseId: latestResponse?.id ?? null,
+    latestResponseCreatedAt: latestResponse?.createdAt ?? null,
+    latestActivityAt: latestActivity?.createdAt ?? null,
+    latestActivityAuthorUid: latestActivity?.authorUid ?? null,
+    latestActivityAuthorDisplayName: latestActivity?.authorDisplayName ?? null,
+    latestActivityAuthorPhotoURLSnapshot: latestActivity?.authorPhotoURLSnapshot ?? null,
+    latestActivityText: latestActivity?.text ?? null,
+    latestActivityEmoji: latestActivity?.emoji ?? null,
+    latestActivityKind: latestActivity?.kind ?? null,
+    updatedAt: getNowIso(),
   };
 }
 
@@ -1981,6 +2122,14 @@ export async function getSharedPostResponses(
   user: AppUser,
   postId: string
 ): Promise<SharedPostResponse[]> {
+  return getSharedPostResponsesPage(user, postId);
+}
+
+export async function getSharedPostResponsesPage(
+  user: AppUser,
+  postId: string,
+  options: { limit?: number; beforeCreatedAt?: string | null } = {}
+): Promise<SharedPostResponse[]> {
   await ensureSupabaseSessionMatchesUser(user.id);
 
   const normalizedPostId = postId.trim();
@@ -1988,18 +2137,93 @@ export async function getSharedPostResponses(
     return [];
   }
 
-  const { data, error } = await requireSupabase()
+  const limit = Math.max(1, Math.min(options.limit ?? 50, 100));
+  const beforeCreatedAt = options.beforeCreatedAt?.trim() || null;
+  const query = requireSupabase()
     .from('shared_post_responses')
     .select('id, post_id, author_user_id, author_display_name, author_photo_url_snapshot, emoji, text, reply_to_response_id, created_at')
     .eq('post_id', normalizedPostId)
-    .order('created_at', { ascending: true })
-    .limit(50);
+    .order('created_at', { ascending: false })
+    .limit(limit);
+
+  if (beforeCreatedAt) {
+    query.lt('created_at', beforeCreatedAt);
+  }
+
+  const { data, error } = await query;
 
   if (error) {
     throw error;
   }
 
-  return ((data ?? []) as SharedPostResponseRow[]).map(mapSharedPostResponse);
+  const responses = ((data ?? []) as SharedPostResponseRow[])
+    .map(mapSharedPostResponse)
+    .reverse();
+  const responseIds = responses.map((response) => response.id);
+  if (responseIds.length === 0) {
+    return responses;
+  }
+
+  const { data: reactionData, error: reactionError } = await requireSupabase()
+    .from('shared_post_response_reactions')
+    .select('id, post_id, response_id, author_user_id, author_display_name, author_photo_url_snapshot, emoji, created_at')
+    .in('response_id', responseIds)
+    .order('created_at', { ascending: true });
+
+  if (reactionError) {
+    if (isSupabaseSchemaMismatchError(reactionError)) {
+      return responses;
+    }
+
+    throw reactionError;
+  }
+
+  const reactionsByResponseId = new Map<string, SharedPostResponseReaction[]>();
+  for (const reaction of ((reactionData ?? []) as SharedPostResponseReactionRow[]).map(
+    mapSharedPostResponseReaction
+  )) {
+    const current = reactionsByResponseId.get(reaction.responseId) ?? [];
+    current.push(reaction);
+    reactionsByResponseId.set(reaction.responseId, current);
+  }
+
+  return responses.map((response) => ({
+    ...response,
+    reactions: reactionsByResponseId.get(response.id) ?? [],
+  }));
+}
+
+export async function getSharedPostThreadSummaries(
+  user: AppUser,
+  postIds: string[]
+): Promise<SharedThreadSummary[]> {
+  await ensureSupabaseSessionMatchesUser(user.id);
+
+  const normalizedPostIds = Array.from(
+    new Set(postIds.map((postId) => postId.trim()).filter(Boolean))
+  );
+  if (normalizedPostIds.length === 0) {
+    return [];
+  }
+
+  const { data, error } = await requireSupabase().rpc('get_shared_post_thread_summaries', {
+    target_post_ids: normalizedPostIds,
+  });
+
+  if (!error) {
+    return ((data ?? []) as SharedThreadSummaryRow[]).map(mapSharedThreadSummary);
+  }
+
+  if (!isSupabaseSchemaMismatchError(error)) {
+    throw error;
+  }
+
+  const summaries = await Promise.all(
+    normalizedPostIds.map(async (postId) =>
+      getLatestActivityFromResponses(postId, await getSharedPostResponses(user, postId))
+    )
+  );
+  return summaries;
 }
 
 function getOnlinePresenceKeys(state: Record<string, unknown>) {
@@ -2233,6 +2457,16 @@ export function subscribeToSharedPostResponses(
       },
       () => scheduleRefresh()
     )
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'shared_post_response_reactions',
+        filter: `post_id=eq.${normalizedPostId}`,
+      },
+      () => scheduleRefresh()
+    )
     .subscribe((status) => {
       if (disposed) {
         return;
@@ -2302,6 +2536,47 @@ export async function createSharedPostResponse(
   });
 
   return mapSharedPostResponse(record);
+}
+
+export async function createSharedPostResponseReaction(
+  user: AppUser,
+  postId: string,
+  responseId: string,
+  emojiInput: string
+): Promise<SharedPostResponseReaction> {
+  await ensureSupabaseSessionMatchesUser(user.id);
+
+  const normalizedPostId = postId.trim();
+  const normalizedResponseId = responseId.trim();
+  const emoji = emojiInput.trim();
+  if (!normalizedPostId || !normalizedResponseId) {
+    throw new Error('Message required.');
+  }
+
+  if (!emoji || emoji.length > 16) {
+    throw new Error('Choose a reaction.');
+  }
+
+  const id = `shared-response-reaction-${Date.now()}-${Crypto.randomUUID().slice(0, 8)}`;
+  const record: SharedPostResponseReactionRow = {
+    id,
+    post_id: normalizedPostId,
+    response_id: normalizedResponseId,
+    author_user_id: user.id,
+    author_display_name: getDisplayName(user),
+    author_photo_url_snapshot: user.photoURL ?? null,
+    emoji,
+    created_at: getNowIso(),
+  };
+
+  const { error } = await requireSupabase()
+    .from('shared_post_response_reactions')
+    .upsert(record, { onConflict: 'response_id,author_user_id' });
+  if (error) {
+    throw error;
+  }
+
+  return mapSharedPostResponseReaction(record);
 }
 
 export async function updateSharedPost(

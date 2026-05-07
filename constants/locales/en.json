@@ -541,6 +541,8 @@
         "chatOriginalNote": "Shared a note.",
         "chatNotFoundBody": "This chat may no longer be available.",
         "chatEmptyHint": "Start with a quick reaction.",
+        "chatJumpToReply": "Jump to replied message",
+        "chatReactWith": "React with {{emoji}}",
         "chatComposerPlaceholder": "Reply to this memory",
         "chatSending": "Sending...",
         "chatSent": "Sent",

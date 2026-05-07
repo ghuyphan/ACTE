@@ -248,4 +248,116 @@ describe('shared feed cache persistence', () => {
 
     expect(snapshot.ownedSharedNoteIds).toEqual(['own-note']);
   });
+
+  it('persists shared response reactions without turning them into messages', async () => {
+    const { replaceCachedSharedPostResponses } =
+      require('../services/sharedFeedCache') as typeof import('../services/sharedFeedCache');
+
+    await replaceCachedSharedPostResponses('owner-1', 'post-1', [
+      {
+        id: 'response-1',
+        postId: 'post-1',
+        authorUid: 'friend-1',
+        authorDisplayName: 'Friend',
+        authorPhotoURLSnapshot: null,
+        emoji: null,
+        text: 'see you there',
+        replyToResponseId: null,
+        reactions: [
+          {
+            id: 'reaction-1',
+            postId: 'post-1',
+            responseId: 'response-1',
+            authorUid: 'owner-1',
+            authorDisplayName: 'Owner',
+            authorPhotoURLSnapshot: null,
+            emoji: '😂',
+            createdAt: '2026-05-06T01:02:00.000Z',
+          },
+        ],
+        createdAt: '2026-05-06T01:00:00.000Z',
+      },
+    ]);
+
+    const responseInsertCall = mockRunAsync.mock.calls.find(([sql]) =>
+      sql.includes('INSERT INTO shared_post_responses_cache')
+    );
+    const reactionInsertCall = mockRunAsync.mock.calls.find(([sql]) =>
+      sql.includes('INSERT INTO shared_post_response_reactions_cache')
+    );
+
+    expect(responseInsertCall).toBeDefined();
+    expect(reactionInsertCall).toBeDefined();
+    expect(countSqlPlaceholders(reactionInsertCall![0])).toBe(reactionInsertCall!.length - 1);
+    expect(reactionInsertCall).toEqual(
+      expect.arrayContaining(['post-1', 'response-1', 'reaction-1', 'owner-1', '😂'])
+    );
+  });
+
+  it('upserts local shared thread read state', async () => {
+    const { markCachedSharedThreadRead } =
+      require('../services/sharedFeedCache') as typeof import('../services/sharedFeedCache');
+
+    const readState = await markCachedSharedThreadRead(
+      'owner-1',
+      'post-1',
+      'response-4',
+      '2026-05-06T01:04:00.000Z'
+    );
+
+    const readStateInsertCall = mockRunAsync.mock.calls.find(([sql]) =>
+      sql.includes('INSERT INTO shared_thread_read_state')
+    );
+
+    expect(readState).toEqual({
+      postId: 'post-1',
+      userUid: 'owner-1',
+      lastReadResponseId: 'response-4',
+      lastReadAt: '2026-05-06T01:04:00.000Z',
+    });
+    expect(readStateInsertCall).toBeDefined();
+    expect(countSqlPlaceholders(readStateInsertCall![0])).toBe(readStateInsertCall!.length - 1);
+    expect(readStateInsertCall).toEqual(
+      expect.arrayContaining(['owner-1', 'post-1', 'response-4', '2026-05-06T01:04:00.000Z'])
+    );
+  });
+
+  it('persists lightweight shared thread summaries for chat list rendering', async () => {
+    const { replaceCachedSharedThreadSummaries } =
+      require('../services/sharedFeedCache') as typeof import('../services/sharedFeedCache');
+
+    await replaceCachedSharedThreadSummaries('owner-1', [
+      {
+        postId: 'post-1',
+        latestResponseId: 'response-1',
+        latestResponseCreatedAt: '2026-05-06T01:00:00.000Z',
+        latestActivityAt: '2026-05-06T01:02:00.000Z',
+        latestActivityAuthorUid: 'friend-1',
+        latestActivityAuthorDisplayName: 'Friend',
+        latestActivityAuthorPhotoURLSnapshot: null,
+        latestActivityText: null,
+        latestActivityEmoji: '😂',
+        latestActivityKind: 'reaction',
+        updatedAt: '2026-05-06T01:03:00.000Z',
+      },
+    ]);
+
+    const summaryInsertCall = mockRunAsync.mock.calls.find(([sql]) =>
+      sql.includes('INSERT INTO shared_thread_summaries_cache')
+    );
+
+    expect(summaryInsertCall).toBeDefined();
+    expect(countSqlPlaceholders(summaryInsertCall![0])).toBe(summaryInsertCall!.length - 1);
+    expect(summaryInsertCall).toEqual(
+      expect.arrayContaining([
+        'owner-1',
+        'post-1',
+        'response-1',
+        '2026-05-06T01:02:00.000Z',
+        'friend-1',
+        '😂',
+        'reaction',
+      ])
+    );
+  });
 });

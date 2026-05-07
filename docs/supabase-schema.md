@@ -99,6 +99,22 @@ Lightweight emoji/text responses attached to a shared post.
 - Foreign keys: `post_id -> public.shared_posts(id)`, `author_user_id -> auth.users(id)`, optional `reply_to_response_id -> public.shared_post_responses(id)`
 - Important fields: author snapshots, optional emoji, short response text, optional reply target, `created_at`
 
+### `public.shared_post_response_reactions`
+
+One reaction per user per shared-post response.
+
+- Primary key: `id`
+- Unique key: `(response_id, author_user_id)`
+- Foreign keys: `post_id -> public.shared_posts(id)`, `response_id -> public.shared_post_responses(id)`, `author_user_id -> auth.users(id)`
+- Important fields: author snapshots, `emoji`, `created_at`
+
+### `public.get_shared_post_thread_summaries(target_post_ids text[])`
+
+RPC used by Home and Chats to load one lightweight latest-activity row per thread without downloading full message pages.
+
+- Returns latest response id/time plus latest activity author/text/emoji/kind per visible shared post.
+- Visibility is constrained to posts authored by the caller or shared to the caller.
+
 ### `public.device_push_tokens`
 
 Expo push token registry for social notifications.

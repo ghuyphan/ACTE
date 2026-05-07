@@ -101,7 +101,12 @@ import {
   type DualCameraStillCapture,
 } from '../../services/dualCamera';
 import { getDistanceMeters, getReminderPlaceGroups } from '../../services/reminderSelection';
-import { getSharedFeedErrorMessage, type SharedPost } from '../../services/sharedFeedService';
+import {
+  getSharedFeedErrorMessage,
+  type SharedPost,
+  type SharedThreadSummary,
+} from '../../services/sharedFeedService';
+import type { SharedThreadReadState } from '../../services/sharedFeedCache';
 import type { NotesRouteTransitionRect } from '../../utils/notesRouteTransition';
 import { setPendingNotesRouteTransition } from '../../utils/notesRouteTransition';
 import { scheduleOnIdle } from '../../utils/scheduleOnIdle';
@@ -125,6 +130,19 @@ type PersistedCaptureDraft = CaptureDraftState & {
   selectedSharedAudienceUserId: string | null;
   stickerPlacements: NoteStickerPlacement[];
 };
+
+function isUnreadSharedThreadSummary(
+  summary: SharedThreadSummary | null | undefined,
+  readState: SharedThreadReadState | null | undefined,
+  currentUserUid: string | null | undefined
+) {
+  if (!summary?.latestActivityAt || summary.latestActivityAuthorUid === currentUserUid) {
+    return false;
+  }
+
+  const lastReadAt = readState?.lastReadAt ? new Date(readState.lastReadAt).getTime() : 0;
+  return new Date(summary.latestActivityAt).getTime() > lastReadAt;
+}
 
 function isPersistableCaptureDraft(
   draft: CaptureDraftState & { stickerPlacements?: readonly NoteStickerPlacement[] }
@@ -299,9 +317,12 @@ export default function HomeScreen() {
     createFriendGroup = async () => undefined,
     updateFriendGroup = async () => undefined,
     deleteFriendGroup = async () => undefined,
+    getSharedPostThreadSummaries = async () => [],
+    getSharedThreadReadStates = async () => [],
     createSharedPost,
     createSharedPostResponse,
   } = useSharedFeedStore();
+  const [hasUnreadSharedChats, setHasUnreadSharedChats] = useState(false);
   const captureAudienceFriends = useMemo(
     () => friends.filter((friend) => friend.userId !== user?.uid),
     [friends, user?.uid]
@@ -331,6 +352,47 @@ export default function HomeScreen() {
         : post;
     });
   }, [friends, sharedPosts]);
+  const sharedPostIdsKey = useMemo(
+    () => sharedPosts.map((post) => post.id).join('|'),
+    [sharedPosts]
+  );
+  useEffect(() => {
+    const postIds = sharedPostIdsKey ? sharedPostIdsKey.split('|') : [];
+    if (!sharedEnabled || !sharedReady || !user?.uid || postIds.length === 0) {
+      setHasUnreadSharedChats(false);
+      return;
+    }
+
+    let cancelled = false;
+    void Promise.all([
+      getSharedPostThreadSummaries(postIds).catch(() => []),
+      getSharedThreadReadStates().catch(() => []),
+    ]).then(([summaries, readStates]) => {
+      if (cancelled) {
+        return;
+      }
+
+      const readStateByPostId = new Map(
+        readStates.map((readState) => [readState.postId, readState])
+      );
+      setHasUnreadSharedChats(
+        summaries.some((summary) =>
+          isUnreadSharedThreadSummary(summary, readStateByPostId.get(summary.postId), user.uid)
+        )
+      );
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    getSharedPostThreadSummaries,
+    getSharedThreadReadStates,
+    sharedPostIdsKey,
+    sharedEnabled,
+    sharedReady,
+    user?.uid,
+  ]);
   const {
     bootstrapState: syncBootstrapState,
     requestSync,
@@ -3230,7 +3292,7 @@ export default function HomeScreen() {
           onCloseSearch: () => {},
           showSearchButton: showLegacySearchButton,
           showMessagesButton: Boolean(sharedEnabled && user),
-          showMessagesIndicator: sharedPostsWithFriendNicknames.length > 0,
+          showMessagesIndicator: hasUnreadSharedChats,
           showSharedButton: true,
           showNotesButton: true,
           onOpenMessages: () => {
