@@ -2,9 +2,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { Stack, useRouter } from 'expo-router';
 import { FlashList } from '@shopify/flash-list';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Layout } from '../../../constants/theme';
 import { useAuth } from '../../../hooks/useAuth';
@@ -13,12 +13,20 @@ import { useTheme } from '../../../hooks/useTheme';
 import type { SharedPost, SharedThreadSummary } from '../../../services/sharedFeedService';
 import type { SharedThreadReadState } from '../../../services/sharedFeedCache';
 import { formatChatTimestamp } from '../../../utils/dateUtils';
+import {
+  getSharedChatIdentity,
+  getSharedChatMemoryPreview,
+  getSharedChatThreadIconName,
+  getSharedThreadSummaryBody,
+  isSharedThreadUnread,
+} from '../../../utils/sharedChatPresentation';
 
 const CHAT_LIST_SKELETON_ROWS = [
   { key: 'first', titleWidth: '46%', previewWidth: '68%' },
   { key: 'second', titleWidth: '38%', previewWidth: '54%' },
   { key: 'third', titleWidth: '52%', previewWidth: '62%' },
 ] as const;
+const MAX_CACHED_THREAD_SUMMARIES = 80;
 const cachedThreadSummaryByPostId = new Map<string, SharedThreadSummary>();
 const cachedReadStateByUserUid = new Map<string, Record<string, SharedThreadReadState>>();
 
@@ -33,41 +41,88 @@ function getCachedThreadSummaries(postIds: readonly string[]) {
 
 function rememberThreadSummaries(summaries: readonly SharedThreadSummary[]) {
   for (const summary of summaries) {
+    cachedThreadSummaryByPostId.delete(summary.postId);
     cachedThreadSummaryByPostId.set(summary.postId, summary);
   }
+  while (cachedThreadSummaryByPostId.size > MAX_CACHED_THREAD_SUMMARIES) {
+    const oldestPostId = cachedThreadSummaryByPostId.keys().next().value;
+    if (!oldestPostId) {
+      break;
+    }
+    cachedThreadSummaryByPostId.delete(oldestPostId);
+  }
 }
 
-function getThreadPreview(post: SharedPost, t: ReturnType<typeof useTranslation>['t']) {
-  if (post.type === 'photo') {
-    return post.placeName
-      ? t('shared.chatThreadPhotoAtPlace', 'Photo memory from {{place}}', {
-          place: post.placeName,
-        })
-      : t('shared.chatThreadPhoto', 'Photo memory');
+function UnreadIndicator({ color, count }: { color: string; count: number }) {
+  const pulse = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const animation = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, {
+          toValue: 1,
+          duration: 1200,
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulse, {
+          toValue: 0,
+          duration: 900,
+          useNativeDriver: true,
+        }),
+      ])
+    );
+    animation.start();
+    return () => animation.stop();
+  }, [pulse]);
+
+  if (count > 1) {
+    return (
+      <Animated.View
+        style={[
+          styles.unreadCountPill,
+          {
+            backgroundColor: color,
+            transform: [
+              {
+                scale: pulse.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [1, 1.05],
+                }),
+              },
+            ],
+          },
+        ]}
+      >
+        <Text style={styles.unreadCount}>{count > 9 ? '9+' : count}</Text>
+      </Animated.View>
+    );
   }
 
-  return post.text || t('shared.chatThreadNote', 'Shared note');
-}
-
-function getThreadIconName(post: SharedPost) {
-  return post.type === 'photo' ? 'image-outline' : 'document-text-outline';
-}
-
-function getSummaryBody(summary: SharedThreadSummary) {
-  return [summary.latestActivityEmoji, summary.latestActivityText].filter(Boolean).join(' ').trim();
-}
-
-function isSummaryUnread(
-  summary: SharedThreadSummary | null | undefined,
-  readState: SharedThreadReadState | null | undefined,
-  currentUserUid: string | null | undefined
-) {
-  if (!summary?.latestActivityAt || summary.latestActivityAuthorUid === currentUserUid) {
-    return false;
-  }
-
-  const lastReadAt = readState?.lastReadAt ? new Date(readState.lastReadAt).getTime() : 0;
-  return new Date(summary.latestActivityAt).getTime() > lastReadAt;
+  return (
+    <View style={styles.unreadDotHost}>
+      <Animated.View
+        style={[
+          styles.unreadPulse,
+          {
+            backgroundColor: color,
+            opacity: pulse.interpolate({
+              inputRange: [0, 1],
+              outputRange: [0.28, 0],
+            }),
+            transform: [
+              {
+                scale: pulse.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [1, 2.6],
+                }),
+              },
+            ],
+          },
+        ]}
+      />
+      <View style={[styles.unreadDot, { backgroundColor: color }]} />
+    </View>
+  );
 }
 
 export default function SharedChatsScreen() {
@@ -162,19 +217,25 @@ export default function SharedChatsScreen() {
         [post.authorUid, ...post.audienceUserIds].find((candidate) => candidate !== user?.uid) ??
         post.authorUid;
       const friend = friendById.get(participantUid) ?? null;
-      const label =
-        participantUid === user?.uid
-          ? t('shared.chatYou', 'You')
-          : friend?.nickname?.trim() ||
-            (friend?.username ? `@${friend.username}` : null) ||
-            (participantUid === post.authorUid ? post.authorDisplayName?.trim() : null) ||
-            t('shared.someone', 'Someone');
+      const identity = getSharedChatIdentity(
+        {
+          currentUserUid: user?.uid,
+          displayNameSnapshot: participantUid === post.authorUid ? post.authorDisplayName : null,
+          friend,
+          photoURLSnapshot: participantUid === post.authorUid ? post.authorPhotoURLSnapshot : null,
+          userId: participantUid,
+        },
+        {
+          friendFallback: t('shared.friendFallback', 'Friend'),
+          someone: t('shared.someone', 'Someone'),
+          you: t('shared.chatYou', 'You'),
+        }
+      );
 
       return {
-        label,
-        photoUri:
-          friend?.photoURLSnapshot ??
-          (participantUid === post.authorUid ? post.authorPhotoURLSnapshot : null),
+        label: identity.label,
+        photoUri: identity.avatarUri,
+        avatarInitial: identity.avatarInitial,
       };
     },
     [friendById, t, user?.uid]
@@ -182,9 +243,8 @@ export default function SharedChatsScreen() {
   const renderThreadItem = useCallback(
     ({ item: post }: { item: SharedPost }) => {
       const participant = getThreadParticipant(post);
-      const avatarLabel = participant.label.replace(/^@/, '').charAt(0).toUpperCase();
       const summary = threadSummaryByPostId[post.id] ?? null;
-      const hasUnread = isSummaryUnread(summary, readStateByPostId[post.id], user?.uid);
+      const hasUnread = isSharedThreadUnread(summary, readStateByPostId[post.id], user?.uid);
       const unreadCount = hasUnread ? 1 : 0;
       const latestAuthor =
         summary?.latestActivityAuthorUid && summary.latestActivityAuthorUid === user?.uid
@@ -197,13 +257,34 @@ export default function SharedChatsScreen() {
                 authorPhotoURLSnapshot: summary.latestActivityAuthorPhotoURLSnapshot,
               }).label
             : null;
+      const memoryPreview = getSharedChatMemoryPreview(post, {
+        photoMemory: t('shared.chatThreadPhoto', 'Photo memory'),
+        photoMemoryAtPlace: (place) =>
+          t('shared.chatThreadPhotoAtPlace', 'Photo memory from {{place}}', { place }),
+        sharedNote: t('shared.chatThreadNote', 'Shared note'),
+      });
+      const summaryBody = summary ? getSharedThreadSummaryBody(summary) : '';
       const latestPreview = summary?.latestActivityAt
-        ? `${latestAuthor}: ${getSummaryBody(summary)}`
-        : getThreadPreview(post, t);
+        ? latestAuthor
+          ? t('shared.chatThreadLatestBy', '{{name}}: {{message}}', {
+              name: latestAuthor,
+              message: summaryBody || t('shared.chatThreadActivity', 'New activity'),
+            })
+          : summaryBody || t('shared.chatThreadActivity', 'New activity')
+        : memoryPreview;
       const latestTimestamp = summary?.latestActivityAt ?? post.createdAt;
       return (
         <Pressable
           accessibilityRole="button"
+          accessibilityLabel={
+            hasUnread
+              ? t('shared.openUnreadChatA11y', 'Open unread chat with {{name}}', {
+                  name: participant.label,
+                })
+              : t('shared.openChatWithA11y', 'Open chat with {{name}}', {
+                  name: participant.label,
+                })
+          }
           onPress={() => {
             router.push(`/shared/chat/${post.id}` as any);
           }}
@@ -225,7 +306,7 @@ export default function SharedChatsScreen() {
             ) : (
               <View style={[styles.avatar, { backgroundColor: colors.primarySoft }]}>
                 <Text style={[styles.avatarLabel, { color: colors.primary }]}>
-                  {avatarLabel}
+                  {participant.avatarInitial}
                 </Text>
               </View>
             )}
@@ -238,7 +319,7 @@ export default function SharedChatsScreen() {
                 },
               ]}
             >
-              <Ionicons name={getThreadIconName(post)} size={12} color={colors.primary} />
+              <Ionicons name={getSharedChatThreadIconName(post)} size={12} color={colors.primary} />
             </View>
           </View>
           <View style={styles.threadCopy}>
@@ -267,7 +348,7 @@ export default function SharedChatsScreen() {
                 numberOfLines={1}
                 style={[styles.threadMemoryContext, { color: colors.secondaryText }]}
               >
-                {getThreadPreview(post, t)}
+                {memoryPreview}
               </Text>
             ) : null}
           </View>
@@ -277,12 +358,7 @@ export default function SharedChatsScreen() {
             </Text>
             {hasUnread ? (
               <View style={styles.unreadWrap}>
-                <View style={[styles.unreadDot, { backgroundColor: colors.primary }]} />
-                {unreadCount > 1 ? (
-                  <Text style={[styles.unreadCount, { color: colors.primary }]}>
-                    {unreadCount > 9 ? '9+' : unreadCount}
-                  </Text>
-                ) : null}
+                <UnreadIndicator color={colors.primary} count={unreadCount} />
               </View>
             ) : (
               <Ionicons name="chevron-forward" size={16} color={colors.secondaryText} />
@@ -377,6 +453,21 @@ export default function SharedChatsScreen() {
             <Text style={[styles.emptyBody, { color: colors.secondaryText }]}>
               {t('shared.chatsEmptyBody', 'Share a memory with a friend to start a thread.')}
             </Text>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={t('shared.chatsEmptyAction', 'Open shared moments')}
+              onPress={() => {
+                router.push('/shared' as any);
+              }}
+              style={({ pressed }) => [
+                styles.emptyAction,
+                { backgroundColor: colors.primary, opacity: pressed ? 0.82 : 1 },
+              ]}
+            >
+              <Text style={[styles.emptyActionLabel, { color: colors.onPrimary }]}>
+                {t('shared.chatsEmptyAction', 'Open shared moments')}
+              </Text>
+            </Pressable>
           </View>
         </View>
       ) : (
@@ -442,6 +533,20 @@ const styles = StyleSheet.create({
     fontFamily: 'Noto Sans',
     marginTop: 8,
     maxWidth: 280,
+  },
+  emptyAction: {
+    minHeight: 44,
+    marginTop: 18,
+    borderRadius: 22,
+    paddingHorizontal: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyActionLabel: {
+    fontSize: 13,
+    lineHeight: 17,
+    fontWeight: '900',
+    fontFamily: 'Noto Sans',
   },
   skeletonList: {
     flex: 1,
@@ -541,15 +646,36 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 2,
   },
+  unreadDotHost: {
+    width: 18,
+    height: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  unreadPulse: {
+    position: 'absolute',
+    width: 9,
+    height: 9,
+    borderRadius: 4.5,
+  },
   unreadDot: {
     width: 9,
     height: 9,
     borderRadius: 4.5,
+  },
+  unreadCountPill: {
+    minWidth: 20,
+    height: 20,
+    borderRadius: 10,
+    paddingHorizontal: 5,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   unreadCount: {
     fontSize: 10,
     lineHeight: 12,
     fontWeight: '900',
     fontFamily: 'Noto Sans',
+    color: '#fff',
   },
 });

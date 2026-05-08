@@ -605,7 +605,7 @@ export default function NotesFeed({
               {
                 height: snapHeight,
                 paddingTop: topInset + Layout.headerHeight - DOCKED_HEADER_CONTENT_OVERLAP,
-                paddingBottom: pageBottomInset + 36,
+                paddingBottom: pageBottomInset,
               },
             ]}
           >

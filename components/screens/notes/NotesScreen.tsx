@@ -6,7 +6,14 @@ import { Href, Stack, useRouter } from 'expo-router';
 import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import Reanimated, { FadeInUp } from 'react-native-reanimated';
+import Reanimated, {
+  FadeInUp,
+  cancelAnimation,
+  useAnimatedStyle,
+  useSharedValue,
+  withRepeat,
+  withTiming,
+} from 'react-native-reanimated';
 import {
   Platform,
   Pressable,
@@ -51,6 +58,7 @@ const GRID_DECORATION_REVEAL_DELAY_MS = 180;
 const MODE_SWIPE_DISTANCE = 56;
 const MODE_SWIPE_VELOCITY = 460;
 const NOTES_BROWSE_MODE_ORDER: RecapMode[] = ['all', 'recap'];
+const NOTES_GRID_SKELETON_TILE_COUNT = 15;
 
 function triggerNotesHaptic(style: Haptics.ImpactFeedbackStyle = Haptics.ImpactFeedbackStyle.Light) {
   void Haptics.impactAsync(style);
@@ -240,6 +248,129 @@ const GridTile = memo(function GridTile({
   prevProps.sharedPhotoUri === nextProps.sharedPhotoUri &&
   prevProps.model === nextProps.model
 ));
+
+function NotesGridSkeleton({
+  bottomInset,
+  colors,
+  gap,
+  loadingBody,
+  loadingTitle,
+  showLoadingCopy,
+  tileSize,
+}: {
+  bottomInset: number;
+  colors: {
+    border: string;
+    card: string;
+    primarySoft: string;
+    secondaryText: string;
+    surface: string;
+    text: string;
+  };
+  gap: number;
+  loadingBody: string;
+  loadingTitle: string;
+  showLoadingCopy: boolean;
+  tileSize: number;
+}) {
+  const opacity = useSharedValue(0.46);
+  const pulseStyle = useAnimatedStyle(() => ({
+    opacity: opacity.value,
+  }));
+
+  useEffect(() => {
+    opacity.value = withRepeat(withTiming(0.78, { duration: 760 }), -1, true);
+
+    return () => {
+      cancelAnimation(opacity);
+    };
+  }, [opacity]);
+
+  return (
+    <View
+      accessible
+      accessibilityLabel={loadingTitle}
+      accessibilityState={{ busy: true }}
+      style={[
+        styles.skeletonScreen,
+        {
+          paddingBottom: bottomInset + 28,
+          paddingHorizontal: Layout.screenPadding,
+        },
+      ]}
+      testID="notes-grid-skeleton"
+    >
+      {showLoadingCopy ? (
+        <View
+          style={[
+            styles.skeletonStatus,
+            {
+              backgroundColor: colors.surface,
+              borderColor: colors.border,
+            },
+          ]}
+        >
+          <Text style={[styles.loadingTitle, styles.skeletonStatusTitle, { color: colors.text }]}>
+            {loadingTitle}
+          </Text>
+          <Text style={[styles.loadingBody, { color: colors.secondaryText }]}>
+            {loadingBody}
+          </Text>
+        </View>
+      ) : null}
+      <View style={styles.skeletonGrid} pointerEvents="none">
+        {Array.from({ length: NOTES_GRID_SKELETON_TILE_COUNT }).map((_, index) => {
+          const rowVariant = index % 6;
+          return (
+            <Reanimated.View
+              key={`notes-grid-skeleton-${index}`}
+              style={[
+                styles.skeletonTile,
+                {
+                  width: tileSize,
+                  height: tileSize,
+                  marginRight: index % 3 === 2 ? 0 : gap,
+                  marginBottom: gap,
+                  backgroundColor: rowVariant === 1 || rowVariant === 4 ? colors.primarySoft : colors.card,
+                  borderColor: colors.border,
+                },
+                pulseStyle,
+              ]}
+            >
+              {rowVariant === 0 || rowVariant === 3 ? (
+                <View style={styles.skeletonTextTile}>
+                  <View
+                    style={[
+                      styles.skeletonLine,
+                      styles.skeletonLineWide,
+                      { backgroundColor: colors.surface },
+                    ]}
+                  />
+                  <View
+                    style={[
+                      styles.skeletonLine,
+                      styles.skeletonLineMedium,
+                      { backgroundColor: colors.surface },
+                    ]}
+                  />
+                  <View
+                    style={[
+                      styles.skeletonLine,
+                      styles.skeletonLineShort,
+                      { backgroundColor: colors.surface },
+                    ]}
+                  />
+                </View>
+              ) : rowVariant === 2 ? (
+                <View style={[styles.skeletonPhotoBadge, { backgroundColor: colors.surface }]} />
+              ) : null}
+            </Reanimated.View>
+          );
+        })}
+      </View>
+    </View>
+  );
+}
 
 export default function NotesIndexScreen() {
   const { t } = useTranslation();
@@ -490,22 +621,22 @@ export default function NotesIndexScreen() {
       />
       <View style={[styles.container, { backgroundColor: colors.background }]}>
         {isLoading ? (
-          <View style={styles.center}>
-            <NotoLoader variant="skeleton" size="large" color={colors.primary} />
-            {isBootstrapSyncing ? (
-              <View style={styles.loadingCopy}>
-                <Text style={[styles.loadingTitle, { color: colors.text }]}>
-                  {t('settings.syncingNow', 'Syncing your journal.')}
-                </Text>
-                <Text style={[styles.loadingBody, { color: colors.secondaryText }]}>
-                  {t(
-                    'settings.initialSyncLoadingHint',
-                    'Keep Noto open a little longer so your first backup can finish safely.'
-                  )}
-                </Text>
-              </View>
-            ) : null}
-          </View>
+          <NotesGridSkeleton
+            bottomInset={insets.bottom}
+            colors={colors}
+            gap={gridGap}
+            loadingTitle={
+              isBootstrapSyncing
+                ? t('settings.syncingNow', 'Syncing your journal.')
+                : t('common.loading', 'Loading')
+            }
+            loadingBody={t(
+              'settings.initialSyncLoadingHint',
+              'Keep Noto open a little longer so your first backup can finish safely.'
+            )}
+            showLoadingCopy={isBootstrapSyncing}
+            tileSize={gridSize}
+          />
         ) : (
           <>
             {modeSwitch}
@@ -614,12 +745,6 @@ const styles = StyleSheet.create({
   emptyScreen: {
     paddingHorizontal: Layout.screenPadding,
   },
-  loadingCopy: {
-    marginTop: 14,
-    paddingHorizontal: 28,
-    gap: 6,
-    alignItems: 'center',
-  },
   loadingTitle: {
     fontSize: 16,
     lineHeight: 20,
@@ -633,6 +758,57 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     fontFamily: 'Noto Sans',
     maxWidth: 260,
+  },
+  skeletonScreen: {
+    flex: 1,
+    paddingTop: 4,
+  },
+  skeletonStatus: {
+    borderRadius: 22,
+    borderWidth: 1,
+    paddingHorizontal: 18,
+    paddingVertical: 14,
+    marginBottom: 16,
+    alignItems: 'center',
+  },
+  skeletonStatusTitle: {
+    marginBottom: 6,
+  },
+  skeletonGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+  },
+  skeletonTile: {
+    borderRadius: 28,
+    borderWidth: 1,
+    overflow: 'hidden',
+  },
+  skeletonTextTile: {
+    flex: 1,
+    justifyContent: 'center',
+    gap: 8,
+    paddingHorizontal: 14,
+  },
+  skeletonLine: {
+    height: 9,
+    borderRadius: 999,
+  },
+  skeletonLineWide: {
+    width: '78%',
+  },
+  skeletonLineMedium: {
+    width: '58%',
+  },
+  skeletonLineShort: {
+    width: '44%',
+  },
+  skeletonPhotoBadge: {
+    position: 'absolute',
+    right: 12,
+    bottom: 12,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
   },
   modeSwitchWrap: {
     paddingTop: 4,

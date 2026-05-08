@@ -1,8 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import { TFunction } from 'i18next';
 import { Image } from 'expo-image';
-import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Linking, Platform, Pressable, StyleProp, StyleSheet, Text, TextInput, useWindowDimensions, View, ViewStyle } from 'react-native';
+import { forwardRef, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Keyboard, Linking, Platform, Pressable, StyleProp, StyleSheet, Text, TextInput, useWindowDimensions, View, ViewStyle } from 'react-native';
 import Animated, {
   Easing,
   useAnimatedStyle,
@@ -28,6 +28,7 @@ import { getNotePhotoUri } from '../../services/photoStorage';
 import { SharedPost } from '../../services/sharedFeedService';
 import { showAppAlert } from '../../utils/alert';
 import { formatNoteTimestamp } from '../../utils/dateUtils';
+import { resolveCaptureKeyboardLift } from './useCaptureCardTextInputState';
 import ImageMemoryCard from '../notes/ImageMemoryCard';
 import {
   DEFAULT_DEBUG_TILT_STATE,
@@ -84,6 +85,10 @@ interface SharedPostMemoryCardProps {
 }
 
 const RENDER_SIGNATURE_SEPARATOR = '\u001f';
+const SHARED_RESPONSE_KEYBOARD_GAP = 18;
+const SHARED_RESPONSE_MIN_VISIBLE_Y = 96;
+const SHARED_RESPONSE_COMPOSER_OFFSET_TOP = 112;
+const SHARED_RESPONSE_METADATA_SLOT_HEIGHT = 56;
 
 function signatureValue(value: unknown) {
   return value === null || value === undefined ? '' : String(value);
@@ -260,13 +265,13 @@ function MetadataContainer({
   );
 }
 
-function MetadataSurface({
-  children,
-  style,
-}: {
+const MetadataSurface = forwardRef<View, {
   children: ReactNode;
   style?: StyleProp<ViewStyle>;
-}) {
+}>(function MetadataSurface({
+  children,
+  style,
+}, ref) {
   const { colors, isDark } = useTheme();
   const glassPalette = getGlassSurfacePalette({
     isDark,
@@ -276,6 +281,7 @@ function MetadataSurface({
 
   return (
     <View
+      ref={ref}
       style={[
         styles.metadataPillShell,
         style,
@@ -297,7 +303,7 @@ function MetadataSurface({
       {children}
     </View>
   );
-}
+});
 
 function MetadataIconButton({
   accessibilityLabel,
@@ -793,6 +799,123 @@ function SharedPostInlineResponseComposer({
   const [draft, setDraft] = useState('');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSending, setIsSending] = useState(false);
+  const reduceMotionEnabled = useReducedMotion();
+  const inputRef = useRef<TextInput | null>(null);
+  const composerRef = useRef<View | null>(null);
+  const isFocusedRef = useRef(false);
+  const latestKeyboardScreenYRef = useRef(0);
+  const pendingKeyboardLiftTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const keyboardLift = useSharedValue(0);
+  const chatButtonScale = useSharedValue(1);
+  const keyboardLiftAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: -keyboardLift.value }],
+  }));
+  const chatButtonAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: chatButtonScale.value }],
+  }));
+  const animateKeyboardLift = useCallback(
+    (nextLift: number, duration?: number) => {
+      const nextDuration = reduceMotionEnabled ? 0 : Math.max(120, Math.round(duration ?? 220));
+
+      keyboardLift.value =
+        nextDuration === 0
+          ? nextLift
+          : withTiming(nextLift, {
+              duration: nextDuration,
+              easing: Easing.out(Easing.cubic),
+            });
+    },
+    [keyboardLift, reduceMotionEnabled]
+  );
+  const updateKeyboardLift = useCallback(
+    (keyboardScreenY: number, duration?: number) => {
+      if (keyboardScreenY <= 0) {
+        animateKeyboardLift(0, duration);
+        return;
+      }
+
+      const composerNode = composerRef.current as
+        | (View & {
+            measureInWindow?: (
+              callback: (x: number, y: number, width: number, height: number) => void
+            ) => void;
+          })
+        | null;
+
+      if (!composerNode?.measureInWindow) {
+        animateKeyboardLift(0, duration);
+        return;
+      }
+
+      composerNode.measureInWindow((_x, composerY, _width, composerHeight) => {
+        const nextLift = resolveCaptureKeyboardLift({
+          extraGap: SHARED_RESPONSE_KEYBOARD_GAP,
+          inputHeight: composerHeight,
+          inputY: composerY,
+          keyboardScreenY,
+          minimumVisibleInputY: SHARED_RESPONSE_MIN_VISIBLE_Y,
+        });
+
+        animateKeyboardLift(nextLift, duration);
+      });
+    },
+    [animateKeyboardLift]
+  );
+  const scheduleKeyboardLiftUpdate = useCallback(() => {
+    if (pendingKeyboardLiftTimeoutRef.current != null) {
+      clearTimeout(pendingKeyboardLiftTimeoutRef.current);
+    }
+
+    pendingKeyboardLiftTimeoutRef.current = setTimeout(() => {
+      pendingKeyboardLiftTimeoutRef.current = null;
+
+      if (!isFocusedRef.current) {
+        return;
+      }
+
+      updateKeyboardLift(latestKeyboardScreenYRef.current);
+    }, 0);
+  }, [updateKeyboardLift]);
+  const handleInputFocus = useCallback(() => {
+    isFocusedRef.current = true;
+    scheduleKeyboardLiftUpdate();
+  }, [scheduleKeyboardLiftUpdate]);
+  const handleInputBlur = useCallback(() => {
+    isFocusedRef.current = false;
+    animateKeyboardLift(0);
+  }, [animateKeyboardLift]);
+
+  useEffect(() => {
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillChangeFrame' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const showSubscription = Keyboard.addListener(
+      showEvent,
+      (event: { duration?: number; endCoordinates?: { screenY?: number } }) => {
+        latestKeyboardScreenYRef.current = event.endCoordinates?.screenY ?? 0;
+
+        if (!isFocusedRef.current) {
+          animateKeyboardLift(0, event.duration);
+          return;
+        }
+
+        updateKeyboardLift(latestKeyboardScreenYRef.current, event.duration);
+      }
+    );
+    const hideSubscription = Keyboard.addListener(hideEvent, (event: { duration?: number }) => {
+      latestKeyboardScreenYRef.current = 0;
+      animateKeyboardLift(0, event.duration);
+    });
+
+    return () => {
+      if (pendingKeyboardLiftTimeoutRef.current != null) {
+        clearTimeout(pendingKeyboardLiftTimeoutRef.current);
+        pendingKeyboardLiftTimeoutRef.current = null;
+      }
+
+      showSubscription.remove();
+      hideSubscription.remove();
+    };
+  }, [animateKeyboardLift, updateKeyboardLift]);
 
   const sendResponse = useCallback(
     async (emoji?: string) => {
@@ -830,8 +953,8 @@ function SharedPostInlineResponseComposer({
   );
 
   return (
-    <View style={styles.sharedReplyWrap}>
-      <MetadataSurface style={[styles.metadataPill, styles.sharedReplyComposer]}>
+    <Animated.View style={[styles.sharedReplyWrap, keyboardLiftAnimatedStyle]}>
+      <MetadataSurface ref={composerRef} style={[styles.metadataPill, styles.sharedReplyComposer]}>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={t('shared.quickHeartResponse', 'Send heart response')}
@@ -849,6 +972,7 @@ function SharedPostInlineResponseComposer({
           <Text style={styles.sharedReplyEmoji}>💛</Text>
         </Pressable>
         <TextInput
+          ref={inputRef}
           value={draft}
           onChangeText={setDraft}
           placeholder={t('shared.responsePlaceholder', 'Write a quick response')}
@@ -856,6 +980,8 @@ function SharedPostInlineResponseComposer({
           maxLength={160}
           returnKeyType="send"
           style={[styles.sharedReplyInput, { color: colors.text }]}
+          onFocus={handleInputFocus}
+          onBlur={handleInputBlur}
           onSubmitEditing={() => {
             void sendResponse();
           }}
@@ -883,18 +1009,33 @@ function SharedPostInlineResponseComposer({
         {onOpenChat ? (
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel={t('shared.openChat', 'Open chat')}
+            accessibilityLabel={t('shared.openMemoryChat', 'Open memory chat')}
+            onPressIn={() => {
+              chatButtonScale.value = withTiming(reduceMotionEnabled ? 1 : 0.92, {
+                duration: 90,
+                easing: Easing.out(Easing.cubic),
+              });
+            }}
+            onPressOut={() => {
+              chatButtonScale.value = withTiming(1, {
+                duration: 140,
+                easing: Easing.out(Easing.cubic),
+              });
+            }}
             onPress={() => {
               onOpenChat(postId);
             }}
             style={({ pressed }) => [
               styles.sharedReplyChatButton,
               {
-                opacity: pressed ? 0.72 : 1,
+                backgroundColor: colors.primarySoft ?? 'transparent',
+                opacity: pressed ? 0.78 : 1,
               },
             ]}
           >
-            <Ionicons name="chatbubble-ellipses-outline" size={15} color={colors.secondaryText} />
+            <Animated.View style={chatButtonAnimatedStyle}>
+              <Ionicons name="chatbubble-ellipses-outline" size={15} color={colors.primary} />
+            </Animated.View>
           </Pressable>
         ) : null}
       </MetadataSurface>
@@ -903,7 +1044,7 @@ function SharedPostInlineResponseComposer({
           {errorMessage}
         </Text>
       ) : null}
-    </View>
+    </Animated.View>
   );
 }
 
@@ -920,7 +1061,7 @@ export function SharedPostMemoryCard({
   showSharedBadge = false,
   metadataFullWidth = false,
   showResponseComposer = false,
-  responseComposerOffsetTop = 52,
+  responseComposerOffsetTop = SHARED_RESPONSE_COMPOSER_OFFSET_TOP,
 }: SharedPostMemoryCardProps) {
   const { width } = useWindowDimensions();
   const now = useRelativeTimeNow();
@@ -1032,7 +1173,15 @@ export function SharedPostMemoryCard({
         )}
       </View>
       {showResponseComposer && onSendResponse ? (
-        <View style={{ paddingTop: responseComposerOffsetTop }}>
+        <View
+          pointerEvents="box-none"
+          style={[
+            styles.sharedResponseComposerSlot,
+            {
+              top: resolvedCardSize + SHARED_RESPONSE_METADATA_SLOT_HEIGHT + responseComposerOffsetTop,
+            },
+          ]}
+        >
           <SharedPostInlineResponseComposer
             postId={post.id}
             colors={colors}
@@ -1148,18 +1297,25 @@ const styles = StyleSheet.create({
   },
   sharedCardWrap: {
     alignSelf: 'center',
+    position: 'relative',
+  },
+  sharedResponseComposerSlot: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    zIndex: 3,
   },
   sharedReplyWrap: {
-    width: '72%',
-    maxWidth: 286,
-    minWidth: 218,
+    width: '78%',
+    maxWidth: 306,
+    minWidth: 228,
     alignSelf: 'center',
     gap: 4,
   },
   sharedReplyComposer: {
     width: '100%',
     maxWidth: '100%',
-    minHeight: 34,
+    minHeight: 38,
     paddingLeft: 9,
     paddingRight: 8,
     flexDirection: 'row',
@@ -1167,9 +1323,9 @@ const styles = StyleSheet.create({
     gap: 5,
   },
   sharedReplyEmojiButton: {
-    width: 20,
-    height: 24,
-    borderRadius: 12,
+    width: 26,
+    height: 28,
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1188,16 +1344,16 @@ const styles = StyleSheet.create({
     fontFamily: 'Noto Sans',
   },
   sharedReplyIconButton: {
-    width: 21,
-    height: 26,
-    borderRadius: 13,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
   },
   sharedReplyChatButton: {
-    width: 21,
-    height: 26,
-    borderRadius: 13,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
   },

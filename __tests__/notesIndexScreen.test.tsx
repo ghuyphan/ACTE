@@ -12,6 +12,10 @@ const mockDynamicStickerCanvas = jest.fn();
 const mockScheduleOnIdle = jest.fn();
 const mockLoadNextArchivePage = jest.fn(async () => []);
 const originalConsoleError = console.error;
+let mockNotesLoading = false;
+let mockSharedLoading = false;
+let mockInitialSyncPending = false;
+let mockSyncStatus = 'idle';
 
 const mockNotes: any[] = [
   {
@@ -230,22 +234,22 @@ jest.mock('../hooks/useFeedFocus', () => ({
 
 jest.mock('../hooks/useNotes', () => ({
   useNotesStore: () => ({
-    loading: false,
+    loading: mockNotesLoading,
     notes: mockNotes,
   }),
 }));
 
 jest.mock('../hooks/useSharedFeed', () => ({
   useSharedFeedStore: () => ({
-    loading: false,
+    loading: mockSharedLoading,
     sharedPosts: mockSharedPosts,
   }),
 }));
 
 jest.mock('../hooks/useSyncStatus', () => ({
   useSyncStatus: () => ({
-    isInitialSyncPending: false,
-    status: 'idle',
+    isInitialSyncPending: mockInitialSyncPending,
+    status: mockSyncStatus,
   }),
 }));
 
@@ -265,6 +269,10 @@ describe('NotesIndexScreen', () => {
       return { cancel: jest.fn() };
     });
     mockDynamicStickerCanvas.mockClear();
+    mockNotesLoading = false;
+    mockSharedLoading = false;
+    mockInitialSyncPending = false;
+    mockSyncStatus = 'idle';
     mockNotes.splice(
       0,
       mockNotes.length,
@@ -336,6 +344,18 @@ describe('NotesIndexScreen', () => {
     expect(getByTestId('notes-empty-state')).toBeTruthy();
     expect(getByTestId('peeking-cat-empty-icon')).toBeTruthy();
     expect(getByText('No notes yet')).toBeTruthy();
+  });
+
+  it('renders a grid skeleton while an empty notes screen is hydrating', () => {
+    mockNotes.splice(0, mockNotes.length);
+    mockSharedPosts.splice(0, mockSharedPosts.length);
+    mockNotesLoading = true;
+
+    const { getByTestId, queryByTestId, queryByText } = render(<NotesIndexScreen />);
+
+    expect(getByTestId('notes-grid-skeleton')).toBeTruthy();
+    expect(queryByTestId('notes-empty-state')).toBeNull();
+    expect(queryByText('Loading')).toBeNull();
   });
 
   it('switches into recap mode for personal notes and shows the monthly summary', async () => {

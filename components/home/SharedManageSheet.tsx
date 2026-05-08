@@ -84,14 +84,12 @@ function InviteActionsCard({
   onCreateInvite,
   onShareInvite,
   onRevokeInvite,
-  onOpenFriendSearch,
 }: {
   activeInvite: FriendInvite | null;
   creatingInvite: boolean;
   onCreateInvite: () => void;
   onShareInvite: () => void;
   onRevokeInvite: () => void;
-  onOpenFriendSearch: () => void;
 }) {
   const { colors, isDark } = useTheme();
   const { t } = useTranslation();
@@ -184,22 +182,6 @@ function InviteActionsCard({
           </Pressable>
         ) : null}
       </View>
-      <Pressable
-        onPress={onOpenFriendSearch}
-        style={({ pressed }) => [
-          styles.searchFriendAction,
-          {
-            backgroundColor: softFill,
-            borderColor: outlineColor,
-            opacity: pressed ? 0.92 : 1,
-          },
-        ]}
-      >
-        <Ionicons name="search-outline" size={16} color={colors.text} />
-        <Text style={[styles.searchFriendActionText, { color: colors.text }]}>
-          {t('shared.searchByUsernameButton', 'Find by Noto ID')}
-        </Text>
-      </Pressable>
     </View>
   );
 }
@@ -405,6 +387,8 @@ export default function SharedManageSheet(props: {
   onShareInvite: () => void;
   onRevokeInvite: () => void;
   onOpenFriendSearch: () => void;
+  onOpenChats?: () => void;
+  unreadChatsCount?: number;
   onRemoveFriend: (friendUid: string) => void;
   onUpdateFriendNickname: (friendUid: string, nickname: string | null) => Promise<void>;
   onCreateFriendGroup: (input: { name: string; memberUserIds: string[] }) => Promise<void>;
@@ -425,6 +409,8 @@ export default function SharedManageSheet(props: {
     onShareInvite,
     onRevokeInvite,
     onOpenFriendSearch,
+    onOpenChats,
+    unreadChatsCount = 0,
     onRemoveFriend,
     onUpdateFriendNickname,
     onCreateFriendGroup,
@@ -468,6 +454,9 @@ export default function SharedManageSheet(props: {
     !isSavingNickname &&
     normalizedNicknameDraft.length <= 40 &&
     normalizedNicknameDraft !== currentNickname;
+  const friendBadgeLabel = friends.length > 0 ? (friends.length > 9 ? '9+' : String(friends.length)) : undefined;
+  const unreadChatsBadgeLabel =
+    unreadChatsCount > 0 ? (unreadChatsCount > 9 ? '9+' : String(unreadChatsCount)) : undefined;
 
   useEffect(() => {
     if (!visible) {
@@ -626,8 +615,29 @@ export default function SharedManageSheet(props: {
         fitToContents={false}
       >
         <AppSheetScaffold
-          headerVariant="standard"
+          headerVariant="action"
           title={t('shared.manageTitle', 'Friends')}
+          overlayHeaderActions
+          trailingActions={[
+            ...(onOpenChats
+              ? [
+                  {
+                    icon: 'chatbubble-ellipses-outline',
+                    accessibilityLabel: t('shared.chatsTitle', 'Chats'),
+                    onPress: onOpenChats,
+                    testID: 'shared-manage-chats-button',
+                    badgeLabel: unreadChatsBadgeLabel,
+                  } as const,
+                ]
+              : []),
+            {
+              icon: 'search',
+              accessibilityLabel: t('shared.searchByUsernameButton', 'Find by Noto ID'),
+              onPress: onOpenFriendSearch,
+              testID: 'shared-manage-find-friend-button',
+              badgeLabel: friendBadgeLabel,
+            },
+          ]}
           footer={<SheetFooterButton label={t('common.done', 'Done')} onPress={onClose} />}
           useHorizontalPadding={false}
           contentBottomPaddingWhenFooter={0}
@@ -642,7 +652,6 @@ export default function SharedManageSheet(props: {
               onCreateInvite={onCreateInvite}
               onShareInvite={onShareInvite}
               onRevokeInvite={onRevokeInvite}
-              onOpenFriendSearch={onOpenFriendSearch}
             />
             <GroupsSectionHeader onCreateGroup={() => openGroupEditor(null)} />
             {friendGroups.length > 0 ? (
@@ -894,22 +903,6 @@ const styles = StyleSheet.create({
     marginTop: 10,
     flexDirection: 'row',
     gap: 8,
-  },
-  searchFriendAction: {
-    marginTop: 8,
-    minHeight: 42,
-    borderRadius: 999,
-    borderWidth: 1,
-    paddingHorizontal: 14,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-  },
-  searchFriendActionText: {
-    fontSize: 13,
-    lineHeight: 17,
-    fontWeight: '700',
   },
   primaryInviteAction: {
     flex: 1,

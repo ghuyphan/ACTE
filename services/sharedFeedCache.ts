@@ -915,6 +915,31 @@ export async function upsertCachedSharedPostResponseReaction(
   });
 }
 
+export async function deleteCachedSharedPostResponseReaction(
+  userUid: string,
+  input: { postId: string; responseId: string; authorUid: string }
+): Promise<void> {
+  await withDatabaseTransaction(async (tx) => {
+    await tx.runAsync(
+      `DELETE FROM shared_post_response_reactions_cache
+       WHERE user_uid = ?
+         AND post_id = ?
+         AND response_id = ?
+         AND author_uid = ?`,
+      userUid,
+      input.postId,
+      input.responseId,
+      input.authorUid
+    );
+    const currentResponses = await selectCachedSharedPostResponses(tx, userUid, input.postId);
+    await upsertCachedSharedThreadSummaryInTransaction(
+      tx,
+      userUid,
+      deriveSharedThreadSummaryFromResponses(input.postId, currentResponses)
+    );
+  });
+}
+
 export async function getCachedSharedThreadReadStates(
   userUid: string
 ): Promise<SharedThreadReadState[]> {

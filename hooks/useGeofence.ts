@@ -1,7 +1,7 @@
 import * as Location from 'expo-location';
 import * as Notifications from 'expo-notifications';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { AppState, type AppStateStatus, Linking } from 'react-native';
+import { AppState, type AppStateStatus, Linking, Platform } from 'react-native';
 import { useAuth } from './useAuth';
 import {
     arePlaceRemindersEnabled,
@@ -51,6 +51,14 @@ export interface ForegroundLocationRequestResult {
 export interface ReminderPermissionRequestResult {
     enabled: boolean;
     requiresSettings: boolean;
+    reason:
+        | 'feature_disabled'
+        | 'foreground_denied'
+        | 'background_denied'
+        | 'notifications_denied'
+        | 'geofence_unavailable'
+        | 'unavailable'
+        | null;
 }
 
 interface ForegroundPermissionRequestResult {
@@ -140,6 +148,7 @@ export function useGeofence() {
     const remindersEnabledRef = useRef(false);
     const locationRef = useRef<Location.LocationObject | null>(null);
     const foregroundLocationRequestRef = useRef<Promise<ForegroundLocationRequestResult> | null>(null);
+    const reminderPermissionRequestRef = useRef<Promise<ReminderPermissionRequestResult> | null>(null);
     const isMountedRef = useRef(true);
     const previousAppStateRef = useRef<AppStateStatus>(AppState.currentState);
     const backgroundRefreshRequestIdRef = useRef(0);
@@ -392,6 +401,42 @@ export function useGeofence() {
         };
     }, [clearLocation, commitHasLocationPermission, commitRemindersEnabled]);
 
+    const requestBackgroundPermission = useCallback(async () => {
+        let backgroundStatus: Awaited<ReturnType<typeof Location.getBackgroundPermissionsAsync>>;
+        try {
+            backgroundStatus = await Location.getBackgroundPermissionsAsync();
+        } catch (error) {
+            if (isBackgroundLocationManifestError(error)) {
+                return null;
+            }
+
+            throw error;
+        }
+
+        if (backgroundStatus.status === 'granted' || backgroundStatus.canAskAgain === false) {
+            return backgroundStatus;
+        }
+
+        try {
+            return await Location.requestBackgroundPermissionsAsync();
+        } catch (error) {
+            if (isBackgroundLocationManifestError(error)) {
+                return null;
+            }
+
+            throw error;
+        }
+    }, []);
+
+    const requestNotificationPermission = useCallback(async () => {
+        let notificationStatus = await Notifications.getPermissionsAsync();
+        if (notificationStatus.status !== 'granted' && notificationStatus.canAskAgain !== false) {
+            notificationStatus = await Notifications.requestPermissionsAsync();
+        }
+
+        return notificationStatus;
+    }, []);
+
     const requestForegroundLocation = useCallback(async (): Promise<ForegroundLocationRequestResult> => {
         if (foregroundLocationRequestRef.current) {
             return foregroundLocationRequestRef.current;
@@ -430,79 +475,99 @@ export function useGeofence() {
     }, [refreshLocation, requestForegroundPermission]);
 
     const requestReminderPermissions = useCallback(async (): Promise<ReminderPermissionRequestResult> => {
+        if (reminderPermissionRequestRef.current) {
+            return reminderPermissionRequestRef.current;
+        }
+
+        const requestPromise = (async (): Promise<ReminderPermissionRequestResult> => {
         if (!arePlaceRemindersEnabled()) {
             commitRemindersEnabled(false);
             return {
                 enabled: false,
                 requiresSettings: false,
+                reason: 'feature_disabled',
             };
         }
 
-        const foregroundPermission = await requestForegroundPermission();
+        let foregroundPermission: ForegroundPermissionRequestResult;
+        try {
+            foregroundPermission = await requestForegroundPermission();
+        } catch (error) {
+            console.warn('[geofence] Foreground reminder permission request failed:', error);
+            commitRemindersEnabled(false);
+            return {
+                enabled: false,
+                requiresSettings: false,
+                reason: 'unavailable',
+            };
+        }
+
         if (!foregroundPermission.granted) {
             commitRemindersEnabled(false);
             return {
                 enabled: false,
                 requiresSettings: foregroundPermission.requiresSettings,
+                reason: 'foreground_denied',
             };
         }
 
-        let backgroundStatus: Awaited<ReturnType<typeof Location.getBackgroundPermissionsAsync>>;
+        let backgroundStatus: Awaited<ReturnType<typeof Location.getBackgroundPermissionsAsync>> | null;
         try {
-            backgroundStatus = await Location.getBackgroundPermissionsAsync();
+            backgroundStatus = await requestBackgroundPermission();
         } catch (error) {
-            if (isBackgroundLocationManifestError(error)) {
-                commitRemindersEnabled(false);
-                return {
-                    enabled: false,
-                    requiresSettings: false,
-                };
-            }
-
-            throw error;
-        }
-        if (backgroundStatus.status !== 'granted') {
-            if (backgroundStatus.canAskAgain === false) {
-                commitRemindersEnabled(false);
-                return {
-                    enabled: false,
-                    requiresSettings: true,
-                };
-            }
-
-            try {
-                backgroundStatus = await Location.requestBackgroundPermissionsAsync();
-            } catch (error) {
-                if (isBackgroundLocationManifestError(error)) {
-                    commitRemindersEnabled(false);
-                    return {
-                        enabled: false,
-                        requiresSettings: false,
-                    };
-                }
-
-                throw error;
-            }
-        }
-        if (backgroundStatus.status !== 'granted') {
+            console.warn('[geofence] Background reminder permission request failed:', error);
             commitRemindersEnabled(false);
             return {
                 enabled: false,
-                requiresSettings: backgroundStatus.canAskAgain === false,
+                requiresSettings: false,
+                reason: 'unavailable',
             };
         }
 
-        let notificationStatus = await Notifications.getPermissionsAsync();
-        if (notificationStatus.status !== 'granted' && notificationStatus.canAskAgain !== false) {
-            notificationStatus = await Notifications.requestPermissionsAsync();
+        if (backgroundStatus?.status !== 'granted') {
+            commitRemindersEnabled(false);
+            return {
+                enabled: false,
+                requiresSettings: backgroundStatus
+                    ? backgroundStatus.canAskAgain === false || Platform.OS === 'android'
+                    : false,
+                reason: 'background_denied',
+            };
         }
 
-        const requestedPermissionsEnabled =
-            backgroundStatus.status === 'granted' && notificationStatus.status === 'granted';
+        let notificationStatus: Awaited<ReturnType<typeof Notifications.getPermissionsAsync>>;
+        try {
+            notificationStatus = await requestNotificationPermission();
+        } catch (error) {
+            console.warn('[geofence] Reminder notification permission request failed:', error);
+            commitRemindersEnabled(false);
+            return {
+                enabled: false,
+                requiresSettings: false,
+                reason: 'unavailable',
+            };
+        }
 
-        let enabled = requestedPermissionsEnabled;
-        if (requestedPermissionsEnabled) {
+        if (notificationStatus.status !== 'granted') {
+            commitRemindersEnabled(false);
+            return {
+                enabled: false,
+                requiresSettings: notificationStatus.canAskAgain === false,
+                reason: 'notifications_denied',
+            };
+        }
+
+        let enabled = false;
+        try {
             enabled = await syncGeofenceRegions();
+        } catch (error) {
+            console.warn('[geofence] Reminder geofence registration failed:', error);
+            commitRemindersEnabled(false);
+            return {
+                enabled: false,
+                requiresSettings: false,
+                reason: 'geofence_unavailable',
+            };
         }
 
         commitRemindersEnabled(enabled);
@@ -518,15 +583,30 @@ export function useGeofence() {
             }
         }
 
-        const requiresSettings =
-            (backgroundStatus.status !== 'granted' && backgroundStatus.canAskAgain === false) ||
-            (notificationStatus.status !== 'granted' && notificationStatus.canAskAgain === false);
-
         return {
             enabled,
-            requiresSettings,
+            requiresSettings: false,
+            reason: enabled ? null : 'geofence_unavailable',
         };
-    }, [commitRemindersEnabled, refreshLocation, requestForegroundPermission, user]);
+        })();
+
+        reminderPermissionRequestRef.current = requestPromise;
+
+        try {
+            return await requestPromise;
+        } finally {
+            if (reminderPermissionRequestRef.current === requestPromise) {
+                reminderPermissionRequestRef.current = null;
+            }
+        }
+    }, [
+        commitRemindersEnabled,
+        refreshLocation,
+        requestBackgroundPermission,
+        requestForegroundPermission,
+        requestNotificationPermission,
+        user,
+    ]);
 
     const openAppSettings = useCallback(async () => {
         try {

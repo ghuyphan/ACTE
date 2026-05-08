@@ -314,6 +314,7 @@ describe('useGeofence', () => {
       expect(permissionResult).toEqual({
         enabled: false,
         requiresSettings: true,
+        reason: 'background_denied',
       });
     });
 
@@ -338,6 +339,7 @@ describe('useGeofence', () => {
       expect(permissionResult).toEqual({
         enabled: false,
         requiresSettings: false,
+        reason: 'background_denied',
       });
     });
 
@@ -363,6 +365,7 @@ describe('useGeofence', () => {
       expect(permissionResult).toEqual({
         enabled: false,
         requiresSettings: true,
+        reason: 'notifications_denied',
       });
     });
 
@@ -387,11 +390,89 @@ describe('useGeofence', () => {
       expect(permissionResult).toEqual({
         enabled: false,
         requiresSettings: false,
+        reason: 'geofence_unavailable',
       });
     });
 
     expect(result.current.remindersEnabled).toBe(false);
     expect(mockSyncSocialPushRegistration).not.toHaveBeenCalled();
+  });
+
+  it('returns a typed failure when geofence registration throws', async () => {
+    const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    mockGetForegroundPermissionsAsync.mockResolvedValue({ status: 'granted', canAskAgain: true });
+    mockGetBackgroundPermissionsAsync.mockResolvedValue({ status: 'granted', canAskAgain: true });
+    mockNotificationsGetPermissionsAsync.mockResolvedValue({ status: 'granted', canAskAgain: true });
+    mockSyncGeofenceRegions.mockRejectedValue(new Error('Native geofence setup failed'));
+    mockGetReminderPermissionState.mockResolvedValue({
+      foregroundGranted: true,
+      remindersEnabled: false,
+    });
+
+    const { result } = renderHook(() => useGeofence());
+
+    await act(async () => {
+      const permissionResult = await result.current.requestReminderPermissions();
+      expect(permissionResult).toEqual({
+        enabled: false,
+        requiresSettings: false,
+        reason: 'geofence_unavailable',
+      });
+    });
+
+    expect(result.current.remindersEnabled).toBe(false);
+    expect(mockSyncSocialPushRegistration).not.toHaveBeenCalled();
+    consoleWarnSpy.mockRestore();
+  });
+
+  it('coalesces overlapping reminder permission requests', async () => {
+    let resolveSync: ((value: boolean) => void) | undefined;
+    mockGetForegroundPermissionsAsync.mockResolvedValue({ status: 'granted', canAskAgain: true });
+    mockGetBackgroundPermissionsAsync.mockResolvedValue({ status: 'granted', canAskAgain: true });
+    mockNotificationsGetPermissionsAsync.mockResolvedValue({ status: 'granted', canAskAgain: true });
+    mockSyncGeofenceRegions.mockImplementation(
+      () => new Promise<boolean>((resolve) => {
+        resolveSync = resolve;
+      })
+    );
+    mockGetReminderPermissionState.mockResolvedValue({
+      foregroundGranted: true,
+      remindersEnabled: false,
+    });
+
+    const { result } = renderHook(() => useGeofence());
+
+    let firstRequest: Promise<Awaited<ReturnType<typeof result.current.requestReminderPermissions>>> | null = null;
+    let secondRequest: Promise<Awaited<ReturnType<typeof result.current.requestReminderPermissions>>> | null = null;
+    let responses: Awaited<ReturnType<typeof result.current.requestReminderPermissions>>[] = [];
+
+    await act(async () => {
+      firstRequest = result.current.requestReminderPermissions();
+      secondRequest = result.current.requestReminderPermissions();
+      await waitFor(() => {
+        expect(mockSyncGeofenceRegions).toHaveBeenCalledTimes(1);
+      });
+      resolveSync?.(true);
+      responses = await Promise.all([firstRequest!, secondRequest!]);
+    });
+
+    expect(responses).toEqual([
+      {
+        enabled: true,
+        requiresSettings: false,
+        reason: null,
+      },
+      {
+        enabled: true,
+        requiresSettings: false,
+        reason: null,
+      },
+    ]);
+
+    expect(mockGetForegroundPermissionsAsync).toHaveBeenCalledTimes(1);
+    expect(mockGetBackgroundPermissionsAsync).toHaveBeenCalledTimes(1);
+    expect(mockNotificationsGetPermissionsAsync).toHaveBeenCalledTimes(1);
+    expect(mockSyncGeofenceRegions).toHaveBeenCalledTimes(1);
   });
 
   it('skips reminder flows entirely when place reminders are disabled in config', async () => {
@@ -404,6 +485,7 @@ describe('useGeofence', () => {
       expect(permissionResult).toEqual({
         enabled: false,
         requiresSettings: false,
+        reason: 'feature_disabled',
       });
     });
 

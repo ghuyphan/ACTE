@@ -2579,6 +2579,30 @@ export async function createSharedPostResponseReaction(
   return mapSharedPostResponseReaction(record);
 }
 
+export async function deleteSharedPostResponseReaction(
+  user: AppUser,
+  postId: string,
+  responseId: string
+): Promise<void> {
+  await ensureSupabaseSessionMatchesUser(user.id);
+
+  const normalizedPostId = postId.trim();
+  const normalizedResponseId = responseId.trim();
+  if (!normalizedPostId || !normalizedResponseId) {
+    throw new Error('Message required.');
+  }
+
+  const { error } = await requireSupabase()
+    .from('shared_post_response_reactions')
+    .delete()
+    .eq('post_id', normalizedPostId)
+    .eq('response_id', normalizedResponseId)
+    .eq('author_user_id', user.id);
+  if (error) {
+    throw error;
+  }
+}
+
 export async function updateSharedPost(
   user: AppUser,
   postId: string,

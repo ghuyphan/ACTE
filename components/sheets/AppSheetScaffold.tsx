@@ -14,6 +14,7 @@ export interface AppSheetHeaderAction {
   onPress: () => void;
   testID?: string;
   disabled?: boolean;
+  badgeLabel?: string;
 }
 
 export interface AppSheetScaffoldProps {
@@ -23,6 +24,8 @@ export interface AppSheetScaffoldProps {
   subtitle?: string;
   leadingAction?: AppSheetHeaderAction;
   trailingAction?: AppSheetHeaderAction;
+  trailingActions?: AppSheetHeaderAction[];
+  overlayHeaderActions?: boolean;
   scrollable?: boolean;
   footer?: ReactNode;
   headerTop?: ReactNode;
@@ -41,27 +44,45 @@ function HeaderActionButton({ action }: { action?: AppSheetHeaderAction }) {
   if (Platform.OS === 'android') {
     return (
       <View style={styles.actionButtonAndroidWrap}>
-        <AppIconButton
-          icon={action.icon}
-          accessibilityLabel={action.accessibilityLabel}
-          disabled={action.disabled}
-          onPress={action.onPress}
-          style={[styles.actionButtonAndroid, { borderColor: 'transparent', backgroundColor: 'transparent' }]}
-          testID={action.testID}
-        />
+        <View style={styles.actionButtonBadgeHost}>
+          <AppIconButton
+            icon={action.icon}
+            accessibilityLabel={action.accessibilityLabel}
+            disabled={action.disabled}
+            onPress={action.onPress}
+            style={[styles.actionButtonAndroid, { borderColor: 'transparent', backgroundColor: 'transparent' }]}
+            testID={action.testID}
+          />
+          {action.badgeLabel ? <HeaderActionBadge label={action.badgeLabel} /> : null}
+        </View>
       </View>
     );
   }
 
   return (
-    <AppIconButton
-      icon={action.icon}
-      accessibilityLabel={action.accessibilityLabel}
-      disabled={action.disabled}
-      onPress={action.onPress}
-      style={styles.actionButton}
-      testID={action.testID}
-    />
+    <View style={styles.actionButtonBadgeHost}>
+      <AppIconButton
+        icon={action.icon}
+        accessibilityLabel={action.accessibilityLabel}
+        disabled={action.disabled}
+        onPress={action.onPress}
+        style={styles.actionButton}
+        testID={action.testID}
+      />
+      {action.badgeLabel ? <HeaderActionBadge label={action.badgeLabel} /> : null}
+    </View>
+  );
+}
+
+function HeaderActionBadge({ label }: { label: string }) {
+  const { colors } = useTheme();
+
+  return (
+    <View style={[styles.actionBadge, { backgroundColor: colors.primary }]}>
+      <Text numberOfLines={1} style={[styles.actionBadgeText, { color: colors.onPrimary }]}>
+        {label}
+      </Text>
+    </View>
   );
 }
 
@@ -72,6 +93,8 @@ export default function AppSheetScaffold({
   subtitle,
   leadingAction,
   trailingAction,
+  trailingActions,
+  overlayHeaderActions = false,
   scrollable = false,
   footer,
   headerTop,
@@ -101,6 +124,7 @@ export default function AppSheetScaffold({
         : 0);
   const hasHeader =
     headerVariant !== 'none' && (Boolean(title) || Boolean(subtitle) || Boolean(headerTop));
+  const resolvedTrailingActions = trailingActions ?? (trailingAction ? [trailingAction] : []);
 
   const content = scrollable ? (
     <ScrollView
@@ -149,11 +173,29 @@ export default function AppSheetScaffold({
             <View
               style={[
                 styles.actionRow,
+                overlayHeaderActions
+                  ? [
+                      styles.actionRowOverlay,
+                      {
+                        left: horizontalPadding,
+                        right: horizontalPadding,
+                        top: headerTopPadding,
+                      },
+                    ]
+                  : null,
                 isAndroid && !leadingAction ? styles.actionRowAndroidTrailing : null,
               ]}
             >
               <HeaderActionButton action={leadingAction} />
-              <HeaderActionButton action={trailingAction} />
+              {resolvedTrailingActions.length > 0 ? (
+                <View style={styles.trailingActionsGroup}>
+                  {resolvedTrailingActions.map((action) => (
+                    <HeaderActionButton key={action.testID ?? action.accessibilityLabel} action={action} />
+                  ))}
+                </View>
+              ) : (
+                <HeaderActionButton />
+              )}
             </View>
           ) : null}
 
@@ -199,6 +241,7 @@ const styles = StyleSheet.create({
   },
   header: {
     alignItems: 'center',
+    position: 'relative',
   },
   headerAndroid: {
     alignItems: 'stretch',
@@ -209,11 +252,41 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: 18,
   },
+  actionRowOverlay: {
+    position: 'absolute',
+    zIndex: 1,
+    marginBottom: 0,
+    width: undefined,
+  },
   actionRowAndroidTrailing: {
     justifyContent: 'flex-end',
   },
+  trailingActionsGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
   actionButton: {
     flexShrink: 0,
+  },
+  actionButtonBadgeHost: {
+    position: 'relative',
+  },
+  actionBadge: {
+    position: 'absolute',
+    top: -4,
+    right: -5,
+    minWidth: 17,
+    height: 17,
+    borderRadius: 9,
+    paddingHorizontal: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  actionBadgeText: {
+    fontSize: 10,
+    lineHeight: 12,
+    fontWeight: '800',
   },
   actionButtonAndroidWrap: {
     width: 40,

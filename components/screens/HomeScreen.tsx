@@ -46,6 +46,7 @@ import { useHomeStartupReady } from '../../hooks/app/useHomeStartupReady';
 import {
   useGeofence,
   type ForegroundLocationRequestResult,
+  type ReminderPermissionRequestResult,
 } from '../../hooks/useGeofence';
 import { useNoteDetailSheet } from '../../hooks/useNoteDetailSheet';
 import { showAppAlert } from '../../utils/alert';
@@ -322,7 +323,7 @@ export default function HomeScreen() {
     createSharedPost,
     createSharedPostResponse,
   } = useSharedFeedStore();
-  const [hasUnreadSharedChats, setHasUnreadSharedChats] = useState(false);
+  const [unreadSharedChatCount, setUnreadSharedChatCount] = useState(0);
   const captureAudienceFriends = useMemo(
     () => friends.filter((friend) => friend.userId !== user?.uid),
     [friends, user?.uid]
@@ -359,7 +360,7 @@ export default function HomeScreen() {
   useEffect(() => {
     const postIds = sharedPostIdsKey ? sharedPostIdsKey.split('|') : [];
     if (!sharedEnabled || !sharedReady || !user?.uid || postIds.length === 0) {
-      setHasUnreadSharedChats(false);
+      setUnreadSharedChatCount(0);
       return;
     }
 
@@ -375,10 +376,10 @@ export default function HomeScreen() {
       const readStateByPostId = new Map(
         readStates.map((readState) => [readState.postId, readState])
       );
-      setHasUnreadSharedChats(
-        summaries.some((summary) =>
+      setUnreadSharedChatCount(
+        summaries.filter((summary) =>
           isUnreadSharedThreadSummary(summary, readStateByPostId.get(summary.postId), user.uid)
-        )
+        ).length
       );
     });
 
@@ -1605,6 +1606,59 @@ export default function HomeScreen() {
     [openAppSettings, showAlert, t]
   );
 
+  const getReminderPermissionUnavailableMessage = useCallback(
+    (result: ReminderPermissionRequestResult) => {
+      if (result.reason === 'foreground_denied') {
+        return result.requiresSettings
+          ? t(
+              'capture.remindersForegroundSettingsMsg',
+              'Location access is blocked for Noto. Open Settings to turn location back on, then enable reminders.'
+            )
+          : t(
+              'capture.remindersForegroundMsg',
+              'Noto needs location access before it can set up place reminders.'
+            );
+      }
+
+      if (result.reason === 'background_denied') {
+        return result.requiresSettings
+          ? t(
+              'capture.remindersBackgroundSettingsMsg',
+              'Background location is still off for Noto. Open Settings and choose Always Allow to enable reminders.'
+            )
+          : t(
+              'capture.remindersBackgroundMsg',
+              'Background location is still off. Noto needs it to remind you after you leave the app.'
+            );
+      }
+
+      if (result.reason === 'notifications_denied') {
+        return result.requiresSettings
+          ? t(
+              'capture.remindersNotificationSettingsMsg',
+              'Notifications are blocked for Noto. Open Settings to turn them back on, then enable reminders.'
+            )
+          : t(
+              'capture.remindersNotificationMsg',
+              'Notifications are still off. Noto needs them to deliver nearby reminders.'
+            );
+      }
+
+      if (result.reason === 'feature_disabled') {
+        return t(
+          'capture.remindersFeatureDisabledMsg',
+          'Background reminders are not available in this build.'
+        );
+      }
+
+      return t(
+        'capture.remindersSetupFailedMsg',
+        'Noto could not finish setting up nearby reminders. Please try again in a moment.'
+      );
+    },
+    [t]
+  );
+
   const promptReminderPermissionsFromDisclosure = useCallback(() => {
     showAlert({
       variant: 'info',
@@ -1636,10 +1690,7 @@ export default function HomeScreen() {
             showDoneSheet(
               'warning',
               t('capture.remindersUnavailableTitle', 'Reminders still off'),
-              t(
-                'capture.remindersUnavailableSettingsMsg',
-                'Background location or notifications are blocked for Noto. Open Settings to enable reminders.'
-              ),
+              getReminderPermissionUnavailableMessage(result),
               true
             );
             return;
@@ -1648,10 +1699,7 @@ export default function HomeScreen() {
           showDoneSheet(
             'warning',
             t('capture.remindersUnavailableTitle', 'Reminders still off'),
-            t(
-              'capture.remindersUnavailableMsg',
-              'Your note is still saved locally. Noto needs background location and notifications to send reminders.'
-            )
+            getReminderPermissionUnavailableMessage(result)
           );
         },
       },
@@ -1660,7 +1708,7 @@ export default function HomeScreen() {
         variant: 'secondary',
       },
     });
-  }, [requestReminderPermissions, showAlert, showDoneSheet, t]);
+  }, [getReminderPermissionUnavailableMessage, requestReminderPermissions, showAlert, showDoneSheet, t]);
 
   useEffect(() => {
     if (remindersEnabled || notes.length === 0 || syncBootstrapState !== 'complete') {
@@ -3291,13 +3339,9 @@ export default function HomeScreen() {
           },
           onCloseSearch: () => {},
           showSearchButton: showLegacySearchButton,
-          showMessagesButton: Boolean(sharedEnabled && user),
-          showMessagesIndicator: hasUnreadSharedChats,
+          showMessagesButton: false,
           showSharedButton: true,
           showNotesButton: true,
-          onOpenMessages: () => {
-            router.push('/shared/chats' as Href);
-          },
           onOpenShared: handleOpenSharedManage,
           onOpenNotes: handleOpenNotes,
           sharedButtonMode: settledSharedButtonMode,
@@ -3338,6 +3382,13 @@ export default function HomeScreen() {
                   dismissSharedManageSheet();
                   router.push('/friends/join' as Href);
                 },
+                onOpenChats: sharedEnabled && user
+                  ? () => {
+                      dismissSharedManageSheet();
+                      router.push('/shared/chats' as Href);
+                    }
+                  : undefined,
+                unreadChatsCount: unreadSharedChatCount,
                 onRemoveFriend: handleRemoveFriend,
                 onUpdateFriendNickname: updateFriendNickname,
                 onCreateFriendGroup: createFriendGroup,

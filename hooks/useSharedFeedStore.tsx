@@ -10,6 +10,7 @@ import {
   createSharedPost as createPost,
   createSharedPostResponse as createPostResponse,
   createSharedPostResponseReaction as createPostResponseReaction,
+  deleteSharedPostResponseReaction as deletePostResponseReaction,
   deleteFriendGroup as removeGroup,
   deleteOwnedSharedPostsForNotes,
   deleteSharedPost as deletePost,
@@ -47,6 +48,7 @@ import {
   getCachedSharedFeedSnapshot,
   getCachedSharedThreadReadStates,
   getCachedSharedThreadSummaries,
+  deleteCachedSharedPostResponseReaction,
   markCachedSharedThreadRead,
   patchCachedSharedPostMedia,
   replaceCachedSharedPostResponses,
@@ -131,6 +133,10 @@ interface SharedFeedStoreValue {
     responseId: string,
     emoji: string
   ) => Promise<SharedPostResponseReaction>;
+  deleteSharedPostResponseReaction: (
+    postId: string,
+    responseId: string
+  ) => Promise<void>;
   getSharedThreadReadStates: () => Promise<SharedThreadReadState[]>;
   markSharedThreadRead: (
     postId: string,
@@ -1768,6 +1774,18 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
           console.warn('Failed to persist shared response reaction cache:', error);
         });
         return reaction;
+      },
+      deleteSharedPostResponseReaction: async (postId: string, responseId: string) => {
+        requireOnline();
+        const activeUser = requireUser();
+        await deletePostResponseReaction(activeUser, postId, responseId);
+        void deleteCachedSharedPostResponseReaction(activeUser.uid, {
+          postId,
+          responseId,
+          authorUid: activeUser.uid,
+        }).catch((error) => {
+          console.warn('Failed to remove shared response reaction cache:', error);
+        });
       },
       getSharedThreadReadStates: async () => {
         const activeUser = requireUser();
