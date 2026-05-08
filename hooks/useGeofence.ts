@@ -480,114 +480,114 @@ export function useGeofence() {
         }
 
         const requestPromise = (async (): Promise<ReminderPermissionRequestResult> => {
-        if (!arePlaceRemindersEnabled()) {
-            commitRemindersEnabled(false);
-            return {
-                enabled: false,
-                requiresSettings: false,
-                reason: 'feature_disabled',
-            };
-        }
-
-        let foregroundPermission: ForegroundPermissionRequestResult;
-        try {
-            foregroundPermission = await requestForegroundPermission();
-        } catch (error) {
-            console.warn('[geofence] Foreground reminder permission request failed:', error);
-            commitRemindersEnabled(false);
-            return {
-                enabled: false,
-                requiresSettings: false,
-                reason: 'unavailable',
-            };
-        }
-
-        if (!foregroundPermission.granted) {
-            commitRemindersEnabled(false);
-            return {
-                enabled: false,
-                requiresSettings: foregroundPermission.requiresSettings,
-                reason: 'foreground_denied',
-            };
-        }
-
-        let backgroundStatus: Awaited<ReturnType<typeof Location.getBackgroundPermissionsAsync>> | null;
-        try {
-            backgroundStatus = await requestBackgroundPermission();
-        } catch (error) {
-            console.warn('[geofence] Background reminder permission request failed:', error);
-            commitRemindersEnabled(false);
-            return {
-                enabled: false,
-                requiresSettings: false,
-                reason: 'unavailable',
-            };
-        }
-
-        if (backgroundStatus?.status !== 'granted') {
-            commitRemindersEnabled(false);
-            return {
-                enabled: false,
-                requiresSettings: backgroundStatus
-                    ? backgroundStatus.canAskAgain === false || Platform.OS === 'android'
-                    : false,
-                reason: 'background_denied',
-            };
-        }
-
-        let notificationStatus: Awaited<ReturnType<typeof Notifications.getPermissionsAsync>>;
-        try {
-            notificationStatus = await requestNotificationPermission();
-        } catch (error) {
-            console.warn('[geofence] Reminder notification permission request failed:', error);
-            commitRemindersEnabled(false);
-            return {
-                enabled: false,
-                requiresSettings: false,
-                reason: 'unavailable',
-            };
-        }
-
-        if (notificationStatus.status !== 'granted') {
-            commitRemindersEnabled(false);
-            return {
-                enabled: false,
-                requiresSettings: notificationStatus.canAskAgain === false,
-                reason: 'notifications_denied',
-            };
-        }
-
-        let enabled = false;
-        try {
-            enabled = await syncGeofenceRegions();
-        } catch (error) {
-            console.warn('[geofence] Reminder geofence registration failed:', error);
-            commitRemindersEnabled(false);
-            return {
-                enabled: false,
-                requiresSettings: false,
-                reason: 'geofence_unavailable',
-            };
-        }
-
-        commitRemindersEnabled(enabled);
-        if (enabled) {
-            void refreshLocation({
-                preferCached: true,
-                backgroundRefreshIfCached: true,
-            }).catch(() => undefined);
-            if (user) {
-                void syncSocialPushRegistration(user).catch((error) => {
-                    console.warn('[social-push] Registration refresh failed:', error);
-                });
+            if (!arePlaceRemindersEnabled()) {
+                commitRemindersEnabled(false);
+                return {
+                    enabled: false,
+                    requiresSettings: false,
+                    reason: 'feature_disabled',
+                };
             }
-        }
 
-        return {
-            enabled,
-            requiresSettings: false,
-            reason: enabled ? null : 'geofence_unavailable',
-        };
+            let foregroundPermission: ForegroundPermissionRequestResult;
+            try {
+                foregroundPermission = await requestForegroundPermission();
+            } catch (error) {
+                console.warn('[geofence] Foreground reminder permission request failed:', error);
+                commitRemindersEnabled(false);
+                return {
+                    enabled: false,
+                    requiresSettings: false,
+                    reason: 'unavailable',
+                };
+            }
+
+            if (!foregroundPermission.granted) {
+                commitRemindersEnabled(false);
+                return {
+                    enabled: false,
+                    requiresSettings: foregroundPermission.requiresSettings,
+                    reason: 'foreground_denied',
+                };
+            }
+
+            let backgroundStatus: Awaited<ReturnType<typeof Location.getBackgroundPermissionsAsync>> | null;
+            try {
+                backgroundStatus = await requestBackgroundPermission();
+            } catch (error) {
+                console.warn('[geofence] Background reminder permission request failed:', error);
+                commitRemindersEnabled(false);
+                return {
+                    enabled: false,
+                    requiresSettings: false,
+                    reason: 'unavailable',
+                };
+            }
+
+            if (backgroundStatus?.status !== 'granted') {
+                commitRemindersEnabled(false);
+                return {
+                    enabled: false,
+                    requiresSettings: backgroundStatus
+                        ? backgroundStatus.canAskAgain === false || Platform.OS === 'android'
+                        : false,
+                    reason: 'background_denied',
+                };
+            }
+
+            let notificationStatus: Awaited<ReturnType<typeof Notifications.getPermissionsAsync>>;
+            try {
+                notificationStatus = await requestNotificationPermission();
+            } catch (error) {
+                console.warn('[geofence] Reminder notification permission request failed:', error);
+                commitRemindersEnabled(false);
+                return {
+                    enabled: false,
+                    requiresSettings: false,
+                    reason: 'unavailable',
+                };
+            }
+
+            if (notificationStatus.status !== 'granted') {
+                commitRemindersEnabled(false);
+                return {
+                    enabled: false,
+                    requiresSettings: notificationStatus.canAskAgain === false,
+                    reason: 'notifications_denied',
+                };
+            }
+
+            let enabled = false;
+            try {
+                enabled = await syncGeofenceRegions();
+            } catch (error) {
+                console.warn('[geofence] Reminder geofence registration failed:', error);
+                commitRemindersEnabled(false);
+                return {
+                    enabled: false,
+                    requiresSettings: false,
+                    reason: 'geofence_unavailable',
+                };
+            }
+
+            commitRemindersEnabled(enabled);
+            if (enabled) {
+                void refreshLocation({
+                    preferCached: true,
+                    backgroundRefreshIfCached: true,
+                }).catch(() => undefined);
+                if (user) {
+                    void syncSocialPushRegistration(user).catch((error) => {
+                        console.warn('[social-push] Registration refresh failed:', error);
+                    });
+                }
+            }
+
+            return {
+                enabled,
+                requiresSettings: false,
+                reason: enabled ? null : 'geofence_unavailable',
+            };
         })();
 
         reminderPermissionRequestRef.current = requestPromise;
