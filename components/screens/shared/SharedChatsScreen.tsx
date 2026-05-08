@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
-import { Stack, useRouter } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { FlashList } from '@shopify/flash-list';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -428,20 +428,6 @@ export default function SharedChatsScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <Stack.Screen
-        options={{
-          headerShown: true,
-          headerTransparent: false,
-          headerShadowVisible: false,
-          title: t('shared.chatsTitle', 'Chats'),
-          headerTintColor: colors.text,
-          headerBackButtonDisplayMode: 'minimal',
-          headerBackButtonMenuEnabled: false,
-          headerStyle: {
-            backgroundColor: colors.background,
-          },
-        }}
-      />
       {!authReady || (loading && threads.length === 0) ? (
         renderLoadingThreads()
       ) : threads.length === 0 ? (

@@ -163,6 +163,12 @@ function AppContent() {
       stickerLibrary: createSolidBackScreenOptions(colors, {
         title: t('notes.stickerLibrary.title', 'Your stickers & stamps'),
       }),
+      sharedChats: createSolidBackScreenOptions(colors, {
+        title: t('shared.chatsTitle', 'Chats'),
+      }),
+      sharedChat: createSolidBackScreenOptions(colors, {
+        title: '',
+      }),
     }),
     [colors, homeTitle, settingsTitle, t]
   );

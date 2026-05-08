@@ -1724,16 +1724,7 @@ export default function SharedPostChatScreen({ postId }: SharedPostChatScreenPro
     >
       <Stack.Screen
         options={{
-          headerShown: true,
-          headerTransparent: false,
-          headerShadowVisible: false,
-          headerTintColor: colors.text,
-          headerBackButtonDisplayMode: 'minimal',
-          headerBackButtonMenuEnabled: false,
           headerTitleAlign: 'center',
-          headerStyle: {
-            backgroundColor: colors.background,
-          },
           headerTitle: () =>
             post ? (
               <View style={styles.headerIdentity}>
