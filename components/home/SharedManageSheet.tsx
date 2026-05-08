@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { BottomSheetFlatList } from '@gorhom/bottom-sheet';
 import { Image } from 'expo-image';
-import { type ReactNode, useEffect, useMemo, useState } from 'react';
+import { type ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import Animated, {
   Easing,
@@ -26,6 +26,7 @@ import {
 import { Sheet, Typography } from '../../constants/theme';
 import { useTheme } from '../../hooks/useTheme';
 import { FriendConnection, FriendGroup, FriendInvite } from '../../services/sharedFeedService';
+import { getPersistentItem, getPersistentItemSync, setPersistentItem } from '../../utils/appStorage';
 import AppSheet from '../sheets/AppSheet';
 import AppSheetScaffold from '../sheets/AppSheetScaffold';
 import SheetFooterButton from '../sheets/SheetFooterButton';
@@ -37,6 +38,39 @@ const FriendsList = Platform.OS === 'android' ? BottomSheetFlatList : FlatList;
 const COLLAPSIBLE_LAYOUT_TRANSITION = LinearTransition.duration(180).easing(Easing.out(Easing.cubic));
 const COLLAPSIBLE_ENTERING = FadeIn.duration(140).easing(Easing.out(Easing.cubic));
 const COLLAPSIBLE_EXITING = FadeOut.duration(110).easing(Easing.in(Easing.cubic));
+const COLLAPSE_STATE_STORAGE_KEY = 'sharedManageSheet.collapseState.v1';
+const DEFAULT_COLLAPSE_STATE = {
+  groupsExpanded: true,
+  friendsExpanded: true,
+};
+
+type CollapseState = typeof DEFAULT_COLLAPSE_STATE;
+
+function parseCollapseState(rawValue: string | null | undefined): CollapseState | null {
+  if (!rawValue) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(rawValue) as Partial<CollapseState>;
+    return {
+      groupsExpanded:
+        typeof parsed.groupsExpanded === 'boolean'
+          ? parsed.groupsExpanded
+          : DEFAULT_COLLAPSE_STATE.groupsExpanded,
+      friendsExpanded:
+        typeof parsed.friendsExpanded === 'boolean'
+          ? parsed.friendsExpanded
+          : DEFAULT_COLLAPSE_STATE.friendsExpanded,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function getInitialCollapseState(): CollapseState {
+  return parseCollapseState(getPersistentItemSync(COLLAPSE_STATE_STORAGE_KEY)) ?? DEFAULT_COLLAPSE_STATE;
+}
 
 function formatConnectedCopy(template: string, friendedAt: string, locale?: string) {
   const date = new Date(friendedAt);
@@ -527,8 +561,9 @@ export default function SharedManageSheet(props: {
   const [groupMemberDraft, setGroupMemberDraft] = useState<string[]>([]);
   const [groupErrorMessage, setGroupErrorMessage] = useState<string | null>(null);
   const [isSavingGroup, setIsSavingGroup] = useState(false);
-  const [areGroupsExpanded, setAreGroupsExpanded] = useState(true);
-  const [areFriendsExpanded, setAreFriendsExpanded] = useState(true);
+  const [collapseState, setCollapseState] = useState<CollapseState>(getInitialCollapseState);
+  const areGroupsExpanded = collapseState.groupsExpanded;
+  const areFriendsExpanded = collapseState.friendsExpanded;
 
   const emptyLoadingBody = t('shared.refreshingFriends', 'Refreshing your shared circle...');
   const emptyBody = t(
@@ -559,6 +594,35 @@ export default function SharedManageSheet(props: {
   const friendBadgeLabel = friends.length > 0 ? (friends.length > 9 ? '9+' : String(friends.length)) : undefined;
   const unreadChatsBadgeLabel =
     unreadChatsCount > 0 ? (unreadChatsCount > 9 ? '9+' : String(unreadChatsCount)) : undefined;
+
+  useEffect(() => {
+    let cancelled = false;
+
+    void getPersistentItem(COLLAPSE_STATE_STORAGE_KEY)
+      .then((rawValue) => {
+        const persistedState = parseCollapseState(rawValue);
+        if (!cancelled && persistedState) {
+          setCollapseState(persistedState);
+        }
+      })
+      .catch((error) => {
+        console.warn('[SharedManageSheet] Failed to load collapse state:', error);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const updateCollapseState = useCallback((patch: Partial<CollapseState>) => {
+    setCollapseState((current) => {
+      const nextState = { ...current, ...patch };
+      void setPersistentItem(COLLAPSE_STATE_STORAGE_KEY, JSON.stringify(nextState)).catch((error) => {
+        console.warn('[SharedManageSheet] Failed to persist collapse state:', error);
+      });
+      return nextState;
+    });
+  }, []);
 
   useEffect(() => {
     if (!visible) {
@@ -764,7 +828,7 @@ export default function SharedManageSheet(props: {
             <GroupsSectionHeader
               count={friendGroups.length}
               expanded={areGroupsExpanded}
-              onToggle={() => setAreGroupsExpanded((current) => !current)}
+              onToggle={() => updateCollapseState({ groupsExpanded: !areGroupsExpanded })}
               onCreateGroup={() => openGroupEditor(null)}
             />
             {areGroupsExpanded && friendGroups.length > 0 ? (
@@ -787,7 +851,7 @@ export default function SharedManageSheet(props: {
             <FriendsSectionHeader
               count={friends.length}
               expanded={areFriendsExpanded}
-              onToggle={() => setAreFriendsExpanded((current) => !current)}
+              onToggle={() => updateCollapseState({ friendsExpanded: !areFriendsExpanded })}
               compactTop={!areGroupsExpanded || friendGroups.length === 0}
             />
           </View>

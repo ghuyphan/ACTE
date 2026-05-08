@@ -862,17 +862,11 @@ export default function SharedPostChatScreen({ postId }: SharedPostChatScreenPro
                 : t('shared.chatOffline', 'Offline');
             })()
           : t('shared.chatConnecting', 'Syncing');
-    if (primaryFriend?.nickname?.trim() && primaryFriendPublicLabel) {
-      return `${primaryFriendPublicLabel} • ${presenceText}`;
-    }
-
     return presenceText;
   }, [
     headerPresenceStatus,
     participantIds.length,
     post,
-    primaryFriend?.nickname,
-    primaryFriendPublicLabel,
     primaryPresence?.lastSeenAt,
     t,
   ]);
