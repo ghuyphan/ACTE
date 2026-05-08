@@ -1731,7 +1731,7 @@ export default function SharedPostChatScreen({ postId }: SharedPostChatScreenPro
         style={[
           styles.chatHeader,
           {
-            paddingTop: headerTopInset + 6,
+            paddingTop: headerTopInset,
             backgroundColor: colors.background,
           },
         ]}
@@ -1739,6 +1739,7 @@ export default function SharedPostChatScreen({ postId }: SharedPostChatScreenPro
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={t('common.back', 'Back')}
+          hitSlop={8}
           onPress={() => {
             router.back();
           }}
@@ -1797,7 +1798,7 @@ export default function SharedPostChatScreen({ postId }: SharedPostChatScreenPro
             </View>
           </View>
         ) : (
-          <Text style={[styles.headerFallbackTitle, { color: colors.text }]}>
+          <Text numberOfLines={1} style={[styles.headerFallbackTitle, { color: colors.text }]}>
             {t('shared.chatTitle', 'Chat')}
           </Text>
         )}
@@ -1805,6 +1806,7 @@ export default function SharedPostChatScreen({ postId }: SharedPostChatScreenPro
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={t('shared.friendNicknameEdit', 'Edit nickname')}
+            hitSlop={8}
             onPress={openNicknameEditor}
             style={({ pressed }) => [
               styles.chatHeaderActionButton,
@@ -2190,11 +2192,11 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
   },
   chatHeader: {
-    minHeight: 74,
+    minHeight: 44,
     paddingHorizontal: 14,
-    paddingBottom: 7,
     flexDirection: 'row',
-    alignItems: 'flex-end',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     gap: 10,
   },
   chatBackButton: {
@@ -2203,15 +2205,20 @@ const styles = StyleSheet.create({
     borderRadius: 21,
     alignItems: 'center',
     justifyContent: 'center',
+    zIndex: 2,
   },
   chatHeaderSpacer: {
     width: 42,
     height: 42,
   },
   headerIdentity: {
-    flex: 1,
+    position: 'absolute',
+    left: 64,
+    right: 64,
+    bottom: 5,
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: 9,
     minWidth: 0,
   },
@@ -2231,6 +2238,7 @@ const styles = StyleSheet.create({
   headerCopy: {
     flexShrink: 1,
     minWidth: 0,
+    alignItems: 'flex-start',
   },
   chatHeaderActionButton: {
     width: 42,
@@ -2238,6 +2246,7 @@ const styles = StyleSheet.create({
     borderRadius: 21,
     alignItems: 'center',
     justifyContent: 'center',
+    zIndex: 2,
   },
   headerIdentityText: {
     fontSize: 16,
@@ -2259,11 +2268,15 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   headerFallbackTitle: {
-    flex: 1,
+    position: 'absolute',
+    left: 64,
+    right: 64,
+    bottom: 10,
     fontSize: 18,
     lineHeight: 23,
     fontWeight: '900',
     fontFamily: 'Noto Sans',
+    textAlign: 'center',
   },
   headerPresenceDot: {
     width: 7,
