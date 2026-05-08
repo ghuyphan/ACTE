@@ -4,7 +4,7 @@ import { Stack, useRouter } from 'expo-router';
 import { FlashList } from '@shopify/flash-list';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Animated, Platform, Pressable, StatusBar, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Layout } from '../../../constants/theme';
 import { useAuth } from '../../../hooks/useAuth';
@@ -29,6 +29,14 @@ const CHAT_LIST_SKELETON_ROWS = [
 const MAX_CACHED_THREAD_SUMMARIES = 80;
 const cachedThreadSummaryByPostId = new Map<string, SharedThreadSummary>();
 const cachedReadStateByUserUid = new Map<string, Record<string, SharedThreadReadState>>();
+
+function getHeaderTopInset(topInset: number) {
+  if (topInset > 0) {
+    return topInset;
+  }
+
+  return Platform.OS === 'ios' ? 44 : StatusBar.currentHeight ?? 24;
+}
 
 function getCachedThreadSummaries(postIds: readonly string[]) {
   return Object.fromEntries(
@@ -129,6 +137,7 @@ export default function SharedChatsScreen() {
   const { t } = useTranslation();
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
+  const headerTopInset = getHeaderTopInset(insets.top);
   const router = useRouter();
   const { isReady: authReady, user } = useAuth();
   const {
@@ -375,7 +384,7 @@ export default function SharedChatsScreen() {
         style={[
           styles.skeletonList,
           {
-            paddingTop: insets.top + 68,
+            paddingTop: 12,
             paddingBottom: insets.bottom + 32,
             paddingHorizontal: Layout.screenPadding,
           },
@@ -423,22 +432,45 @@ export default function SharedChatsScreen() {
         ))}
       </View>
     ),
-    [colors.border, colors.primarySoft, insets.bottom, insets.top]
+    [colors.border, colors.primarySoft, insets.bottom]
   );
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <Stack.Screen
         options={{
-          headerShown: true,
-          headerTransparent: true,
-          headerShadowVisible: false,
-          title: t('shared.chatsTitle', 'Chats'),
-          headerTintColor: colors.text,
-          headerBackButtonDisplayMode: 'minimal',
-          headerBackButtonMenuEnabled: false,
+          headerShown: false,
         }}
       />
+      <View
+        style={[
+          styles.chatListHeader,
+          {
+            paddingTop: headerTopInset + 6,
+            backgroundColor: colors.background,
+          },
+        ]}
+      >
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={t('common.back', 'Back')}
+          onPress={() => {
+            router.back();
+          }}
+          style={({ pressed }) => [
+            styles.chatListBackButton,
+            {
+              opacity: pressed ? 0.64 : 1,
+            },
+          ]}
+        >
+          <Ionicons name="arrow-back" size={24} color={colors.text} />
+        </Pressable>
+        <Text numberOfLines={1} style={[styles.chatListTitle, { color: colors.text }]}>
+          {t('shared.chatsTitle', 'Chats')}
+        </Text>
+        <View style={styles.chatListHeaderSpacer} />
+      </View>
       {!authReady || (loading && threads.length === 0) ? (
         renderLoadingThreads()
       ) : threads.length === 0 ? (
@@ -480,7 +512,7 @@ export default function SharedChatsScreen() {
           )}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{
-            paddingTop: insets.top + 68,
+            paddingTop: 8,
             paddingBottom: insets.bottom + 32,
             paddingHorizontal: Layout.screenPadding,
           }}
@@ -493,6 +525,32 @@ export default function SharedChatsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  chatListHeader: {
+    minHeight: 74,
+    paddingHorizontal: 14,
+    paddingBottom: 7,
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 10,
+  },
+  chatListBackButton: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  chatListTitle: {
+    flex: 1,
+    fontSize: 18,
+    lineHeight: 23,
+    fontWeight: '900',
+    fontFamily: 'Noto Sans',
+  },
+  chatListHeaderSpacer: {
+    width: 42,
+    height: 42,
   },
   center: {
     flex: 1,

@@ -11,6 +11,7 @@ import {
   PanResponder,
   Platform,
   Pressable,
+  StatusBar,
   StyleSheet,
   Text,
   TextInput,
@@ -119,6 +120,14 @@ function scheduleKeyboardLayout(event: KeyboardEvent) {
   if (Platform.OS === 'ios') {
     Keyboard.scheduleLayoutAnimation(event);
   }
+}
+
+function getHeaderTopInset(topInset: number) {
+  if (topInset > 0) {
+    return topInset;
+  }
+
+  return Platform.OS === 'ios' ? 44 : StatusBar.currentHeight ?? 24;
 }
 
 function ResponseSkeletonRows({
@@ -626,6 +635,7 @@ export default function SharedPostChatScreen({ postId }: SharedPostChatScreenPro
   const { t } = useTranslation();
   const { colors, isDark } = useTheme();
   const insets = useSafeAreaInsets();
+  const headerTopInset = getHeaderTopInset(insets.top);
   const { height: screenHeight, width: screenWidth } = useWindowDimensions();
   const router = useRouter();
   const { user } = useAuth();
@@ -1500,11 +1510,17 @@ export default function SharedPostChatScreen({ postId }: SharedPostChatScreenPro
             avatarUri ? (
               <Image
                 source={{ uri: avatarUri }}
-                style={styles.messageAvatar}
+                style={[styles.messageAvatar, styles.messageAvatarAlignedToBubble]}
                 contentFit="cover"
               />
             ) : (
-              <View style={[styles.messageAvatar, { backgroundColor: colors.primarySoft }]}>
+              <View
+                style={[
+                  styles.messageAvatar,
+                  styles.messageAvatarAlignedToBubble,
+                  { backgroundColor: colors.primarySoft },
+                ]}
+              >
                 <Text style={[styles.messageAvatarLabel, { color: colors.primary }]}>
                   {avatarLabel}
                 </Text>
@@ -1692,7 +1708,7 @@ export default function SharedPostChatScreen({ postId }: SharedPostChatScreenPro
       )
     : 0;
   const reactionOverlayTop = reactionOverlay
-    ? Math.max(insets.top + 10, reactionOverlay.pageY - 72)
+    ? Math.max(headerTopInset + 10, reactionOverlay.pageY - 72)
     : 0;
   const activeReactionOverlayResponse = reactionOverlay
     ? responseById.get(reactionOverlay.response.id) ?? reactionOverlay.response
@@ -1715,7 +1731,7 @@ export default function SharedPostChatScreen({ postId }: SharedPostChatScreenPro
         style={[
           styles.chatHeader,
           {
-            paddingTop: insets.top + 6,
+            paddingTop: headerTopInset + 6,
             backgroundColor: colors.background,
           },
         ]}
@@ -1915,7 +1931,6 @@ export default function SharedPostChatScreen({ postId }: SharedPostChatScreenPro
                 bottom: composerKeyboardOffset,
                 paddingBottom: Math.max(insets.bottom, 12),
                 backgroundColor: colors.background,
-                borderTopColor: colors.border,
               },
             ]}
           >
@@ -2433,6 +2448,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  messageAvatarAlignedToBubble: {
+    marginBottom: 18,
+  },
   messageAvatarLabel: {
     fontSize: 11,
     lineHeight: 14,
@@ -2612,7 +2630,6 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 0,
     right: 0,
-    borderTopWidth: StyleSheet.hairlineWidth,
     paddingHorizontal: Layout.screenPadding,
     paddingTop: 9,
     gap: 7,
