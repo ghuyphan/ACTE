@@ -1,9 +1,28 @@
 import { Ionicons } from '@expo/vector-icons';
 import { BottomSheetFlatList } from '@gorhom/bottom-sheet';
 import { Image } from 'expo-image';
-import { useEffect, useMemo, useState } from 'react';
+import { type ReactNode, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Dimensions, FlatList, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import Animated, {
+  Easing,
+  FadeIn,
+  FadeOut,
+  LinearTransition,
+  useAnimatedStyle,
+  withTiming,
+} from 'react-native-reanimated';
+import {
+  Dimensions,
+  FlatList,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+  type StyleProp,
+  type ViewStyle,
+} from 'react-native';
 import { Sheet, Typography } from '../../constants/theme';
 import { useTheme } from '../../hooks/useTheme';
 import { FriendConnection, FriendGroup, FriendInvite } from '../../services/sharedFeedService';
@@ -13,9 +32,11 @@ import SheetFooterButton from '../sheets/SheetFooterButton';
 import TextFieldEditSheet from '../sheets/TextFieldEditSheet';
 import PrimaryButton from '../ui/PrimaryButton';
 
-const ESTIMATED_FRIEND_ROW_HEIGHT = 68;
 const FIXED_SHEET_HEIGHT = Math.min(Sheet.maxHeight, Math.round(Dimensions.get('window').height * 0.82));
 const FriendsList = Platform.OS === 'android' ? BottomSheetFlatList : FlatList;
+const COLLAPSIBLE_LAYOUT_TRANSITION = LinearTransition.duration(180).easing(Easing.out(Easing.cubic));
+const COLLAPSIBLE_ENTERING = FadeIn.duration(140).easing(Easing.out(Easing.cubic));
+const COLLAPSIBLE_EXITING = FadeOut.duration(110).easing(Easing.in(Easing.cubic));
 
 function formatConnectedCopy(template: string, friendedAt: string, locale?: string) {
   const date = new Date(friendedAt);
@@ -186,49 +207,128 @@ function InviteActionsCard({
   );
 }
 
-function FriendsSectionHeader({ count, compactTop = false }: { count: number; compactTop?: boolean }) {
+function CollapsibleSectionHeader({
+  title,
+  count,
+  expanded,
+  onToggle,
+  compactTop = false,
+  topStyle,
+  trailing,
+}: {
+  title: string;
+  count: number;
+  expanded: boolean;
+  onToggle: () => void;
+  compactTop?: boolean;
+  topStyle?: StyleProp<ViewStyle>;
+  trailing?: ReactNode;
+}) {
   const { colors, isDark } = useTheme();
-  const { t } = useTranslation();
   const softFill = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)';
+  const chevronAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [
+      {
+        rotate: withTiming(expanded ? '90deg' : '0deg', {
+          duration: 160,
+          easing: Easing.out(Easing.cubic),
+        }),
+      },
+    ],
+  }));
 
   return (
-    <View
+    <Animated.View
+      layout={COLLAPSIBLE_LAYOUT_TRANSITION}
       style={[
         styles.sectionHeaderRow,
         compactTop ? styles.sectionHeaderCompactTop : styles.sectionHeaderTop,
+        topStyle,
       ]}
     >
-      <Text style={[styles.sectionTitle, { color: colors.text }]}>
-        {t('shared.friendsListTitle', 'Your friends')}
-      </Text>
-      <View style={[styles.countPill, { backgroundColor: softFill }]}>
-        <Text style={[styles.countPillText, { color: colors.text }]}>{count}</Text>
-      </View>
-    </View>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityState={{ expanded }}
+        onPress={onToggle}
+        style={({ pressed }) => [
+          styles.sectionToggle,
+          {
+            opacity: pressed ? 0.72 : 1,
+          },
+        ]}
+      >
+        <Animated.View style={chevronAnimatedStyle}>
+          <Ionicons name="chevron-forward" size={17} color={colors.secondaryText} />
+        </Animated.View>
+        <Text style={[styles.sectionTitle, { color: colors.text }]}>{title}</Text>
+        <View style={[styles.countPill, { backgroundColor: softFill }]}>
+          <Text style={[styles.countPillText, { color: colors.text }]}>{count}</Text>
+        </View>
+      </Pressable>
+      {trailing}
+    </Animated.View>
   );
 }
 
-function GroupsSectionHeader({ onCreateGroup }: { onCreateGroup: () => void }) {
+function GroupsSectionHeader({
+  count,
+  expanded,
+  onToggle,
+  onCreateGroup,
+}: {
+  count: number;
+  expanded: boolean;
+  onToggle: () => void;
+  onCreateGroup: () => void;
+}) {
   const { colors, isDark } = useTheme();
   const { t } = useTranslation();
   const softFill = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)';
 
   return (
-    <View style={[styles.sectionHeaderRow, styles.groupsHeaderTop]}>
-      <Text style={[styles.sectionTitle, { color: colors.text }]}>
-        {t('shared.friendGroupsTitle', 'Groups')}
-      </Text>
-      <Pressable
-        accessibilityRole="button"
-        onPress={onCreateGroup}
-        style={({ pressed }) => [
-          styles.addGroupButton,
-          { backgroundColor: softFill, opacity: pressed ? 0.86 : 1 },
-        ]}
-      >
-        <Ionicons name="add" size={18} color={colors.text} />
-      </Pressable>
-    </View>
+    <CollapsibleSectionHeader
+      title={t('shared.friendGroupsTitle', 'Groups')}
+      count={count}
+      expanded={expanded}
+      onToggle={onToggle}
+      topStyle={styles.groupsHeaderTop}
+      trailing={
+        <Pressable
+          accessibilityRole="button"
+          onPress={onCreateGroup}
+          style={({ pressed }) => [
+            styles.addGroupButton,
+            { backgroundColor: softFill, opacity: pressed ? 0.86 : 1 },
+          ]}
+        >
+          <Ionicons name="add" size={17} color={colors.text} />
+        </Pressable>
+      }
+    />
+  );
+}
+
+function FriendsSectionHeader({
+  count,
+  expanded,
+  onToggle,
+  compactTop = false,
+}: {
+  count: number;
+  expanded: boolean;
+  onToggle: () => void;
+  compactTop?: boolean;
+}) {
+  const { t } = useTranslation();
+
+  return (
+    <CollapsibleSectionHeader
+      title={t('shared.friendsListTitle', 'Connected friends')}
+      count={count}
+      expanded={expanded}
+      onToggle={onToggle}
+      compactTop={compactTop}
+    />
   );
 }
 
@@ -265,7 +365,7 @@ function GroupRow({
           {t('shared.friendGroupMembersCount', '{{count}} friends', { count: memberCount })}
         </Text>
       </View>
-      <Ionicons name="chevron-forward" size={18} color={colors.secondaryText} />
+      <Ionicons name="chevron-forward" size={17} color={colors.secondaryText} />
     </Pressable>
   );
 }
@@ -357,7 +457,7 @@ function FriendRow({
           },
         ]}
       >
-        <Ionicons name="pencil-outline" size={18} color={colors.secondaryText} />
+        <Ionicons name="pencil-outline" size={16} color={colors.secondaryText} />
       </Pressable>
       <Pressable
         onPress={() => onRemoveFriend(friend.userId)}
@@ -369,7 +469,7 @@ function FriendRow({
           },
         ]}
       >
-        <Ionicons name="close-outline" size={21} color={colors.secondaryText} />
+        <Ionicons name="close-outline" size={19} color={colors.secondaryText} />
       </Pressable>
     </View>
   );
@@ -427,6 +527,8 @@ export default function SharedManageSheet(props: {
   const [groupMemberDraft, setGroupMemberDraft] = useState<string[]>([]);
   const [groupErrorMessage, setGroupErrorMessage] = useState<string | null>(null);
   const [isSavingGroup, setIsSavingGroup] = useState(false);
+  const [areGroupsExpanded, setAreGroupsExpanded] = useState(true);
+  const [areFriendsExpanded, setAreFriendsExpanded] = useState(true);
 
   const emptyLoadingBody = t('shared.refreshingFriends', 'Refreshing your shared circle...');
   const emptyBody = t(
@@ -638,7 +740,13 @@ export default function SharedManageSheet(props: {
               badgeLabel: friendBadgeLabel,
             },
           ]}
-          footer={<SheetFooterButton label={t('common.done', 'Done')} onPress={onClose} />}
+          footer={(
+            <SheetFooterButton
+              label={t('common.done', 'Done')}
+              onPress={onClose}
+              style={styles.compactDoneButton}
+            />
+          )}
           useHorizontalPadding={false}
           contentBottomPaddingWhenFooter={0}
           footerTopSpacing={12}
@@ -653,9 +761,19 @@ export default function SharedManageSheet(props: {
               onShareInvite={onShareInvite}
               onRevokeInvite={onRevokeInvite}
             />
-            <GroupsSectionHeader onCreateGroup={() => openGroupEditor(null)} />
-            {friendGroups.length > 0 ? (
-              <View style={styles.groupList}>
+            <GroupsSectionHeader
+              count={friendGroups.length}
+              expanded={areGroupsExpanded}
+              onToggle={() => setAreGroupsExpanded((current) => !current)}
+              onCreateGroup={() => openGroupEditor(null)}
+            />
+            {areGroupsExpanded && friendGroups.length > 0 ? (
+              <Animated.View
+                entering={COLLAPSIBLE_ENTERING}
+                exiting={COLLAPSIBLE_EXITING}
+                layout={COLLAPSIBLE_LAYOUT_TRANSITION}
+                style={styles.groupList}
+              >
                 {friendGroups.map((group) => (
                   <GroupRow
                     key={group.id}
@@ -664,42 +782,54 @@ export default function SharedManageSheet(props: {
                     onPress={openGroupEditor}
                   />
                 ))}
-              </View>
+              </Animated.View>
             ) : null}
-            <FriendsSectionHeader count={friends.length} compactTop={friendGroups.length === 0} />
-          </View>
-          <View style={styles.listShell}>
-            <FriendsList<FriendConnection>
-              data={friends}
-              keyExtractor={(item) => item.userId}
-              renderItem={({ item }) => (
-                <FriendRow
-                  friend={item}
-                  friendFallback={friendFallback}
-                  connectedCopyTemplate={connectedCopyTemplate}
-                  locale={i18n.language}
-                  onRemoveFriend={onRemoveFriend}
-                  onEditNickname={openNicknameEditor}
-                />
-              )}
-              ListEmptyComponent={(
-                <EmptyFriendsState
-                  loading={loading}
-                  emptyLoadingBody={emptyLoadingBody}
-                  emptyBody={emptyBody}
-                />
-              )}
-              keyboardShouldPersistTaps="handled"
-              showsVerticalScrollIndicator={false}
-              initialNumToRender={12}
-              maxToRenderPerBatch={10}
-              windowSize={5}
-              contentContainerStyle={[
-                styles.listContent,
-                { paddingHorizontal: horizontalPadding },
-              ]}
+            <FriendsSectionHeader
+              count={friends.length}
+              expanded={areFriendsExpanded}
+              onToggle={() => setAreFriendsExpanded((current) => !current)}
+              compactTop={!areGroupsExpanded || friendGroups.length === 0}
             />
           </View>
+          {areFriendsExpanded ? (
+            <Animated.View
+              entering={COLLAPSIBLE_ENTERING}
+              exiting={COLLAPSIBLE_EXITING}
+              layout={COLLAPSIBLE_LAYOUT_TRANSITION}
+              style={styles.listShell}
+            >
+              <FriendsList<FriendConnection>
+                data={friends}
+                keyExtractor={(item) => item.userId}
+                renderItem={({ item }) => (
+                  <FriendRow
+                    friend={item}
+                    friendFallback={friendFallback}
+                    connectedCopyTemplate={connectedCopyTemplate}
+                    locale={i18n.language}
+                    onRemoveFriend={onRemoveFriend}
+                    onEditNickname={openNicknameEditor}
+                  />
+                )}
+                ListEmptyComponent={(
+                  <EmptyFriendsState
+                    loading={loading}
+                    emptyLoadingBody={emptyLoadingBody}
+                    emptyBody={emptyBody}
+                  />
+                )}
+                keyboardShouldPersistTaps="handled"
+                showsVerticalScrollIndicator={false}
+                initialNumToRender={12}
+                maxToRenderPerBatch={10}
+                windowSize={5}
+                contentContainerStyle={[
+                  styles.listContent,
+                  { paddingHorizontal: horizontalPadding },
+                ]}
+              />
+            </Animated.View>
+          ) : null}
         </AppSheetScaffold>
       </AppSheet>
       <TextFieldEditSheet
@@ -844,33 +974,42 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   listContent: {
-    paddingBottom: 24,
+    paddingBottom: 18,
   },
   sectionHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: 12,
-    marginBottom: 10,
+    gap: 8,
+    marginBottom: 8,
   },
   sectionHeaderTop: {
-    marginTop: 20,
+    marginTop: 16,
   },
   sectionHeaderCompactTop: {
-    marginTop: 10,
+    marginTop: 8,
   },
   groupsHeaderTop: {
-    marginTop: 18,
+    marginTop: 14,
+  },
+  sectionToggle: {
+    minWidth: 0,
+    minHeight: 34,
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
   },
   sectionTitle: {
-    fontSize: 17,
-    lineHeight: 21,
+    fontSize: 16,
+    lineHeight: 20,
     fontWeight: '800',
+    flexShrink: 1,
   },
   inviteCard: {
-    borderRadius: 20,
+    borderRadius: 18,
     borderWidth: 1,
-    padding: 12,
+    padding: 11,
   },
   inviteCardHeader: {
     flexDirection: 'row',
@@ -878,9 +1017,9 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   inviteCardIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 12,
+    width: 30,
+    height: 30,
+    borderRadius: 11,
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,
@@ -900,16 +1039,16 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
   inviteActionsRow: {
-    marginTop: 10,
+    marginTop: 9,
     flexDirection: 'row',
     gap: 8,
   },
   primaryInviteAction: {
     flex: 1,
     minWidth: 0,
-    minHeight: 42,
+    minHeight: 38,
     borderRadius: 999,
-    paddingHorizontal: 14,
+    paddingHorizontal: 12,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -925,10 +1064,10 @@ const styles = StyleSheet.create({
   secondaryInviteAction: {
     flex: 1,
     minWidth: 0,
-    minHeight: 42,
+    minHeight: 38,
     borderRadius: 999,
     borderWidth: 1,
-    paddingHorizontal: 14,
+    paddingHorizontal: 12,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -939,9 +1078,10 @@ const styles = StyleSheet.create({
     flexShrink: 1,
   },
   countPill: {
-    minWidth: 28,
-    height: 28,
-    borderRadius: 14,
+    minWidth: 25,
+    height: 25,
+    borderRadius: 13,
+    paddingHorizontal: 7,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -951,28 +1091,28 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   addGroupButton: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
   },
   groupList: {
-    gap: 8,
-    marginBottom: 2,
+    gap: 6,
+    marginBottom: 1,
   },
   groupRow: {
-    minHeight: 58,
-    borderRadius: 18,
-    paddingHorizontal: 12,
+    minHeight: 52,
+    borderRadius: 16,
+    paddingHorizontal: 11,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
   },
   groupIcon: {
-    width: 38,
-    height: 38,
-    borderRadius: 14,
+    width: 34,
+    height: 34,
+    borderRadius: 13,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1002,19 +1142,19 @@ const styles = StyleSheet.create({
   friendRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    minHeight: ESTIMATED_FRIEND_ROW_HEIGHT,
-    paddingVertical: 7,
+    gap: 9,
+    minHeight: 58,
+    paddingVertical: 5,
   },
   avatarImage: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
   },
   avatarFallback: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1039,12 +1179,16 @@ const styles = StyleSheet.create({
     lineHeight: 16,
   },
   iconButton: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,
+  },
+  compactDoneButton: {
+    minHeight: 48,
+    borderRadius: 14,
   },
   groupFooter: {
     width: '100%',

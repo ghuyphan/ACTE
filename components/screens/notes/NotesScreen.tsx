@@ -253,9 +253,7 @@ function NotesGridSkeleton({
   bottomInset,
   colors,
   gap,
-  loadingBody,
   loadingTitle,
-  showLoadingCopy,
   tileSize,
 }: {
   bottomInset: number;
@@ -268,9 +266,7 @@ function NotesGridSkeleton({
     text: string;
   };
   gap: number;
-  loadingBody: string;
   loadingTitle: string;
-  showLoadingCopy: boolean;
   tileSize: number;
 }) {
   const opacity = useSharedValue(0.46);
@@ -300,24 +296,6 @@ function NotesGridSkeleton({
       ]}
       testID="notes-grid-skeleton"
     >
-      {showLoadingCopy ? (
-        <View
-          style={[
-            styles.skeletonStatus,
-            {
-              backgroundColor: colors.surface,
-              borderColor: colors.border,
-            },
-          ]}
-        >
-          <Text style={[styles.loadingTitle, styles.skeletonStatusTitle, { color: colors.text }]}>
-            {loadingTitle}
-          </Text>
-          <Text style={[styles.loadingBody, { color: colors.secondaryText }]}>
-            {loadingBody}
-          </Text>
-        </View>
-      ) : null}
       <View style={styles.skeletonGrid} pointerEvents="none">
         {Array.from({ length: NOTES_GRID_SKELETON_TILE_COUNT }).map((_, index) => {
           const rowVariant = index % 6;
@@ -339,6 +317,7 @@ function NotesGridSkeleton({
             >
               {rowVariant === 0 || rowVariant === 3 ? (
                 <View style={styles.skeletonTextTile}>
+                  <View style={[styles.skeletonLine, styles.skeletonLineTiny, { backgroundColor: colors.surface }]} />
                   <View
                     style={[
                       styles.skeletonLine,
@@ -362,8 +341,29 @@ function NotesGridSkeleton({
                   />
                 </View>
               ) : rowVariant === 2 ? (
-                <View style={[styles.skeletonPhotoBadge, { backgroundColor: colors.surface }]} />
-              ) : null}
+                <>
+                  <LinearGradient
+                    colors={[colors.surface, colors.card]}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={styles.skeletonPhotoWash}
+                  />
+                  <View style={[styles.skeletonPhotoBadge, { backgroundColor: colors.surface }]} />
+                </>
+              ) : rowVariant === 5 ? (
+                <View style={styles.skeletonCaptionTile}>
+                  <View style={[styles.skeletonAvatarDot, { backgroundColor: colors.surface }]} />
+                  <View style={[styles.skeletonLine, styles.skeletonLineMedium, { backgroundColor: colors.surface }]} />
+                </View>
+              ) : (
+                <>
+                  <View style={[styles.skeletonPhotoWash, { backgroundColor: colors.surface }]} />
+                  <View style={styles.skeletonBottomLines}>
+                    <View style={[styles.skeletonLine, styles.skeletonLineMedium, { backgroundColor: colors.card }]} />
+                    <View style={[styles.skeletonLine, styles.skeletonLineShort, { backgroundColor: colors.card }]} />
+                  </View>
+                </>
+              )}
             </Reanimated.View>
           );
         })}
@@ -625,16 +625,7 @@ export default function NotesIndexScreen() {
             bottomInset={insets.bottom}
             colors={colors}
             gap={gridGap}
-            loadingTitle={
-              isBootstrapSyncing
-                ? t('settings.syncingNow', 'Syncing your journal.')
-                : t('common.loading', 'Loading')
-            }
-            loadingBody={t(
-              'settings.initialSyncLoadingHint',
-              'Keep Noto open a little longer so your first backup can finish safely.'
-            )}
-            showLoadingCopy={isBootstrapSyncing}
+            loadingTitle={t('common.loading', 'Loading')}
             tileSize={gridSize}
           />
         ) : (
@@ -745,34 +736,9 @@ const styles = StyleSheet.create({
   emptyScreen: {
     paddingHorizontal: Layout.screenPadding,
   },
-  loadingTitle: {
-    fontSize: 16,
-    lineHeight: 20,
-    fontWeight: '700',
-    textAlign: 'center',
-    fontFamily: 'Noto Sans',
-  },
-  loadingBody: {
-    fontSize: 13,
-    lineHeight: 18,
-    textAlign: 'center',
-    fontFamily: 'Noto Sans',
-    maxWidth: 260,
-  },
   skeletonScreen: {
     flex: 1,
-    paddingTop: 4,
-  },
-  skeletonStatus: {
-    borderRadius: 22,
-    borderWidth: 1,
-    paddingHorizontal: 18,
-    paddingVertical: 14,
-    marginBottom: 16,
-    alignItems: 'center',
-  },
-  skeletonStatusTitle: {
-    marginBottom: 6,
+    paddingTop: 8,
   },
   skeletonGrid: {
     flexDirection: 'row',
@@ -782,6 +748,7 @@ const styles = StyleSheet.create({
     borderRadius: 28,
     borderWidth: 1,
     overflow: 'hidden',
+    position: 'relative',
   },
   skeletonTextTile: {
     flex: 1,
@@ -793,6 +760,11 @@ const styles = StyleSheet.create({
     height: 9,
     borderRadius: 999,
   },
+  skeletonLineTiny: {
+    width: '26%',
+    height: 7,
+    marginBottom: 2,
+  },
   skeletonLineWide: {
     width: '78%',
   },
@@ -802,6 +774,14 @@ const styles = StyleSheet.create({
   skeletonLineShort: {
     width: '44%',
   },
+  skeletonPhotoWash: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    bottom: 10,
+    left: 10,
+    borderRadius: 20,
+  },
   skeletonPhotoBadge: {
     position: 'absolute',
     right: 12,
@@ -809,6 +789,24 @@ const styles = StyleSheet.create({
     width: 34,
     height: 34,
     borderRadius: 17,
+  },
+  skeletonCaptionTile: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+  },
+  skeletonAvatarDot: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+  },
+  skeletonBottomLines: {
+    position: 'absolute',
+    left: 16,
+    right: 16,
+    bottom: 16,
+    gap: 7,
   },
   modeSwitchWrap: {
     paddingTop: 4,

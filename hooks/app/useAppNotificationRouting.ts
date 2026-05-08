@@ -3,6 +3,31 @@ import { useRootNavigationState, useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef } from 'react';
 import { useExternalEntryNavigation } from './useExternalEntryNavigation';
 
+type NotificationData = Record<string, unknown>;
+
+function getNotificationString(data: NotificationData, key: string) {
+  const value = data[key];
+  return typeof value === 'string' && value.trim() ? value.trim() : '';
+}
+
+function parseNotificationData(data: NotificationData | undefined): NotificationData {
+  const rawData = data ?? {};
+  const dataString = getNotificationString(rawData, 'dataString');
+  if (!dataString) {
+    return rawData;
+  }
+
+  try {
+    const parsed = JSON.parse(dataString) as NotificationData;
+    return {
+      ...parsed,
+      ...rawData,
+    };
+  } catch {
+    return rawData;
+  }
+}
+
 export function useAppNotificationRouting() {
   const router = useRouter();
   const rootNavigationState = useRootNavigationState();
@@ -26,21 +51,25 @@ export function useAppNotificationRouting() {
       }
       lastHandledNotificationIdRef.current = notificationId;
 
-      const noteId = response.notification.request.content.data?.noteId;
-      const sharedPostId = response.notification.request.content.data?.sharedPostId;
-      const notificationType = response.notification.request.content.data?.notificationType;
-      const route = response.notification.request.content.data?.route;
+      const data = parseNotificationData(response.notification.request.content.data);
+      const noteId = getNotificationString(data, 'noteId');
+      const sharedPostId = getNotificationString(data, 'sharedPostId');
+      const notificationType = getNotificationString(data, 'notificationType');
+      const route = getNotificationString(data, 'route');
       if (notificationType === 'friend-accepted') {
         prepareForExternalNavigation();
         router.dismissTo(`/(tabs)?openSharedManageAt=${encodeURIComponent(notificationId)}` as any);
-      } else if (notificationType === 'shared-response' && sharedPostId && typeof sharedPostId === 'string') {
+      } else if (notificationType === 'shared-response' && sharedPostId) {
         prepareForExternalNavigation();
         router.push(`/shared/chat/${sharedPostId}` as any);
-      } else if (noteId && typeof noteId === 'string') {
+      } else if (route.startsWith('/shared/chat/')) {
+        prepareForExternalNavigation();
+        router.push(route as any);
+      } else if (noteId) {
         focusFeedTargetFromExternalEntry({ kind: 'note', id: noteId });
-      } else if (sharedPostId && typeof sharedPostId === 'string') {
+      } else if (sharedPostId) {
         focusFeedTargetFromExternalEntry({ kind: 'shared-post', id: sharedPostId });
-      } else if (route && typeof route === 'string') {
+      } else if (route) {
         prepareForExternalNavigation();
         router.push(route as any);
       }

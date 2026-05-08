@@ -803,7 +803,13 @@ Deno.serve(async (request) => {
         })
       );
 
-      const delivery = await sendExpoPushMessages(messages, expoAccessToken);
+      const delivery = await sendExpoPushMessages(messages, expoAccessToken).catch((error) => {
+        console.warn('Expo social notification delivery failed; leaving event retryable:', error);
+        return {
+          delivered: 0,
+          invalidTokens: [] as string[],
+        };
+      });
 
       if (delivery.invalidTokens.length > 0) {
         try {

@@ -7,7 +7,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { useTranslation } from 'react-i18next';
 import {
   Animated,
-  KeyboardAvoidingView,
+  Keyboard,
   PanResponder,
   Platform,
   Pressable,
@@ -17,6 +17,8 @@ import {
   useWindowDimensions,
   View,
   type GestureResponderEvent,
+  type KeyboardEvent,
+  type LayoutChangeEvent,
   type StyleProp,
   type ViewStyle,
 } from 'react-native';
@@ -110,6 +112,12 @@ function rememberResponses(postId: string, responses: SharedPostResponse[]) {
     }
     responseSnapshotByPostId.delete(oldestPostId);
     hydratedResponsePostIds.delete(oldestPostId);
+  }
+}
+
+function scheduleKeyboardLayout(event: KeyboardEvent) {
+  if (Platform.OS === 'ios') {
+    Keyboard.scheduleLayoutAnimation(event);
   }
 }
 
@@ -618,7 +626,7 @@ export default function SharedPostChatScreen({ postId }: SharedPostChatScreenPro
   const { t } = useTranslation();
   const { colors, isDark } = useTheme();
   const insets = useSafeAreaInsets();
-  const { width: screenWidth } = useWindowDimensions();
+  const { height: screenHeight, width: screenWidth } = useWindowDimensions();
   const router = useRouter();
   const { user } = useAuth();
   const {
@@ -659,7 +667,10 @@ export default function SharedPostChatScreen({ postId }: SharedPostChatScreenPro
   const [replyTarget, setReplyTarget] = useState<SharedPostResponse | null>(null);
   const [reactionOverlay, setReactionOverlay] = useState<ReactionOverlay>(null);
   const [highlightedResponseId, setHighlightedResponseId] = useState<string | null>(null);
+  const [composerHeight, setComposerHeight] = useState(96);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
   const listRef = useRef<FlashListRef<ChatListItem> | null>(null);
+  const composerFocusedRef = useRef(false);
   const pendingResponsesRef = useRef<Map<string, SharedPostResponse>>(new Map());
   const lastMarkedReadSignatureRef = useRef<string | null>(null);
   const optimisticSequenceRef = useRef(0);
@@ -1333,7 +1344,46 @@ export default function SharedPostChatScreen({ postId }: SharedPostChatScreenPro
     router.push(`/shared/${postId}` as any);
   }, [postId, router]);
 
-  const contentBottomPadding = 18;
+  const scrollToThreadEnd = useCallback((animated = true) => {
+    requestAnimationFrame(() => {
+      listRef.current?.scrollToEnd({ animated });
+    });
+  }, []);
+
+  useEffect(() => {
+    const showSubscription = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
+      (event) => {
+        scheduleKeyboardLayout(event);
+        setKeyboardHeight(Math.max(0, screenHeight - event.endCoordinates.screenY));
+        if (composerFocusedRef.current) {
+          requestAnimationFrame(() => scrollToThreadEnd(true));
+        }
+      }
+    );
+    const hideSubscription = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
+      (event) => {
+        scheduleKeyboardLayout(event);
+        setKeyboardHeight(0);
+      }
+    );
+
+    return () => {
+      showSubscription.remove();
+      hideSubscription.remove();
+    };
+  }, [screenHeight, scrollToThreadEnd]);
+
+  const handleComposerLayout = useCallback((event: LayoutChangeEvent) => {
+    const nextHeight = Math.ceil(event.nativeEvent.layout.height);
+    setComposerHeight((currentHeight) =>
+      Math.abs(currentHeight - nextHeight) > 1 ? nextHeight : currentHeight
+    );
+  }, []);
+
+  const composerKeyboardOffset = Math.max(0, keyboardHeight - insets.bottom);
+  const contentBottomPadding = composerHeight + composerKeyboardOffset + 18;
   const renderMemoryHeader = useCallback(() => {
     if (!post) {
       return null;
@@ -1653,10 +1703,8 @@ export default function SharedPostChatScreen({ postId }: SharedPostChatScreenPro
     )?.emoji ?? null;
 
   return (
-    <KeyboardAvoidingView
+    <View
       style={[styles.container, { backgroundColor: colors.background }]}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      keyboardVerticalOffset={0}
     >
       <Stack.Screen
         options={{
@@ -1667,9 +1715,8 @@ export default function SharedPostChatScreen({ postId }: SharedPostChatScreenPro
         style={[
           styles.chatHeader,
           {
-            paddingTop: insets.top + 8,
+            paddingTop: insets.top + 6,
             backgroundColor: colors.background,
-            borderBottomColor: colors.border,
           },
         ]}
       >
@@ -1813,7 +1860,6 @@ export default function SharedPostChatScreen({ postId }: SharedPostChatScreenPro
               styles.memoryPreviewHost,
               {
                 backgroundColor: colors.background,
-                borderBottomColor: colors.border,
               },
             ]}
           >
@@ -1849,6 +1895,7 @@ export default function SharedPostChatScreen({ postId }: SharedPostChatScreenPro
               onStartReached={loadOlderResponses}
               onStartReachedThreshold={0.2}
               keyboardShouldPersistTaps="handled"
+              keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
               showsVerticalScrollIndicator={false}
               contentContainerStyle={[
                 styles.threadContent,
@@ -1861,9 +1908,11 @@ export default function SharedPostChatScreen({ postId }: SharedPostChatScreenPro
           )}
 
           <View
+            onLayout={handleComposerLayout}
             style={[
               styles.composerShell,
               {
+                bottom: composerKeyboardOffset,
                 paddingBottom: Math.max(insets.bottom, 12),
                 backgroundColor: colors.background,
                 borderTopColor: colors.border,
@@ -1943,7 +1992,16 @@ export default function SharedPostChatScreen({ postId }: SharedPostChatScreenPro
                 maxLength={160}
                 returnKeyType="send"
                 multiline
+                textAlignVertical="top"
+                underlineColorAndroid="transparent"
                 style={[styles.composerInput, { color: colors.text }]}
+                onFocus={() => {
+                  composerFocusedRef.current = true;
+                  scrollToThreadEnd(true);
+                }}
+                onBlur={() => {
+                  composerFocusedRef.current = false;
+                }}
                 onSubmitEditing={() => {
                   void sendResponse();
                 }}
@@ -2067,7 +2125,7 @@ export default function SharedPostChatScreen({ postId }: SharedPostChatScreenPro
         autoComplete="name"
         testIDPrefix="chat-friend-nickname"
       />
-    </KeyboardAvoidingView>
+    </View>
   );
 }
 
@@ -2112,16 +2170,14 @@ const styles = StyleSheet.create({
     paddingTop: 20,
   },
   memoryPreviewHost: {
-    borderBottomWidth: StyleSheet.hairlineWidth,
     paddingHorizontal: Layout.screenPadding,
-    paddingTop: 12,
-    paddingBottom: 10,
+    paddingTop: 8,
+    paddingBottom: 8,
   },
   chatHeader: {
-    minHeight: 82,
-    borderBottomWidth: StyleSheet.hairlineWidth,
+    minHeight: 74,
     paddingHorizontal: 14,
-    paddingBottom: 10,
+    paddingBottom: 7,
     flexDirection: 'row',
     alignItems: 'flex-end',
     gap: 10,
@@ -2201,19 +2257,19 @@ const styles = StyleSheet.create({
   },
   memoryPreviewBlock: {
     width: '100%',
-    minHeight: 76,
-    borderRadius: 20,
+    minHeight: 62,
+    borderRadius: 17,
     borderWidth: StyleSheet.hairlineWidth,
-    padding: 8,
+    padding: 7,
     marginBottom: 0,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 10,
   },
   memoryCard: {
-    width: 58,
-    height: 58,
-    borderRadius: 17,
+    width: 48,
+    height: 48,
+    borderRadius: 14,
     overflow: 'hidden',
   },
   miniMemoryFill: {
@@ -2222,11 +2278,11 @@ const styles = StyleSheet.create({
     height: '100%',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 8,
+    padding: 7,
   },
   miniMemoryText: {
-    fontSize: 11,
-    lineHeight: 14,
+    fontSize: 10,
+    lineHeight: 13,
     fontWeight: '900',
     textAlign: 'center',
     fontFamily: 'Noto Sans',
@@ -2236,11 +2292,11 @@ const styles = StyleSheet.create({
   memoryCopy: {
     flex: 1,
     minWidth: 0,
-    gap: 8,
+    gap: 5,
   },
   memoryTitle: {
-    fontSize: 15,
-    lineHeight: 19,
+    fontSize: 14,
+    lineHeight: 18,
     fontWeight: '900',
     fontFamily: 'Noto Sans',
   },
@@ -2271,19 +2327,19 @@ const styles = StyleSheet.create({
   memoryAuthorText: {
     flex: 1,
     minWidth: 0,
-    fontSize: 11,
-    lineHeight: 15,
+    fontSize: 10,
+    lineHeight: 14,
     fontFamily: 'Noto Sans',
   },
   memoryMetaTime: {
-    fontSize: 11,
-    lineHeight: 15,
+    fontSize: 10,
+    lineHeight: 14,
     fontFamily: 'Noto Sans',
   },
   loadingMemoryCard: {
-    width: 58,
-    height: 58,
-    borderRadius: 17,
+    width: 48,
+    height: 48,
+    borderRadius: 14,
   },
   loadingLine: {
     height: 12,
@@ -2553,6 +2609,9 @@ const styles = StyleSheet.create({
     fontFamily: 'Noto Sans',
   },
   composerShell: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
     borderTopWidth: StyleSheet.hairlineWidth,
     paddingHorizontal: Layout.screenPadding,
     paddingTop: 9,

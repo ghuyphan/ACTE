@@ -157,4 +157,64 @@ describe('useAppNotificationRouting', () => {
       expect(mockClearLastNotificationResponseAsync).toHaveBeenCalledTimes(1);
     });
   });
+
+  it('opens the chat screen when Expo wraps shared response data in dataString', async () => {
+    const notificationResponse = {
+      notification: {
+        request: {
+          identifier: 'shared-response-data-string-1',
+          content: {
+            data: {
+              dataString: JSON.stringify({
+                notificationType: 'shared-response',
+                sharedPostId: 'shared-42',
+                responseId: 'response-42',
+                route: '/shared/chat/shared-42',
+              }),
+            },
+          },
+        },
+      },
+    } as unknown as Notifications.NotificationResponse;
+
+    mockGetLastNotificationResponseAsync.mockResolvedValue(notificationResponse);
+    mockRootNavigationState = { key: 'root-ready' };
+
+    renderHook(() => useAppNotificationRouting());
+
+    await waitFor(() => {
+      expect(mockCloseNoteDetail).toHaveBeenCalledTimes(1);
+      expect(mockPush).toHaveBeenCalledWith('/shared/chat/shared-42');
+      expect(mockRequestFeedFocus).not.toHaveBeenCalled();
+      expect(mockClearLastNotificationResponseAsync).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it('prefers an explicit chat route over the shared post feed fallback', async () => {
+    const notificationResponse = {
+      notification: {
+        request: {
+          identifier: 'shared-chat-route-1',
+          content: {
+            data: {
+              sharedPostId: 'shared-42',
+              route: '/shared/chat/shared-42',
+            },
+          },
+        },
+      },
+    } as unknown as Notifications.NotificationResponse;
+
+    mockGetLastNotificationResponseAsync.mockResolvedValue(notificationResponse);
+    mockRootNavigationState = { key: 'root-ready' };
+
+    renderHook(() => useAppNotificationRouting());
+
+    await waitFor(() => {
+      expect(mockCloseNoteDetail).toHaveBeenCalledTimes(1);
+      expect(mockPush).toHaveBeenCalledWith('/shared/chat/shared-42');
+      expect(mockRequestFeedFocus).not.toHaveBeenCalled();
+      expect(mockClearLastNotificationResponseAsync).toHaveBeenCalledTimes(1);
+    });
+  });
 });

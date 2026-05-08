@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { TFunction } from 'i18next';
 import { Image } from 'expo-image';
 import { forwardRef, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Keyboard, Linking, Platform, Pressable, StyleProp, StyleSheet, Text, TextInput, useWindowDimensions, View, ViewStyle } from 'react-native';
+import { KeyboardAvoidingView, Linking, Modal, Platform, Pressable, StyleProp, StyleSheet, Text, TextInput, useWindowDimensions, View, ViewStyle } from 'react-native';
 import Animated, {
   Easing,
   useAnimatedStyle,
@@ -28,7 +28,6 @@ import { getNotePhotoUri } from '../../services/photoStorage';
 import { SharedPost } from '../../services/sharedFeedService';
 import { showAppAlert } from '../../utils/alert';
 import { formatNoteTimestamp } from '../../utils/dateUtils';
-import { resolveCaptureKeyboardLift } from './useCaptureCardTextInputState';
 import ImageMemoryCard from '../notes/ImageMemoryCard';
 import {
   DEFAULT_DEBUG_TILT_STATE,
@@ -85,8 +84,6 @@ interface SharedPostMemoryCardProps {
 }
 
 const RENDER_SIGNATURE_SEPARATOR = '\u001f';
-const SHARED_RESPONSE_KEYBOARD_GAP = 18;
-const SHARED_RESPONSE_MIN_VISIBLE_Y = 96;
 const SHARED_RESPONSE_COMPOSER_OFFSET_TOP = 112;
 const SHARED_RESPONSE_METADATA_SLOT_HEIGHT = 56;
 
@@ -268,9 +265,11 @@ function MetadataContainer({
 const MetadataSurface = forwardRef<View, {
   children: ReactNode;
   style?: StyleProp<ViewStyle>;
+  variant?: 'glass' | 'solid';
 }>(function MetadataSurface({
   children,
   style,
+  variant = 'glass',
 }, ref) {
   const { colors, isDark } = useTheme();
   const glassPalette = getGlassSurfacePalette({
@@ -287,11 +286,16 @@ const MetadataSurface = forwardRef<View, {
         style,
         {
           borderColor: glassPalette.controlBorderColor,
-          backgroundColor: Platform.OS === 'android' ? glassPalette.controlBackgroundColor : 'transparent',
+          backgroundColor:
+            variant === 'solid'
+              ? colors.card
+              : Platform.OS === 'android'
+                ? glassPalette.controlBackgroundColor
+                : 'transparent',
         },
       ]}
     >
-      {Platform.OS !== 'android' ? (
+      {variant === 'glass' && Platform.OS !== 'android' ? (
         <GlassView
           pointerEvents="none"
           style={StyleSheet.absoluteFill}
@@ -799,126 +803,24 @@ function SharedPostInlineResponseComposer({
   const [draft, setDraft] = useState('');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSending, setIsSending] = useState(false);
+  const [isComposerOpen, setIsComposerOpen] = useState(false);
   const reduceMotionEnabled = useReducedMotion();
-  const inputRef = useRef<TextInput | null>(null);
-  const composerRef = useRef<View | null>(null);
-  const isFocusedRef = useRef(false);
-  const latestKeyboardScreenYRef = useRef(0);
-  const pendingKeyboardLiftTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const keyboardLift = useSharedValue(0);
+  const dockedInputRef = useRef<TextInput | null>(null);
   const chatButtonScale = useSharedValue(1);
-  const keyboardLiftAnimatedStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: -keyboardLift.value }],
-  }));
   const chatButtonAnimatedStyle = useAnimatedStyle(() => ({
     transform: [{ scale: chatButtonScale.value }],
   }));
-  const animateKeyboardLift = useCallback(
-    (nextLift: number, duration?: number) => {
-      const nextDuration = reduceMotionEnabled ? 0 : Math.max(120, Math.round(duration ?? 220));
-
-      keyboardLift.value =
-        nextDuration === 0
-          ? nextLift
-          : withTiming(nextLift, {
-              duration: nextDuration,
-              easing: Easing.out(Easing.cubic),
-            });
-    },
-    [keyboardLift, reduceMotionEnabled]
-  );
-  const updateKeyboardLift = useCallback(
-    (keyboardScreenY: number, duration?: number) => {
-      if (keyboardScreenY <= 0) {
-        animateKeyboardLift(0, duration);
-        return;
-      }
-
-      const composerNode = composerRef.current as
-        | (View & {
-            measureInWindow?: (
-              callback: (x: number, y: number, width: number, height: number) => void
-            ) => void;
-          })
-        | null;
-
-      if (!composerNode?.measureInWindow) {
-        animateKeyboardLift(0, duration);
-        return;
-      }
-
-      composerNode.measureInWindow((_x, composerY, _width, composerHeight) => {
-        const nextLift = resolveCaptureKeyboardLift({
-          extraGap: SHARED_RESPONSE_KEYBOARD_GAP,
-          inputHeight: composerHeight,
-          inputY: composerY,
-          keyboardScreenY,
-          minimumVisibleInputY: SHARED_RESPONSE_MIN_VISIBLE_Y,
-        });
-
-        animateKeyboardLift(nextLift, duration);
-      });
-    },
-    [animateKeyboardLift]
-  );
-  const scheduleKeyboardLiftUpdate = useCallback(() => {
-    if (pendingKeyboardLiftTimeoutRef.current != null) {
-      clearTimeout(pendingKeyboardLiftTimeoutRef.current);
-    }
-
-    pendingKeyboardLiftTimeoutRef.current = setTimeout(() => {
-      pendingKeyboardLiftTimeoutRef.current = null;
-
-      if (!isFocusedRef.current) {
-        return;
-      }
-
-      updateKeyboardLift(latestKeyboardScreenYRef.current);
-    }, 0);
-  }, [updateKeyboardLift]);
-  const handleInputFocus = useCallback(() => {
-    isFocusedRef.current = true;
-    scheduleKeyboardLiftUpdate();
-  }, [scheduleKeyboardLiftUpdate]);
-  const handleInputBlur = useCallback(() => {
-    isFocusedRef.current = false;
-    animateKeyboardLift(0);
-  }, [animateKeyboardLift]);
-
-  useEffect(() => {
-    const showEvent = Platform.OS === 'ios' ? 'keyboardWillChangeFrame' : 'keyboardDidShow';
-    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
-    const showSubscription = Keyboard.addListener(
-      showEvent,
-      (event: { duration?: number; endCoordinates?: { screenY?: number } }) => {
-        latestKeyboardScreenYRef.current = event.endCoordinates?.screenY ?? 0;
-
-        if (!isFocusedRef.current) {
-          animateKeyboardLift(0, event.duration);
-          return;
-        }
-
-        updateKeyboardLift(latestKeyboardScreenYRef.current, event.duration);
-      }
-    );
-    const hideSubscription = Keyboard.addListener(hideEvent, (event: { duration?: number }) => {
-      latestKeyboardScreenYRef.current = 0;
-      animateKeyboardLift(0, event.duration);
-    });
-
-    return () => {
-      if (pendingKeyboardLiftTimeoutRef.current != null) {
-        clearTimeout(pendingKeyboardLiftTimeoutRef.current);
-        pendingKeyboardLiftTimeoutRef.current = null;
-      }
-
-      showSubscription.remove();
-      hideSubscription.remove();
-    };
-  }, [animateKeyboardLift, updateKeyboardLift]);
+  const closeComposer = useCallback(() => {
+    setIsComposerOpen(false);
+    dockedInputRef.current?.blur();
+  }, []);
+  const openComposer = useCallback(() => {
+    setErrorMessage(null);
+    setIsComposerOpen(true);
+  }, []);
 
   const sendResponse = useCallback(
-    async (emoji?: string) => {
+    async (emoji?: string, options?: { closeAfterSend?: boolean }) => {
       if (isSending) {
         return;
       }
@@ -938,6 +840,9 @@ function SharedPostInlineResponseComposer({
         if (!emoji) {
           setDraft('');
         }
+        if (options?.closeAfterSend) {
+          closeComposer();
+        }
         void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       } catch (error) {
         setErrorMessage(
@@ -949,12 +854,12 @@ function SharedPostInlineResponseComposer({
         setIsSending(false);
       }
     },
-    [draft, isSending, onSendResponse, postId, t]
+    [closeComposer, draft, isSending, onSendResponse, postId, t]
   );
 
   return (
-    <Animated.View style={[styles.sharedReplyWrap, keyboardLiftAnimatedStyle]}>
-      <MetadataSurface ref={composerRef} style={[styles.metadataPill, styles.sharedReplyComposer]}>
+    <View style={styles.sharedReplyWrap}>
+      <MetadataSurface style={[styles.metadataPill, styles.sharedReplyComposer]}>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={t('shared.quickHeartResponse', 'Send heart response')}
@@ -971,28 +876,33 @@ function SharedPostInlineResponseComposer({
         >
           <Text style={styles.sharedReplyEmoji}>💛</Text>
         </Pressable>
-        <TextInput
-          ref={inputRef}
-          value={draft}
-          onChangeText={setDraft}
-          placeholder={t('shared.responsePlaceholder', 'Write a quick response')}
-          placeholderTextColor={colors.secondaryText}
-          maxLength={160}
-          returnKeyType="send"
-          style={[styles.sharedReplyInput, { color: colors.text }]}
-          onFocus={handleInputFocus}
-          onBlur={handleInputBlur}
-          onSubmitEditing={() => {
-            void sendResponse();
-          }}
-        />
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={t('shared.responsePlaceholder', 'Write a quick response')}
+          onPress={openComposer}
+          style={styles.sharedReplyInputButton}
+        >
+          <Text
+            style={[
+              styles.sharedReplyInputText,
+              { color: draft.trim() ? colors.text : colors.secondaryText },
+            ]}
+            numberOfLines={1}
+          >
+            {draft.trim() || t('shared.responsePlaceholder', 'Write a quick response')}
+          </Text>
+        </Pressable>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={t('common.send', 'Send')}
           onPress={() => {
-            void sendResponse();
+            if (draft.trim()) {
+              void sendResponse();
+              return;
+            }
+
+            openComposer();
           }}
-          disabled={isSending || !draft.trim()}
           style={({ pressed }) => [
             styles.sharedReplyIconButton,
             {
@@ -1044,7 +954,89 @@ function SharedPostInlineResponseComposer({
           {errorMessage}
         </Text>
       ) : null}
-    </Animated.View>
+      <Modal
+        transparent
+        visible={isComposerOpen}
+        animationType="fade"
+        onRequestClose={closeComposer}
+        onShow={() => {
+          dockedInputRef.current?.focus();
+        }}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.sharedReplyModalRoot}
+        >
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={t('common.close', 'Close')}
+            onPress={closeComposer}
+            style={styles.sharedReplyModalBackdrop}
+          />
+          <View style={styles.sharedReplyDock}>
+            <MetadataSurface
+              variant="solid"
+              style={[styles.metadataPill, styles.sharedReplyDockComposer]}
+            >
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={t('shared.quickHeartResponse', 'Send heart response')}
+                onPress={() => {
+                  void sendResponse('💛');
+                }}
+                disabled={isSending}
+                style={({ pressed }) => [
+                  styles.sharedReplyEmojiButton,
+                  {
+                    opacity: isSending ? 0.5 : pressed ? 0.82 : 1,
+                  },
+                ]}
+              >
+                <Text style={styles.sharedReplyEmoji}>💛</Text>
+              </Pressable>
+              <TextInput
+                ref={dockedInputRef}
+                value={draft}
+                onChangeText={setDraft}
+                placeholder={t('shared.responsePlaceholder', 'Write a quick response')}
+                placeholderTextColor={colors.secondaryText}
+                maxLength={160}
+                returnKeyType="send"
+                style={[styles.sharedReplyDockInput, { color: colors.text }]}
+                onSubmitEditing={() => {
+                  void sendResponse(undefined, { closeAfterSend: true });
+                }}
+              />
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={t('common.send', 'Send')}
+                onPress={() => {
+                  void sendResponse(undefined, { closeAfterSend: true });
+                }}
+                disabled={isSending || !draft.trim()}
+                style={({ pressed }) => [
+                  styles.sharedReplyIconButton,
+                  {
+                    opacity: isSending || !draft.trim() ? 0.42 : pressed ? 0.72 : 1,
+                  },
+                ]}
+              >
+                <Ionicons
+                  name="send"
+                  size={14}
+                  color={draft.trim() ? colors.primary : colors.secondaryText}
+                />
+              </Pressable>
+            </MetadataSurface>
+            {errorMessage ? (
+              <Text style={[styles.sharedReplyDockError, { color: colors.danger }]} numberOfLines={2}>
+                {errorMessage}
+              </Text>
+            ) : null}
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+    </View>
   );
 }
 
@@ -1333,13 +1325,50 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 18,
   },
-  sharedReplyInput: {
+  sharedReplyInputButton: {
     flex: 1,
     minWidth: 0,
     height: 30,
-    paddingVertical: 0,
+    justifyContent: 'center',
+  },
+  sharedReplyInputText: {
     fontSize: 11,
     lineHeight: 13,
+    fontWeight: '700',
+    fontFamily: 'Noto Sans',
+  },
+  sharedReplyModalRoot: {
+    flex: 1,
+    justifyContent: 'flex-end',
+  },
+  sharedReplyModalBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.08)',
+  },
+  sharedReplyDock: {
+    width: '100%',
+    paddingHorizontal: Layout.screenPadding,
+    paddingBottom: Platform.OS === 'ios' ? 12 : 10,
+    gap: 6,
+  },
+  sharedReplyDockComposer: {
+    alignSelf: 'center',
+    width: '100%',
+    maxWidth: 420,
+    minHeight: 46,
+    paddingLeft: 10,
+    paddingRight: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+  },
+  sharedReplyDockInput: {
+    flex: 1,
+    minWidth: 0,
+    minHeight: 34,
+    paddingVertical: 0,
+    fontSize: 14,
+    lineHeight: 18,
     fontWeight: '700',
     fontFamily: 'Noto Sans',
   },
@@ -1361,6 +1390,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     fontSize: 11,
     lineHeight: 15,
+    fontFamily: 'Noto Sans',
+  },
+  sharedReplyDockError: {
+    alignSelf: 'center',
+    width: '100%',
+    maxWidth: 420,
+    paddingHorizontal: 10,
+    fontSize: 12,
+    lineHeight: 16,
     fontFamily: 'Noto Sans',
   },
   sharedBadge: {
