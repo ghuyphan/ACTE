@@ -1724,103 +1724,87 @@ export default function SharedPostChatScreen({ postId }: SharedPostChatScreenPro
     >
       <Stack.Screen
         options={{
-          headerShown: false,
-        }}
-      />
-      <View
-        style={[
-          styles.chatHeader,
-          {
-            paddingTop: headerTopInset,
+          headerShown: true,
+          headerTransparent: false,
+          headerShadowVisible: false,
+          headerTintColor: colors.text,
+          headerBackButtonDisplayMode: 'minimal',
+          headerBackButtonMenuEnabled: false,
+          headerTitleAlign: 'center',
+          headerStyle: {
             backgroundColor: colors.background,
           },
-        ]}
-      >
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={t('common.back', 'Back')}
-          hitSlop={8}
-          onPress={() => {
-            router.back();
-          }}
-          style={({ pressed }) => [
-            styles.chatBackButton,
-            {
-              opacity: pressed ? 0.64 : 1,
-            },
-          ]}
-        >
-          <Ionicons name="arrow-back" size={24} color={colors.text} />
-        </Pressable>
-        {post ? (
-          <View style={styles.headerIdentity}>
-            {headerAvatarUri ? (
-              <Image
-                source={{ uri: headerAvatarUri }}
-                style={styles.headerAvatar}
-                contentFit="cover"
-              />
-            ) : (
-              <View style={[styles.headerAvatar, { backgroundColor: colors.primarySoft }]}>
-                <Text style={[styles.headerAvatarLabel, { color: colors.primary }]}>
-                  {headerAvatarInitial}
-                </Text>
-              </View>
-            )}
-            <View style={styles.headerCopy}>
-              <Text numberOfLines={1} style={[styles.headerIdentityText, { color: colors.text }]}>
-                {headerIdentityLabel}
-              </Text>
-              {headerSubtitle ? (
-                <View style={styles.headerSubtitleRow}>
-                  {shouldShowHeaderPresence ? (
-                    <View
-                      style={[
-                        styles.headerPresenceDot,
-                        {
-                          backgroundColor:
-                            headerPresenceStatus === 'online'
-                              ? colors.success
-                              : colors.secondaryText,
-                          opacity: headerPresenceStatus === 'unknown' ? 0.42 : 1,
-                        },
-                      ]}
-                    />
-                  ) : null}
-                  <Text
-                    numberOfLines={1}
-                    style={[styles.headerSubtitle, { color: colors.secondaryText }]}
-                  >
-                    {headerSubtitle}
+          headerTitle: () =>
+            post ? (
+              <View style={styles.headerIdentity}>
+                {headerAvatarUri ? (
+                  <Image
+                    source={{ uri: headerAvatarUri }}
+                    style={styles.headerAvatar}
+                    contentFit="cover"
+                  />
+                ) : (
+                  <View style={[styles.headerAvatar, { backgroundColor: colors.primarySoft }]}>
+                    <Text style={[styles.headerAvatarLabel, { color: colors.primary }]}>
+                      {headerAvatarInitial}
+                    </Text>
+                  </View>
+                )}
+                <View style={styles.headerCopy}>
+                  <Text numberOfLines={1} style={[styles.headerIdentityText, { color: colors.text }]}>
+                    {headerIdentityLabel}
                   </Text>
+                  {headerSubtitle ? (
+                    <View style={styles.headerSubtitleRow}>
+                      {shouldShowHeaderPresence ? (
+                        <View
+                          style={[
+                            styles.headerPresenceDot,
+                            {
+                              backgroundColor:
+                                headerPresenceStatus === 'online'
+                                  ? colors.success
+                                  : colors.secondaryText,
+                              opacity: headerPresenceStatus === 'unknown' ? 0.42 : 1,
+                            },
+                          ]}
+                        />
+                      ) : null}
+                      <Text
+                        numberOfLines={1}
+                        style={[styles.headerSubtitle, { color: colors.secondaryText }]}
+                      >
+                        {headerSubtitle}
+                      </Text>
+                    </View>
+                  ) : null}
                 </View>
-              ) : null}
-            </View>
-          </View>
-        ) : (
-          <Text numberOfLines={1} style={[styles.headerFallbackTitle, { color: colors.text }]}>
-            {t('shared.chatTitle', 'Chat')}
-          </Text>
-        )}
-        {canEditHeaderNickname ? (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={t('shared.friendNicknameEdit', 'Edit nickname')}
-            hitSlop={8}
-            onPress={openNicknameEditor}
-            style={({ pressed }) => [
-              styles.chatHeaderActionButton,
-              {
-                opacity: pressed ? 0.64 : 1,
-              },
-            ]}
-          >
-            <Ionicons name="pencil-outline" size={21} color={colors.text} />
-          </Pressable>
-        ) : (
-          <View style={styles.chatHeaderSpacer} />
-        )}
-      </View>
+              </View>
+            ) : (
+              <Text numberOfLines={1} style={[styles.headerFallbackTitle, { color: colors.text }]}>
+                {t('shared.chatTitle', 'Chat')}
+              </Text>
+            ),
+          headerRight: canEditHeaderNickname
+            ? () => (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={t('shared.friendNicknameEdit', 'Edit nickname')}
+                  hitSlop={8}
+                  onPress={openNicknameEditor}
+                  style={({ pressed }) => [
+                    styles.chatHeaderActionButton,
+                    {
+                      opacity: pressed ? 0.64 : 1,
+                    },
+                  ]}
+                >
+                  <Ionicons name="pencil-outline" size={21} color={colors.text} />
+                </Pressable>
+              )
+            : undefined,
+        }}
+      />
 
       {!post && loading ? (
         <View style={styles.loadingChatContent} pointerEvents="none">
@@ -2191,31 +2175,8 @@ const styles = StyleSheet.create({
     paddingTop: 8,
     paddingBottom: 8,
   },
-  chatHeader: {
-    minHeight: 44,
-    paddingHorizontal: 14,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 10,
-  },
-  chatBackButton: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 2,
-  },
-  chatHeaderSpacer: {
-    width: 42,
-    height: 42,
-  },
   headerIdentity: {
-    position: 'absolute',
-    left: 64,
-    right: 64,
-    bottom: 5,
+    maxWidth: '100%',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -2241,9 +2202,9 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
   },
   chatHeaderActionButton: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 2,
@@ -2268,10 +2229,7 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   headerFallbackTitle: {
-    position: 'absolute',
-    left: 64,
-    right: 64,
-    bottom: 10,
+    maxWidth: '100%',
     fontSize: 18,
     lineHeight: 23,
     fontWeight: '900',
