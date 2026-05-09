@@ -1,6 +1,7 @@
 import * as Notifications from 'expo-notifications';
 import { useRootNavigationState, useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef } from 'react';
+import { buildSharedChatRoute, parseSocialNotificationData } from '../../utils/socialNotificationPresentation';
 import { useExternalEntryNavigation } from './useExternalEntryNavigation';
 
 type NotificationData = Record<string, unknown>;
@@ -11,21 +12,7 @@ function getNotificationString(data: NotificationData, key: string) {
 }
 
 function parseNotificationData(data: NotificationData | undefined): NotificationData {
-  const rawData = data ?? {};
-  const dataString = getNotificationString(rawData, 'dataString');
-  if (!dataString) {
-    return rawData;
-  }
-
-  try {
-    const parsed = JSON.parse(dataString) as NotificationData;
-    return {
-      ...parsed,
-      ...rawData,
-    };
-  } catch {
-    return rawData;
-  }
+  return parseSocialNotificationData(data);
 }
 
 export function useAppNotificationRouting() {
@@ -54,6 +41,7 @@ export function useAppNotificationRouting() {
       const data = parseNotificationData(response.notification.request.content.data);
       const noteId = getNotificationString(data, 'noteId');
       const sharedPostId = getNotificationString(data, 'sharedPostId');
+      const responseId = getNotificationString(data, 'responseId');
       const notificationType = getNotificationString(data, 'notificationType');
       const route = getNotificationString(data, 'route');
       if (notificationType === 'friend-accepted') {
@@ -61,7 +49,7 @@ export function useAppNotificationRouting() {
         router.dismissTo(`/(tabs)?openSharedManageAt=${encodeURIComponent(notificationId)}` as any);
       } else if (notificationType === 'shared-response' && sharedPostId) {
         prepareForExternalNavigation();
-        router.push(`/shared/chat/${sharedPostId}` as any);
+        router.push(buildSharedChatRoute(sharedPostId, responseId) as any);
       } else if (route.startsWith('/shared/chat/')) {
         prepareForExternalNavigation();
         router.push(route as any);

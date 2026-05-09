@@ -1,4 +1,3 @@
-import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from '../../../hooks/useHaptics';
 import * as Linking from 'expo-linking';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -7,8 +6,6 @@ import { useTranslation } from 'react-i18next';
 import {
   KeyboardAvoidingView,
   Platform,
-  StyleSheet,
-  View,
 } from 'react-native';
 import AppSheet from '../../sheets/AppSheet';
 import AppSheetScaffold from '../../sheets/AppSheetScaffold';
@@ -17,7 +14,6 @@ import { useAuth } from '../../../hooks/useAuth';
 import { useConnectivity } from '../../../hooks/useConnectivity';
 import { useFriendInviteJoin } from '../../../hooks/useFriendInviteJoin';
 import { useSharedFeedStore } from '../../../hooks/useSharedFeed';
-import { useTheme } from '../../../hooks/useTheme';
 import { normalizeUsernameInput } from '../../../services/publicProfileService';
 import {
   getSharedFeedErrorMessage,
@@ -66,7 +62,6 @@ export default function FriendJoinScreen() {
     username?: string;
   }>();
   const { t } = useTranslation();
-  const { colors } = useTheme();
   const { user, isAuthAvailable, isReady: authReady } = useAuth();
   const { isOnline } = useConnectivity();
   const { findFriendByUsername, addFriendByUsername } = useSharedFeedStore();
@@ -382,6 +377,7 @@ export default function FriendJoinScreen() {
         <AppSheetScaffold
           headerVariant="action"
           title={t('shared.joinTitle', 'Join a friend')}
+          overlayHeaderActions
           subtitle={
             user
               ? joinMode === 'username'
@@ -394,15 +390,6 @@ export default function FriendJoinScreen() {
                 ? t('shared.joinSignInBody', 'Sign in first so we can connect you to this friend.')
                 : t('shared.unavailableBody', 'This build does not have shared social enabled right now.')
           }
-          headerTop={(
-            <View style={[styles.badge, { backgroundColor: colors.primarySoft }]}>
-              <Ionicons
-                name={user ? (joinMode === 'username' ? 'search-outline' : 'link-outline') : 'person-circle-outline'}
-                size={20}
-                color={colors.primary}
-              />
-            </View>
-          )}
           trailingAction={{
             icon: 'close',
             accessibilityLabel: t('common.close', 'Close'),
@@ -450,13 +437,3 @@ export default function FriendJoinScreen() {
     </AppSheet>
   );
 }
-
-const styles = StyleSheet.create({
-  badge: {
-    width: 46,
-    height: 46,
-    borderRadius: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-});

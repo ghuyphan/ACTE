@@ -5,18 +5,13 @@ import { ANDROID_SOCIAL_CHANNEL_ID } from '../services/notificationService';
 import { getCachedSharedFeedSnapshot } from '../services/sharedFeedCache';
 import { refreshSharedFeed } from '../services/sharedFeedService';
 import { updateWidgetData } from '../services/widgetService';
+import {
+  extractSocialNotificationPayload,
+  type SocialNotificationPayload,
+} from './socialNotificationPresentation';
 import { getSupabaseUser } from './supabase';
 
 export const SOCIAL_PUSH_NOTIFICATION_TASK_NAME = 'BACKGROUND_SOCIAL_PUSH_NOTIFICATION_TASK';
-
-type SocialNotificationPayload = {
-  notificationType?: string;
-  sharedPostId?: string;
-  route?: string;
-  notificationTitle?: string;
-  notificationBody?: string;
-  notificationChannelId?: string;
-};
 
 let socialPushTaskRegistrationPromise: Promise<void> | null = null;
 
@@ -26,43 +21,11 @@ function isNotificationResponse(
   return 'actionIdentifier' in payload;
 }
 
-function asTrimmedString(value: unknown) {
-  return typeof value === 'string' && value.trim() ? value.trim() : '';
-}
-
 function parseNotificationTaskData(payload: Notifications.NotificationTaskPayload) {
   const rawData = isNotificationResponse(payload)
     ? payload.notification.request.content.data ?? {}
     : payload.data ?? {};
-  const dataString = typeof rawData.dataString === 'string' ? rawData.dataString : '';
-
-  if (!dataString) {
-    return rawData;
-  }
-
-  try {
-    const parsed = JSON.parse(dataString) as Record<string, unknown>;
-    return {
-      ...parsed,
-      ...rawData,
-    };
-  } catch {
-    return rawData;
-  }
-}
-
-function extractSocialNotificationPayload(
-  payload: Notifications.NotificationTaskPayload
-): SocialNotificationPayload {
-  const data = parseNotificationTaskData(payload);
-  return {
-    notificationType: asTrimmedString(data.notificationType),
-    sharedPostId: asTrimmedString(data.sharedPostId),
-    route: asTrimmedString(data.route),
-    notificationTitle: asTrimmedString(data.notificationTitle),
-    notificationBody: asTrimmedString(data.notificationBody),
-    notificationChannelId: asTrimmedString(data.notificationChannelId),
-  };
+  return extractSocialNotificationPayload(rawData);
 }
 
 async function scheduleLocalSocialNotification(payload: SocialNotificationPayload) {
@@ -78,7 +41,14 @@ async function scheduleLocalSocialNotification(payload: SocialNotificationPayloa
     sound: 'default',
     data: {
       route: payload.route,
+      notificationType: payload.notificationType,
+      notificationTitle: payload.notificationTitle,
+      notificationBody: payload.notificationBody,
       sharedPostId: payload.sharedPostId,
+      responseId: payload.responseId,
+      actorDisplayName: payload.actorDisplayName,
+      memoryType: payload.memoryType,
+      placeName: payload.placeName,
     },
   };
 
@@ -95,7 +65,7 @@ async function scheduleLocalSocialNotification(payload: SocialNotificationPayloa
 export async function handleSocialPushNotificationTask(
   payload: Notifications.NotificationTaskPayload
 ) {
-  const socialPayload = extractSocialNotificationPayload(payload);
+  const socialPayload = parseNotificationTaskData(payload);
   if (
     socialPayload.notificationType !== 'shared-post' ||
     !socialPayload.sharedPostId

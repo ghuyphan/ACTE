@@ -152,7 +152,7 @@ describe('useAppNotificationRouting', () => {
 
     await waitFor(() => {
       expect(mockCloseNoteDetail).toHaveBeenCalledTimes(1);
-      expect(mockPush).toHaveBeenCalledWith('/shared/chat/shared-42');
+      expect(mockPush).toHaveBeenCalledWith('/shared/chat/shared-42?responseId=response-42');
       expect(mockRequestFeedFocus).not.toHaveBeenCalled();
       expect(mockClearLastNotificationResponseAsync).toHaveBeenCalledTimes(1);
     });
@@ -184,7 +184,7 @@ describe('useAppNotificationRouting', () => {
 
     await waitFor(() => {
       expect(mockCloseNoteDetail).toHaveBeenCalledTimes(1);
-      expect(mockPush).toHaveBeenCalledWith('/shared/chat/shared-42');
+      expect(mockPush).toHaveBeenCalledWith('/shared/chat/shared-42?responseId=response-42');
       expect(mockRequestFeedFocus).not.toHaveBeenCalled();
       expect(mockClearLastNotificationResponseAsync).toHaveBeenCalledTimes(1);
     });

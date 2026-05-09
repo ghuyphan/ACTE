@@ -2,6 +2,11 @@ import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 import i18n from '../constants/i18n';
 import { getPersistentItem, setPersistentItem } from '../utils/appStorage';
+import {
+  extractSocialNotificationPayload,
+  isSocialNotificationType,
+  shouldSuppressSocialNotificationPresentation,
+} from '../utils/socialNotificationPresentation';
 
 // Android channel sound settings are immutable after the channel is first created,
 // so we version the id when fixing channel-level sound behavior.
@@ -214,12 +219,25 @@ export function configureForegroundNotificationPresentation() {
 
   Notifications.setNotificationHandler({
     // Expo drops foreground notifications unless the app opts into presenting them.
-    handleNotification: async () => ({
-      shouldShowBanner: true,
-      shouldShowList: true,
-      shouldPlaySound: true,
-      shouldSetBadge: true,
-    }),
+    handleNotification: async (notification) => {
+      const socialPayload = extractSocialNotificationPayload(notification.request.content.data);
+      if (isSocialNotificationType(socialPayload.notificationType)) {
+        const suppressAll = shouldSuppressSocialNotificationPresentation(socialPayload);
+        return {
+          shouldShowBanner: false,
+          shouldShowList: !suppressAll,
+          shouldPlaySound: !suppressAll,
+          shouldSetBadge: !suppressAll,
+        };
+      }
+
+      return {
+        shouldShowBanner: true,
+        shouldShowList: true,
+        shouldPlaySound: true,
+        shouldSetBadge: true,
+      };
+    },
     handleError: (notificationId, error) => {
       console.warn('[notifications] Foreground notification handling failed:', {
         notificationId,
@@ -248,10 +266,10 @@ export async function configureNotificationChannels(platformOS = Platform.OS) {
   });
 
   await Notifications.setNotificationChannelAsync(ANDROID_SOCIAL_CHANNEL_ID, {
-    name: i18n.t('notification.socialChannelName', 'Friend activity'),
+    name: i18n.t('notification.socialChannelName', 'Memories from friends'),
     description: i18n.t(
       'notification.socialChannelDescription',
-      'Push notifications when friends accept invites or share moments with you.'
+      'Replies, shared memories, and friend updates from people you connect with in Noto.'
     ),
     importance: Notifications.AndroidImportance.HIGH,
     enableVibrate: true,

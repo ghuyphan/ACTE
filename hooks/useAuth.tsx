@@ -1,4 +1,4 @@
-import type { Session } from '@supabase/supabase-js';
+import type { Session, SupabaseClient } from '@supabase/supabase-js';
 import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
 import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState, Platform } from 'react-native';
@@ -25,6 +25,7 @@ import {
 import { clearSharedFeedCache } from '../services/sharedFeedCache';
 import { unregisterCurrentSocialPushToken } from '../services/socialPushService';
 import { AppUser, deriveUsernameCandidate, mapSupabaseUser } from '../utils/appUser';
+import { getPersistentItem, removePersistentItem, setPersistentItem } from '../utils/appStorage';
 import { getSupabase, getSupabaseErrorMessage, hasSupabaseConfig } from '../utils/supabase';
 
 export interface AuthActionResult {
@@ -57,6 +58,8 @@ interface AuthContextValue {
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
+const AUTH_USER_SNAPSHOT_KEY = 'auth.cachedUser.v1';
+const TRANSIENT_SIGNED_OUT_CONFIRMATION_DELAY_MS = 900;
 
 function isSupportedPlatform() {
   return Platform.OS === 'ios' || Platform.OS === 'android';
@@ -109,6 +112,7 @@ async function clearAuthenticatedUserState(
   invalidateAuthSyncRequests();
   setActiveNotesScope(LOCAL_NOTES_SCOPE);
   setUser(null);
+  await setCachedAuthUser(null);
   await clearGeofenceRegions().catch((error) => {
     console.warn('[auth] Failed to clear geofences during sign-out:', error);
   });
@@ -482,6 +486,61 @@ function mergeSessionRefreshWithCurrentProfile(
   };
 }
 
+function isValidCachedUser(value: unknown): value is AppUser {
+  if (typeof value !== 'object' || !value) {
+    return false;
+  }
+
+  const user = value as Partial<AppUser>;
+  return (
+    typeof user.id === 'string' &&
+    user.id.trim().length > 0 &&
+    typeof user.uid === 'string' &&
+    user.uid.trim().length > 0
+  );
+}
+
+async function getCachedAuthUser() {
+  try {
+    const rawValue = await getPersistentItem(AUTH_USER_SNAPSHOT_KEY);
+    if (!rawValue) {
+      return null;
+    }
+
+    const parsed = JSON.parse(rawValue) as { user?: unknown };
+    return isValidCachedUser(parsed.user) ? parsed.user : null;
+  } catch {
+    return null;
+  }
+}
+
+async function setCachedAuthUser(user: AppUser | null) {
+  try {
+    if (!user) {
+      await removePersistentItem(AUTH_USER_SNAPSHOT_KEY);
+      return;
+    }
+
+    await setPersistentItem(
+      AUTH_USER_SNAPSHOT_KEY,
+      JSON.stringify({
+        user: {
+          id: user.id,
+          uid: user.uid,
+          email: user.email,
+          displayName: user.displayName,
+          username: user.username ?? null,
+          usernameSetAt: user.usernameSetAt ?? null,
+          photoURL: user.photoURL,
+          providerData: user.providerData,
+        },
+      })
+    );
+  } catch (error) {
+    console.warn('[auth] Failed to update cached user snapshot:', error);
+  }
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AppUser | null>(null);
   const [isReady, setIsReady] = useState(() => !isSupportedPlatform());
@@ -491,6 +550,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     key: string;
     promise: Promise<AppUser | null>;
   } | null>(null);
+  const missingSessionConfirmationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const userRef = useRef<AppUser | null>(user);
   userRef.current = user;
   const sessionSyncFailureRef = useRef<SessionSyncFailureCode>('none');
@@ -510,11 +570,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return invalidateAuthSessionSyncRequests();
   }, [invalidateAuthLoadRequests, invalidateAuthSessionSyncRequests]);
 
-  const applySignedOutState = useCallback(() => {
-    setActiveNotesScope(LOCAL_NOTES_SCOPE);
-    setUser(null);
-    setIsReady(true);
+  const clearMissingSessionConfirmationTimer = useCallback(() => {
+    if (missingSessionConfirmationTimerRef.current) {
+      clearTimeout(missingSessionConfirmationTimerRef.current);
+      missingSessionConfirmationTimerRef.current = null;
+    }
   }, []);
+
+  const commitUser = useCallback((nextUser: AppUser | null) => {
+    setUser(nextUser);
+    void setCachedAuthUser(nextUser);
+  }, []);
+
+  const updateCommittedUser = useCallback((updater: (currentUser: AppUser | null) => AppUser | null) => {
+    setUser((currentUser) => {
+      const nextUser = updater(currentUser);
+      void setCachedAuthUser(nextUser);
+      return nextUser;
+    });
+  }, []);
+
+  const applySignedOutState = useCallback(() => {
+    clearMissingSessionConfirmationTimer();
+    setActiveNotesScope(LOCAL_NOTES_SCOPE);
+    commitUser(null);
+    setIsReady(true);
+  }, [clearMissingSessionConfirmationTimer, commitUser]);
 
   const getSessionSyncKey = useCallback((session: Session | null) => {
     const accessToken = session?.access_token?.trim();
@@ -590,7 +671,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             return null;
           }
 
-          setUser(nextUser);
+          commitUser(nextUser);
           setIsReady(true);
           void reconcileUserProfile(nextUser, requestId)
             .then((reconciledUser) => {
@@ -598,7 +679,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 reconciledUser &&
                 authSessionSyncRequestIdRef.current === requestId
               ) {
-                setUser(reconciledUser);
+                commitUser(reconciledUser);
               }
             })
             .catch(() => undefined);
@@ -618,7 +699,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
           const fallbackUser = mapSupabaseUser(session?.user);
           setActiveNotesScope(fallbackUser?.uid ?? LOCAL_NOTES_SCOPE);
-          setUser(fallbackUser);
+          commitUser(fallbackUser);
           setIsReady(true);
           return fallbackUser;
         }
@@ -638,13 +719,42 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       return syncPromise;
     },
-    [applySignedOutState, getSessionSyncKey, invalidateAuthSessionSyncRequests, reconcileUserProfile]
+    [
+      applySignedOutState,
+      commitUser,
+      getSessionSyncKey,
+      invalidateAuthSessionSyncRequests,
+      reconcileUserProfile,
+    ]
+  );
+
+  const scheduleMissingSessionConfirmation = useCallback(
+    (supabase: SupabaseClient) => {
+      clearMissingSessionConfirmationTimer();
+      missingSessionConfirmationTimerRef.current = setTimeout(() => {
+        missingSessionConfirmationTimerRef.current = null;
+        void (async () => {
+          try {
+            const { data, error } = await supabase.auth.getSession();
+            if (error) {
+              throw error;
+            }
+
+            await startAuthSessionSync(data.session ?? null, 'confirm missing Supabase session');
+          } catch (error) {
+            console.warn('[auth] Failed to confirm missing Supabase session:', error);
+          }
+        })();
+      }, TRANSIENT_SIGNED_OUT_CONFIRMATION_DELAY_MS);
+    },
+    [clearMissingSessionConfirmationTimer, startAuthSessionSync]
   );
 
   const reloadAuthSession = useCallback(
     async (
       errorContext: string,
       options?: {
+        allowCachedUserFallback?: boolean;
         retryCount?: number;
       }
     ) => {
@@ -668,7 +778,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             return null;
           }
 
-          return await startAuthSessionSync(data.session ?? null, errorContext);
+          const session = data.session ?? null;
+          if (!session && options?.allowCachedUserFallback !== false) {
+            const cachedUser = await getCachedAuthUser();
+            if (authLoadRequestIdRef.current !== requestId) {
+              return null;
+            }
+
+            if (cachedUser) {
+              setActiveNotesScope(cachedUser.uid);
+              updateCommittedUser((currentUser) =>
+                currentUser && currentUser.uid === cachedUser.uid
+                  ? mergeSessionRefreshWithCurrentProfile(cachedUser, currentUser)
+                  : cachedUser
+              );
+              setIsReady(true);
+              scheduleMissingSessionConfirmation(supabase);
+              return cachedUser;
+            }
+          }
+
+          clearMissingSessionConfirmationTimer();
+          return await startAuthSessionSync(session, errorContext);
         } catch (error) {
           console.warn(`[auth] Failed to ${errorContext}:`, error);
           if (authLoadRequestIdRef.current !== requestId) {
@@ -682,7 +813,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           const fallbackUser = userRef.current;
           if (fallbackUser) {
             setActiveNotesScope(fallbackUser.uid);
-            setUser(fallbackUser);
+            commitUser(fallbackUser);
             setIsReady(true);
             return fallbackUser;
           }
@@ -694,7 +825,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       return loadSession(retryCount);
     },
-    [applySignedOutState, invalidateAuthLoadRequests, startAuthSessionSync]
+    [
+      applySignedOutState,
+      clearMissingSessionConfirmationTimer,
+      commitUser,
+      invalidateAuthLoadRequests,
+      scheduleMissingSessionConfirmation,
+      startAuthSessionSync,
+      updateCommittedUser,
+    ]
   );
 
   useEffect(() => {
@@ -721,15 +860,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
       invalidateAuthLoadRequests();
+      if (_event === 'SIGNED_OUT') {
+        clearMissingSessionConfirmationTimer();
+        void startAuthSessionSync(null, 'sync signed-out auth state');
+        return;
+      }
+
+      if (!session) {
+        void reloadAuthSession('sync missing auth state');
+        return;
+      }
+
+      clearMissingSessionConfirmationTimer();
       void startAuthSessionSync(session, 'sync auth state');
     });
 
     void reloadAuthSession('load Supabase session', { retryCount: 1 });
 
     return () => {
+      clearMissingSessionConfirmationTimer();
       subscription.unsubscribe();
     };
-  }, [invalidateAuthLoadRequests, reloadAuthSession, startAuthSessionSync]);
+  }, [
+    clearMissingSessionConfirmationTimer,
+    invalidateAuthLoadRequests,
+    reloadAuthSession,
+    startAuthSessionSync,
+  ]);
 
   useEffect(() => {
     if (!isSupportedPlatform() || !isSupabaseAuthAvailable()) {
@@ -993,7 +1150,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             displayName: normalizedDisplayName,
           });
 
-          setUser((currentUser) =>
+          updateCommittedUser((currentUser) =>
             currentUser
               ? {
                   ...currentUser,
@@ -1031,7 +1188,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             username,
           });
 
-          setUser((currentUser) =>
+          updateCommittedUser((currentUser) =>
             currentUser
               ? {
                   ...currentUser,
@@ -1067,7 +1224,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             photoURL,
           });
 
-          setUser((currentUser) =>
+          updateCommittedUser((currentUser) =>
             currentUser
               ? {
                   ...currentUser,
@@ -1170,7 +1327,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await clearAuthenticatedUserState(currentUserUid, setUser, invalidateAuthRequests);
       },
     }),
-    [invalidateAuthLoadRequests, invalidateAuthRequests, isReady, startAuthSessionSync, user]
+    [
+      invalidateAuthLoadRequests,
+      invalidateAuthRequests,
+      isReady,
+      startAuthSessionSync,
+      updateCommittedUser,
+      user,
+    ]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

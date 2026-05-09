@@ -117,16 +117,19 @@ describe('backgroundSocialPush', () => {
       preferredNoteId: 'shared-1',
     });
     expect(mockScheduleNotificationAsync).toHaveBeenCalledWith({
-      content: {
+      content: expect.objectContaining({
         title: 'Bao shared a memory with you',
         body: 'Open Noto to read the note they shared with you.',
         sound: 'default',
         channelId: 'social-v2',
-        data: {
+        data: expect.objectContaining({
           route: '/shared/shared-1',
+          notificationType: 'shared-post',
+          notificationTitle: 'Bao shared a memory with you',
+          notificationBody: 'Open Noto to read the note they shared with you.',
           sharedPostId: 'shared-1',
-        },
-      },
+        }),
+      }),
       trigger: null,
     });
   });
@@ -159,15 +162,18 @@ describe('backgroundSocialPush', () => {
       preferredNoteId: 'shared-1',
     });
     expect(mockScheduleNotificationAsync).toHaveBeenCalledWith({
-      content: {
+      content: expect.objectContaining({
         title: 'Bao shared a memory with you',
         body: 'Open Noto to read the note they shared with you.',
         sound: 'default',
-        data: {
+        data: expect.objectContaining({
           route: '/shared/shared-1',
+          notificationType: 'shared-post',
+          notificationTitle: 'Bao shared a memory with you',
+          notificationBody: 'Open Noto to read the note they shared with you.',
           sharedPostId: 'shared-1',
-        },
-      },
+        }),
+      }),
       trigger: null,
     });
   });

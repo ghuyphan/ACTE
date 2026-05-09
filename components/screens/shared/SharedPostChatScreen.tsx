@@ -44,9 +44,11 @@ import {
   getSharedChatIdentity,
   getSharedChatMemoryPreview,
 } from '../../../utils/sharedChatPresentation';
+import { setActiveSharedChatPostId } from '../../../utils/socialNotificationPresentation';
 import TextFieldEditSheet from '../../sheets/TextFieldEditSheet';
 
 type SharedPostChatScreenProps = {
+  initialResponseId?: string | string[] | null;
   postId: string;
 };
 
@@ -631,7 +633,10 @@ function MiniMemoryCard({
   );
 }
 
-export default function SharedPostChatScreen({ postId }: SharedPostChatScreenProps) {
+export default function SharedPostChatScreen({
+  initialResponseId,
+  postId,
+}: SharedPostChatScreenProps) {
   const { t } = useTranslation();
   const { colors, isDark } = useTheme();
   const insets = useSafeAreaInsets();
@@ -686,8 +691,12 @@ export default function SharedPostChatScreen({ postId }: SharedPostChatScreenPro
   const optimisticSequenceRef = useRef(0);
   const reactionOverlayProgress = useRef(new Animated.Value(0)).current;
   const sendButtonPulse = useRef(new Animated.Value(0)).current;
+  const pendingInitialResponseIdRef = useRef<string | null>(null);
 
   const post = sharedPosts.find((item) => item.id === postId) ?? null;
+  const normalizedInitialResponseId = Array.isArray(initialResponseId)
+    ? initialResponseId[0]?.trim() || null
+    : initialResponseId?.trim() || null;
   const responseGroups = useMemo(() => groupConsecutiveResponses(responses, t), [responses, t]);
   const responseById = useMemo(
     () => new Map(responses.map((response) => [response.id, response] as const)),
@@ -749,6 +758,17 @@ export default function SharedPostChatScreen({ postId }: SharedPostChatScreenPro
     },
     [getAuthorLabel, responseById]
   );
+
+  useEffect(() => {
+    setActiveSharedChatPostId(postId);
+    return () => {
+      setActiveSharedChatPostId(null);
+    };
+  }, [postId]);
+
+  useEffect(() => {
+    pendingInitialResponseIdRef.current = normalizedInitialResponseId;
+  }, [normalizedInitialResponseId, postId]);
 
   useEffect(() => {
     Animated.spring(reactionOverlayProgress, {
@@ -1297,43 +1317,43 @@ export default function SharedPostChatScreen({ postId }: SharedPostChatScreenPro
     [responseGroups]
   );
 
-  const loadOlderResponses = useCallback(() => {
+  const loadOlderResponses = useCallback(async () => {
     if (isLoadingOlderResponses || isLoadingResponses || !hasOlderResponses || responses.length === 0) {
-      return;
+      return false;
     }
 
     const oldestResponse = responses[0];
     if (!oldestResponse) {
-      return;
+      return false;
     }
 
     setIsLoadingOlderResponses(true);
-    void getSharedPostResponsesPage(postId, {
-      limit: RESPONSE_PAGE_SIZE,
-      beforeCreatedAt: oldestResponse.createdAt,
-    })
-      .then((olderResponses) => {
-        setHasOlderResponses(olderResponses.length >= RESPONSE_PAGE_SIZE);
-        if (olderResponses.length === 0) {
-          return;
-        }
-
-        setResponses((current) => {
-          const next = mergeResponses([...olderResponses, ...current], []);
-          rememberResponses(postId, next);
-          return areResponseListsEqual(current, next) ? current : next;
-        });
-      })
-      .catch((error) => {
-        setErrorMessage(
-          error instanceof Error
-            ? error.message
-            : t('shared.responseLoadFailed', 'Could not load responses.')
-        );
-      })
-      .finally(() => {
-        setIsLoadingOlderResponses(false);
+    try {
+      const olderResponses = await getSharedPostResponsesPage(postId, {
+        limit: RESPONSE_PAGE_SIZE,
+        beforeCreatedAt: oldestResponse.createdAt,
       });
+      setHasOlderResponses(olderResponses.length >= RESPONSE_PAGE_SIZE);
+      if (olderResponses.length === 0) {
+        return false;
+      }
+
+      setResponses((current) => {
+        const next = mergeResponses([...olderResponses, ...current], []);
+        rememberResponses(postId, next);
+        return areResponseListsEqual(current, next) ? current : next;
+      });
+      return true;
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : t('shared.responseLoadFailed', 'Could not load responses.')
+      );
+      return false;
+    } finally {
+      setIsLoadingOlderResponses(false);
+    }
   }, [
     getSharedPostResponsesPage,
     hasOlderResponses,
@@ -1342,6 +1362,32 @@ export default function SharedPostChatScreen({ postId }: SharedPostChatScreenPro
     postId,
     responses,
     t,
+  ]);
+
+  useEffect(() => {
+    const targetResponseId = pendingInitialResponseIdRef.current;
+    if (!targetResponseId || isLoadingResponses) {
+      return;
+    }
+
+    if (responseById.has(targetResponseId)) {
+      pendingInitialResponseIdRef.current = null;
+      requestAnimationFrame(() => scrollToResponse(targetResponseId));
+      return;
+    }
+
+    if (!hasOlderResponses || isLoadingOlderResponses) {
+      return;
+    }
+
+    void loadOlderResponses();
+  }, [
+    hasOlderResponses,
+    isLoadingOlderResponses,
+    isLoadingResponses,
+    loadOlderResponses,
+    responseById,
+    scrollToResponse,
   ]);
 
   const openMemory = useCallback(() => {
@@ -1718,7 +1764,7 @@ export default function SharedPostChatScreen({ postId }: SharedPostChatScreenPro
     >
       <Stack.Screen
         options={{
-          headerTitleAlign: 'center',
+          headerTitleAlign: 'left',
           headerTitle: () =>
             post ? (
               <View style={styles.headerIdentity}>
@@ -1770,15 +1816,15 @@ export default function SharedPostChatScreen({ postId }: SharedPostChatScreenPro
                 {t('shared.chatTitle', 'Chat')}
               </Text>
             ),
-          headerRight: canEditHeaderNickname
-            ? () => (
+          headerRight: () =>
+            canEditHeaderNickname ? (
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel={t('shared.friendNicknameEdit', 'Edit nickname')}
                   hitSlop={8}
                   onPress={openNicknameEditor}
                   style={({ pressed }) => [
-                    styles.chatHeaderActionButton,
+                    styles.chatHeaderSideButton,
                     {
                       opacity: pressed ? 0.64 : 1,
                     },
@@ -1786,8 +1832,9 @@ export default function SharedPostChatScreen({ postId }: SharedPostChatScreenPro
                 >
                   <Ionicons name="pencil-outline" size={21} color={colors.text} />
                 </Pressable>
-              )
-            : undefined,
+              ) : (
+                <View style={styles.chatHeaderSideButton} />
+              ),
         }}
       />
 
@@ -2164,8 +2211,9 @@ const styles = StyleSheet.create({
     maxWidth: '100%',
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    justifyContent: 'flex-start',
     gap: 9,
+    marginLeft: 22,
     minWidth: 0,
   },
   headerAvatar: {
@@ -2186,7 +2234,7 @@ const styles = StyleSheet.create({
     minWidth: 0,
     alignItems: 'flex-start',
   },
-  chatHeaderActionButton: {
+  chatHeaderSideButton: {
     width: 44,
     height: 44,
     borderRadius: 22,

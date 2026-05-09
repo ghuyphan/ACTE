@@ -276,6 +276,7 @@ describe('send-social-notifications edge function', () => {
                     id: 'post-1',
                     author_user_id: 'author-1',
                     audience_user_ids: ['actor-1'],
+                    type: 'photo',
                     place_name: 'Da Nang',
                   },
                   error: null,
@@ -342,10 +343,13 @@ describe('send-social-notifications edge function', () => {
       expect(body[0]).toEqual(
         expect.objectContaining({
           to: 'ExponentPushToken[author]',
-          title: 'Mai responded to your memory',
+          title: 'Mai replied to the Da Nang memory',
           body: 'This place was so good',
           data: expect.objectContaining({
+            actorDisplayName: 'Mai',
+            memoryType: 'photo',
             notificationType: 'shared-response',
+            placeName: 'Da Nang',
             responseId: 'response-1',
             route: '/shared/chat/post-1',
             sharedPostId: 'post-1',

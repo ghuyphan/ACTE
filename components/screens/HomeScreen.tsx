@@ -1669,6 +1669,7 @@ export default function HomeScreen() {
       ),
       primaryAction: {
         label: t('common.continue', 'Continue'),
+        closeOnPress: false,
         onPress: async () => {
           const result = await requestReminderPermissions();
           if (result.enabled) {
@@ -1745,6 +1746,7 @@ export default function HomeScreen() {
               ),
               primaryAction: {
                 label: t('capture.enableReminders', 'Enable reminders'),
+                closeOnPress: false,
                 onPress: promptReminderPermissionsFromDisclosure,
               },
               secondaryAction: {
@@ -2073,6 +2075,7 @@ export default function HomeScreen() {
       onClose: releaseSavedNote,
       primaryAction: {
         label: t('capture.enableReminders', 'Enable reminders'),
+        closeOnPress: false,
         onPress: promptReminderPermissionsFromDisclosure,
       },
       secondaryAction: {

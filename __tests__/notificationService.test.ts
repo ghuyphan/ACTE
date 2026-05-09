@@ -44,7 +44,7 @@ describe('notificationService', () => {
     mockStorage.clear();
   });
 
-  it('shows incoming notifications while the app is already open', async () => {
+  it('shows incoming non-social notifications while the app is already open', async () => {
     const { configureForegroundNotificationPresentation } = loadNotificationService();
 
     configureForegroundNotificationPresentation();
@@ -54,16 +54,98 @@ describe('notificationService', () => {
 
     const handler = mockSetNotificationHandler.mock.calls[0]?.[0] as
       | {
-          handleNotification?: () => Promise<Record<string, unknown>>;
+          handleNotification?: (notification: {
+            request: { content: { data?: Record<string, unknown> } };
+          }) => Promise<Record<string, unknown>>;
         }
       | undefined;
 
-    await expect(handler?.handleNotification?.()).resolves.toEqual({
+    await expect(
+      handler?.handleNotification?.({
+        request: {
+          content: {
+            data: { noteId: 'note-1' },
+          },
+        },
+      })
+    ).resolves.toEqual({
       shouldShowBanner: true,
       shouldShowList: true,
       shouldPlaySound: true,
       shouldSetBadge: true,
     });
+  });
+
+  it('uses the in-app banner instead of the system foreground banner for social notifications', async () => {
+    const { configureForegroundNotificationPresentation } = loadNotificationService();
+
+    configureForegroundNotificationPresentation();
+
+    const handler = mockSetNotificationHandler.mock.calls[0]?.[0] as
+      | {
+          handleNotification?: (notification: {
+            request: { content: { data?: Record<string, unknown> } };
+          }) => Promise<Record<string, unknown>>;
+        }
+      | undefined;
+
+    await expect(
+      handler?.handleNotification?.({
+        request: {
+          content: {
+            data: {
+              notificationType: 'shared-response',
+              sharedPostId: 'shared-1',
+            },
+          },
+        },
+      })
+    ).resolves.toEqual({
+      shouldShowBanner: false,
+      shouldShowList: true,
+      shouldPlaySound: true,
+      shouldSetBadge: true,
+    });
+  });
+
+  it('fully suppresses foreground response notifications for the active chat', async () => {
+    const {
+      configureForegroundNotificationPresentation,
+    } = loadNotificationService();
+    const {
+      setActiveSharedChatPostId,
+    } = require('../utils/socialNotificationPresentation') as typeof import('../utils/socialNotificationPresentation');
+
+    setActiveSharedChatPostId('shared-1');
+    configureForegroundNotificationPresentation();
+
+    const handler = mockSetNotificationHandler.mock.calls[0]?.[0] as
+      | {
+          handleNotification?: (notification: {
+            request: { content: { data?: Record<string, unknown> } };
+          }) => Promise<Record<string, unknown>>;
+        }
+      | undefined;
+
+    await expect(
+      handler?.handleNotification?.({
+        request: {
+          content: {
+            data: {
+              notificationType: 'shared-response',
+              sharedPostId: 'shared-1',
+            },
+          },
+        },
+      })
+    ).resolves.toEqual({
+      shouldShowBanner: false,
+      shouldShowList: false,
+      shouldPlaySound: false,
+      shouldSetBadge: false,
+    });
+
+    setActiveSharedChatPostId(null);
   });
 
   it('creates the Android reminder channel with the expected configuration', async () => {
@@ -86,7 +168,7 @@ describe('notificationService', () => {
     expect(mockSetNotificationChannelAsync).toHaveBeenCalledWith(
       ANDROID_SOCIAL_CHANNEL_ID,
       expect.objectContaining({
-        name: 'Friend activity',
+        name: 'Memories from friends',
         importance: 'high',
         showBadge: true,
       })

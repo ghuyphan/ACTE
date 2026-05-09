@@ -65,6 +65,7 @@ type SharedPostRow = {
   audience_user_ids: string[] | null;
   type: 'text' | 'photo';
   place_name: string | null;
+  text?: string | null;
 };
 
 type SharedPostResponseRow = {
@@ -99,6 +100,23 @@ function jsonResponse(body: SocialNotificationResponse, status = 200) {
 function normalizeDisplayName(value: string | null | undefined) {
   const trimmed = value?.trim();
   return trimmed || 'A friend';
+}
+
+function truncateNotificationLine(value: string, maxLength = 96) {
+  const normalized = value.replace(/\s+/g, ' ').trim();
+  if (normalized.length <= maxLength) {
+    return normalized;
+  }
+
+  return `${normalized.slice(0, Math.max(0, maxLength - 1)).trimEnd()}…`;
+}
+
+function getMemoryKindLabel(type: SharedPostRow['type']) {
+  return type === 'photo' ? 'photo' : 'note';
+}
+
+function getMemoryContext(placeName: string) {
+  return placeName ? ` from ${placeName}` : '';
 }
 
 function buildPushMessage(options: {
@@ -240,7 +258,7 @@ async function loadSharedPostPayload(
 
   const { data: post, error: postError } = await adminClient
     .from('shared_posts')
-    .select('id, author_user_id, author_display_name, audience_user_ids, type, place_name')
+    .select('id, author_user_id, author_display_name, audience_user_ids, type, text, place_name')
     .eq('id', normalizedPostId)
     .eq('author_user_id', actorUserId)
     .maybeSingle();
@@ -273,20 +291,23 @@ async function loadSharedPostPayload(
     };
   }
 
+  const memoryKind = getMemoryKindLabel(typedPost.type);
+  const title = `${actorDisplayName} shared a ${memoryKind}${getMemoryContext(placeName)}`;
+  const noteExcerpt = typedPost.type === 'text' ? truncateNotificationLine(typedPost.text ?? '', 90) : '';
   const body =
-    typedPost.type === 'photo'
-      ? placeName
-        ? `Open Noto to see the photo memory from ${placeName}.`
-        : 'Open Noto to see the photo memory they shared with you.'
-      : placeName
-        ? `Open Noto to read the note from ${placeName}.`
-        : 'Open Noto to read the note they shared with you.';
+    noteExcerpt ||
+    (placeName
+      ? `A new Noto memory is waiting at ${placeName}.`
+      : 'A new Noto memory is waiting for you.');
 
   return {
     recipientUserIds,
-    title: `${actorDisplayName} shared a memory with you`,
+    title,
     body,
     data: {
+      actorDisplayName,
+      memoryType: typedPost.type,
+      placeName,
       route: `/shared/${typedPost.id}`,
       sharedPostId: typedPost.id,
       notificationType: 'shared-post',
@@ -322,7 +343,7 @@ async function loadSharedPostResponsePayload(
   const typedResponse = response as SharedPostResponseRow;
   const { data: post, error: postError } = await adminClient
     .from('shared_posts')
-    .select('id, author_user_id, audience_user_ids, place_name')
+    .select('id, author_user_id, audience_user_ids, type, place_name')
     .eq('id', typedResponse.post_id)
     .maybeSingle();
 
@@ -336,26 +357,29 @@ async function loadSharedPostResponsePayload(
 
   const typedPost = post as Pick<
     SharedPostRow,
-    'id' | 'author_user_id' | 'audience_user_ids' | 'place_name'
+    'id' | 'author_user_id' | 'audience_user_ids' | 'type' | 'place_name'
   >;
-  const recipientUserIds =
-    typedPost.author_user_id && typedPost.author_user_id !== actorUserId
-      ? [typedPost.author_user_id]
-      : [];
+  const recipientUserIds = Array.from(
+    new Set([typedPost.author_user_id, ...(typedPost.audience_user_ids ?? [])])
+  ).filter((userId) => userId && userId !== actorUserId);
   const actorDisplayName = normalizeDisplayName(typedResponse.author_display_name);
   const text = typedResponse.text?.trim() ?? '';
   const emoji = typedResponse.emoji?.trim() ?? '';
-  const body = text
-    ? text
-    : emoji
-      ? `${emoji} reacted to your memory.`
-      : 'Open Noto to see their response.';
+  const placeName = typedPost.place_name?.trim() ?? '';
+  const memoryContext = placeName ? ` to the ${placeName} memory` : ' to a memory';
+  const body = text ? truncateNotificationLine(text, 96) : emoji || 'Open Noto to see their response.';
+  const title = emoji && !text
+    ? `${actorDisplayName} sent ${emoji}`
+    : `${actorDisplayName} replied${memoryContext}`;
 
   return {
     recipientUserIds,
-    title: `${actorDisplayName} responded to your memory`,
+    title,
     body,
     data: {
+      actorDisplayName,
+      memoryType: typedPost.type,
+      placeName,
       route: `/shared/chat/${typedPost.id}`,
       sharedPostId: typedPost.id,
       responseId: typedResponse.id,

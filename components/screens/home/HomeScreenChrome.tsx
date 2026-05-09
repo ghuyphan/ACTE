@@ -23,7 +23,7 @@ const HomeScreenChrome = memo(function HomeScreenChrome({
       <DualCaptureComposer {...dualCaptureComposerProps} />
       <HomeHeaderSearch {...headerSearchProps} />
       {sharedManageSheetProps ? <SharedManageSheet {...sharedManageSheetProps} /> : null}
-      {alertProps.visible ? <AppSheetAlert {...alertProps} /> : null}
+      <AppSheetAlert {...alertProps} />
     </>
   );
 });

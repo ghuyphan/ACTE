@@ -12,6 +12,7 @@ export interface AppSheetAlertAction {
   label: string;
   onPress?: () => void | Promise<void>;
   variant?: 'primary' | 'secondary' | 'neutral' | 'destructive';
+  closeOnPress?: boolean;
 }
 
 export interface AppSheetAlertProps {
@@ -64,11 +65,12 @@ function AlertSheetBody({
     }
 
     actionInFlightRef.current = true;
-    const shouldShowBusy = !closeOnAction;
+    const shouldClose = action?.closeOnPress ?? closeOnAction;
+    const shouldShowBusy = !shouldClose;
     if (shouldShowBusy) {
       setBusyActionIndex(index ?? null);
     }
-    if (closeOnAction) {
+    if (shouldClose) {
       onClose();
     }
 

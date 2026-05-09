@@ -9,6 +9,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider, initialWindowMetrics } from 'react-native-safe-area-context';
 import AppProviders from '../components/app/AppProviders';
 import RootStackNavigator from '../components/app/RootStackNavigator';
+import SocialNotificationBanner from '../components/app/SocialNotificationBanner';
 import StartupErrorView from '../components/app/StartupErrorView';
 import {
   createSolidBackScreenOptions,
@@ -188,6 +189,7 @@ function AppContent() {
         ) : (
           <RootStackNavigator homeTitle={homeTitle} rootScreenOptions={rootScreenOptions} />
         )}
+        <SocialNotificationBanner />
       </View>
     </NavThemeProvider>
   );

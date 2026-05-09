@@ -38,6 +38,34 @@ function buildSession(overrides?: Partial<Session>): Session {
   };
 }
 
+function cacheAuthUser(overrides?: Partial<{
+  id: string;
+  uid: string;
+  email: string | null;
+  displayName: string | null;
+  username: string | null;
+  usernameSetAt: string | null;
+  photoURL: string | null;
+  providerData: Array<{ providerId: string }>;
+}>) {
+  mockPersistentStorage.set(
+    'auth.cachedUser.v1',
+    JSON.stringify({
+      user: {
+        id: 'user-1',
+        uid: 'user-1',
+        email: 'huy@example.com',
+        displayName: 'Huy',
+        username: 'huy',
+        usernameSetAt: null,
+        photoURL: 'https://example.com/avatar.jpg',
+        providerData: [{ providerId: 'google' }],
+        ...overrides,
+      },
+    })
+  );
+}
+
 const mockUpsertPublicUserProfile = jest.fn<
   Promise<{ displayName: string | null; username: string | null; usernameSetAt: string | null; photoURL: string | null; updatedAt: string }>,
   [any]
@@ -86,6 +114,7 @@ const mockMigrateLocalNotesScopeToUser = jest.fn<Promise<void>, [string]>(async 
 const mockSetActiveNotesScope = jest.fn<void, [string | null | undefined]>();
 const mockGetPersistedActiveNotesScopeSync = jest.fn<string | null | undefined, []>(() => null);
 const mockClearGeofenceRegions = jest.fn<Promise<void>, []>(async () => undefined);
+const mockPersistentStorage = new Map<string, string>();
 let authStateChangeCallback: ((event: string, session: Session | null) => void) | null = null;
 let appStateListener: ((state: AppStateStatus) => void) | null = null;
 const mockGetSession = jest.fn(async () => ({
@@ -245,6 +274,17 @@ jest.mock('../services/geofenceService', () => ({
   clearGeofenceRegions: () => mockClearGeofenceRegions(),
 }));
 
+jest.mock('../utils/appStorage', () => ({
+  getPersistentItem: async (key: string) => mockPersistentStorage.get(key) ?? null,
+  getPersistentItemSync: (key: string) => mockPersistentStorage.get(key) ?? undefined,
+  removePersistentItem: async (key: string) => {
+    mockPersistentStorage.delete(key);
+  },
+  setPersistentItem: async (key: string, value: string) => {
+    mockPersistentStorage.set(key, value);
+  },
+}));
+
 const mockSupabaseClient = {
   auth: {
     getSession: () => mockGetSession(),
@@ -322,6 +362,7 @@ describe('useAuth', () => {
     mockUpdateOwnPhotoURL.mockClear();
     mockHasScopeOwnedData.mockResolvedValue(true);
     mockMigrateLocalNotesScopeToUser.mockClear();
+    mockPersistentStorage.clear();
     mockGetPersistedActiveNotesScopeSync.mockReturnValue(null);
     mockSetActiveNotesScope.mockClear();
     mockClearGeofenceRegions.mockClear();
@@ -892,6 +933,49 @@ describe('useAuth', () => {
     await waitFor(() => {
       expect(hook.result.current.user?.uid).toBe('user-1');
     });
+  });
+
+  it('keeps the cached user during a transient missing-session startup', async () => {
+    cacheAuthUser();
+    mockGetSession.mockResolvedValueOnce({
+      data: { session: null },
+      error: null,
+    });
+
+    const hook = renderHook(() => useAuth(), { wrapper });
+
+    await waitFor(() => {
+      expect(hook.result.current.isReady).toBe(true);
+      expect(hook.result.current.user?.uid).toBe('user-1');
+    });
+
+    expect(mockSetActiveNotesScope).toHaveBeenLastCalledWith('user-1');
+    expect(mockUnregisterCurrentSocialPushToken).not.toHaveBeenCalled();
+    hook.unmount();
+  });
+
+  it('clears the cached user for an explicit signed-out auth event', async () => {
+    cacheAuthUser({
+      photoURL: null,
+      providerData: [{ providerId: 'password' }],
+      username: null,
+    });
+    mockAuthState.initialSession = buildSession();
+
+    const hook = renderHook(() => useAuth(), { wrapper });
+
+    await waitFor(() => {
+      expect(hook.result.current.user?.uid).toBe('user-1');
+    });
+
+    await act(async () => {
+      authStateChangeCallback?.('SIGNED_OUT', null);
+    });
+
+    await waitFor(() => {
+      expect(hook.result.current.user).toBeNull();
+    });
+    expect(mockPersistentStorage.has('auth.cachedUser.v1')).toBe(false);
   });
 
   it('requires a recent sign-in message from delete account when the backend rejects it', async () => {

@@ -4,7 +4,7 @@ import SharedPostChatScreen from '../../../components/screens/shared/SharedPostC
 import { useAuth } from '../../../hooks/useAuth';
 
 export default function SharedPostChatRoute() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, responseId } = useLocalSearchParams<{ id: string; responseId?: string }>();
   const router = useRouter();
   const { isAuthAvailable, isReady: authReady, user } = useAuth();
 
@@ -16,14 +16,16 @@ export default function SharedPostChatRoute() {
     router.replace({
       pathname: '/auth',
       params: {
-        returnTo: `/shared/chat/${id}`,
+        returnTo: responseId
+          ? `/shared/chat/${id}?responseId=${encodeURIComponent(responseId)}`
+          : `/shared/chat/${id}`,
       },
     });
-  }, [authReady, id, isAuthAvailable, router, user]);
+  }, [authReady, id, isAuthAvailable, responseId, router, user]);
 
   if (!id || (!authReady && isAuthAvailable) || (!user && isAuthAvailable)) {
     return null;
   }
 
-  return <SharedPostChatScreen postId={id} />;
+  return <SharedPostChatScreen initialResponseId={responseId} postId={id} />;
 }
