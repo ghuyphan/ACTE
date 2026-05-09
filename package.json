@@ -154,6 +154,7 @@
   "overrides": {
     "@tootallnate/once": "^3.0.1",
     "@xmldom/xmldom": "^0.9.10",
+    "postcss": "^8.5.14",
     "uuid": "^14.0.0"
   }
 }
