@@ -33,6 +33,19 @@ jest.mock('../hooks/useTheme', () => ({
 }));
 
 describe('NoteColorPicker', () => {
+  it('renders the restored pink swatches in card color sheets', () => {
+    const { getByTestId } = render(
+      <NoteColorPicker
+        selectedColor="marigold-glow"
+        onSelectColor={jest.fn()}
+        testIDPrefix="capture-note-color"
+      />
+    );
+
+    expect(getByTestId('capture-note-color-sunset-coral')).toBeTruthy();
+    expect(getByTestId('capture-note-color-muted-rosewood')).toBeTruthy();
+  });
+
   it('routes locked premium swatches to the lock handler instead of selecting them', () => {
     const onSelectColor = jest.fn();
     const onLockedColorPress = jest.fn();

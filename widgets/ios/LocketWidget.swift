@@ -1712,7 +1712,7 @@ private struct LocketWidgetEntryView: View {
             return Color(red: 0.247, green: 0.388, blue: 0.408) // #3F6368
         case "violet-bloom", "periwinkle-ink", "chrome-rare", "aurora-rgb":
             return Color(red: 0.329, green: 0.294, blue: 0.439) // #544B70
-        case "sunset-coral", "raspberry-dusk":
+        case "sunset-coral", "raspberry-dusk", "muted-rosewood":
             return Color(red: 0.400, green: 0.302, blue: 0.361) // #664D5C
         case "marigold-glow", "tangerine-clay":
             return Color(red: 0.337, green: 0.271, blue: 0.231) // #56453B

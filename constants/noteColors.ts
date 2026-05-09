@@ -12,6 +12,7 @@ export type NoteColorId =
   | 'matcha-theme'
   | 'berry-theme'
   | 'cotton-candy-theme'
+  | 'muted-rosewood'
   | 'peach-theme-light'
   | 'peach-theme-dark'
   | 'matcha-theme-light'
@@ -43,10 +44,12 @@ export type NoteColorPreset = {
 
 export const NOTE_COLOR_PRESETS: NoteColorPreset[] = [
   { id: 'marigold-glow', card: ['#F6D365', '#FDA085'], darkCard: ['#F2C96F', '#F19A7A'] },
+  { id: 'sunset-coral', card: ['#FF9A8B', '#FF6A88'] },
   { id: 'peach-theme', card: ['#FFD9C6', '#F6BCCB'] },
   { id: 'matcha-theme', card: ['#D8E9C1', '#BEE7D7'] },
   { id: 'berry-theme', card: ['#D9D3FF', '#F3CBE9'] },
   { id: 'cotton-candy-theme', card: ['#F8D7E2', '#D4C9FA'] },
+  { id: 'muted-rosewood', card: ['#6B4C57', '#A57A84'] },
   { id: 'jade-pop', card: ['#84FAB0', '#8FD3F4'], darkCard: ['#65D28F', '#6FB6CB'] },
   { id: 'sky-blue', card: ['#A1C4FD', '#C2E9FB'], darkCard: ['#7EA7D8', '#8FCBE0'], stickerMotion: 'water' },
   { id: 'tangerine-clay', card: ['#FAD961', '#F76B1C'], darkCard: ['#DFAE45', '#C9652D'] },

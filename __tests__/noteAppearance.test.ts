@@ -56,6 +56,13 @@ describe('noteAppearance', () => {
     );
   });
 
+  it('resolves the restored muted rosewood card color through shared note appearance', () => {
+    expect(getCaptureNoteGradient({ noteColor: 'muted-rosewood' })).toEqual(['#6B4C57', '#A57A84']);
+    expect(
+      getTextNoteCardGradient({ text: 'Rose note', noteId: 'rose-1', noteColor: 'muted-rosewood' })
+    ).toEqual(['#6B4C57', '#A57A84']);
+  });
+
   it('uses the theme fallback for saved notes that stay on the app default color', () => {
     expect(
       getTextNoteCardGradient({

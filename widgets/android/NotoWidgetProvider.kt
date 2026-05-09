@@ -1408,7 +1408,7 @@ class NotoWidgetProvider : AppWidgetProvider() {
         "cotton-candy-theme", "cotton-candy-theme-light", "cotton-candy-theme-dark" -> return R.drawable.noto_widget_badge_light_cotton_candy
         "violet-bloom", "periwinkle-ink", "chrome-rare", "aurora-rgb" -> return R.drawable.noto_widget_badge_light_lavender
         "peach-theme", "peach-theme-light", "peach-theme-dark" -> return R.drawable.noto_widget_badge_light_peach
-        "sunset-coral", "raspberry-dusk" -> return R.drawable.noto_widget_badge_light_pink
+        "sunset-coral", "raspberry-dusk", "muted-rosewood" -> return R.drawable.noto_widget_badge_light_pink
         "marigold-glow" -> return R.drawable.noto_widget_badge_light_marigold
         "tangerine-clay" -> return R.drawable.noto_widget_badge_light_tangerine
       }
@@ -1454,7 +1454,7 @@ class NotoWidgetProvider : AppWidgetProvider() {
         "cotton-candy-theme", "cotton-candy-theme-light", "cotton-candy-theme-dark" -> return Color.parseColor("#6E5B83")
         "violet-bloom", "periwinkle-ink", "chrome-rare", "aurora-rgb" -> return Color.parseColor("#655884")
         "peach-theme", "peach-theme-light", "peach-theme-dark" -> return Color.parseColor("#7B5861")
-        "sunset-coral", "raspberry-dusk" -> return Color.parseColor("#7A5568")
+        "sunset-coral", "raspberry-dusk", "muted-rosewood" -> return Color.parseColor("#7A5568")
         "marigold-glow" -> return Color.parseColor("#7A5A46")
         "tangerine-clay" -> return Color.parseColor("#84523A")
       }
