@@ -14,6 +14,7 @@ import {
 } from '../../services/startupRouting';
 import { registerSocialPushBackgroundTaskAsync } from '../../utils/backgroundSocialPush';
 import { scheduleOnIdle } from '../../utils/scheduleOnIdle';
+import { logStartupEvent, traceStartupAsync } from '../../utils/startupTrace';
 import { withTimeout } from '../../utils/timeout';
 
 const DATABASE_STARTUP_TIMEOUT_MS = 12000;
@@ -110,12 +111,13 @@ export function useAppStartupBootstrap() {
 
     let cancelled = false;
 
-    void loadStartupRoute('entry').then((nextRoute) => {
-      if (!cancelled) {
-        setStartupRoute(nextRoute);
-        setIsStartupRouteReady(true);
-      }
-    });
+    void traceStartupAsync('startup-route.load', () => loadStartupRoute('entry'))
+      .then((nextRoute) => {
+        if (!cancelled) {
+          setStartupRoute(nextRoute);
+          setIsStartupRouteReady(true);
+        }
+      });
 
     return () => {
       cancelled = true;
@@ -143,7 +145,10 @@ export function useAppStartupBootstrap() {
       return;
     }
 
-    waitForDatabaseStartup()
+    traceStartupAsync('database.init', waitForDatabaseStartup, {
+      attempt: databaseStartup.attempt,
+      recovering: databaseStartup.status === 'recovering',
+    })
       .then(() => {
         if (cancelled) {
           return;
@@ -153,9 +158,13 @@ export function useAppStartupBootstrap() {
         startupIdleHandle = scheduleOnIdle(() => {
           startupTimeout = setTimeout(() => {
             if (arePlaceRemindersEnabled()) {
-              syncGeofenceRegions().catch((err) => console.warn('Geofence sync failed:', err));
+              void traceStartupAsync('geofence.sync-idle', syncGeofenceRegions).catch((err) =>
+                console.warn('Geofence sync failed:', err)
+              );
             }
-            runMediaCacheEviction().catch((err) => console.warn('Cache eviction failed:', err));
+            void traceStartupAsync('media-cache.evict-idle', runMediaCacheEviction).catch((err) =>
+              console.warn('Cache eviction failed:', err)
+            );
           }, 400);
         });
       })
@@ -180,6 +189,14 @@ export function useAppStartupBootstrap() {
       }
     };
   }, [databaseStartup.attempt]);
+
+  useEffect(() => {
+    logStartupEvent('startup.state', {
+      databaseStatus: databaseStartup.status,
+      routeReady: isStartupRouteReady,
+      hasError: Boolean(databaseStartup.error),
+    });
+  }, [databaseStartup.error, databaseStartup.status, isStartupRouteReady]);
 
   return {
     isDatabaseReady: databaseStartup.status === 'ready',

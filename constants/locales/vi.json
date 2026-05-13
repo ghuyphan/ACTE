@@ -560,6 +560,8 @@
         "chatReplyingTo": "Đang trả lời",
         "chatDismissError": "Ẩn lỗi trò chuyện",
         "chatSending": "Đang gửi...",
+        "chatTypingOne": "{{name}} đang nhập",
+        "chatTypingMany": "{{count}} người đang nhập",
         "chatSent": "Đã gửi",
         "chatWithTitle": "Trò chuyện với {{name}}",
         "chatGroupTitle": "Trò chuyện kỷ niệm",

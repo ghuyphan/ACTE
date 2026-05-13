@@ -1,5 +1,6 @@
 import { getLocalPhotoUsageTimeZone } from '../constants/subscription';
 import i18n from '../constants/i18n';
+import { logAppEvent, traceAppAsync } from '../utils/appDiagnostics';
 import { getPersistentItem, setPersistentItem } from '../utils/appStorage';
 import { AppUser } from '../utils/appUser';
 import {
@@ -3026,7 +3027,24 @@ export async function syncNotes(
 
     while (true) {
       runState.requestedMode = cycleRequestedMode;
-      const result = await runSyncCycle(cycleRequestedMode);
+      const result = await traceAppAsync(
+        'sync',
+        'sync.cycle',
+        () => runSyncCycle(cycleRequestedMode),
+        {
+          queuedFull: runState.queuedMode === 'full',
+          requestedMode: cycleRequestedMode,
+          signedIn: Boolean(user),
+        }
+      );
+      logAppEvent('sync', 'sync.cycle.result', {
+        bootstrapCompleted: result.bootstrapCompleted,
+        failedCount: result.failedCount,
+        importedCount: result.importedCount,
+        status: result.status,
+        syncedCount: result.syncedCount,
+        uploadedCount: result.uploadedCount,
+      });
 
       if (runState.queuedMode === 'full' && runState.currentMode !== 'full') {
         runState.queuedMode = null;

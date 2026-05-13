@@ -45,6 +45,7 @@ import { getNotePhotoUri } from '../../services/photoStorage';
 import { getNotePairedVideoUri } from '../../services/livePhotoStorage';
 import { scheduleWidgetDataUpdate } from '../../services/widgetService';
 import type { UpdateWidgetDataOptions } from '../../services/widgetService';
+import { traceAppAsync } from '../../utils/appDiagnostics';
 import { scheduleOnIdle } from '../../utils/scheduleOnIdle';
 import { traceStartupAsync } from '../../utils/startupTrace';
 import { withTimeoutResult } from '../../utils/timeout';
@@ -482,15 +483,27 @@ function useNotesStoreValue(): { state: NotesStateValue; actions: NotesActionsVa
       const scope = activeScopeRef.current;
       const scopeRevision = activeScopeRevisionRef.current;
       const timestamp = new Date().toISOString();
-      const note = await dbCreate(input, {
-        scope,
-        syncChange: {
-          type: 'create',
-          entity: 'note',
-          payload: input,
-          timestamp,
-        },
-      });
+      const note = await traceAppAsync(
+        'notes',
+        'note.create',
+        () =>
+          dbCreate(input, {
+            scope,
+            syncChange: {
+              type: 'create',
+              entity: 'note',
+              payload: input,
+              timestamp,
+            },
+          }),
+        {
+          hasDoodle: Boolean(input.hasDoodle),
+          hasPhoto: input.type === 'photo',
+          hasStickers: Boolean(input.hasStickers),
+          signedIn: scope !== LOCAL_NOTES_SCOPE,
+          type: input.type,
+        }
+      );
       if (!isCurrentScope(scope, scopeRevision)) {
         return note;
       }
@@ -512,16 +525,25 @@ function useNotesStoreValue(): { state: NotesStateValue; actions: NotesActionsVa
     async (id: string, updates: NoteUpdates) => {
       const scope = activeScopeRef.current;
       const scopeRevision = activeScopeRevisionRef.current;
-      await dbUpdate(id, updates, {
-        scope,
-        syncChange: {
-          type: 'update',
-          entity: 'note',
-          entityId: id,
-          payload: updates,
-          timestamp: new Date().toISOString(),
-        },
-      });
+      await traceAppAsync(
+        'notes',
+        'note.update',
+        () =>
+          dbUpdate(id, updates, {
+            scope,
+            syncChange: {
+              type: 'update',
+              entity: 'note',
+              entityId: id,
+              payload: updates,
+              timestamp: new Date().toISOString(),
+            },
+          }),
+        {
+          fieldCount: Object.keys(updates).length,
+          signedIn: scope !== LOCAL_NOTES_SCOPE,
+        }
+      );
       if (!isCurrentScope(scope, scopeRevision)) {
         return;
       }
@@ -615,15 +637,25 @@ function useNotesStoreValue(): { state: NotesStateValue; actions: NotesActionsVa
           ? await dbGetByIdForScope(id, scope)
           : await dbGetById(id);
 
-      await dbDelete(id, {
-        scope,
-        syncChange: {
-          type: 'delete',
-          entity: 'note',
-          entityId: id,
-          timestamp: new Date().toISOString(),
-        },
-      });
+      await traceAppAsync(
+        'notes',
+        'note.delete',
+        () =>
+          dbDelete(id, {
+            scope,
+            syncChange: {
+              type: 'delete',
+              entity: 'note',
+              entityId: id,
+              timestamp: new Date().toISOString(),
+            },
+          }),
+        {
+          hadNote: Boolean(note),
+          signedIn: scope !== LOCAL_NOTES_SCOPE,
+          type: note?.type ?? null,
+        }
+      );
       if (!isCurrentScope(scope, scopeRevision)) {
         return;
       }

@@ -36,6 +36,7 @@ import type {
   SharedPost,
   SharedPostResponse,
   SharedPostResponseReaction,
+  SharedPostTypingUser,
 } from '../../../services/sharedFeedService';
 import { getUserSocialName } from '../../../utils/appUser';
 import { formatChatTimestamp } from '../../../utils/dateUtils';
@@ -82,6 +83,11 @@ type ReactionOverlay = {
   pageY: number;
 } | null;
 
+type SharedPostTypingSubscription = {
+  setTyping: (isTyping: boolean) => void;
+  unsubscribe: () => void;
+};
+
 const RESPONSE_SKELETON_ROWS = [
   { key: 'incoming-short', isSelf: false, width: '44%', minHeight: 40 },
   { key: 'self-reaction', isSelf: true, width: 54, minHeight: 44 },
@@ -91,6 +97,8 @@ const RESPONSE_SKELETON_ROWS = [
 const QUICK_RESPONSES = ['💛', '🥹', '✨', '😂'] as const;
 const RESPONSE_PAGE_SIZE = 50;
 const MAX_REMEMBERED_RESPONSE_THREADS = 24;
+const TYPING_IDLE_MS = 3500;
+const TYPING_HEARTBEAT_MS = 2500;
 const THREAD_SCROLL_POSITION_CONFIG = {
   startRenderingFromBottom: true,
   autoscrollToBottomThreshold: 0.25,
@@ -338,6 +346,54 @@ function ReactionTrayButton({
         <Text style={styles.reactionTrayText}>{emoji}</Text>
       </Pressable>
     </Animated.View>
+  );
+}
+
+function TypingIndicatorDots({ color }: { color: string }) {
+  const progress = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const animation = Animated.loop(
+      Animated.timing(progress, {
+        toValue: 1,
+        duration: 1050,
+        useNativeDriver: true,
+      })
+    );
+    animation.start();
+    return () => animation.stop();
+  }, [progress]);
+
+  return (
+    <View style={styles.typingDots} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+      {[0, 1, 2].map((index) => {
+        const dotProgress = progress.interpolate({
+          inputRange: [0, 0.25 + index * 0.16, 0.5 + index * 0.16, 1],
+          outputRange: [0.35, 0.35, 1, 0.35],
+          extrapolate: 'clamp',
+        });
+        return (
+          <Animated.View
+            key={index}
+            style={[
+              styles.typingDot,
+              {
+                backgroundColor: color,
+                opacity: dotProgress,
+                transform: [
+                  {
+                    translateY: dotProgress.interpolate({
+                      inputRange: [0.35, 1],
+                      outputRange: [0, -2],
+                    }),
+                  },
+                ],
+              },
+            ]}
+          />
+        );
+      })}
+    </View>
   );
 }
 
@@ -652,6 +708,10 @@ export default function SharedPostChatScreen({
     sharedPosts = [],
     getSharedPostResponsesPage = async () => [],
     subscribeToSharedPostResponses,
+    subscribeToSharedPostTyping = () => ({
+      setTyping: () => undefined,
+      unsubscribe: () => undefined,
+    }),
     updateFriendNickname = async () => undefined,
     createSharedPostResponseReaction = async () => {
       throw new Error(t('shared.responseSendFailed', 'Could not send response.'));
@@ -681,11 +741,16 @@ export default function SharedPostChatScreen({
   const [isSavingNickname, setIsSavingNickname] = useState(false);
   const [replyTarget, setReplyTarget] = useState<SharedPostResponse | null>(null);
   const [reactionOverlay, setReactionOverlay] = useState<ReactionOverlay>(null);
+  const [typingUsers, setTypingUsers] = useState<SharedPostTypingUser[]>([]);
   const [highlightedResponseId, setHighlightedResponseId] = useState<string | null>(null);
   const [composerHeight, setComposerHeight] = useState(96);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const listRef = useRef<FlashListRef<ChatListItem> | null>(null);
   const composerFocusedRef = useRef(false);
+  const typingSubscriptionRef = useRef<SharedPostTypingSubscription | null>(null);
+  const typingIdleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isTypingRef = useRef(false);
+  const lastTypingPublishAtRef = useRef(0);
   const pendingResponsesRef = useRef<Map<string, SharedPostResponse>>(new Map());
   const lastMarkedReadSignatureRef = useRef<string | null>(null);
   const optimisticSequenceRef = useRef(0);
@@ -759,12 +824,85 @@ export default function SharedPostChatScreen({
     [getAuthorLabel, responseById]
   );
 
+  const clearTypingIdleTimer = useCallback(() => {
+    if (typingIdleTimerRef.current) {
+      clearTimeout(typingIdleTimerRef.current);
+      typingIdleTimerRef.current = null;
+    }
+  }, []);
+
+  const publishOwnTypingState = useCallback(
+    (isTyping: boolean, options: { force?: boolean } = {}) => {
+      const subscription = typingSubscriptionRef.current;
+      if (!subscription) {
+        return;
+      }
+
+      const now = Date.now();
+      const shouldPublish =
+        options.force ||
+        isTypingRef.current !== isTyping ||
+        (isTyping && now - lastTypingPublishAtRef.current > TYPING_HEARTBEAT_MS);
+      if (!shouldPublish) {
+        return;
+      }
+
+      isTypingRef.current = isTyping;
+      lastTypingPublishAtRef.current = now;
+      subscription.setTyping(isTyping);
+    },
+    []
+  );
+
+  const handleDraftChange = useCallback(
+    (nextDraft: string) => {
+      setDraft(nextDraft);
+      clearTypingIdleTimer();
+
+      if (!nextDraft.trim()) {
+        publishOwnTypingState(false, { force: true });
+        return;
+      }
+
+      publishOwnTypingState(true);
+      typingIdleTimerRef.current = setTimeout(() => {
+        publishOwnTypingState(false, { force: true });
+      }, TYPING_IDLE_MS);
+    },
+    [clearTypingIdleTimer, publishOwnTypingState]
+  );
+
   useEffect(() => {
     setActiveSharedChatPostId(postId);
     return () => {
       setActiveSharedChatPostId(null);
     };
   }, [postId]);
+
+  useEffect(() => {
+    if (!post || !user?.uid) {
+      setTypingUsers([]);
+      return;
+    }
+
+    const subscription = subscribeToSharedPostTyping(postId, {
+      onTypingUsers: setTypingUsers,
+      onError: () => undefined,
+    });
+    typingSubscriptionRef.current = subscription;
+    isTypingRef.current = false;
+    lastTypingPublishAtRef.current = 0;
+
+    return () => {
+      clearTypingIdleTimer();
+      subscription.setTyping(false);
+      subscription.unsubscribe();
+      typingSubscriptionRef.current = null;
+      isTypingRef.current = false;
+      lastTypingPublishAtRef.current = 0;
+      setTypingUsers([]);
+    };
+  }, [clearTypingIdleTimer, post, postId, subscribeToSharedPostTyping, user?.uid]);
 
   useEffect(() => {
     pendingInitialResponseIdRef.current = normalizedInitialResponseId;
@@ -1102,6 +1240,8 @@ export default function SharedPostChatScreen({
       });
       if (!emoji) {
         setDraft('');
+        clearTypingIdleTimer();
+        publishOwnTypingState(false, { force: true });
       }
       if (!explicitReplyToResponseId) {
         setReplyTarget(null);
@@ -1147,7 +1287,17 @@ export default function SharedPostChatScreen({
         setIsSending(false);
       }
     },
-    [createSharedPostResponse, draft, isSending, post, replyTarget, t, user]
+    [
+      clearTypingIdleTimer,
+      createSharedPostResponse,
+      draft,
+      isSending,
+      post,
+      publishOwnTypingState,
+      replyTarget,
+      t,
+      user,
+    ]
   );
 
   const sendReaction = useCallback(
@@ -1433,7 +1583,10 @@ export default function SharedPostChatScreen({
   }, []);
 
   const composerKeyboardOffset = Math.max(0, keyboardHeight - insets.bottom);
-  const contentBottomPadding = composerHeight + composerKeyboardOffset + 18;
+  const contentBottomPadding =
+    composerHeight +
+    composerKeyboardOffset +
+    (typingUsers.some((typingUser) => typingUser.userId !== user?.uid) ? 42 : 18);
   const renderMemoryHeader = useCallback(() => {
     if (!post) {
       return null;
@@ -1757,6 +1910,21 @@ export default function SharedPostChatScreen({
     activeReactionOverlayResponse?.reactions?.find(
       (reaction) => reaction.authorUid === user?.uid
     )?.emoji ?? null;
+  const visibleTypingUsers = typingUsers.filter((typingUser) => typingUser.userId !== user?.uid);
+  const typingIndicatorLabel =
+    visibleTypingUsers.length === 0
+      ? null
+      : visibleTypingUsers.length === 1
+        ? t('shared.chatTypingOne', '{{name}} is typing', {
+            name: getAuthorIdentity(
+              visibleTypingUsers[0].userId,
+              visibleTypingUsers[0].displayName,
+              visibleTypingUsers[0].photoURL
+            ).label,
+          })
+        : t('shared.chatTypingMany', '{{count}} people are typing', {
+            count: visibleTypingUsers.length,
+          });
 
   return (
     <View
@@ -1922,7 +2090,7 @@ export default function SharedPostChatScreen({
               data={responseGroups}
               keyExtractor={(item) => item.id}
               renderItem={renderResponseItem}
-              extraData={responses.length}
+              extraData={responses}
               ItemSeparatorComponent={() => <View style={styles.messageSeparator} />}
               ListEmptyComponent={renderEmptyThread}
               maintainVisibleContentPosition={THREAD_SCROLL_POSITION_CONFIG}
@@ -1952,6 +2120,27 @@ export default function SharedPostChatScreen({
               },
             ]}
           >
+            {typingIndicatorLabel ? (
+              <View
+                accessibilityRole="text"
+                accessibilityLabel={typingIndicatorLabel}
+                style={[
+                  styles.typingIndicator,
+                  {
+                    backgroundColor: colors.surface,
+                    borderColor: colors.border,
+                  },
+                ]}
+              >
+                <TypingIndicatorDots color={colors.primary} />
+                <Text
+                  numberOfLines={1}
+                  style={[styles.typingIndicatorText, { color: colors.secondaryText }]}
+                >
+                  {typingIndicatorLabel}
+                </Text>
+              </View>
+            ) : null}
             {errorMessage ? (
               <View style={styles.errorRow}>
                 <Text style={[styles.errorText, { color: colors.danger }]} numberOfLines={2}>
@@ -2018,7 +2207,7 @@ export default function SharedPostChatScreen({
             >
               <TextInput
                 value={draft}
-                onChangeText={setDraft}
+                onChangeText={handleDraftChange}
                 placeholder={t('shared.chatComposerPlaceholder', 'Reply to this memory')}
                 placeholderTextColor={colors.secondaryText}
                 accessibilityLabel={t('shared.chatComposerA11y', 'Message')}
@@ -2030,10 +2219,15 @@ export default function SharedPostChatScreen({
                 style={[styles.composerInput, { color: colors.text }]}
                 onFocus={() => {
                   composerFocusedRef.current = true;
+                  if (draft.trim()) {
+                    publishOwnTypingState(true, { force: true });
+                  }
                   scrollToThreadEnd(true);
                 }}
                 onBlur={() => {
                   composerFocusedRef.current = false;
+                  clearTypingIdleTimer();
+                  publishOwnTypingState(false, { force: true });
                 }}
                 onSubmitEditing={() => {
                   void sendResponse();
@@ -2570,6 +2764,20 @@ const styles = StyleSheet.create({
     fontSize: 24,
     lineHeight: 29,
   },
+  typingDots: {
+    width: 34,
+    height: 18,
+    borderRadius: 9,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+  },
+  typingDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
+  },
   loadingMessageBubble: {
     maxWidth: '78%',
     borderRadius: 18,
@@ -2637,6 +2845,31 @@ const styles = StyleSheet.create({
     paddingHorizontal: Layout.screenPadding,
     paddingTop: 9,
     gap: 7,
+  },
+  typingIndicator: {
+    alignSelf: 'flex-start',
+    maxWidth: '82%',
+    minHeight: 32,
+    borderRadius: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingLeft: 7,
+    paddingRight: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  typingIndicatorText: {
+    flexShrink: 1,
+    minWidth: 0,
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '700',
+    fontFamily: 'Noto Sans',
   },
   reactionOverlayLayer: {
     ...StyleSheet.absoluteFillObject,

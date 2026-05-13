@@ -560,6 +560,8 @@
         "chatReplyingTo": "Replying to",
         "chatDismissError": "Dismiss chat error",
         "chatSending": "Sending...",
+        "chatTypingOne": "{{name}} is typing",
+        "chatTypingMany": "{{count}} people are typing",
         "chatSent": "Sent",
         "chatWithTitle": "Chat with {{name}}",
         "chatGroupTitle": "Memory chat",

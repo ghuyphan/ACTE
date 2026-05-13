@@ -49,6 +49,7 @@ import {
   type ReminderPermissionRequestResult,
 } from '../../hooks/useGeofence';
 import { useNoteDetailSheet } from '../../hooks/useNoteDetailSheet';
+import { startAppSpan } from '../../utils/appDiagnostics';
 import { showAppAlert } from '../../utils/alert';
 import { useNotesStore } from '../../hooks/useNotes';
 import { useReducedMotion } from '../../hooks/useReducedMotion';
@@ -2470,6 +2471,16 @@ export default function HomeScreen() {
     }
 
     saveInFlightRef.current = true;
+    let saveOutcome = 'unknown';
+    const saveSpan = startAppSpan('capture', 'capture.save-note', {
+      cameraSubmode,
+      captureMode,
+      captureTarget,
+      hasCapturedPhoto: Boolean(capturedPhoto),
+      hasLivePhotoVideo: Boolean(capturedPairedVideo),
+      photoFilter: selectedPhotoFilterId,
+      signedIn: Boolean(user),
+    });
 
     try {
       const doodleSnapshot = captureCardRef.current?.getDoodleSnapshot() ?? {
@@ -2487,6 +2498,7 @@ export default function HomeScreen() {
         doodleSnapshot.strokes.length === 0 &&
         stickerSnapshot.placements.length === 0
       ) {
+        saveOutcome = 'validation_empty_text';
         showDoneSheet(
           'warning',
           t('capture.error', 'Error'),
@@ -2496,6 +2508,7 @@ export default function HomeScreen() {
       }
 
       if (captureMode === 'camera' && !capturedPhoto) {
+        saveOutcome = 'validation_missing_photo';
         showDoneSheet(
           'warning',
           t('capture.error', 'Error'),
@@ -2505,6 +2518,7 @@ export default function HomeScreen() {
       }
 
       if (captureMode === 'camera' && !isPhotoNoteQuotaReady) {
+        saveOutcome = 'quota_not_ready';
         showDoneSheet(
           'warning',
           t('capture.photoLimitCheckingTitle', 'Checking today\'s photo limit'),
@@ -2517,6 +2531,7 @@ export default function HomeScreen() {
       }
 
       if (captureMode === 'camera' && !canSaveAnotherPhotoNote) {
+        saveOutcome = 'quota_limit';
         showPlusSheet('limit');
         return;
       }
@@ -2533,6 +2548,7 @@ export default function HomeScreen() {
             setNoteColor(getFallbackFreeNoteColor(lastFreeNoteColorRef.current, noteColor));
           }
           if (choice !== 'upgrade-success') {
+            saveOutcome = `premium_${choice}`;
             return;
           }
         }
@@ -2573,6 +2589,7 @@ export default function HomeScreen() {
       }
 
       if (!saveCoordinate) {
+        saveOutcome = 'location_unavailable';
         setSaveButtonState('idle');
         showDoneSheet(
           'error',
@@ -2750,19 +2767,24 @@ export default function HomeScreen() {
         }
 
         if (shareOutcome === 'default' && remindersEnabled) {
+          saveOutcome = 'saved_inline_reminder';
           completeInlineSaveFlow(createdNote);
         } else if (shareOutcome === 'shared') {
+          saveOutcome = 'saved_shared';
           completeInlineSaveFlow(createdNote);
         } else if (shareOutcome === 'default') {
+          saveOutcome = 'saved_private';
           setSaveButtonState('idle');
           finalizeSavedCapture();
           showSavedSheet(createdNote.id);
         } else {
+          saveOutcome = shareOutcome;
           setSaveButtonState('idle');
           finalizeSavedCapture();
           showSharedSaveSheet(shareOutcome, shareFailureMessage, createdNote.id);
         }
       } catch (error) {
+        saveOutcome = 'failed';
         console.error('Save failed:', error);
         setSaveButtonState('idle');
         setSuppressedHomeNoteIds((current) => current.filter((id) => id !== pendingNoteId));
@@ -2798,6 +2820,7 @@ export default function HomeScreen() {
     } finally {
       setSaving(false);
       saveInFlightRef.current = false;
+      saveSpan.finish({ outcome: saveOutcome });
     }
   }, [
     location,

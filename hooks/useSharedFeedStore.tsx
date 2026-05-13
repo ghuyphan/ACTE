@@ -31,10 +31,12 @@ import {
   SharedPost,
   SharedPostResponse,
   SharedPostResponseReaction,
+  SharedPostTypingUser,
   SharedThreadSummary,
   subscribeToFriendPresence,
   subscribeToSharedFeed,
   subscribeToSharedPostResponses as subscribeToPostResponses,
+  subscribeToSharedPostTyping as subscribeToPostTyping,
   updateFriendGroup as saveGroup,
   updateFriendNickname as saveFriendNickname,
   updateOwnPresenceLastSeen,
@@ -124,6 +126,16 @@ interface SharedFeedStoreValue {
       onStatus?: (status: 'connecting' | 'connected' | 'disconnected') => void;
     }
   ) => () => void;
+  subscribeToSharedPostTyping: (
+    postId: string,
+    options: {
+      onTypingUsers: (users: SharedPostTypingUser[]) => void;
+      onError?: (error: unknown) => void;
+    }
+  ) => {
+    setTyping: (isTyping: boolean) => void;
+    unsubscribe: () => void;
+  };
   createSharedPostResponse: (
     postId: string,
     input: { emoji?: string | null; text?: string | null; replyToResponseId?: string | null }
@@ -1749,6 +1761,24 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
           disposed = true;
           unsubscribe();
         };
+      },
+      subscribeToSharedPostTyping: (
+        postId: string,
+        options: {
+          onTypingUsers: (users: SharedPostTypingUser[]) => void;
+          onError?: (error: unknown) => void;
+        }
+      ) => {
+        const activeUser = requireUser();
+        if (!isOnline) {
+          options.onTypingUsers([]);
+          return {
+            setTyping: () => undefined,
+            unsubscribe: () => undefined,
+          };
+        }
+
+        return subscribeToPostTyping(activeUser, postId, options);
       },
       createSharedPostResponse: async (
         postId: string,

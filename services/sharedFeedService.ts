@@ -185,6 +185,13 @@ export interface FriendPresenceState {
 
 export type FriendPresenceSnapshot = Record<string, FriendPresenceState>;
 
+export interface SharedPostTypingUser {
+  userId: string;
+  displayName: string | null;
+  photoURL: string | null;
+  updatedAt: string;
+}
+
 export interface SharedFeedSnapshot {
   friends: FriendConnection[];
   friendGroups: FriendGroup[];
@@ -200,6 +207,11 @@ interface SubscribeToSharedFeedOptions {
 
 interface SubscribeToFriendPresenceOptions {
   onPresence: (presence: FriendPresenceSnapshot) => void;
+  onError?: (error: unknown) => void;
+}
+
+interface SubscribeToSharedPostTypingOptions {
+  onTypingUsers: (users: SharedPostTypingUser[]) => void;
   onError?: (error: unknown) => void;
 }
 
@@ -2237,6 +2249,58 @@ function getOnlinePresenceKeys(state: Record<string, unknown>) {
   return onlineKeys;
 }
 
+type SharedPostTypingPresenceMeta = {
+  user_id?: string | null;
+  display_name?: string | null;
+  photo_url?: string | null;
+  is_typing?: boolean | null;
+  typing_at?: string | null;
+};
+
+const SHARED_POST_TYPING_STALE_MS = 8000;
+
+function getTypingUsersFromPresenceState(
+  state: Record<string, unknown>,
+  ownUserId: string
+): SharedPostTypingUser[] {
+  const now = Date.now();
+  const typingUsers: SharedPostTypingUser[] = [];
+
+  for (const [presenceKey, presences] of Object.entries(state)) {
+    if (presenceKey === ownUserId || !Array.isArray(presences)) {
+      continue;
+    }
+
+    const latestTypingPresence = presences
+      .map((presence) => presence as SharedPostTypingPresenceMeta)
+      .filter((presence) => presence.is_typing && presence.typing_at)
+      .sort(
+        (left, right) =>
+          new Date(right.typing_at ?? '').getTime() - new Date(left.typing_at ?? '').getTime()
+      )[0];
+
+    if (!latestTypingPresence?.typing_at) {
+      continue;
+    }
+
+    const typingTime = new Date(latestTypingPresence.typing_at).getTime();
+    if (!Number.isFinite(typingTime) || now - typingTime > SHARED_POST_TYPING_STALE_MS) {
+      continue;
+    }
+
+    typingUsers.push({
+      userId: latestTypingPresence.user_id?.trim() || presenceKey,
+      displayName: latestTypingPresence.display_name?.trim() || null,
+      photoURL: latestTypingPresence.photo_url?.trim() || null,
+      updatedAt: latestTypingPresence.typing_at,
+    });
+  }
+
+  return typingUsers.sort(
+    (left, right) => new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime()
+  );
+}
+
 async function getFriendLastSeenMap(friendUserIds: string[]) {
   const supabase = requireSupabase();
   const { data, error } = await supabase
@@ -2380,6 +2444,95 @@ export function subscribeToFriendPresence(
     void updateOwnPresenceLastSeen(user).catch(() => undefined);
     void channel.untrack();
     void supabase.removeChannel(channel);
+  };
+}
+
+export function subscribeToSharedPostTyping(
+  user: AppUser,
+  postId: string,
+  options: SubscribeToSharedPostTypingOptions
+) {
+  const normalizedPostId = postId.trim();
+  const ownUserId = user.uid || user.id;
+  if (!normalizedPostId || !ownUserId) {
+    options.onTypingUsers([]);
+    return {
+      setTyping: () => undefined,
+      unsubscribe: () => undefined,
+    };
+  }
+
+  const supabase = requireSupabase();
+  let disposed = false;
+  let subscribed = false;
+  let pendingTypingState: boolean | null = null;
+
+  const channel = supabase.channel(`shared-post-typing:${normalizedPostId}`, {
+    config: {
+      presence: {
+        key: ownUserId,
+      },
+    },
+  });
+
+  const emitTypingUsers = () => {
+    if (disposed) {
+      return;
+    }
+
+    options.onTypingUsers(
+      getTypingUsersFromPresenceState(channel.presenceState() as Record<string, unknown>, ownUserId)
+    );
+  };
+
+  const trackTyping = (isTyping: boolean) => {
+    if (disposed) {
+      return;
+    }
+
+    if (!subscribed) {
+      pendingTypingState = isTyping;
+      return;
+    }
+
+    void channel
+      .track({
+        user_id: ownUserId,
+        display_name: getDisplayName(user),
+        photo_url: user.photoURL ?? null,
+        is_typing: isTyping,
+        typing_at: isTyping ? getNowIso() : null,
+      })
+      .then(emitTypingUsers)
+      .catch((error) => {
+        if (!disposed) {
+          options.onError?.(error);
+        }
+      });
+  };
+
+  channel
+    .on('presence', { event: 'sync' }, emitTypingUsers)
+    .on('presence', { event: 'join' }, emitTypingUsers)
+    .on('presence', { event: 'leave' }, emitTypingUsers)
+    .subscribe((status) => {
+      if (disposed || status !== 'SUBSCRIBED') {
+        return;
+      }
+
+      subscribed = true;
+      trackTyping(pendingTypingState ?? false);
+      pendingTypingState = null;
+    });
+
+  return {
+    setTyping: trackTyping,
+    unsubscribe: () => {
+      disposed = true;
+      options.onTypingUsers([]);
+      void channel.untrack();
+      void supabase.removeChannel(channel);
+    },
   };
 }
 

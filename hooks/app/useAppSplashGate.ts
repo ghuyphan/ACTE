@@ -1,6 +1,7 @@
 import { SplashScreen } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { hasInitializedI18n, i18nReady } from '../../constants/i18n';
+import { logStartupEvent } from '../../utils/startupTrace';
 
 interface UseAppSplashGateOptions {
   authReady: boolean;
@@ -65,18 +66,40 @@ export function useAppSplashGate({
     }
 
     hasHiddenSplashRef.current = true;
+    logStartupEvent('splash.hide:scheduled', {
+      authReady,
+      homeInitialFeedReady,
+      isDatabaseReady,
+      isStartupRouteReady,
+      notesReady,
+      themeReady,
+    });
     let cancelled = false;
 
     requestAnimationFrame(() => {
       if (!cancelled) {
-        void SplashScreen.hideAsync();
+        void SplashScreen.hideAsync()
+          .then(() => {
+            logStartupEvent('splash.hide:done');
+          })
+          .catch((error) => {
+            logStartupEvent('splash.hide:failed', { error });
+          });
       }
     });
 
     return () => {
       cancelled = true;
     };
-  }, [startupGateReady]);
+  }, [
+    authReady,
+    homeInitialFeedReady,
+    isDatabaseReady,
+    isStartupRouteReady,
+    notesReady,
+    startupGateReady,
+    themeReady,
+  ]);
 
   return {
     i18nInitialized,

@@ -1,6 +1,7 @@
 import * as Location from 'expo-location';
 import { Appearance, Platform } from 'react-native';
 import i18n from '../constants/i18n';
+import { startAppSpan } from '../utils/appDiagnostics';
 import { getPersistentItem, setPersistentItem } from '../utils/appStorage';
 import { getSupabaseUser } from '../utils/supabase';
 import { formatDate } from '../utils/dateUtils';
@@ -710,10 +711,21 @@ async function buildWidgetTimeline(options: {
 }
 
 async function runWidgetUpdate(options: UpdateWidgetDataOptions = {}): Promise<WidgetUpdateResult> {
+  const span = startAppSpan('widget', 'widget.update', {
+    hasProvidedNotes: Boolean(options.notes),
+    hasProvidedSharedPosts: Boolean(options.sharedPosts),
+    includeLocationLookup: options.includeLocationLookup !== false,
+    includeSharedRefresh: options.includeSharedRefresh === true,
+    platform: Platform.OS,
+    preferred: Boolean(options.preferredNoteId),
+  });
+
   if (Platform.OS !== 'ios' && Platform.OS !== 'android') {
-    return {
+    const result: WidgetUpdateResult = {
       status: 'skipped_platform',
     };
+    span.finish({ status: result.status });
+    return result;
   }
 
   try {
@@ -758,25 +770,31 @@ async function runWidgetUpdate(options: UpdateWidgetDataOptions = {}): Promise<W
 
     const deliverySignature = getPlatformWidgetDeliverySignature(deliveredEntries);
     if (!deliverySignature) {
-      return {
+      const result: WidgetUpdateResult = {
         status: 'skipped_platform',
         deliveredProps,
       };
+      span.finish({ status: result.status });
+      return result;
     }
 
     if (lastPlatformDeliverySignature === deliverySignature) {
-      return {
+      const result: WidgetUpdateResult = {
         status: 'skipped_unchanged',
         deliveredProps,
       };
+      span.finish({ status: result.status });
+      return result;
     }
 
     const deliveryStatus = updatePlatformWidgetTimeline(deliveredEntries);
     if (deliveryStatus !== 'updated') {
-      return {
+      const result: WidgetUpdateResult = {
         status: 'skipped_platform',
         deliveredProps,
       };
+      span.finish({ status: result.status });
+      return result;
     }
 
     lastPlatformDeliverySignature = deliverySignature;
@@ -785,17 +803,25 @@ async function runWidgetUpdate(options: UpdateWidgetDataOptions = {}): Promise<W
       await saveRecentWidgetCandidateKeys(deliveredCandidateKeys);
     }
 
-    return {
+    const result: WidgetUpdateResult = {
       status: nextStatus,
       deliveredProps,
     };
+    span.finish({
+      deliveredCandidateCount: deliveredCandidateKeys.length,
+      status: result.status,
+      timelineEntryCount: deliveredEntries.length,
+    });
+    return result;
   } catch (error) {
     const errorMessage = getWidgetWarningMessage(error);
     console.warn('[widgetService] Failed to update widget:', errorMessage);
-    return {
+    const result: WidgetUpdateResult = {
       status: 'failed',
       errorMessage,
     };
+    span.fail(error, { status: result.status });
+    return result;
   }
 }
 
