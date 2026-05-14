@@ -477,7 +477,7 @@ export function buildMapViewportState({
   };
 }
 
-function areRegionsEquivalent(left: Region | null, right: Region) {
+export function areRegionsEquivalent(left: Region | null, right: Region) {
   if (!left) {
     return false;
   }

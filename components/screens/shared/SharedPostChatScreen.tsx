@@ -7,6 +7,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { useTranslation } from 'react-i18next';
 import {
   Animated,
+  AppState,
   Keyboard,
   PanResponder,
   Platform,
@@ -20,13 +21,27 @@ import {
   type GestureResponderEvent,
   type KeyboardEvent,
   type LayoutChangeEvent,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
   type StyleProp,
   type ViewStyle,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Layout } from '../../../constants/theme';
 import { useAuth } from '../../../hooks/useAuth';
+import { useConnectivity } from '../../../hooks/useConnectivity';
+import * as Haptics from '../../../hooks/useHaptics';
 import { useSharedFeedStore } from '../../../hooks/useSharedFeed';
+import {
+  areChatResponseListsEqual as areResponseListsEqualFromThread,
+  getResponseDeliveryStatus,
+  isReactionOnlyResponse,
+  mergeChatResponses,
+  useSharedPostChatThreadPresentation,
+  type ChatDeliveryStatus,
+  type ChatListItem,
+  type ChatThreadResponse as SharedPostChatThreadResponse,
+} from '../../../hooks/shared/useSharedPostChatThread';
 import { useTheme } from '../../../hooks/useTheme';
 import {
   getNoteCardTextPalette,
@@ -35,7 +50,6 @@ import {
 import type {
   SharedPost,
   SharedPostResponse,
-  SharedPostResponseReaction,
   SharedPostTypingUser,
 } from '../../../services/sharedFeedService';
 import { getUserSocialName } from '../../../utils/appUser';
@@ -53,24 +67,7 @@ type SharedPostChatScreenProps = {
   postId: string;
 };
 
-type ChatResponseGroup = {
-  type: 'group';
-  id: string;
-  authorUid: string;
-  authorDisplayName: string | null;
-  authorPhotoURLSnapshot: string | null;
-  responses: SharedPostResponse[];
-  createdAt: string;
-  timeLabel: string;
-};
-
-type ChatDaySeparator = {
-  type: 'day';
-  id: string;
-  label: string;
-};
-
-type ChatListItem = ChatResponseGroup | ChatDaySeparator;
+type ChatThreadResponse = SharedPostChatThreadResponse;
 
 type ReplyPreview = {
   authorLabel: string;
@@ -104,14 +101,14 @@ const THREAD_SCROLL_POSITION_CONFIG = {
   autoscrollToBottomThreshold: 0.25,
   animateAutoScrollToBottom: true,
 } as const;
-const responseSnapshotByPostId = new Map<string, SharedPostResponse[]>();
+const responseSnapshotByPostId = new Map<string, ChatThreadResponse[]>();
 const hydratedResponsePostIds = new Set<string>();
 
 function getRememberedResponses(postId: string) {
   return responseSnapshotByPostId.get(postId) ?? [];
 }
 
-function rememberResponses(postId: string, responses: SharedPostResponse[]) {
+function rememberResponses(postId: string, responses: ChatThreadResponse[]) {
   responseSnapshotByPostId.delete(postId);
   responseSnapshotByPostId.set(postId, responses);
   hydratedResponsePostIds.add(postId);
@@ -350,141 +347,36 @@ function ReactionTrayButton({
 }
 
 function TypingIndicatorDots({ color }: { color: string }) {
-  const progress = useRef(new Animated.Value(0)).current;
+  const opacity = useRef(new Animated.Value(0.45)).current;
 
   useEffect(() => {
     const animation = Animated.loop(
-      Animated.timing(progress, {
-        toValue: 1,
-        duration: 1050,
-        useNativeDriver: true,
-      })
+      Animated.sequence([
+        Animated.timing(opacity, {
+          toValue: 1,
+          duration: 520,
+          useNativeDriver: true,
+        }),
+        Animated.timing(opacity, {
+          toValue: 0.45,
+          duration: 520,
+          useNativeDriver: true,
+        }),
+      ])
     );
     animation.start();
     return () => animation.stop();
-  }, [progress]);
+  }, [opacity]);
 
   return (
-    <View style={styles.typingDots} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-      {[0, 1, 2].map((index) => {
-        const dotProgress = progress.interpolate({
-          inputRange: [0, 0.25 + index * 0.16, 0.5 + index * 0.16, 1],
-          outputRange: [0.35, 0.35, 1, 0.35],
-          extrapolate: 'clamp',
-        });
-        return (
-          <Animated.View
-            key={index}
-            style={[
-              styles.typingDot,
-              {
-                backgroundColor: color,
-                opacity: dotProgress,
-                transform: [
-                  {
-                    translateY: dotProgress.interpolate({
-                      inputRange: [0.35, 1],
-                      outputRange: [0, -2],
-                    }),
-                  },
-                ],
-              },
-            ]}
-          />
-        );
-      })}
-    </View>
+    <Animated.Text
+      accessibilityElementsHidden
+      importantForAccessibility="no-hide-descendants"
+      style={[styles.typingDotsText, { color, opacity }]}
+    >
+      •••
+    </Animated.Text>
   );
-}
-
-function formatMessageGroupTime(date: Date | string) {
-  const timestamp = typeof date === 'string' ? new Date(date) : date;
-  if (!Number.isFinite(timestamp.getTime())) {
-    return '';
-  }
-
-  return new Intl.DateTimeFormat(undefined, {
-    hour: 'numeric',
-    minute: '2-digit',
-  }).format(timestamp);
-}
-
-function isReactionOnlyResponse(response: SharedPostResponse) {
-  return Boolean(response.emoji && response.text.trim().length === 0);
-}
-
-function getDayKey(value: string) {
-  const date = new Date(value);
-  if (!Number.isFinite(date.getTime())) {
-    return 'unknown';
-  }
-
-  return `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
-}
-
-function formatDaySeparatorLabel(value: string, t: ReturnType<typeof useTranslation>['t']) {
-  const date = new Date(value);
-  if (!Number.isFinite(date.getTime())) {
-    return '';
-  }
-
-  const now = new Date();
-  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-  const startOfDate = new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
-  const dayDelta = Math.round((startOfToday - startOfDate) / 86400000);
-  if (dayDelta === 0) {
-    return t('common.today', 'Today');
-  }
-  if (dayDelta === 1) {
-    return t('common.yesterday', 'Yesterday');
-  }
-
-  return new Intl.DateTimeFormat(undefined, {
-    month: 'short',
-    day: 'numeric',
-  }).format(date);
-}
-
-function groupConsecutiveResponses(
-  responses: SharedPostResponse[],
-  t: ReturnType<typeof useTranslation>['t']
-): ChatListItem[] {
-  const groups: ChatListItem[] = [];
-  let currentDayKey: string | null = null;
-
-  for (const response of responses) {
-    const responseDayKey = getDayKey(response.createdAt);
-    if (responseDayKey !== currentDayKey) {
-      currentDayKey = responseDayKey;
-      groups.push({
-        type: 'day',
-        id: `day:${responseDayKey}`,
-        label: formatDaySeparatorLabel(response.createdAt, t),
-      });
-    }
-
-    const previousGroup = groups[groups.length - 1];
-    if (previousGroup?.type === 'group' && previousGroup.authorUid === response.authorUid) {
-      previousGroup.responses.push(response);
-      previousGroup.createdAt = response.createdAt;
-      previousGroup.timeLabel = formatMessageGroupTime(response.createdAt);
-      previousGroup.id = `${previousGroup.responses[0]?.id ?? response.id}:${response.id}`;
-      continue;
-    }
-
-    groups.push({
-      type: 'group',
-      id: response.id,
-      authorUid: response.authorUid,
-      authorDisplayName: response.authorDisplayName,
-      authorPhotoURLSnapshot: response.authorPhotoURLSnapshot,
-      responses: [response],
-      createdAt: response.createdAt,
-      timeLabel: formatMessageGroupTime(response.createdAt),
-    });
-  }
-
-  return groups;
 }
 
 function formatOfflineDuration(
@@ -516,109 +408,6 @@ function formatOfflineDuration(
 
   return t('shared.chatOfflineDays', '{{count}}d ago', {
     count: Math.floor(elapsedHours / 24),
-  });
-}
-
-function isOptimisticResponse(response: SharedPostResponse) {
-  return response.id.startsWith('local-shared-response-');
-}
-
-function isOptimisticReaction(reaction: SharedPostResponseReaction) {
-  return reaction.id.startsWith('local-shared-response-reaction-');
-}
-
-function getReactionTime(reaction: SharedPostResponseReaction) {
-  const time = new Date(reaction.createdAt).getTime();
-  return Number.isFinite(time) ? time : 0;
-}
-
-function mergeResponseReactions(
-  existingReactions: SharedPostResponseReaction[] = [],
-  incomingReactions: SharedPostResponseReaction[] = []
-) {
-  const byAuthorUid = new Map<string, SharedPostResponseReaction>();
-
-  for (const reaction of [...existingReactions, ...incomingReactions]) {
-    const current = byAuthorUid.get(reaction.authorUid);
-    if (!current) {
-      byAuthorUid.set(reaction.authorUid, reaction);
-      continue;
-    }
-
-    const reactionTime = getReactionTime(reaction);
-    const currentTime = getReactionTime(current);
-    const shouldReplace =
-      (isOptimisticReaction(current) &&
-        !isOptimisticReaction(reaction) &&
-        (reaction.emoji === current.emoji || reactionTime >= currentTime)) ||
-      reactionTime >= currentTime;
-    if (shouldReplace) {
-      byAuthorUid.set(reaction.authorUid, reaction);
-    }
-  }
-
-  return Array.from(byAuthorUid.values()).sort(
-    (left, right) => getReactionTime(left) - getReactionTime(right)
-  );
-}
-
-function mergeResponseSnapshot(
-  existing: SharedPostResponse | undefined,
-  incoming: SharedPostResponse
-) {
-  if (!existing) {
-    return incoming;
-  }
-
-  return {
-    ...incoming,
-    reactions: mergeResponseReactions(existing.reactions, incoming.reactions),
-  };
-}
-
-function mergeResponses(
-  remoteResponses: SharedPostResponse[],
-  pendingResponses: SharedPostResponse[]
-) {
-  const byId = new Map<string, SharedPostResponse>();
-  for (const response of remoteResponses) {
-    byId.set(response.id, mergeResponseSnapshot(byId.get(response.id), response));
-  }
-  for (const response of pendingResponses) {
-    byId.set(response.id, mergeResponseSnapshot(byId.get(response.id), response));
-  }
-
-  return Array.from(byId.values()).sort(
-    (left, right) => new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime()
-  );
-}
-
-function areResponseListsEqual(
-  left: SharedPostResponse[],
-  right: SharedPostResponse[]
-) {
-  if (left.length !== right.length) {
-    return false;
-  }
-
-  return left.every((leftResponse, index) => {
-    const rightResponse = right[index];
-    const leftReactionSignature = (leftResponse.reactions ?? [])
-      .map((reaction) => `${reaction.id}:${reaction.authorUid}:${reaction.emoji}:${reaction.createdAt}`)
-      .join('|');
-    const rightReactionSignature = (rightResponse?.reactions ?? [])
-      .map((reaction) => `${reaction.id}:${reaction.authorUid}:${reaction.emoji}:${reaction.createdAt}`)
-      .join('|');
-    return (
-      rightResponse &&
-      leftResponse.id === rightResponse.id &&
-      leftResponse.authorUid === rightResponse.authorUid &&
-      leftResponse.emoji === rightResponse.emoji &&
-      leftResponse.text === rightResponse.text &&
-      leftResponse.replyToResponseId === rightResponse.replyToResponseId &&
-      leftReactionSignature === rightReactionSignature &&
-      leftResponse.createdAt === rightResponse.createdAt
-    );
   });
 }
 
@@ -700,6 +489,7 @@ export default function SharedPostChatScreen({
   const { height: screenHeight, width: screenWidth } = useWindowDimensions();
   const router = useRouter();
   const { user } = useAuth();
+  const { isOnline } = useConnectivity();
   const {
     friends = [],
     friendPresence = {},
@@ -722,7 +512,7 @@ export default function SharedPostChatScreen({
       throw new Error(t('shared.responseSendFailed', 'Could not send response.'));
     },
   } = useSharedFeedStore();
-  const [responses, setResponses] = useState<SharedPostResponse[]>(() =>
+  const [responses, setResponses] = useState<ChatThreadResponse[]>(() =>
     getRememberedResponses(postId)
   );
   const [draft, setDraft] = useState('');
@@ -742,6 +532,9 @@ export default function SharedPostChatScreen({
   const [replyTarget, setReplyTarget] = useState<SharedPostResponse | null>(null);
   const [reactionOverlay, setReactionOverlay] = useState<ReactionOverlay>(null);
   const [typingUsers, setTypingUsers] = useState<SharedPostTypingUser[]>([]);
+  const [connectionStatus, setConnectionStatus] = useState<
+    'connecting' | 'connected' | 'disconnected'
+  >('connecting');
   const [highlightedResponseId, setHighlightedResponseId] = useState<string | null>(null);
   const [composerHeight, setComposerHeight] = useState(96);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
@@ -751,7 +544,8 @@ export default function SharedPostChatScreen({
   const typingIdleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isTypingRef = useRef(false);
   const lastTypingPublishAtRef = useRef(0);
-  const pendingResponsesRef = useRef<Map<string, SharedPostResponse>>(new Map());
+  const isThreadEndVisibleRef = useRef(true);
+  const pendingResponsesRef = useRef<Map<string, ChatThreadResponse>>(new Map());
   const lastMarkedReadSignatureRef = useRef<string | null>(null);
   const optimisticSequenceRef = useRef(0);
   const reactionOverlayProgress = useRef(new Animated.Value(0)).current;
@@ -762,10 +556,16 @@ export default function SharedPostChatScreen({
   const normalizedInitialResponseId = Array.isArray(initialResponseId)
     ? initialResponseId[0]?.trim() || null
     : initialResponseId?.trim() || null;
-  const responseGroups = useMemo(() => groupConsecutiveResponses(responses, t), [responses, t]);
-  const responseById = useMemo(
-    () => new Map(responses.map((response) => [response.id, response] as const)),
-    [responses]
+  const chatThreadLabels = useMemo(
+    () => ({
+      today: t('common.today', 'Today'),
+      yesterday: t('common.yesterday', 'Yesterday'),
+    }),
+    [t]
+  );
+  const { responseById, responseGroups } = useSharedPostChatThreadPresentation(
+    responses,
+    chatThreadLabels
   );
   const friendById = useMemo(() => {
     const next = new Map<string, (typeof friends)[number]>();
@@ -805,7 +605,7 @@ export default function SharedPostChatScreen({
     [getAuthorIdentity]
   );
   const getResponseReplyPreview = useCallback(
-    (response: SharedPostResponse): ReplyPreview => {
+    (response: ChatThreadResponse): ReplyPreview => {
       const replyToResponseId = response.replyToResponseId?.trim();
       if (!replyToResponseId) {
         return null;
@@ -909,6 +709,23 @@ export default function SharedPostChatScreen({
   }, [normalizedInitialResponseId, postId]);
 
   useEffect(() => {
+    if (!isOnline) {
+      setConnectionStatus('disconnected');
+    }
+  }, [isOnline]);
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextState) => {
+      if (nextState !== 'active') {
+        clearTypingIdleTimer();
+        publishOwnTypingState(false, { force: true });
+      }
+    });
+
+    return () => subscription.remove();
+  }, [clearTypingIdleTimer, publishOwnTypingState]);
+
+  useEffect(() => {
     Animated.spring(reactionOverlayProgress, {
       toValue: reactionOverlay ? 1 : 0,
       useNativeDriver: true,
@@ -1009,6 +826,18 @@ export default function SharedPostChatScreen({
       });
     }
 
+    if (!isOnline) {
+      return t('shared.chatOfflineConnection', 'Offline');
+    }
+
+    if (connectionStatus === 'connecting') {
+      return t('shared.chatConnecting', 'Syncing');
+    }
+
+    if (connectionStatus === 'disconnected') {
+      return t('shared.chatWaitingForConnection', 'Waiting for connection');
+    }
+
     const presenceText =
       headerPresenceStatus === 'online'
         ? t('shared.chatOnline', 'Online')
@@ -1023,6 +852,8 @@ export default function SharedPostChatScreen({
     return presenceText;
   }, [
     headerPresenceStatus,
+    connectionStatus,
+    isOnline,
     participantIds.length,
     post,
     primaryPresence?.lastSeenAt,
@@ -1031,12 +862,12 @@ export default function SharedPostChatScreen({
   const shouldShowHeaderPresence = Boolean(post && participantIds.length <= 1);
   const applyRemoteResponses = useCallback((nextResponses: SharedPostResponse[]) => {
     setResponses((current) => {
-      const next = mergeResponses(
+      const next = mergeChatResponses(
         [...current, ...nextResponses],
         Array.from(pendingResponsesRef.current.values())
       );
       rememberResponses(postId, next);
-      return areResponseListsEqual(current, next) ? current : next;
+      return areResponseListsEqualFromThread(current, next) ? current : next;
     });
   }, [postId]);
 
@@ -1049,6 +880,7 @@ export default function SharedPostChatScreen({
     setHasOlderResponses(rememberedResponses.length >= RESPONSE_PAGE_SIZE);
     setIsLoadingOlderResponses(false);
     setErrorMessage(null);
+    setConnectionStatus(isOnline ? 'connecting' : 'disconnected');
     if (!subscribeToSharedPostResponses) {
       let cancelled = false;
       void getSharedPostResponsesPage(postId, { limit: RESPONSE_PAGE_SIZE })
@@ -1056,10 +888,12 @@ export default function SharedPostChatScreen({
           if (!cancelled) {
             applyRemoteResponses(nextResponses);
             setHasOlderResponses(nextResponses.length >= RESPONSE_PAGE_SIZE);
+            setConnectionStatus('connected');
           }
         })
         .catch((error) => {
           if (!cancelled) {
+            setConnectionStatus('disconnected');
             setErrorMessage(
               error instanceof Error
                 ? error.message
@@ -1087,12 +921,14 @@ export default function SharedPostChatScreen({
         },
         onError: (error) => {
           setIsLoadingResponses(false);
+          setConnectionStatus('disconnected');
           setErrorMessage(
             error instanceof Error
               ? error.message
               : t('shared.responseLoadFailed', 'Could not load responses.')
           );
         },
+        onStatus: setConnectionStatus,
       });
     } catch (error) {
       setIsLoadingResponses(false);
@@ -1107,6 +943,7 @@ export default function SharedPostChatScreen({
   }, [
     applyRemoteResponses,
     getSharedPostResponsesPage,
+    isOnline,
     postId,
     subscribeToSharedPostResponses,
     t,
@@ -1118,11 +955,7 @@ export default function SharedPostChatScreen({
     }
   }, [loading, post, refreshSharedFeed]);
 
-  useEffect(() => {
-    if (isLoadingResponses) {
-      return;
-    }
-
+  const markThreadReadThroughLatest = useCallback(() => {
     const lastResponse = responses[responses.length - 1] ?? null;
     const nextSignature = `${postId}:${lastResponse?.id ?? 'empty'}`;
     if (lastMarkedReadSignatureRef.current === nextSignature) {
@@ -1133,7 +966,29 @@ export default function SharedPostChatScreen({
     void markSharedThreadRead(postId, lastResponse?.id ?? null).catch(() => {
       lastMarkedReadSignatureRef.current = null;
     });
-  }, [isLoadingResponses, markSharedThreadRead, postId, responses]);
+  }, [markSharedThreadRead, postId, responses]);
+
+  useEffect(() => {
+    if (isLoadingResponses || !isThreadEndVisibleRef.current) {
+      return;
+    }
+
+    markThreadReadThroughLatest();
+  }, [isLoadingResponses, markThreadReadThroughLatest, responses]);
+
+  const handleThreadScroll = useCallback(
+    (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+      const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
+      const distanceFromEnd =
+        contentSize.height - (contentOffset.y + layoutMeasurement.height);
+      const isNearEnd = distanceFromEnd < 96;
+      isThreadEndVisibleRef.current = isNearEnd;
+      if (isNearEnd && !isLoadingResponses) {
+        markThreadReadThroughLatest();
+      }
+    },
+    [isLoadingResponses, markThreadReadThroughLatest]
+  );
 
   const openNicknameEditor = useCallback(() => {
     if (!primaryFriend) {
@@ -1208,43 +1063,64 @@ export default function SharedPostChatScreen({
   }, [draft, isSending, sendButtonPulse]);
 
   const sendResponse = useCallback(
-    async (emoji?: string, explicitReplyToResponseId?: string | null) => {
+    async (
+      emoji?: string,
+      explicitReplyToResponseId?: string | null,
+      retryResponse?: ChatThreadResponse
+    ) => {
       if (!post || isSending) {
         return;
       }
 
-      const text = draft.trim();
-      if (!emoji && !text) {
+      const text = retryResponse ? retryResponse.text.trim() : draft.trim();
+      const responseEmoji = retryResponse ? retryResponse.emoji ?? undefined : emoji;
+      if (!responseEmoji && !text) {
         return;
       }
 
       optimisticSequenceRef.current += 1;
-      const optimisticId = `local-shared-response-${Date.now()}-${optimisticSequenceRef.current}`;
-      const replyToResponseId = explicitReplyToResponseId ?? replyTarget?.id ?? null;
-      const optimisticResponse: SharedPostResponse = {
+      const optimisticId =
+        retryResponse?.id ?? `local-shared-response-${Date.now()}-${optimisticSequenceRef.current}`;
+      const replyToResponseId =
+        explicitReplyToResponseId ?? retryResponse?.replyToResponseId ?? replyTarget?.id ?? null;
+      const optimisticResponse: ChatThreadResponse = {
         id: optimisticId,
         postId: post.id,
         authorUid: user?.uid ?? '',
         authorDisplayName: user ? getUserSocialName(user) : t('shared.chatYou', 'You'),
         authorPhotoURLSnapshot: user?.photoURL ?? null,
-        emoji: emoji ?? null,
-        text: emoji ? '' : text,
+        emoji: responseEmoji ?? null,
+        text: responseEmoji ? '' : text,
         replyToResponseId,
         createdAt: new Date().toISOString(),
+        deliveryStatus: isOnline ? 'sending' : 'offline',
+        failureMessage: isOnline
+          ? null
+          : t('shared.chatOfflineSendMessage', 'You are offline. Retry when connected.'),
       };
       pendingResponsesRef.current.set(optimisticId, optimisticResponse);
       setResponses((current) => {
-        const next = mergeResponses(current, [optimisticResponse]);
+        const withoutRetry = retryResponse
+          ? current.filter((item) => item.id !== retryResponse.id)
+          : current;
+        const next = mergeChatResponses(withoutRetry, [optimisticResponse]);
         rememberResponses(post.id, next);
-        return areResponseListsEqual(current, next) ? current : next;
+        return areResponseListsEqualFromThread(current, next) ? current : next;
       });
-      if (!emoji) {
+      if (!retryResponse && !responseEmoji) {
         setDraft('');
         clearTypingIdleTimer();
         publishOwnTypingState(false, { force: true });
       }
-      if (!explicitReplyToResponseId) {
+      if (!retryResponse && !explicitReplyToResponseId) {
         setReplyTarget(null);
+      }
+      markThreadReadThroughLatest();
+
+      if (!isOnline) {
+        pendingResponsesRef.current.delete(optimisticId);
+        setIsSending(false);
+        return;
       }
 
       setIsSending(true);
@@ -1252,37 +1128,41 @@ export default function SharedPostChatScreen({
       setErrorMessage(null);
       try {
         const response = await createSharedPostResponse(post.id, {
-          emoji: emoji ?? null,
-          text: emoji ? null : text,
+          emoji: responseEmoji ?? null,
+          text: responseEmoji ? null : text,
           replyToResponseId,
         });
         pendingResponsesRef.current.delete(optimisticId);
         setResponses((current) => {
-          const next = mergeResponses(
+          const next = mergeChatResponses(
             current.filter((item) => item.id !== optimisticId),
             [response]
           );
           rememberResponses(post.id, next);
-          return areResponseListsEqual(current, next) ? current : next;
+          return areResponseListsEqualFromThread(current, next) ? current : next;
         });
+        markThreadReadThroughLatest();
       } catch (error) {
         pendingResponsesRef.current.delete(optimisticId);
+        const failureMessage =
+          error instanceof Error
+            ? error.message
+            : t('shared.responseSendFailed', 'Could not send response.');
         setResponses((current) => {
-          const next = current.filter((item) => item.id !== optimisticId);
+          const failedStatus: ChatDeliveryStatus = isOnline ? 'failed' : 'offline';
+          const next = current.map((item) =>
+            item.id === optimisticId
+              ? {
+                  ...item,
+                  deliveryStatus: failedStatus,
+                  failureMessage,
+                }
+              : item
+          );
           rememberResponses(post.id, next);
           return next;
         });
-        if (!emoji) {
-          setDraft(text);
-        }
-        if (!explicitReplyToResponseId && replyToResponseId) {
-          setReplyTarget(replyTarget);
-        }
-        setErrorMessage(
-          error instanceof Error
-            ? error.message
-            : t('shared.responseSendFailed', 'Could not send response.')
-        );
+        setErrorMessage(failureMessage);
       } finally {
         setIsSending(false);
       }
@@ -1292,12 +1172,35 @@ export default function SharedPostChatScreen({
       createSharedPostResponse,
       draft,
       isSending,
+      isOnline,
+      markThreadReadThroughLatest,
       post,
       publishOwnTypingState,
       replyTarget,
       t,
       user,
     ]
+  );
+
+  const retryFailedResponse = useCallback(
+    (response: ChatThreadResponse) => {
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      void sendResponse(response.emoji ?? undefined, response.replyToResponseId, response);
+    },
+    [sendResponse]
+  );
+
+  const removeFailedResponse = useCallback(
+    (responseId: string) => {
+      void Haptics.selectionAsync();
+      pendingResponsesRef.current.delete(responseId);
+      setResponses((current) => {
+        const next = current.filter((response) => response.id !== responseId);
+        rememberResponses(postId, next);
+        return next;
+      });
+    },
+    [postId]
   );
 
   const sendReaction = useCallback(
@@ -1489,9 +1392,9 @@ export default function SharedPostChatScreen({
       }
 
       setResponses((current) => {
-        const next = mergeResponses([...olderResponses, ...current], []);
+        const next = mergeChatResponses([...olderResponses, ...current], []);
         rememberResponses(postId, next);
-        return areResponseListsEqual(current, next) ? current : next;
+        return areResponseListsEqualFromThread(current, next) ? current : next;
       });
       return true;
     } catch (error) {
@@ -1691,7 +1594,9 @@ export default function SharedPostChatScreen({
       const authorLabel = authorIdentity.label;
       const avatarLabel = authorIdentity.avatarInitial;
       const avatarUri = authorIdentity.avatarUri;
-      const shouldShowStatus = isSelf && group.responses.some(isOptimisticResponse);
+      const shouldShowStatus =
+        isSelf &&
+        group.responses.some((response) => getResponseDeliveryStatus(response) === 'sending');
       return (
         <View
           style={[
@@ -1747,6 +1652,9 @@ export default function SharedPostChatScreen({
                 const replyPreview = getResponseReplyPreview(response);
                 const reactions = response.reactions ?? [];
                 const isHighlighted = highlightedResponseId === response.id;
+                const deliveryStatus = getResponseDeliveryStatus(response);
+                const isFailedDelivery =
+                  deliveryStatus === 'failed' || deliveryStatus === 'offline';
                 return (
                   <View
                     key={response.id}
@@ -1760,6 +1668,7 @@ export default function SharedPostChatScreen({
                         setReactionOverlay(null);
                       }}
                       onLongPress={(event) => {
+                        void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                         setReactionOverlay({
                           response,
                           pageX: event.nativeEvent.pageX,
@@ -1848,6 +1757,38 @@ export default function SharedPostChatScreen({
                         </Text>
                       </View>
                     ) : null}
+                    {isSelf && isFailedDelivery ? (
+                      <View style={styles.failedMessageActions}>
+                        <Text numberOfLines={1} style={[styles.failedMessageText, { color: colors.danger }]}>
+                          {deliveryStatus === 'offline'
+                            ? t('shared.chatOfflineSendShort', 'Offline')
+                            : response.failureMessage ??
+                              t('shared.responseSendFailed', 'Could not send response.')}
+                        </Text>
+                        <Pressable
+                          accessibilityRole="button"
+                          accessibilityLabel={t('shared.chatRetryMessage', 'Retry message')}
+                          onPress={() => retryFailedResponse(response)}
+                          style={({ pressed }) => [
+                            styles.failedMessageIconButton,
+                            { borderColor: colors.border, opacity: pressed ? 0.72 : 1 },
+                          ]}
+                        >
+                          <Ionicons name="refresh" size={14} color={colors.primary} />
+                        </Pressable>
+                        <Pressable
+                          accessibilityRole="button"
+                          accessibilityLabel={t('shared.chatRemoveFailedMessage', 'Remove failed message')}
+                          onPress={() => removeFailedResponse(response.id)}
+                          style={({ pressed }) => [
+                            styles.failedMessageIconButton,
+                            { borderColor: colors.border, opacity: pressed ? 0.72 : 1 },
+                          ]}
+                        >
+                          <Ionicons name="close" size={14} color={colors.secondaryText} />
+                        </Pressable>
+                      </View>
+                    ) : null}
                   </View>
                 );
               })}
@@ -1888,12 +1829,14 @@ export default function SharedPostChatScreen({
       getAuthorIdentity,
       getResponseReplyPreview,
       highlightedResponseId,
+      removeFailedResponse,
+      retryFailedResponse,
       scrollToResponse,
       t,
       user?.uid,
     ]
   );
-  const reactionOverlayWidth = 188;
+  const reactionOverlayWidth = 236;
   const reactionOverlayLeft = reactionOverlay
     ? Math.min(
         Math.max(reactionOverlay.pageX - reactionOverlayWidth / 2, 12),
@@ -2096,6 +2039,8 @@ export default function SharedPostChatScreen({
               maintainVisibleContentPosition={THREAD_SCROLL_POSITION_CONFIG}
               onStartReached={loadOlderResponses}
               onStartReachedThreshold={0.2}
+              onScroll={handleThreadScroll}
+              scrollEventThrottle={120}
               keyboardShouldPersistTaps="handled"
               keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
               showsVerticalScrollIndicator={false}
@@ -2329,10 +2274,31 @@ export default function SharedPostChatScreen({
                       })
                 }
                 onPress={() => {
+                  void Haptics.selectionAsync();
                   void sendReaction(reactionOverlay.response, reactionEmoji);
                 }}
               />
             ))}
+            <View style={[styles.reactionTrayDivider, { backgroundColor: colors.border }]} />
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={t('shared.chatReplyToMessage', 'Reply to message')}
+              onPress={() => {
+                const target =
+                  responseById.get(reactionOverlay.response.id) ?? reactionOverlay.response;
+                void Haptics.selectionAsync();
+                setReplyTarget(target);
+                setReactionOverlay(null);
+              }}
+              style={({ pressed }) => [
+                styles.reactionTrayActionButton,
+                {
+                  backgroundColor: pressed ? colors.primarySoft : 'transparent',
+                },
+              ]}
+            >
+              <Ionicons name="return-up-back" size={19} color={colors.primary} />
+            </Pressable>
           </Animated.View>
         </View>
       ) : null}
@@ -2737,6 +2703,31 @@ const styles = StyleSheet.create({
     lineHeight: 17,
     fontFamily: 'Noto Sans',
   },
+  failedMessageActions: {
+    alignSelf: 'flex-end',
+    maxWidth: '92%',
+    marginTop: 5,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 7,
+  },
+  failedMessageText: {
+    flexShrink: 1,
+    minWidth: 0,
+    fontSize: 11,
+    lineHeight: 14,
+    fontWeight: '700',
+    fontFamily: 'Noto Sans',
+  },
+  failedMessageIconButton: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    borderWidth: StyleSheet.hairlineWidth,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   reactionTray: {
     position: 'absolute',
     zIndex: 10,
@@ -2753,10 +2744,23 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   reactionTrayButton: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     borderWidth: StyleSheet.hairlineWidth,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  reactionTrayDivider: {
+    width: StyleSheet.hairlineWidth,
+    height: 28,
+    alignSelf: 'center',
+    opacity: 0.8,
+  },
+  reactionTrayActionButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -2764,19 +2768,13 @@ const styles = StyleSheet.create({
     fontSize: 24,
     lineHeight: 29,
   },
-  typingDots: {
+  typingDotsText: {
     width: 34,
-    height: 18,
-    borderRadius: 9,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 4,
-  },
-  typingDot: {
-    width: 5,
-    height: 5,
-    borderRadius: 2.5,
+    fontSize: 15,
+    lineHeight: 18,
+    fontWeight: '900',
+    textAlign: 'center',
+    fontFamily: 'Noto Sans',
   },
   loadingMessageBubble: {
     maxWidth: '78%',

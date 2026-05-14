@@ -17,15 +17,16 @@ import StickerCreationOverlay from './StickerCreationOverlay';
 import type {
   StickerCreationAnimatedStyle,
 } from './StickerCreationOverlay';
+import {
+  areWindowRectsEqual,
+  measureWindowRect,
+  type MeasurableView,
+} from './previewMeasurement';
 import type { WindowRect } from './stickerCreationTypes';
 
 const PREVIEW_HORIZONTAL_PADDING = 52;
 const PREVIEW_MAX_WIDTH = 360;
 const PREVIEW_MAX_HEIGHT_RATIO = 0.52;
-
-type MeasurableView = View & {
-  measureInWindow?: (callback: (x: number, y: number, width: number, height: number) => void) => void;
-};
 
 interface StampPreviewEditorProps {
   visible: boolean;
@@ -45,39 +46,6 @@ interface StampPreviewEditorProps {
   onConfirm: (payload: {
     stampStyle: StickerStampStyle;
   }) => NoteStickerPlacement | null | Promise<NoteStickerPlacement | null>;
-}
-
-function measureWindowRect(node: MeasurableView | null): Promise<WindowRect | null> {
-  return new Promise((resolve) => {
-    if (!node?.measureInWindow) {
-      resolve(null);
-      return;
-    }
-
-    let settled = false;
-    const finish = (rect: WindowRect | null) => {
-      if (settled) {
-        return;
-      }
-
-      settled = true;
-      resolve(rect);
-    };
-    const fallbackTimeout = setTimeout(() => {
-      finish(null);
-    }, 32);
-
-    node.measureInWindow((x, y, width, height) => {
-      clearTimeout(fallbackTimeout);
-
-      if (width <= 0 || height <= 0) {
-        finish(null);
-        return;
-      }
-
-      finish({ x, y, width, height });
-    });
-  });
 }
 
 function StampPreviewEditor({
@@ -143,13 +111,7 @@ function StampPreviewEditor({
     }
 
     setPreviewWindowRect((current) => {
-      if (
-        current &&
-        current.x === nextRect.x &&
-        current.y === nextRect.y &&
-        current.width === nextRect.width &&
-        current.height === nextRect.height
-      ) {
+      if (areWindowRectsEqual(current, nextRect)) {
         return current;
       }
 

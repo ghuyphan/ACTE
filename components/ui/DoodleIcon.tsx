@@ -1,6 +1,5 @@
 import React, { memo } from 'react';
-import { Canvas, Group, Path as SkiaPath } from '@shopify/react-native-skia';
-import { StyleSheet, View } from 'react-native';
+import SkiaStrokeIcon from './SkiaStrokeIcon';
 
 type DoodleIconProps = {
   size?: number;
@@ -16,59 +15,15 @@ const TIP_DIVIDER_PATH = 'M 384 192 L 432 240';
 const ERASER_DIVIDER_PATH = 'M 432 144 L 480 192';
 
 function DoodleIcon({ size = 18, color = '#111111' }: DoodleIconProps) {
-  const scale = size / VIEWBOX_SIZE;
-
   return (
-    <View style={[styles.root, { width: size, height: size }]}>
-      <Canvas style={styles.canvas}>
-        <Group transform={[{ scale }]}>
-          <SkiaPath
-            path={SCRIBBLE_PATH}
-            color={color}
-            style="stroke"
-            strokeWidth={32}
-            strokeCap="round"
-            strokeJoin="round"
-          />
-          <SkiaPath
-            path={PENCIL_PATH}
-            color={color}
-            style="stroke"
-            strokeWidth={32}
-            strokeCap="round"
-            strokeJoin="round"
-          />
-          <SkiaPath
-            path={TIP_DIVIDER_PATH}
-            color={color}
-            style="stroke"
-            strokeWidth={32}
-            strokeCap="round"
-            strokeJoin="round"
-          />
-          <SkiaPath
-            path={ERASER_DIVIDER_PATH}
-            color={color}
-            style="stroke"
-            strokeWidth={32}
-            strokeCap="round"
-            strokeJoin="round"
-          />
-        </Group>
-      </Canvas>
-    </View>
+    <SkiaStrokeIcon
+      color={color}
+      paths={[SCRIBBLE_PATH, PENCIL_PATH, TIP_DIVIDER_PATH, ERASER_DIVIDER_PATH]}
+      size={size}
+      strokeWidth={32}
+      viewBoxSize={VIEWBOX_SIZE}
+    />
   );
 }
 
 export default memo(DoodleIcon);
-
-const styles = StyleSheet.create({
-  root: {
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  canvas: {
-    width: '100%',
-    height: '100%',
-  },
-});

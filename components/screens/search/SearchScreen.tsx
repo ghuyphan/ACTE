@@ -4,7 +4,7 @@ import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Href, Stack, useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
-import { useCallback, useDeferredValue, useEffect, useReducer, useState, useTransition } from 'react';
+import { useCallback, useDeferredValue, useEffect, useReducer, useState, useTransition, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   Keyboard,
@@ -59,6 +59,42 @@ const initialSearchState: SearchState = {
   results: [],
   status: 'idle',
 };
+
+function SearchEmptyMessage({
+  accessible,
+  accessibilityLabel,
+  busy,
+  icon,
+  pointerEvents,
+  subtitle,
+  title,
+  titleColor,
+  subtitleColor,
+}: {
+  accessible?: boolean;
+  accessibilityLabel?: string;
+  busy?: boolean;
+  icon: ReactNode;
+  pointerEvents?: 'none';
+  subtitle: string;
+  title: string;
+  titleColor: string;
+  subtitleColor: string;
+}) {
+  return (
+    <View
+      accessible={accessible}
+      accessibilityLabel={accessibilityLabel}
+      accessibilityState={busy ? { busy: true } : undefined}
+      pointerEvents={pointerEvents}
+      style={styles.emptyState}
+    >
+      <View style={styles.emptyIconWrap}>{icon}</View>
+      <Text style={[styles.emptyTitle, { color: titleColor }]}>{title}</Text>
+      <Text style={[styles.emptySubtitle, { color: subtitleColor }]}>{subtitle}</Text>
+    </View>
+  );
+}
 
 function searchReducer(state: SearchState, action: SearchAction): SearchState {
   switch (action.type) {
@@ -159,6 +195,10 @@ export default function SearchScreen() {
   const shouldHoldSearchingState = hasPendingSearch && !showDelayedSearchLoading;
   const shouldShowEmptyState =
     !searchFailed && !hasPendingSearch && visibleNotes.length === 0;
+  const emptyScreenInsetStyle = {
+    paddingTop: Platform.OS === 'android' ? insets.top + Layout.screenPadding : 10,
+    paddingBottom: insets.bottom + 20 + bottomTabOverlayInset,
+  };
 
   useEffect(() => {
     if (!hasPendingSearch) {
@@ -341,60 +381,49 @@ export default function SearchScreen() {
           style={[
             styles.centerWrap,
             styles.emptyScreen,
-            {
-              paddingTop: Platform.OS === 'android' ? insets.top + Layout.screenPadding : 10,
-              paddingBottom: insets.bottom + 20 + bottomTabOverlayInset,
-            },
+            emptyScreenInsetStyle,
           ]}
           testID="search-error-state"
         >
-          <View pointerEvents="none" style={styles.emptyState}>
-            <View style={styles.emptyIconWrap}>
+          <SearchEmptyMessage
+            pointerEvents="none"
+            title={t('search.errorTitle', 'Search is unavailable')}
+            subtitle={t('search.errorBody', 'We could not search your notes right now. Please try again in a moment.')}
+            titleColor={colors.text}
+            subtitleColor={colors.secondaryText}
+            icon={
               <Ionicons
                 name="alert-circle-outline"
                 size={Platform.OS === 'ios' ? 54 : 30}
                 color={colors.secondaryText}
               />
-            </View>
-            <Text style={[styles.emptyTitle, { color: colors.text }]}>
-              {t('search.errorTitle', 'Search is unavailable')}
-            </Text>
-            <Text style={[styles.emptySubtitle, { color: colors.secondaryText }]}>
-              {t('search.errorBody', 'We could not search your notes right now. Please try again in a moment.')}
-            </Text>
-          </View>
+            }
+          />
         </Pressable>
       ) : shouldShowSearchingState ? (
         <View
           style={[
             styles.centerWrap,
             styles.emptyScreen,
-            {
-              paddingTop: Platform.OS === 'android' ? insets.top + Layout.screenPadding : 10,
-              paddingBottom: insets.bottom + 20 + bottomTabOverlayInset,
-            },
+            emptyScreenInsetStyle,
           ]}
         >
-          <View
+          <SearchEmptyMessage
             accessible
             accessibilityLabel={t('common.loading', 'Loading')}
-            accessibilityState={{ busy: true }}
-            style={styles.emptyState}
-          >
-            <View style={styles.emptyIconWrap}>
+            busy
+            title={t('common.loading', 'Loading')}
+            subtitle={t('home.searchPlaceholder', 'Search notes...')}
+            titleColor={colors.text}
+            subtitleColor={colors.secondaryText}
+            icon={
               <NotoLoader
                 variant={Platform.OS === 'ios' ? 'inline' : 'note'}
                 size={Platform.OS === 'ios' ? 34 : 'large'}
                 color={colors.primary}
               />
-            </View>
-            <Text style={[styles.emptyTitle, { color: colors.text }]}>
-              {t('common.loading', 'Loading')}
-            </Text>
-            <Text style={[styles.emptySubtitle, { color: colors.secondaryText }]}>
-              {t('home.searchPlaceholder', 'Search notes...')}
-            </Text>
-          </View>
+            }
+          />
         </View>
       ) : shouldHoldSearchingState ? (
         <Pressable
@@ -402,10 +431,7 @@ export default function SearchScreen() {
           style={[
             styles.centerWrap,
             styles.emptyScreen,
-            {
-              paddingTop: Platform.OS === 'android' ? insets.top + Layout.screenPadding : 10,
-              paddingBottom: insets.bottom + 20 + bottomTabOverlayInset,
-            },
+            emptyScreenInsetStyle,
           ]}
         />
       ) : shouldShowEmptyState ? (
@@ -414,31 +440,27 @@ export default function SearchScreen() {
           style={[
             styles.centerWrap,
             styles.emptyScreen,
-            {
-              paddingTop: Platform.OS === 'android' ? insets.top + Layout.screenPadding : 10,
-              paddingBottom: insets.bottom + 20 + bottomTabOverlayInset,
-            },
+            emptyScreenInsetStyle,
           ]}
         >
-          <View pointerEvents="none" style={styles.emptyState}>
-            <View style={styles.emptyIconWrap}>
+          <SearchEmptyMessage
+            pointerEvents="none"
+            title={hasQuery
+              ? t('home.noResults', 'No notes found')
+              : t('home.searchPlaceholder', 'Search notes...')}
+            subtitle={hasQuery
+              ? t('home.noResultsMsg', 'Try a different keyword')
+              : t('home.count', '{{count}} notes saved', { count: notes.length })}
+            titleColor={colors.text}
+            subtitleColor={colors.secondaryText}
+            icon={
               <Ionicons
                 name="search-outline"
                 size={Platform.OS === 'ios' ? 54 : 30}
                 color={colors.secondaryText}
               />
-            </View>
-            <Text style={[styles.emptyTitle, { color: colors.text }]}>
-              {hasQuery
-                ? t('home.noResults', 'No notes found')
-                : t('home.searchPlaceholder', 'Search notes...')}
-            </Text>
-            <Text style={[styles.emptySubtitle, { color: colors.secondaryText }]}>
-              {hasQuery
-                ? t('home.noResultsMsg', 'Try a different keyword')
-                : t('home.count', '{{count}} notes saved', { count: notes.length })}
-            </Text>
-          </View>
+            }
+          />
         </Pressable>
       ) : (
         <FlashList

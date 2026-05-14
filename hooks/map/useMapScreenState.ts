@@ -4,6 +4,7 @@ import type { Region } from 'react-native-maps';
 import type { Note } from '../../services/database';
 import {
   applyMapFilters,
+  areRegionsEquivalent,
   buildMapGeometry,
   buildMapViewportState,
   getInitialMapRegion,
@@ -19,19 +20,6 @@ interface UseMapScreenStateParams {
 }
 
 const SYNTHETIC_MAP_PRESS_GUARD_MS = 120;
-
-function areRegionsEquivalent(left: Region | null, right: Region) {
-  if (!left) {
-    return false;
-  }
-
-  return (
-    Math.abs(left.latitude - right.latitude) < 0.00001 &&
-    Math.abs(left.longitude - right.longitude) < 0.00001 &&
-    Math.abs(left.latitudeDelta - right.latitudeDelta) < 0.00001 &&
-    Math.abs(left.longitudeDelta - right.longitudeDelta) < 0.00001
-  );
-}
 
 export function useMapScreenState({
   notes,

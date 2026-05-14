@@ -1,6 +1,5 @@
 import React, { memo } from 'react';
-import { Canvas, Group, Path as SkiaPath } from '@shopify/react-native-skia';
-import { StyleSheet, View } from 'react-native';
+import SkiaStrokeIcon from './SkiaStrokeIcon';
 
 type CatBoxIconProps = {
   size?: number;
@@ -28,38 +27,15 @@ function CatBoxIcon({
   color = '#111111',
   strokeWidth = 1.08,
 }: CatBoxIconProps) {
-  const scale = size / VIEWBOX_SIZE;
-
   return (
-    <View style={[styles.root, { width: size, height: size }]}>
-      <Canvas style={styles.canvas}>
-        <Group transform={[{ scale }]}>
-          {PATHS.map((path) => (
-            <SkiaPath
-              key={path}
-              path={path}
-              color={color}
-              style="stroke"
-              strokeWidth={strokeWidth}
-              strokeCap="round"
-              strokeJoin="round"
-            />
-          ))}
-        </Group>
-      </Canvas>
-    </View>
+    <SkiaStrokeIcon
+      color={color}
+      paths={PATHS}
+      size={size}
+      strokeWidth={strokeWidth}
+      viewBoxSize={VIEWBOX_SIZE}
+    />
   );
 }
 
 export default memo(CatBoxIcon);
-
-const styles = StyleSheet.create({
-  root: {
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  canvas: {
-    width: '100%',
-    height: '100%',
-  },
-});

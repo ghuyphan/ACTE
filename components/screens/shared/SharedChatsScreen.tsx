@@ -10,7 +10,11 @@ import { Layout } from '../../../constants/theme';
 import { useAuth } from '../../../hooks/useAuth';
 import { useSharedFeedStore } from '../../../hooks/useSharedFeed';
 import { useTheme } from '../../../hooks/useTheme';
-import type { SharedPost, SharedThreadSummary } from '../../../services/sharedFeedService';
+import type {
+  SharedPost,
+  SharedPostTypingUser,
+  SharedThreadSummary,
+} from '../../../services/sharedFeedService';
 import type { SharedThreadReadState } from '../../../services/sharedFeedCache';
 import { formatChatTimestamp } from '../../../utils/dateUtils';
 import {
@@ -27,6 +31,7 @@ const CHAT_LIST_SKELETON_ROWS = [
   { key: 'third', titleWidth: '52%', previewWidth: '62%' },
 ] as const;
 const MAX_CACHED_THREAD_SUMMARIES = 80;
+const MAX_TYPING_PREVIEW_THREADS = 30;
 const cachedThreadSummaryByPostId = new Map<string, SharedThreadSummary>();
 const cachedReadStateByUserUid = new Map<string, Record<string, SharedThreadReadState>>();
 
@@ -137,6 +142,10 @@ export default function SharedChatsScreen() {
     sharedPosts = [],
     getSharedPostThreadSummaries = async () => [],
     getSharedThreadReadStates = async () => [],
+    subscribeToSharedPostTyping = () => ({
+      setTyping: () => undefined,
+      unsubscribe: () => undefined,
+    }),
   } = useSharedFeedStore();
   const [threadSummaryByPostId, setThreadSummaryByPostId] = useState<
     Record<string, SharedThreadSummary>
@@ -144,6 +153,9 @@ export default function SharedChatsScreen() {
   const [readStateByPostId, setReadStateByPostId] = useState<
     Record<string, SharedThreadReadState>
   >(() => (user?.uid ? cachedReadStateByUserUid.get(user.uid) ?? {} : {}));
+  const [typingUsersByPostId, setTypingUsersByPostId] = useState<
+    Record<string, SharedPostTypingUser[]>
+  >({});
   const threadPostIdsKey = useMemo(
     () => sharedPosts.map((post) => post.id).join('|'),
     [sharedPosts]
@@ -211,6 +223,52 @@ export default function SharedChatsScreen() {
       }),
     [sharedPosts, threadSummaryByPostId]
   );
+  const typingPreviewPostIdsKey = useMemo(
+    () =>
+      threads
+        .slice(0, MAX_TYPING_PREVIEW_THREADS)
+        .map((post) => post.id)
+        .join('|'),
+    [threads]
+  );
+  useEffect(() => {
+    const postIds = typingPreviewPostIdsKey ? typingPreviewPostIdsKey.split('|') : [];
+    if (!authReady || !user?.uid || postIds.length === 0) {
+      setTypingUsersByPostId({});
+      return;
+    }
+
+    const subscriptions = postIds.map((postId) =>
+      subscribeToSharedPostTyping(postId, {
+        onTypingUsers: (typingUsers) => {
+          setTypingUsersByPostId((current) => {
+            const visibleTypingUsers = typingUsers.filter(
+              (typingUser) => typingUser.userId !== user.uid
+            );
+            if (visibleTypingUsers.length === 0) {
+              if (!current[postId]) {
+                return current;
+              }
+              const next = { ...current };
+              delete next[postId];
+              return next;
+            }
+            return {
+              ...current,
+              [postId]: visibleTypingUsers,
+            };
+          });
+        },
+        onError: () => undefined,
+      })
+    );
+
+    return () => {
+      for (const subscription of subscriptions) {
+        subscription.unsubscribe();
+      }
+    };
+  }, [authReady, subscribeToSharedPostTyping, typingPreviewPostIdsKey, user?.uid]);
   const getThreadParticipant = useCallback(
     (post: SharedPost) => {
       const participantUid =
@@ -264,6 +322,22 @@ export default function SharedChatsScreen() {
         sharedNote: t('shared.chatThreadNote', 'Shared note'),
       });
       const summaryBody = summary ? getSharedThreadSummaryBody(summary) : '';
+      const typingUsers = typingUsersByPostId[post.id] ?? [];
+      const typingPreview =
+        typingUsers.length === 0
+          ? null
+          : typingUsers.length === 1
+            ? t('shared.chatTypingOne', '{{name}} is typing', {
+                name: getThreadParticipant({
+                  ...post,
+                  authorUid: typingUsers[0].userId,
+                  authorDisplayName: typingUsers[0].displayName,
+                  authorPhotoURLSnapshot: typingUsers[0].photoURL,
+                }).label,
+              })
+            : t('shared.chatTypingMany', '{{count}} people are typing', {
+                count: typingUsers.length,
+              });
       const latestPreview = summary?.latestActivityAt
         ? latestAuthor
           ? t('shared.chatThreadLatestBy', '{{name}}: {{message}}', {
@@ -338,10 +412,17 @@ export default function SharedChatsScreen() {
               style={[
                 styles.threadPreview,
                 hasUnread ? styles.threadPreviewUnread : null,
-                { color: hasUnread ? colors.text : colors.secondaryText },
+                typingPreview ? styles.threadPreviewTyping : null,
+                {
+                  color: typingPreview
+                    ? colors.primary
+                    : hasUnread
+                      ? colors.text
+                      : colors.secondaryText,
+                },
               ]}
             >
-              {latestPreview}
+              {typingPreview ?? latestPreview}
             </Text>
             {summary?.latestActivityAt ? (
               <Text
@@ -367,7 +448,16 @@ export default function SharedChatsScreen() {
         </Pressable>
       );
     },
-    [colors, getThreadParticipant, readStateByPostId, router, t, threadSummaryByPostId, user?.uid]
+    [
+      colors,
+      getThreadParticipant,
+      readStateByPostId,
+      router,
+      t,
+      threadSummaryByPostId,
+      typingUsersByPostId,
+      user?.uid,
+    ]
   );
   const renderLoadingThreads = useCallback(
     () => (
@@ -612,6 +702,9 @@ const styles = StyleSheet.create({
   },
   threadPreviewUnread: {
     fontWeight: '800',
+  },
+  threadPreviewTyping: {
+    fontWeight: '900',
   },
   threadMemoryContext: {
     fontSize: 11,

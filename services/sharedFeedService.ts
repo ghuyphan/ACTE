@@ -2259,7 +2259,7 @@ type SharedPostTypingPresenceMeta = {
 
 const SHARED_POST_TYPING_STALE_MS = 8000;
 
-function getTypingUsersFromPresenceState(
+export function getTypingUsersFromPresenceState(
   state: Record<string, unknown>,
   ownUserId: string
 ): SharedPostTypingUser[] {

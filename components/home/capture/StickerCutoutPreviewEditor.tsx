@@ -17,6 +17,11 @@ import StickerCreationOverlay from './StickerCreationOverlay';
 import type {
   StickerCreationAnimatedStyle,
 } from './StickerCreationOverlay';
+import {
+  areWindowRectsEqual,
+  measureWindowRect,
+  type MeasurableView,
+} from './previewMeasurement';
 import type { WindowRect } from './stickerCreationTypes';
 
 const PREVIEW_HORIZONTAL_PADDING = 48;
@@ -33,10 +38,6 @@ const STICKER_PREVIEW_OUTLINE_OFFSETS = [
   { x: -0.72, y: 0.72 },
   { x: 0.72, y: 0.72 },
 ] as const;
-
-type MeasurableView = View & {
-  measureInWindow?: (callback: (x: number, y: number, width: number, height: number) => void) => void;
-};
 
 interface StickerCutoutPreviewEditorProps {
   visible: boolean;
@@ -56,39 +57,6 @@ interface StickerCutoutPreviewEditorProps {
   onConfirm: (payload: {
     outlineEnabled: boolean;
   }) => NoteStickerPlacement | null | Promise<NoteStickerPlacement | null>;
-}
-
-function measureWindowRect(node: MeasurableView | null): Promise<WindowRect | null> {
-  return new Promise((resolve) => {
-    if (!node?.measureInWindow) {
-      resolve(null);
-      return;
-    }
-
-    let settled = false;
-    const finish = (rect: WindowRect | null) => {
-      if (settled) {
-        return;
-      }
-
-      settled = true;
-      resolve(rect);
-    };
-    const fallbackTimeout = setTimeout(() => {
-      finish(null);
-    }, 32);
-
-    node.measureInWindow((x, y, width, height) => {
-      clearTimeout(fallbackTimeout);
-
-      if (width <= 0 || height <= 0) {
-        finish(null);
-        return;
-      }
-
-      finish({ x, y, width, height });
-    });
-  });
 }
 
 function StickerCutoutPreviewEditor({
@@ -184,13 +152,7 @@ function StickerCutoutPreviewEditor({
     }
 
     setPreviewWindowRect((current) => {
-      if (
-        current &&
-        current.x === nextRect.x &&
-        current.y === nextRect.y &&
-        current.width === nextRect.width &&
-        current.height === nextRect.height
-      ) {
+      if (areWindowRectsEqual(current, nextRect)) {
         return current;
       }
 
