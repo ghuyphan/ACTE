@@ -31,6 +31,7 @@ import {
   SharedPost,
   SharedPostResponse,
   SharedPostResponseReaction,
+  SharedPostResponsesSubscriptionOptions,
   SharedPostTypingUser,
   SharedThreadSummary,
   subscribeToFriendPresence,
@@ -50,9 +51,12 @@ import {
   getCachedSharedFeedSnapshot,
   getCachedSharedThreadReadStates,
   getCachedSharedThreadSummaries,
+  deleteCachedSharedPostResponse,
+  deleteCachedSharedPostResponseReactionById,
   deleteCachedSharedPostResponseReaction,
   markCachedSharedThreadRead,
   patchCachedSharedPostMedia,
+  reconcileCachedSharedPostResponsesPage,
   replaceCachedSharedPostResponses,
   replaceCachedSharedThreadSummaries,
   upsertCachedSharedPostResponse,
@@ -73,6 +77,7 @@ import {
   shouldForceSharedFeedForegroundRefresh,
   shouldRefreshSharedFeedOnForeground,
 } from '../services/sharedFeedRefreshPolicy';
+import { rememberSharedPostResponses } from '../services/sharedPostResponseMemory';
 import {
   getOwnedSharedNoteIdsFromPosts,
   normalizeOwnedSharedNoteIds,
@@ -83,6 +88,7 @@ import { useAuth } from './useAuth';
 import { useConnectivity } from './useConnectivity';
 import { logStartupEvent, traceStartupAsync } from '../utils/startupTrace';
 import { applyFriendNicknamesToSharedPosts } from '../utils/sharedDisplayNames';
+import type { AppUser } from '../utils/appUser';
 
 export type SharedFeedLoadPhase = 'bootstrapping' | 'cache-ready' | 'ready' | 'refreshing';
 
@@ -120,11 +126,7 @@ interface SharedFeedStoreValue {
   getSharedPostThreadSummaries: (postIds: string[]) => Promise<SharedThreadSummary[]>;
   subscribeToSharedPostResponses: (
     postId: string,
-    options: {
-      onResponses: (responses: SharedPostResponse[]) => void | Promise<void>;
-      onError?: (error: unknown) => void;
-      onStatus?: (status: 'connecting' | 'connected' | 'disconnected') => void;
-    }
+    options: SharedPostResponsesSubscriptionOptions
   ) => () => void;
   subscribeToSharedPostTyping: (
     postId: string,
@@ -403,6 +405,7 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
   const sharedFeedSessionRef = useRef(0);
   const refreshRequestIdRef = useRef(0);
   const refreshInFlightRef = useRef<Promise<void> | null>(null);
+  const responsePageFetchesRef = useRef<Map<string, Promise<SharedPostResponse[]>>>(new Map());
   const pendingForcedRefreshRef = useRef(false);
   const sharedFeedSubscriptionHealthyRef = useRef(true);
   const sharedMediaHydrationKeyRef = useRef<string | null>(null);
@@ -1144,6 +1147,7 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
       commitSnapshot(
         {
           friends: [],
+          friendGroups: [],
           sharedPosts: [],
           activeInvite: null,
           ownedSharedNoteIds: [],
@@ -1364,6 +1368,33 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
       );
     }
   }, [isOnline]);
+  const fetchSharedPostResponsesPageOnce = useCallback(
+    (
+      activeUser: AppUser,
+      postId: string,
+      options: { limit?: number; beforeCreatedAt?: string | null } = {}
+    ) => {
+      const normalizedPostId = postId.trim();
+      const beforeCreatedAt = options.beforeCreatedAt?.trim() || '';
+      const requestKey = [
+        activeUser.uid,
+        normalizedPostId,
+        options.limit ?? 'default',
+        beforeCreatedAt,
+      ].join(':');
+      const inFlightRequest = responsePageFetchesRef.current.get(requestKey);
+      if (inFlightRequest) {
+        return inFlightRequest;
+      }
+
+      const request = fetchPostResponsesPage(activeUser, normalizedPostId, options).finally(() => {
+        responsePageFetchesRef.current.delete(requestKey);
+      });
+      responsePageFetchesRef.current.set(requestKey, request);
+      return request;
+    },
+    []
+  );
   const presentedSharedPosts = useMemo(
     () => applyFriendNicknamesToSharedPosts(sharedPosts, friends, user?.uid ?? null),
     [friends, sharedPosts, user?.uid]
@@ -1660,11 +1691,14 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
       getSharedPostResponses: async (postId: string) => {
         const activeUser = requireUser();
         if (!isOnline) {
-          return getCachedSharedPostResponses(activeUser.uid, postId);
+          const cachedResponses = await getCachedSharedPostResponses(activeUser.uid, postId);
+          rememberSharedPostResponses(postId, cachedResponses);
+          return cachedResponses;
         }
 
-        const responses = await fetchPostResponsesPage(activeUser, postId);
-        void replaceCachedSharedPostResponses(activeUser.uid, postId, responses).catch((error) => {
+        const responses = await fetchSharedPostResponsesPageOnce(activeUser, postId);
+        rememberSharedPostResponses(postId, responses);
+        void reconcileCachedSharedPostResponsesPage(activeUser.uid, postId, responses).catch((error) => {
           console.warn('Failed to persist shared response cache:', error);
         });
         return responses;
@@ -1675,20 +1709,33 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
       ) => {
         const activeUser = requireUser();
         if (!isOnline) {
-          return getCachedSharedPostResponsesPage(activeUser.uid, postId, options);
+          const cachedResponses = await getCachedSharedPostResponsesPage(
+            activeUser.uid,
+            postId,
+            options
+          );
+          if (!options?.beforeCreatedAt) {
+            rememberSharedPostResponses(postId, cachedResponses);
+          }
+          return cachedResponses;
         }
 
-        const responses = await fetchPostResponsesPage(activeUser, postId, options);
+        const responses = await fetchSharedPostResponsesPageOnce(activeUser, postId, options);
+        if (!options?.beforeCreatedAt) {
+          rememberSharedPostResponses(postId, responses);
+        }
         if (options?.beforeCreatedAt) {
-          void Promise.all(
-            responses.map((response) => upsertCachedSharedPostResponse(activeUser.uid, response))
-          ).catch((error) => {
+          void reconcileCachedSharedPostResponsesPage(activeUser.uid, postId, responses, {
+            beforeCreatedAt: options.beforeCreatedAt,
+          }).catch((error) => {
             console.warn('Failed to persist shared response page cache:', error);
           });
         } else {
-          void replaceCachedSharedPostResponses(activeUser.uid, postId, responses).catch((error) => {
-            console.warn('Failed to persist shared response cache:', error);
-          });
+          void reconcileCachedSharedPostResponsesPage(activeUser.uid, postId, responses).catch(
+            (error) => {
+              console.warn('Failed to persist shared response cache:', error);
+            }
+          );
         }
         return responses;
       },
@@ -1720,17 +1767,16 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
       },
       subscribeToSharedPostResponses: (
         postId: string,
-        options: {
-          onResponses: (responses: SharedPostResponse[]) => void | Promise<void>;
-          onError?: (error: unknown) => void;
-          onStatus?: (status: 'connecting' | 'connected' | 'disconnected') => void;
-        }
+        options: SharedPostResponsesSubscriptionOptions
       ) => {
         const activeUser = requireUser();
         let disposed = false;
-        void getCachedSharedPostResponses(activeUser.uid, postId)
+        void getCachedSharedPostResponsesPage(activeUser.uid, postId, {
+          limit: options.initialPageSize,
+        })
           .then((cachedResponses) => {
             if (!disposed && (cachedResponses.length > 0 || !isOnline)) {
+              rememberSharedPostResponses(postId, cachedResponses);
               void options.onResponses(cachedResponses);
             }
           })
@@ -1746,13 +1792,101 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
         const unsubscribe = subscribeToPostResponses(activeUser, postId, {
           ...options,
           onResponses: async (responses) => {
-            await replaceCachedSharedPostResponses(activeUser.uid, postId, responses).catch(
+            rememberSharedPostResponses(postId, responses);
+            await reconcileCachedSharedPostResponsesPage(activeUser.uid, postId, responses).catch(
               (error) => {
                 console.warn('Failed to persist shared response cache:', error);
               }
             );
             if (!disposed) {
               await options.onResponses(responses);
+            }
+          },
+          onResponse: async (response) => {
+            await upsertCachedSharedPostResponse(activeUser.uid, response).catch((error) => {
+              console.warn('Failed to persist shared response cache:', error);
+            });
+            if (disposed) {
+              return;
+            }
+
+            if (options.onResponse) {
+              await options.onResponse(response);
+            } else {
+              await options.onResponses(
+                await getCachedSharedPostResponsesPage(activeUser.uid, postId, {
+                  limit: options.initialPageSize,
+                })
+              );
+            }
+          },
+          onResponseDeleted: async (responseId) => {
+            await deleteCachedSharedPostResponse(activeUser.uid, { postId, responseId }).catch(
+              (error) => {
+                console.warn('Failed to remove shared response cache:', error);
+              }
+            );
+            if (disposed) {
+              return;
+            }
+
+            if (options.onResponseDeleted) {
+              await options.onResponseDeleted(responseId);
+            } else {
+              await options.onResponses(
+                await getCachedSharedPostResponsesPage(activeUser.uid, postId, {
+                  limit: options.initialPageSize,
+                })
+              );
+            }
+          },
+          onReaction: async (reaction) => {
+            await upsertCachedSharedPostResponseReaction(activeUser.uid, reaction).catch((error) => {
+              console.warn('Failed to persist shared response reaction cache:', error);
+            });
+            if (disposed) {
+              return;
+            }
+
+            if (options.onReaction) {
+              await options.onReaction(reaction);
+            } else {
+              await options.onResponses(
+                await getCachedSharedPostResponsesPage(activeUser.uid, postId, {
+                  limit: options.initialPageSize,
+                })
+              );
+            }
+          },
+          onReactionDeleted: async (reaction) => {
+            if (reaction.responseId && reaction.authorUid) {
+              await deleteCachedSharedPostResponseReaction(activeUser.uid, {
+                postId: reaction.postId,
+                responseId: reaction.responseId,
+                authorUid: reaction.authorUid,
+              }).catch((error) => {
+                console.warn('Failed to remove shared response reaction cache:', error);
+              });
+            } else {
+              await deleteCachedSharedPostResponseReactionById(activeUser.uid, {
+                postId: reaction.postId,
+                reactionId: reaction.id,
+              }).catch((error) => {
+                console.warn('Failed to remove shared response reaction cache:', error);
+              });
+            }
+            if (disposed) {
+              return;
+            }
+
+            if (options.onReactionDeleted) {
+              await options.onReactionDeleted(reaction);
+            } else {
+              await options.onResponses(
+                await getCachedSharedPostResponsesPage(activeUser.uid, postId, {
+                  limit: options.initialPageSize,
+                })
+              );
             }
           },
         });
@@ -1958,6 +2092,7 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
       friends,
       friendPresence,
       friendGroups,
+      fetchSharedPostResponsesPageOnce,
       phase,
       initialLoadComplete,
       isOnline,

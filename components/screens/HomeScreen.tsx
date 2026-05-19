@@ -412,6 +412,7 @@ export default function HomeScreen() {
   const {
     location,
     remindersEnabled,
+    refreshPermissions,
     requestForegroundLocation,
     requestReminderPermissions,
     openAppSettings,
@@ -1732,9 +1733,16 @@ export default function HomeScreen() {
           return;
         }
 
-        return setPersistentItem(promptKey, '1')
-          .then(() => {
-            if (cancelled) {
+        return refreshPermissions()
+          .then((permissionState) => {
+            if (cancelled || permissionState.remindersEnabled) {
+              return false;
+            }
+
+            return setPersistentItem(promptKey, '1').then(() => true);
+          })
+          .then((shouldShowPrompt) => {
+            if (cancelled || !shouldShowPrompt) {
               return;
             }
 
@@ -1765,6 +1773,7 @@ export default function HomeScreen() {
   }, [
     notes,
     promptReminderPermissionsFromDisclosure,
+    refreshPermissions,
     remindersEnabled,
     showAlert,
     syncBootstrapState,

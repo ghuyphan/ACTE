@@ -76,7 +76,7 @@ export function useAppSplashGate({
     });
     let cancelled = false;
 
-    requestAnimationFrame(() => {
+    const animationFrame = requestAnimationFrame(() => {
       if (!cancelled) {
         void SplashScreen.hideAsync()
           .then(() => {
@@ -90,6 +90,7 @@ export function useAppSplashGate({
 
     return () => {
       cancelled = true;
+      cancelAnimationFrame(animationFrame);
     };
   }, [
     authReady,

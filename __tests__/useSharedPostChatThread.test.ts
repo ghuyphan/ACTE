@@ -3,6 +3,7 @@ import {
   groupChatResponses,
   mergeChatResponses,
   mergeResponseReactions,
+  removeResponseReaction,
   type ChatThreadResponse,
 } from '../hooks/shared/useSharedPostChatThread';
 
@@ -83,6 +84,33 @@ describe('useSharedPostChatThread helpers', () => {
 
     expect(merged).toHaveLength(1);
     expect(merged[0].id).toBe('shared-response-reaction-1');
+  });
+
+  it('removes a reaction by id without rebuilding unrelated reactions', () => {
+    const reactions = [
+      {
+        id: 'reaction-1',
+        postId: 'post-1',
+        responseId: 'response-1',
+        authorUid: 'me',
+        authorDisplayName: 'Me',
+        authorPhotoURLSnapshot: null,
+        emoji: '💛',
+        createdAt: '2026-05-01T01:00:00.000Z',
+      },
+      {
+        id: 'reaction-2',
+        postId: 'post-1',
+        responseId: 'response-1',
+        authorUid: 'friend-1',
+        authorDisplayName: 'Friend',
+        authorPhotoURLSnapshot: null,
+        emoji: '✨',
+        createdAt: '2026-05-01T01:00:01.000Z',
+      },
+    ];
+
+    expect(removeResponseReaction(reactions, { id: 'reaction-1' })).toEqual([reactions[1]]);
   });
 
   it('prepends older paginated responses in chronological order', () => {

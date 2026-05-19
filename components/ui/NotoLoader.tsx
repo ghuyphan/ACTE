@@ -18,6 +18,7 @@ type NotoLoaderVariant = 'note' | 'map' | 'photo' | 'skeleton' | 'inline';
 type NotoLoaderSize = 'small' | 'large' | number;
 
 type NotoLoaderProps = {
+  animating?: boolean;
   variant?: NotoLoaderVariant;
   size?: NotoLoaderSize;
   color?: string;
@@ -36,6 +37,7 @@ function getSize(size: NotoLoaderSize | undefined, variant: NotoLoaderVariant) {
 }
 
 function NotoLoader({
+  animating = true,
   variant = 'note',
   size = 'large',
   color,
@@ -53,6 +55,20 @@ function NotoLoader({
   const dotThree = useSharedValue(0.38);
 
   useEffect(() => {
+    if (!animating) {
+      cancelAnimation(pulse);
+      cancelAnimation(bob);
+      cancelAnimation(dotOne);
+      cancelAnimation(dotTwo);
+      cancelAnimation(dotThree);
+      pulse.value = 0;
+      bob.value = 0;
+      dotOne.value = 0.76;
+      dotTwo.value = 0.76;
+      dotThree.value = 0.76;
+      return;
+    }
+
     if (reduceMotionEnabled) {
       pulse.value = 0.55;
       bob.value = 0;
@@ -113,7 +129,7 @@ function NotoLoader({
       cancelAnimation(dotTwo);
       cancelAnimation(dotThree);
     };
-  }, [bob, dotOne, dotThree, dotTwo, pulse, reduceMotionEnabled]);
+  }, [animating, bob, dotOne, dotThree, dotTwo, pulse, reduceMotionEnabled]);
 
   const bobStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: bob.value }],
@@ -133,6 +149,7 @@ function NotoLoader({
     const dotSize = Math.max(4, Math.round(visualSize / 5));
     return (
       <View
+        {...({ animating } as { animating: boolean })}
         testID={testID}
         pointerEvents="none"
         style={[styles.inlineRoot, { minWidth: visualSize, height: visualSize }, style]}
@@ -160,6 +177,7 @@ function NotoLoader({
     const ringSize = visualSize * 0.9;
     return (
       <View
+        {...({ animating } as { animating: boolean })}
         testID={testID}
         pointerEvents="none"
         style={[styles.root, { width: visualSize, height: visualSize }, style]}
@@ -188,6 +206,7 @@ function NotoLoader({
     const cardHeight = variant === 'skeleton' ? visualSize * 0.9 : visualSize * 1.05;
     return (
       <View
+        {...({ animating } as { animating: boolean })}
         testID={testID}
         pointerEvents="none"
         style={[styles.skeletonRoot, { minHeight: cardHeight }, style]}
@@ -230,6 +249,7 @@ function NotoLoader({
 
   return (
     <View
+      {...({ animating } as { animating: boolean })}
       testID={testID}
       pointerEvents="none"
       style={[styles.noteRoot, { minWidth: visualSize, minHeight: visualSize + 12 }, style]}

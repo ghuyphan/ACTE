@@ -91,7 +91,7 @@ export function CaptureSaveButton({
             <Ionicons
               name="paper-plane"
               size={22}
-              color="#FFFFFF"
+              color={colors.captureCameraOverlayText}
             />
           </Reanimated.View>
           <Reanimated.View
@@ -100,10 +100,11 @@ export function CaptureSaveButton({
             style={[styles.captureToggleIconLayer, animatedSaveSpinnerStyle]}
           >
             <NotoLoader
+              animating={isSaveBusy}
               testID="capture-save-button-spinner-indicator"
               variant="inline"
               size="small"
-              color="#FFFFFF"
+              color={colors.captureCameraOverlayText}
             />
           </Reanimated.View>
           <Reanimated.View
@@ -114,7 +115,7 @@ export function CaptureSaveButton({
             <Ionicons
               name="checkmark"
               size={27}
-              color="#FFFFFF"
+              color={colors.captureCameraOverlayText}
             />
           </Reanimated.View>
         </Reanimated.View>

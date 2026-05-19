@@ -69,6 +69,7 @@ let mockSyncStatusState = {
 let mockGeofenceState = {
   location: null as null,
   remindersEnabled: false,
+  refreshPermissions: jest.fn(async () => ({ foregroundGranted: false, remindersEnabled: false })),
   requestForegroundLocation: jest.fn(async () => ({ location: null, requiresSettings: false })),
   requestReminderPermissions: jest.fn(async () => ({ enabled: false, requiresSettings: false })),
   openAppSettings: jest.fn(async () => undefined),
@@ -394,6 +395,7 @@ describe('HomeScreen empty state', () => {
     mockGeofenceState = {
       location: null,
       remindersEnabled: false,
+      refreshPermissions: jest.fn(async () => ({ foregroundGranted: false, remindersEnabled: false })),
       requestForegroundLocation: jest.fn(async () => ({ location: null, requiresSettings: false })),
       requestReminderPermissions: jest.fn(async () => ({ enabled: false, requiresSettings: false })),
       openAppSettings: jest.fn(async () => undefined),
@@ -611,6 +613,32 @@ describe('HomeScreen empty state', () => {
 
     await renderHomeScreen();
 
+    expect(mockShowAlert).not.toHaveBeenCalled();
+  });
+
+  it('does not show the reminder recovery prompt when a fresh permission check finds reminders enabled', async () => {
+    mockNotesStoreState = {
+      ...mockNotesStoreState,
+      notes: [buildNote()],
+    };
+    mockGeofenceState = {
+      ...mockGeofenceState,
+      remindersEnabled: false,
+      refreshPermissions: jest.fn(async () => ({
+        foregroundGranted: true,
+        remindersEnabled: true,
+      })),
+    };
+
+    await renderHomeScreen();
+
+    await waitFor(() => {
+      expect(mockGeofenceState.refreshPermissions).toHaveBeenCalled();
+    });
+    expect(mockSetPersistentItem).not.toHaveBeenCalledWith(
+      'noto.home.reminder-recovery-prompt.v1.user-1',
+      '1'
+    );
     expect(mockShowAlert).not.toHaveBeenCalled();
   });
 });

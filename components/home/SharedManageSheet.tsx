@@ -1,5 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { BottomSheetFlatList } from '@gorhom/bottom-sheet';
+import { environment, presentationDetents, presentationDragIndicator } from '@expo/ui/swift-ui/modifiers';
 import { Image } from 'expo-image';
 import { type ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -530,7 +531,7 @@ export default function SharedManageSheet(props: {
   onDeleteFriendGroup: (groupId: string) => Promise<void>;
 }) {
   const { t, i18n } = useTranslation();
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   const {
     visible,
     friends,
@@ -594,6 +595,15 @@ export default function SharedManageSheet(props: {
   const friendBadgeLabel = friends.length > 0 ? (friends.length > 9 ? '9+' : String(friends.length)) : undefined;
   const unreadChatsBadgeLabel =
     unreadChatsCount > 0 ? (unreadChatsCount > 9 ? '9+' : String(unreadChatsCount)) : undefined;
+  const iosManageSheetDetents = useMemo(() => [{ height: FIXED_SHEET_HEIGHT }], []);
+  const iosManageSheetModifiers = useMemo(
+    () => [
+      presentationDragIndicator('visible'),
+      environment('colorScheme', isDark ? 'dark' : 'light'),
+      presentationDetents(iosManageSheetDetents, { selection: { height: FIXED_SHEET_HEIGHT } }),
+    ],
+    [iosManageSheetDetents, isDark]
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -779,6 +789,7 @@ export default function SharedManageSheet(props: {
         androidSnapPoints={[FIXED_SHEET_HEIGHT]}
         androidContentContainerStyle={styles.androidSheetContainer}
         fitToContents={false}
+        iosGroupModifiers={iosManageSheetModifiers}
       >
         <AppSheetScaffold
           headerVariant="action"

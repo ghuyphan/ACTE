@@ -30,10 +30,13 @@ const CHAT_LIST_SKELETON_ROWS = [
   { key: 'second', titleWidth: '38%', previewWidth: '54%' },
   { key: 'third', titleWidth: '52%', previewWidth: '62%' },
 ] as const;
+const CHAT_PREWARM_RESPONSE_LIMIT = 30;
+const MAX_PREWARM_THREADS = 8;
 const MAX_CACHED_THREAD_SUMMARIES = 80;
-const MAX_TYPING_PREVIEW_THREADS = 30;
+const MAX_TYPING_PREVIEW_THREADS = 12;
 const cachedThreadSummaryByPostId = new Map<string, SharedThreadSummary>();
 const cachedReadStateByUserUid = new Map<string, Record<string, SharedThreadReadState>>();
+const prewarmedResponsePageKeys = new Set<string>();
 
 function getCachedThreadSummaries(postIds: readonly string[]) {
   return Object.fromEntries(
@@ -140,6 +143,7 @@ export default function SharedChatsScreen() {
     friends = [],
     loading,
     sharedPosts = [],
+    getSharedPostResponsesPage = async () => [],
     getSharedPostThreadSummaries = async () => [],
     getSharedThreadReadStates = async () => [],
     subscribeToSharedPostTyping = () => ({
@@ -269,6 +273,53 @@ export default function SharedChatsScreen() {
       }
     };
   }, [authReady, subscribeToSharedPostTyping, typingPreviewPostIdsKey, user?.uid]);
+  const prewarmThreadResponses = useCallback(
+    (postId: string) => {
+      if (!authReady || !user?.uid) {
+        return;
+      }
+
+      const cacheKey = `${user.uid}:${postId}`;
+      if (prewarmedResponsePageKeys.has(cacheKey)) {
+        return;
+      }
+
+      prewarmedResponsePageKeys.add(cacheKey);
+      void getSharedPostResponsesPage(postId, { limit: CHAT_PREWARM_RESPONSE_LIMIT }).catch(() => {
+        prewarmedResponsePageKeys.delete(cacheKey);
+      });
+    },
+    [authReady, getSharedPostResponsesPage, user?.uid]
+  );
+  const prewarmPostIdsKey = useMemo(
+    () =>
+      threads
+        .slice(0, MAX_PREWARM_THREADS)
+        .map((post) => post.id)
+        .join('|'),
+    [threads]
+  );
+  useEffect(() => {
+    const postIds = prewarmPostIdsKey ? prewarmPostIdsKey.split('|') : [];
+    if (!authReady || !user?.uid || postIds.length === 0) {
+      return;
+    }
+
+    let cancelled = false;
+    const warmNext = (index: number) => {
+      if (cancelled || index >= postIds.length) {
+        return;
+      }
+
+      prewarmThreadResponses(postIds[index]);
+      setTimeout(() => warmNext(index + 1), 120);
+    };
+
+    warmNext(0);
+    return () => {
+      cancelled = true;
+    };
+  }, [authReady, prewarmPostIdsKey, prewarmThreadResponses, user?.uid]);
   const getThreadParticipant = useCallback(
     (post: SharedPost) => {
       const participantUid =
@@ -362,6 +413,7 @@ export default function SharedChatsScreen() {
           onPress={() => {
             router.push(`/shared/chat/${post.id}` as any);
           }}
+          onPressIn={() => prewarmThreadResponses(post.id)}
           style={({ pressed }) => [
             styles.threadRow,
             {
@@ -424,14 +476,6 @@ export default function SharedChatsScreen() {
             >
               {typingPreview ?? latestPreview}
             </Text>
-            {summary?.latestActivityAt ? (
-              <Text
-                numberOfLines={1}
-                style={[styles.threadMemoryContext, { color: colors.secondaryText }]}
-              >
-                {memoryPreview}
-              </Text>
-            ) : null}
           </View>
           <View style={styles.threadMeta}>
             <Text style={[styles.threadTime, { color: colors.secondaryText }]}>
@@ -451,6 +495,7 @@ export default function SharedChatsScreen() {
     [
       colors,
       getThreadParticipant,
+      prewarmThreadResponses,
       readStateByPostId,
       router,
       t,
@@ -705,11 +750,6 @@ const styles = StyleSheet.create({
   },
   threadPreviewTyping: {
     fontWeight: '900',
-  },
-  threadMemoryContext: {
-    fontSize: 11,
-    lineHeight: 15,
-    fontFamily: 'Noto Sans',
   },
   threadMeta: {
     alignItems: 'flex-end',

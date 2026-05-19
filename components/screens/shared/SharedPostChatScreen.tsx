@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import * as Clipboard from 'expo-clipboard';
 import { FlashList, type FlashListRef } from '@shopify/flash-list';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -7,7 +8,6 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { useTranslation } from 'react-i18next';
 import {
   Animated,
-  AppState,
   Keyboard,
   PanResponder,
   Platform,
@@ -27,13 +27,14 @@ import {
   type ViewStyle,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Layout } from '../../../constants/theme';
+import { Layout, Shadows } from '../../../constants/theme';
 import { useAuth } from '../../../hooks/useAuth';
 import { useConnectivity } from '../../../hooks/useConnectivity';
 import * as Haptics from '../../../hooks/useHaptics';
 import { useSharedFeedStore } from '../../../hooks/useSharedFeed';
+import { useSharedPostChatResponses } from '../../../hooks/shared/useSharedPostChatResponses';
+import { useSharedPostTypingPresence } from '../../../hooks/shared/useSharedPostTypingPresence';
 import {
-  areChatResponseListsEqual as areResponseListsEqualFromThread,
   getResponseDeliveryStatus,
   isReactionOnlyResponse,
   mergeChatResponses,
@@ -50,7 +51,6 @@ import {
 import type {
   SharedPost,
   SharedPostResponse,
-  SharedPostTypingUser,
 } from '../../../services/sharedFeedService';
 import { getUserSocialName } from '../../../utils/appUser';
 import { formatChatTimestamp } from '../../../utils/dateUtils';
@@ -80,11 +80,6 @@ type ReactionOverlay = {
   pageY: number;
 } | null;
 
-type SharedPostTypingSubscription = {
-  setTyping: (isTyping: boolean) => void;
-  unsubscribe: () => void;
-};
-
 const RESPONSE_SKELETON_ROWS = [
   { key: 'incoming-short', isSelf: false, width: '44%', minHeight: 40 },
   { key: 'self-reaction', isSelf: true, width: 54, minHeight: 44 },
@@ -93,35 +88,14 @@ const RESPONSE_SKELETON_ROWS = [
 ] as const;
 const QUICK_RESPONSES = ['💛', '🥹', '✨', '😂'] as const;
 const RESPONSE_PAGE_SIZE = 50;
-const MAX_REMEMBERED_RESPONSE_THREADS = 24;
+const INFO_MESSAGE_VISIBLE_MS = 1800;
 const TYPING_IDLE_MS = 3500;
 const TYPING_HEARTBEAT_MS = 2500;
 const THREAD_SCROLL_POSITION_CONFIG = {
   startRenderingFromBottom: true,
   autoscrollToBottomThreshold: 0.25,
-  animateAutoScrollToBottom: true,
+  animateAutoScrollToBottom: false,
 } as const;
-const responseSnapshotByPostId = new Map<string, ChatThreadResponse[]>();
-const hydratedResponsePostIds = new Set<string>();
-
-function getRememberedResponses(postId: string) {
-  return responseSnapshotByPostId.get(postId) ?? [];
-}
-
-function rememberResponses(postId: string, responses: ChatThreadResponse[]) {
-  responseSnapshotByPostId.delete(postId);
-  responseSnapshotByPostId.set(postId, responses);
-  hydratedResponsePostIds.add(postId);
-
-  while (responseSnapshotByPostId.size > MAX_REMEMBERED_RESPONSE_THREADS) {
-    const oldestPostId = responseSnapshotByPostId.keys().next().value;
-    if (!oldestPostId) {
-      break;
-    }
-    responseSnapshotByPostId.delete(oldestPostId);
-    hydratedResponsePostIds.delete(oldestPostId);
-  }
-}
 
 function scheduleKeyboardLayout(event: KeyboardEvent) {
   if (Platform.OS === 'ios') {
@@ -512,18 +486,7 @@ export default function SharedPostChatScreen({
       throw new Error(t('shared.responseSendFailed', 'Could not send response.'));
     },
   } = useSharedFeedStore();
-  const [responses, setResponses] = useState<ChatThreadResponse[]>(() =>
-    getRememberedResponses(postId)
-  );
   const [draft, setDraft] = useState('');
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [isLoadingResponses, setIsLoadingResponses] = useState(
-    () => !hydratedResponsePostIds.has(postId)
-  );
-  const [isLoadingOlderResponses, setIsLoadingOlderResponses] = useState(false);
-  const [hasOlderResponses, setHasOlderResponses] = useState(
-    () => getRememberedResponses(postId).length >= RESPONSE_PAGE_SIZE
-  );
   const [isSending, setIsSending] = useState(false);
   const [isNicknameEditorVisible, setIsNicknameEditorVisible] = useState(false);
   const [nicknameDraft, setNicknameDraft] = useState('');
@@ -531,24 +494,20 @@ export default function SharedPostChatScreen({
   const [isSavingNickname, setIsSavingNickname] = useState(false);
   const [replyTarget, setReplyTarget] = useState<SharedPostResponse | null>(null);
   const [reactionOverlay, setReactionOverlay] = useState<ReactionOverlay>(null);
-  const [typingUsers, setTypingUsers] = useState<SharedPostTypingUser[]>([]);
-  const [connectionStatus, setConnectionStatus] = useState<
-    'connecting' | 'connected' | 'disconnected'
-  >('connecting');
+  const [infoMessage, setInfoMessage] = useState<string | null>(null);
   const [highlightedResponseId, setHighlightedResponseId] = useState<string | null>(null);
+  const [isThreadFirstPaintReady, setIsThreadFirstPaintReady] = useState(false);
+  const [isJumpToLatestMounted, setIsJumpToLatestMounted] = useState(false);
   const [composerHeight, setComposerHeight] = useState(96);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const listRef = useRef<FlashListRef<ChatListItem> | null>(null);
   const composerFocusedRef = useRef(false);
-  const typingSubscriptionRef = useRef<SharedPostTypingSubscription | null>(null);
-  const typingIdleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const isTypingRef = useRef(false);
-  const lastTypingPublishAtRef = useRef(0);
-  const isThreadEndVisibleRef = useRef(true);
-  const pendingResponsesRef = useRef<Map<string, ChatThreadResponse>>(new Map());
+  const highlightResetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const infoMessageTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastMarkedReadSignatureRef = useRef<string | null>(null);
   const optimisticSequenceRef = useRef(0);
   const reactionOverlayProgress = useRef(new Animated.Value(0)).current;
+  const jumpToLatestProgress = useRef(new Animated.Value(0)).current;
   const sendButtonPulse = useRef(new Animated.Value(0)).current;
   const pendingInitialResponseIdRef = useRef<string | null>(null);
 
@@ -556,6 +515,42 @@ export default function SharedPostChatScreen({
   const normalizedInitialResponseId = Array.isArray(initialResponseId)
     ? initialResponseId[0]?.trim() || null
     : initialResponseId?.trim() || null;
+  const {
+    clearNewMessageCount,
+    connectionStatus,
+    errorMessage,
+    hasOlderResponses,
+    isLoadingOlderResponses,
+    isLoadingResponses,
+    isThreadEndVisible,
+    isThreadEndVisibleRef,
+    loadOlderResponses,
+    newMessageCount,
+    pendingResponsesRef,
+    responses,
+    setErrorMessage,
+    setThreadEndVisible,
+    updateResponses,
+  } = useSharedPostChatResponses({
+    getSharedPostResponsesPage,
+    isOnline,
+    pageSize: RESPONSE_PAGE_SIZE,
+    postId,
+    responseLoadFailedMessage: t('shared.responseLoadFailed', 'Could not load responses.'),
+    subscribeToSharedPostResponses,
+  });
+  const {
+    clearTypingIdleTimer,
+    handleDraftChange: handleTypingDraftChange,
+    publishTypingState,
+    typingUsers,
+  } = useSharedPostTypingPresence({
+    enabled: Boolean(post && user?.uid),
+    heartbeatMs: TYPING_HEARTBEAT_MS,
+    idleMs: TYPING_IDLE_MS,
+    postId,
+    subscribeToSharedPostTyping,
+  });
   const chatThreadLabels = useMemo(
     () => ({
       today: t('common.today', 'Today'),
@@ -567,6 +562,7 @@ export default function SharedPostChatScreen({
     responses,
     chatThreadLabels
   );
+  const shouldShowJumpToLatest = !isThreadEndVisible && responses.length > 0;
   const friendById = useMemo(() => {
     const next = new Map<string, (typeof friends)[number]>();
     for (const friend of friends) {
@@ -624,52 +620,37 @@ export default function SharedPostChatScreen({
     [getAuthorLabel, responseById]
   );
 
-  const clearTypingIdleTimer = useCallback(() => {
-    if (typingIdleTimerRef.current) {
-      clearTimeout(typingIdleTimerRef.current);
-      typingIdleTimerRef.current = null;
+  const clearHighlightResetTimer = useCallback(() => {
+    if (highlightResetTimerRef.current) {
+      clearTimeout(highlightResetTimerRef.current);
+      highlightResetTimerRef.current = null;
     }
   }, []);
 
-  const publishOwnTypingState = useCallback(
-    (isTyping: boolean, options: { force?: boolean } = {}) => {
-      const subscription = typingSubscriptionRef.current;
-      if (!subscription) {
-        return;
-      }
+  const clearInfoMessageTimer = useCallback(() => {
+    if (infoMessageTimerRef.current) {
+      clearTimeout(infoMessageTimerRef.current);
+      infoMessageTimerRef.current = null;
+    }
+  }, []);
 
-      const now = Date.now();
-      const shouldPublish =
-        options.force ||
-        isTypingRef.current !== isTyping ||
-        (isTyping && now - lastTypingPublishAtRef.current > TYPING_HEARTBEAT_MS);
-      if (!shouldPublish) {
-        return;
-      }
-
-      isTypingRef.current = isTyping;
-      lastTypingPublishAtRef.current = now;
-      subscription.setTyping(isTyping);
+  const showInfoMessage = useCallback(
+    (message: string) => {
+      clearInfoMessageTimer();
+      setInfoMessage(message);
+      infoMessageTimerRef.current = setTimeout(() => {
+        infoMessageTimerRef.current = null;
+        setInfoMessage(null);
+      }, INFO_MESSAGE_VISIBLE_MS);
     },
-    []
+    [clearInfoMessageTimer]
   );
 
   const handleDraftChange = useCallback(
     (nextDraft: string) => {
-      setDraft(nextDraft);
-      clearTypingIdleTimer();
-
-      if (!nextDraft.trim()) {
-        publishOwnTypingState(false, { force: true });
-        return;
-      }
-
-      publishOwnTypingState(true);
-      typingIdleTimerRef.current = setTimeout(() => {
-        publishOwnTypingState(false, { force: true });
-      }, TYPING_IDLE_MS);
+      handleTypingDraftChange(nextDraft, setDraft);
     },
-    [clearTypingIdleTimer, publishOwnTypingState]
+    [handleTypingDraftChange]
   );
 
   useEffect(() => {
@@ -680,50 +661,16 @@ export default function SharedPostChatScreen({
   }, [postId]);
 
   useEffect(() => {
-    if (!post || !user?.uid) {
-      setTypingUsers([]);
-      return;
-    }
-
-    const subscription = subscribeToSharedPostTyping(postId, {
-      onTypingUsers: setTypingUsers,
-      onError: () => undefined,
-    });
-    typingSubscriptionRef.current = subscription;
-    isTypingRef.current = false;
-    lastTypingPublishAtRef.current = 0;
-
-    return () => {
-      clearTypingIdleTimer();
-      subscription.setTyping(false);
-      subscription.unsubscribe();
-      typingSubscriptionRef.current = null;
-      isTypingRef.current = false;
-      lastTypingPublishAtRef.current = 0;
-      setTypingUsers([]);
-    };
-  }, [clearTypingIdleTimer, post, postId, subscribeToSharedPostTyping, user?.uid]);
-
-  useEffect(() => {
     pendingInitialResponseIdRef.current = normalizedInitialResponseId;
   }, [normalizedInitialResponseId, postId]);
 
   useEffect(() => {
-    if (!isOnline) {
-      setConnectionStatus('disconnected');
-    }
-  }, [isOnline]);
+    lastMarkedReadSignatureRef.current = null;
+    setIsThreadFirstPaintReady(false);
+  }, [postId]);
 
-  useEffect(() => {
-    const subscription = AppState.addEventListener('change', (nextState) => {
-      if (nextState !== 'active') {
-        clearTypingIdleTimer();
-        publishOwnTypingState(false, { force: true });
-      }
-    });
-
-    return () => subscription.remove();
-  }, [clearTypingIdleTimer, publishOwnTypingState]);
+  useEffect(() => clearHighlightResetTimer, [clearHighlightResetTimer]);
+  useEffect(() => clearInfoMessageTimer, [clearInfoMessageTimer]);
 
   useEffect(() => {
     Animated.spring(reactionOverlayProgress, {
@@ -734,6 +681,30 @@ export default function SharedPostChatScreen({
       mass: 0.7,
     }).start();
   }, [reactionOverlay, reactionOverlayProgress]);
+
+  useEffect(() => {
+    if (shouldShowJumpToLatest) {
+      setIsJumpToLatestMounted(true);
+      Animated.spring(jumpToLatestProgress, {
+        toValue: 1,
+        useNativeDriver: true,
+        damping: 17,
+        stiffness: 360,
+        mass: 0.7,
+      }).start();
+      return;
+    }
+
+    Animated.timing(jumpToLatestProgress, {
+      toValue: 0,
+      duration: 140,
+      useNativeDriver: true,
+    }).start(({ finished }) => {
+      if (finished) {
+        setIsJumpToLatestMounted(false);
+      }
+    });
+  }, [jumpToLatestProgress, shouldShowJumpToLatest]);
 
   const postAuthorLabel = post
     ? getAuthorLabel(post.authorUid, post.authorDisplayName)
@@ -860,94 +831,6 @@ export default function SharedPostChatScreen({
     t,
   ]);
   const shouldShowHeaderPresence = Boolean(post && participantIds.length <= 1);
-  const applyRemoteResponses = useCallback((nextResponses: SharedPostResponse[]) => {
-    setResponses((current) => {
-      const next = mergeChatResponses(
-        [...current, ...nextResponses],
-        Array.from(pendingResponsesRef.current.values())
-      );
-      rememberResponses(postId, next);
-      return areResponseListsEqualFromThread(current, next) ? current : next;
-    });
-  }, [postId]);
-
-  useEffect(() => {
-    const rememberedResponses = getRememberedResponses(postId);
-    pendingResponsesRef.current.clear();
-    lastMarkedReadSignatureRef.current = null;
-    setResponses(rememberedResponses);
-    setIsLoadingResponses(!hydratedResponsePostIds.has(postId));
-    setHasOlderResponses(rememberedResponses.length >= RESPONSE_PAGE_SIZE);
-    setIsLoadingOlderResponses(false);
-    setErrorMessage(null);
-    setConnectionStatus(isOnline ? 'connecting' : 'disconnected');
-    if (!subscribeToSharedPostResponses) {
-      let cancelled = false;
-      void getSharedPostResponsesPage(postId, { limit: RESPONSE_PAGE_SIZE })
-        .then((nextResponses) => {
-          if (!cancelled) {
-            applyRemoteResponses(nextResponses);
-            setHasOlderResponses(nextResponses.length >= RESPONSE_PAGE_SIZE);
-            setConnectionStatus('connected');
-          }
-        })
-        .catch((error) => {
-          if (!cancelled) {
-            setConnectionStatus('disconnected');
-            setErrorMessage(
-              error instanceof Error
-                ? error.message
-                : t('shared.responseLoadFailed', 'Could not load responses.')
-            );
-          }
-        })
-        .finally(() => {
-          if (!cancelled) {
-            setIsLoadingResponses(false);
-          }
-        });
-
-      return () => {
-        cancelled = true;
-      };
-    }
-
-    try {
-      return subscribeToSharedPostResponses(postId, {
-        onResponses: (nextResponses) => {
-          applyRemoteResponses(nextResponses);
-          setHasOlderResponses((current) => current || nextResponses.length >= RESPONSE_PAGE_SIZE);
-          setIsLoadingResponses(false);
-        },
-        onError: (error) => {
-          setIsLoadingResponses(false);
-          setConnectionStatus('disconnected');
-          setErrorMessage(
-            error instanceof Error
-              ? error.message
-              : t('shared.responseLoadFailed', 'Could not load responses.')
-          );
-        },
-        onStatus: setConnectionStatus,
-      });
-    } catch (error) {
-      setIsLoadingResponses(false);
-      setErrorMessage(
-        error instanceof Error
-          ? error.message
-          : t('shared.responseLoadFailed', 'Could not load responses.')
-      );
-    }
-
-    return undefined;
-  }, [
-    applyRemoteResponses,
-    getSharedPostResponsesPage,
-    isOnline,
-    postId,
-    subscribeToSharedPostResponses,
-    t,
-  ]);
 
   useEffect(() => {
     if (!post && !loading) {
@@ -982,12 +865,13 @@ export default function SharedPostChatScreen({
       const distanceFromEnd =
         contentSize.height - (contentOffset.y + layoutMeasurement.height);
       const isNearEnd = distanceFromEnd < 96;
-      isThreadEndVisibleRef.current = isNearEnd;
+      setThreadEndVisible(isNearEnd);
       if (isNearEnd && !isLoadingResponses) {
+        clearNewMessageCount();
         markThreadReadThroughLatest();
       }
     },
-    [isLoadingResponses, markThreadReadThroughLatest]
+    [clearNewMessageCount, isLoadingResponses, markThreadReadThroughLatest, setThreadEndVisible]
   );
 
   const openNicknameEditor = useCallback(() => {
@@ -1099,18 +983,16 @@ export default function SharedPostChatScreen({
           : t('shared.chatOfflineSendMessage', 'You are offline. Retry when connected.'),
       };
       pendingResponsesRef.current.set(optimisticId, optimisticResponse);
-      setResponses((current) => {
+      updateResponses((current) => {
         const withoutRetry = retryResponse
           ? current.filter((item) => item.id !== retryResponse.id)
           : current;
-        const next = mergeChatResponses(withoutRetry, [optimisticResponse]);
-        rememberResponses(post.id, next);
-        return areResponseListsEqualFromThread(current, next) ? current : next;
+        return mergeChatResponses(withoutRetry, [optimisticResponse]);
       });
       if (!retryResponse && !responseEmoji) {
         setDraft('');
         clearTypingIdleTimer();
-        publishOwnTypingState(false, { force: true });
+        publishTypingState(false, { force: true });
       }
       if (!retryResponse && !explicitReplyToResponseId) {
         setReplyTarget(null);
@@ -1133,14 +1015,12 @@ export default function SharedPostChatScreen({
           replyToResponseId,
         });
         pendingResponsesRef.current.delete(optimisticId);
-        setResponses((current) => {
-          const next = mergeChatResponses(
+        updateResponses((current) =>
+          mergeChatResponses(
             current.filter((item) => item.id !== optimisticId),
             [response]
-          );
-          rememberResponses(post.id, next);
-          return areResponseListsEqualFromThread(current, next) ? current : next;
-        });
+          )
+        );
         markThreadReadThroughLatest();
       } catch (error) {
         pendingResponsesRef.current.delete(optimisticId);
@@ -1148,9 +1028,9 @@ export default function SharedPostChatScreen({
           error instanceof Error
             ? error.message
             : t('shared.responseSendFailed', 'Could not send response.');
-        setResponses((current) => {
+        updateResponses((current) => {
           const failedStatus: ChatDeliveryStatus = isOnline ? 'failed' : 'offline';
-          const next = current.map((item) =>
+          return current.map((item) =>
             item.id === optimisticId
               ? {
                   ...item,
@@ -1159,8 +1039,6 @@ export default function SharedPostChatScreen({
                 }
               : item
           );
-          rememberResponses(post.id, next);
-          return next;
         });
         setErrorMessage(failureMessage);
       } finally {
@@ -1175,9 +1053,10 @@ export default function SharedPostChatScreen({
       isOnline,
       markThreadReadThroughLatest,
       post,
-      publishOwnTypingState,
+      publishTypingState,
       replyTarget,
       t,
+      updateResponses,
       user,
     ]
   );
@@ -1194,13 +1073,31 @@ export default function SharedPostChatScreen({
     (responseId: string) => {
       void Haptics.selectionAsync();
       pendingResponsesRef.current.delete(responseId);
-      setResponses((current) => {
-        const next = current.filter((response) => response.id !== responseId);
-        rememberResponses(postId, next);
-        return next;
-      });
+      updateResponses((current) => current.filter((response) => response.id !== responseId));
     },
-    [postId]
+    [pendingResponsesRef, updateResponses]
+  );
+
+  const copyResponseText = useCallback(
+    async (response: SharedPostResponse) => {
+      const body = formatSharedResponseBody(response).trim();
+      if (!body) {
+        return;
+      }
+
+      try {
+        await Clipboard.setStringAsync(body);
+        setReactionOverlay(null);
+        showInfoMessage(t('shared.chatCopiedMessage', 'Copied message'));
+      } catch (error) {
+        setErrorMessage(
+          error instanceof Error
+            ? error.message
+            : t('shared.chatCopyFailed', 'Could not copy message.')
+        );
+      }
+    },
+    [showInfoMessage, t]
   );
 
   const sendReaction = useCallback(
@@ -1216,8 +1113,8 @@ export default function SharedPostChatScreen({
       const isRemovingReaction = previousReaction?.emoji === emoji;
       if (isRemovingReaction) {
         setReactionOverlay(null);
-        setResponses((current) => {
-          const next = current.map((response) =>
+        updateResponses((current) =>
+          current.map((response) =>
             response.id === targetResponse.id
               ? {
                   ...response,
@@ -1226,17 +1123,15 @@ export default function SharedPostChatScreen({
                   ),
                 }
               : response
-          );
-          rememberResponses(post.id, next);
-          return next;
-        });
+          )
+        );
 
         try {
           await deleteSharedPostResponseReaction(post.id, targetResponse.id);
         } catch (error) {
           if (previousReaction) {
-            setResponses((current) => {
-              const next = current.map((response) =>
+            updateResponses((current) =>
+              current.map((response) =>
                 response.id === targetResponse.id
                   ? {
                       ...response,
@@ -1248,10 +1143,8 @@ export default function SharedPostChatScreen({
                       ],
                     }
                   : response
-              );
-              rememberResponses(post.id, next);
-              return next;
-            });
+              )
+            );
           }
           setErrorMessage(
             error instanceof Error
@@ -1273,8 +1166,8 @@ export default function SharedPostChatScreen({
         createdAt: new Date().toISOString(),
       };
       setReactionOverlay(null);
-      setResponses((current) => {
-        const next = current.map((response) =>
+      updateResponses((current) =>
+        current.map((response) =>
           response.id === targetResponse.id
             ? {
                 ...response,
@@ -1286,15 +1179,13 @@ export default function SharedPostChatScreen({
                 ],
               }
             : response
-        );
-        rememberResponses(post.id, next);
-        return next;
-      });
+        )
+      );
 
       try {
         const reaction = await createSharedPostResponseReaction(post.id, targetResponse.id, emoji);
-        setResponses((current) => {
-          const next = current.map((response) =>
+        updateResponses((current) =>
+          current.map((response) =>
             response.id === targetResponse.id
               ? {
                   ...response,
@@ -1308,13 +1199,11 @@ export default function SharedPostChatScreen({
                   ],
                 }
               : response
-          );
-          rememberResponses(post.id, next);
-          return next;
-        });
+          )
+        );
       } catch (error) {
-        setResponses((current) => {
-          const next = current.map((response) =>
+        updateResponses((current) =>
+          current.map((response) =>
             response.id === targetResponse.id
               ? {
                   ...response,
@@ -1323,10 +1212,8 @@ export default function SharedPostChatScreen({
                   ),
                 }
               : response
-          );
-          rememberResponses(post.id, next);
-          return next;
-        });
+          )
+        );
         setErrorMessage(
           error instanceof Error
             ? error.message
@@ -1340,6 +1227,7 @@ export default function SharedPostChatScreen({
       post,
       responseById,
       t,
+      updateResponses,
       user,
     ]
   );
@@ -1365,57 +1253,14 @@ export default function SharedPostChatScreen({
         animated: true,
         viewPosition: 0.45,
       });
-      setTimeout(() => setHighlightedResponseId(null), 1200);
+      clearHighlightResetTimer();
+      highlightResetTimerRef.current = setTimeout(() => {
+        highlightResetTimerRef.current = null;
+        setHighlightedResponseId(null);
+      }, 1200);
     },
-    [responseGroups]
+    [clearHighlightResetTimer, responseGroups]
   );
-
-  const loadOlderResponses = useCallback(async () => {
-    if (isLoadingOlderResponses || isLoadingResponses || !hasOlderResponses || responses.length === 0) {
-      return false;
-    }
-
-    const oldestResponse = responses[0];
-    if (!oldestResponse) {
-      return false;
-    }
-
-    setIsLoadingOlderResponses(true);
-    try {
-      const olderResponses = await getSharedPostResponsesPage(postId, {
-        limit: RESPONSE_PAGE_SIZE,
-        beforeCreatedAt: oldestResponse.createdAt,
-      });
-      setHasOlderResponses(olderResponses.length >= RESPONSE_PAGE_SIZE);
-      if (olderResponses.length === 0) {
-        return false;
-      }
-
-      setResponses((current) => {
-        const next = mergeChatResponses([...olderResponses, ...current], []);
-        rememberResponses(postId, next);
-        return areResponseListsEqualFromThread(current, next) ? current : next;
-      });
-      return true;
-    } catch (error) {
-      setErrorMessage(
-        error instanceof Error
-          ? error.message
-          : t('shared.responseLoadFailed', 'Could not load responses.')
-      );
-      return false;
-    } finally {
-      setIsLoadingOlderResponses(false);
-    }
-  }, [
-    getSharedPostResponsesPage,
-    hasOlderResponses,
-    isLoadingOlderResponses,
-    isLoadingResponses,
-    postId,
-    responses,
-    t,
-  ]);
 
   useEffect(() => {
     const targetResponseId = pendingInitialResponseIdRef.current;
@@ -1448,10 +1293,20 @@ export default function SharedPostChatScreen({
   }, [postId, router]);
 
   const scrollToThreadEnd = useCallback((animated = true) => {
+    clearNewMessageCount();
+    setThreadEndVisible(true);
     requestAnimationFrame(() => {
       listRef.current?.scrollToEnd({ animated });
     });
-  }, []);
+  }, [clearNewMessageCount, setThreadEndVisible]);
+
+  const settleThreadEndIfVisible = useCallback(() => {
+    if (!isThreadEndVisibleRef.current) {
+      return;
+    }
+
+    scrollToThreadEnd(false);
+  }, [scrollToThreadEnd]);
 
   useEffect(() => {
     const showSubscription = Keyboard.addListener(
@@ -1460,7 +1315,7 @@ export default function SharedPostChatScreen({
         scheduleKeyboardLayout(event);
         setKeyboardHeight(Math.max(0, screenHeight - event.endCoordinates.screenY));
         if (composerFocusedRef.current) {
-          requestAnimationFrame(() => scrollToThreadEnd(true));
+          requestAnimationFrame(settleThreadEndIfVisible);
         }
       }
     );
@@ -1476,20 +1331,34 @@ export default function SharedPostChatScreen({
       showSubscription.remove();
       hideSubscription.remove();
     };
-  }, [screenHeight, scrollToThreadEnd]);
+  }, [screenHeight, settleThreadEndIfVisible]);
 
-  const handleComposerLayout = useCallback((event: LayoutChangeEvent) => {
-    const nextHeight = Math.ceil(event.nativeEvent.layout.height);
-    setComposerHeight((currentHeight) =>
-      Math.abs(currentHeight - nextHeight) > 1 ? nextHeight : currentHeight
-    );
-  }, []);
+  const handleComposerLayout = useCallback(
+    (event: LayoutChangeEvent) => {
+      const nextHeight = Math.ceil(event.nativeEvent.layout.height);
+      setComposerHeight((currentHeight) => {
+        if (Math.abs(currentHeight - nextHeight) <= 1) {
+          return currentHeight;
+        }
+
+        return nextHeight;
+      });
+    },
+    []
+  );
 
   const composerKeyboardOffset = Math.max(0, keyboardHeight - insets.bottom);
   const contentBottomPadding =
     composerHeight +
     composerKeyboardOffset +
     (typingUsers.some((typingUser) => typingUser.userId !== user?.uid) ? 42 : 18);
+
+  useEffect(() => {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(settleThreadEndIfVisible);
+    });
+  }, [contentBottomPadding, replyTarget, settleThreadEndIfVisible]);
+
   const renderMemoryHeader = useCallback(() => {
     if (!post) {
       return null;
@@ -1550,6 +1419,24 @@ export default function SharedPostChatScreen({
     );
   }, [colors, isDark, openMemory, post, postAuthorLabel, t]);
   const isThreadHydrating = isLoadingResponses && responses.length === 0;
+  useEffect(() => {
+    if (isThreadHydrating || isThreadFirstPaintReady) {
+      return;
+    }
+
+    if (responseGroups.length === 0) {
+      setIsThreadFirstPaintReady(true);
+      return;
+    }
+
+    requestAnimationFrame(() => {
+      listRef.current?.scrollToEnd({ animated: false });
+      requestAnimationFrame(() => {
+        setIsThreadFirstPaintReady(true);
+      });
+    });
+  }, [isThreadFirstPaintReady, isThreadHydrating, responseGroups.length]);
+
   const renderEmptyThread = useCallback(
     () => (
       <View style={styles.messageList}>
@@ -1702,11 +1589,7 @@ export default function SharedPostChatScreen({
                         }}
                         style={[
                           styles.replyPreviewBubble,
-                          {
-                            backgroundColor: isSelf
-                              ? 'rgba(255,255,255,0.18)'
-                              : colors.primarySoft,
-                          },
+                          { backgroundColor: 'transparent' },
                         ]}
                       >
                         <Text
@@ -1836,7 +1719,7 @@ export default function SharedPostChatScreen({
       user?.uid,
     ]
   );
-  const reactionOverlayWidth = 236;
+  const reactionOverlayWidth = Math.min(316, Math.max(284, screenWidth - 24));
   const reactionOverlayLeft = reactionOverlay
     ? Math.min(
         Math.max(reactionOverlay.pageX - reactionOverlayWidth / 2, 12),
@@ -1853,6 +1736,18 @@ export default function SharedPostChatScreen({
     activeReactionOverlayResponse?.reactions?.find(
       (reaction) => reaction.authorUid === user?.uid
     )?.emoji ?? null;
+  const reactionDetailsLabel = activeReactionOverlayResponse?.reactions?.length
+    ? activeReactionOverlayResponse.reactions
+        .map((reaction) => {
+          const identity = getAuthorIdentity(
+            reaction.authorUid,
+            reaction.authorDisplayName,
+            reaction.authorPhotoURLSnapshot
+          );
+          return `${reaction.emoji} ${identity.label}`;
+        })
+        .join('  ·  ')
+    : null;
   const visibleTypingUsers = typingUsers.filter((typingUser) => typingUser.userId !== user?.uid);
   const typingIndicatorLabel =
     visibleTypingUsers.length === 0
@@ -1879,39 +1774,42 @@ export default function SharedPostChatScreen({
           headerTitle: () =>
             post ? (
               <View style={styles.headerIdentity}>
-                {headerAvatarUri ? (
-                  <Image
-                    source={{ uri: headerAvatarUri }}
-                    style={styles.headerAvatar}
-                    contentFit="cover"
-                  />
-                ) : (
-                  <View style={[styles.headerAvatar, { backgroundColor: colors.primarySoft }]}>
-                    <Text style={[styles.headerAvatarLabel, { color: colors.primary }]}>
-                      {headerAvatarInitial}
-                    </Text>
-                  </View>
-                )}
+                <View style={styles.headerAvatarHost}>
+                  {headerAvatarUri ? (
+                    <Image
+                      source={{ uri: headerAvatarUri }}
+                      style={styles.headerAvatar}
+                      contentFit="cover"
+                    />
+                  ) : (
+                    <View style={[styles.headerAvatar, { backgroundColor: colors.primarySoft }]}>
+                      <Text style={[styles.headerAvatarLabel, { color: colors.primary }]}>
+                        {headerAvatarInitial}
+                      </Text>
+                    </View>
+                  )}
+                  {shouldShowHeaderPresence ? (
+                    <View
+                      style={[
+                        styles.headerPresenceDot,
+                        {
+                          backgroundColor:
+                            headerPresenceStatus === 'online'
+                              ? colors.success
+                              : colors.secondaryText,
+                          borderColor: colors.background,
+                          opacity: headerPresenceStatus === 'unknown' ? 0.42 : 1,
+                        },
+                      ]}
+                    />
+                  ) : null}
+                </View>
                 <View style={styles.headerCopy}>
                   <Text numberOfLines={1} style={[styles.headerIdentityText, { color: colors.text }]}>
                     {headerIdentityLabel}
                   </Text>
                   {headerSubtitle ? (
                     <View style={styles.headerSubtitleRow}>
-                      {shouldShowHeaderPresence ? (
-                        <View
-                          style={[
-                            styles.headerPresenceDot,
-                            {
-                              backgroundColor:
-                                headerPresenceStatus === 'online'
-                                  ? colors.success
-                                  : colors.secondaryText,
-                              opacity: headerPresenceStatus === 'unknown' ? 0.42 : 1,
-                            },
-                          ]}
-                        />
-                      ) : null}
                       <Text
                         numberOfLines={1}
                         style={[styles.headerSubtitle, { color: colors.secondaryText }]}
@@ -2026,45 +1924,115 @@ export default function SharedPostChatScreen({
               </View>
             </View>
           ) : (
-            <FlashList
-              key={postId}
-              ref={listRef}
-              style={styles.threadList}
-              data={responseGroups}
-              keyExtractor={(item) => item.id}
-              renderItem={renderResponseItem}
-              extraData={responses}
-              ItemSeparatorComponent={() => <View style={styles.messageSeparator} />}
-              ListEmptyComponent={renderEmptyThread}
-              maintainVisibleContentPosition={THREAD_SCROLL_POSITION_CONFIG}
-              onStartReached={loadOlderResponses}
-              onStartReachedThreshold={0.2}
-              onScroll={handleThreadScroll}
-              scrollEventThrottle={120}
-              keyboardShouldPersistTaps="handled"
-              keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
-              showsVerticalScrollIndicator={false}
-              contentContainerStyle={[
-                styles.threadContent,
+            <View style={styles.threadList}>
+              <FlashList
+                key={postId}
+                ref={listRef}
+                style={[
+                  styles.threadList,
+                  !isThreadFirstPaintReady ? styles.threadListPreparing : null,
+                ]}
+                data={responseGroups}
+                keyExtractor={(item) => item.id}
+                renderItem={renderResponseItem}
+                extraData={responses}
+                ItemSeparatorComponent={() => <View style={styles.messageSeparator} />}
+                ListEmptyComponent={renderEmptyThread}
+                maintainVisibleContentPosition={THREAD_SCROLL_POSITION_CONFIG}
+                onStartReached={loadOlderResponses}
+                onStartReachedThreshold={0.2}
+                onScroll={handleThreadScroll}
+                onScrollEndDrag={handleThreadScroll}
+                onMomentumScrollEnd={handleThreadScroll}
+                scrollEventThrottle={120}
+                keyboardShouldPersistTaps="handled"
+                keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={[
+                  styles.threadContent,
+                  {
+                    paddingTop: 20,
+                    paddingBottom: contentBottomPadding,
+                  },
+                ]}
+              />
+              {!isThreadFirstPaintReady ? (
+                <View style={styles.threadPreparingOverlay} pointerEvents="none">
+                  <View
+                    style={[
+                      styles.threadContent,
+                      styles.threadSkeletonContent,
+                      {
+                        paddingTop: 20,
+                        paddingBottom: contentBottomPadding,
+                      },
+                    ]}
+                  >
+                    {renderResponseLoadingFooter()}
+                  </View>
+                </View>
+              ) : null}
+            </View>
+            )}
+            {isJumpToLatestMounted ? (
+              <Animated.View
+                pointerEvents={shouldShowJumpToLatest ? 'auto' : 'none'}
+                style={[
+                  styles.jumpToLatestHost,
+                  {
+                    bottom: contentBottomPadding + 10,
+                    opacity: jumpToLatestProgress,
+                    transform: [
+                      {
+                        translateY: jumpToLatestProgress.interpolate({
+                          inputRange: [0, 1],
+                          outputRange: [8, 0],
+                        }),
+                      },
+                      {
+                        scale: jumpToLatestProgress.interpolate({
+                          inputRange: [0, 1],
+                          outputRange: [0.82, 1],
+                        }),
+                      },
+                    ],
+                  },
+                ]}
+              >
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={t('shared.chatJumpToLatest', 'Jump to latest messages')}
+                  onPress={() => scrollToThreadEnd(true)}
+                  style={({ pressed }) => [
+                    styles.jumpToLatestButton,
+                    {
+                      backgroundColor: colors.primary,
+                      opacity: pressed ? 0.82 : 1,
+                    },
+                  ]}
+                >
+                  <Ionicons name="arrow-down" size={17} color={colors.onPrimary} />
+                  {newMessageCount > 0 ? (
+                    <View style={[styles.jumpToLatestBadge, { backgroundColor: colors.danger }]}>
+                      <Text style={[styles.jumpToLatestBadgeText, { color: colors.onPrimary }]}>
+                        {newMessageCount > 9 ? '9+' : newMessageCount}
+                      </Text>
+                    </View>
+                  ) : null}
+                </Pressable>
+              </Animated.View>
+            ) : null}
+
+            <View
+              onLayout={handleComposerLayout}
+              style={[
+                styles.composerShell,
                 {
-                  paddingTop: 20,
-                  paddingBottom: contentBottomPadding,
+                  bottom: composerKeyboardOffset,
+                  paddingBottom: Math.max(insets.bottom, 12),
                 },
               ]}
-            />
-          )}
-
-          <View
-            onLayout={handleComposerLayout}
-            style={[
-              styles.composerShell,
-              {
-                bottom: composerKeyboardOffset,
-                paddingBottom: Math.max(insets.bottom, 12),
-                backgroundColor: colors.background,
-              },
-            ]}
-          >
+            >
             {typingIndicatorLabel ? (
               <View
                 accessibilityRole="text"
@@ -2101,28 +2069,39 @@ export default function SharedPostChatScreen({
                 </Pressable>
               </View>
             ) : null}
+            {infoMessage ? (
+              <View style={styles.composerStatusLine}>
+                <Ionicons name="checkmark-circle" size={15} color={colors.primary} />
+                <Text style={[styles.composerStatusText, { color: colors.secondaryText }]} numberOfLines={1}>
+                  {infoMessage}
+                </Text>
+              </View>
+            ) : null}
+            {!isOnline ? (
+              <View style={styles.composerStatusLine}>
+                <Ionicons name="cloud-offline-outline" size={15} color={colors.secondaryText} />
+                <Text style={[styles.composerStatusText, { color: colors.secondaryText }]} numberOfLines={1}>
+                  {t('shared.chatComposerOfflineHint', 'Offline replies stay here until you retry.')}
+                </Text>
+              </View>
+            ) : null}
             {replyTarget ? (
               <View
                 style={[
                   styles.composerReplyPreview,
                   {
                     backgroundColor: colors.surface,
-                    borderColor: colors.border,
                   },
                 ]}
               >
                 <View style={styles.composerReplyCopy}>
                   <Text
                     numberOfLines={1}
-                    style={[styles.composerReplyLabel, { color: colors.secondaryText }]}
+                    style={[styles.composerReplyLabel, { color: colors.primary }]}
                   >
-                    {t('shared.chatReplyingTo', 'Replying to')}
-                  </Text>
-                  <Text
-                    numberOfLines={1}
-                    style={[styles.composerReplyAuthor, { color: colors.primary }]}
-                  >
-                    {getAuthorLabel(replyTarget.authorUid, replyTarget.authorDisplayName)}
+                    {t('shared.chatReplyingToName', 'Replying to {{name}}', {
+                      name: getAuthorLabel(replyTarget.authorUid, replyTarget.authorDisplayName),
+                    })}
                   </Text>
                   <Text
                     numberOfLines={1}
@@ -2165,14 +2144,14 @@ export default function SharedPostChatScreen({
                 onFocus={() => {
                   composerFocusedRef.current = true;
                   if (draft.trim()) {
-                    publishOwnTypingState(true, { force: true });
+                    publishTypingState(true, { force: true });
                   }
-                  scrollToThreadEnd(true);
+                  settleThreadEndIfVisible();
                 }}
                 onBlur={() => {
                   composerFocusedRef.current = false;
                   clearTypingIdleTimer();
-                  publishOwnTypingState(false, { force: true });
+                  publishTypingState(false, { force: true });
                 }}
                 onSubmitEditing={() => {
                   void sendResponse();
@@ -2254,51 +2233,87 @@ export default function SharedPostChatScreen({
               },
             ]}
           >
-            {QUICK_RESPONSES.map((reactionEmoji, index) => (
-              <ReactionTrayButton
-                key={`${reactionOverlay.response.id}:${reactionEmoji}`}
-                emoji={reactionEmoji}
-                index={index}
-                selected={selectedReactionEmoji === reactionEmoji}
-                colors={{
-                  primary: colors.primary,
-                  primarySoft: colors.primarySoft,
+            <View style={styles.reactionTrayReactionRow}>
+              {QUICK_RESPONSES.map((reactionEmoji, index) => (
+                <ReactionTrayButton
+                  key={`${reactionOverlay.response.id}:${reactionEmoji}`}
+                  emoji={reactionEmoji}
+                  index={index}
+                  selected={selectedReactionEmoji === reactionEmoji}
+                  colors={{
+                    primary: colors.primary,
+                    primarySoft: colors.primarySoft,
+                  }}
+                  label={
+                    selectedReactionEmoji === reactionEmoji
+                      ? t('shared.chatRemoveReaction', 'Remove {{emoji}} reaction', {
+                          emoji: reactionEmoji,
+                        })
+                      : t('shared.chatReactWith', 'React with {{emoji}}', {
+                          emoji: reactionEmoji,
+                        })
+                  }
+                  onPress={() => {
+                    void Haptics.selectionAsync();
+                    void sendReaction(reactionOverlay.response, reactionEmoji);
+                  }}
+                />
+              ))}
+            </View>
+            {reactionDetailsLabel ? (
+              <Text
+                numberOfLines={2}
+                style={[styles.reactionDetailsText, { color: colors.secondaryText }]}
+              >
+                {reactionDetailsLabel}
+              </Text>
+            ) : null}
+            <View style={[styles.reactionTrayHorizontalDivider, { backgroundColor: colors.border }]} />
+            <View style={styles.reactionTrayActionRow}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={t('shared.chatReplyToMessage', 'Reply to message')}
+                onPress={() => {
+                  const target =
+                    responseById.get(reactionOverlay.response.id) ?? reactionOverlay.response;
+                  void Haptics.selectionAsync();
+                  setReplyTarget(target);
+                  setReactionOverlay(null);
                 }}
-                label={
-                  selectedReactionEmoji === reactionEmoji
-                    ? t('shared.chatRemoveReaction', 'Remove {{emoji}} reaction', {
-                        emoji: reactionEmoji,
-                      })
-                    : t('shared.chatReactWith', 'React with {{emoji}}', {
-                        emoji: reactionEmoji,
-                      })
-                }
+                style={({ pressed }) => [
+                  styles.reactionTrayTextAction,
+                  {
+                    backgroundColor: pressed ? colors.primarySoft : 'transparent',
+                  },
+                ]}
+              >
+                <Ionicons name="return-up-back" size={18} color={colors.primary} />
+                <Text style={[styles.reactionTrayActionLabel, { color: colors.primary }]}>
+                  {t('shared.chatReplyShort', 'Reply')}
+                </Text>
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={t('shared.chatCopyMessage', 'Copy message')}
                 onPress={() => {
                   void Haptics.selectionAsync();
-                  void sendReaction(reactionOverlay.response, reactionEmoji);
+                  void copyResponseText(
+                    responseById.get(reactionOverlay.response.id) ?? reactionOverlay.response
+                  );
                 }}
-              />
-            ))}
-            <View style={[styles.reactionTrayDivider, { backgroundColor: colors.border }]} />
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={t('shared.chatReplyToMessage', 'Reply to message')}
-              onPress={() => {
-                const target =
-                  responseById.get(reactionOverlay.response.id) ?? reactionOverlay.response;
-                void Haptics.selectionAsync();
-                setReplyTarget(target);
-                setReactionOverlay(null);
-              }}
-              style={({ pressed }) => [
-                styles.reactionTrayActionButton,
-                {
-                  backgroundColor: pressed ? colors.primarySoft : 'transparent',
-                },
-              ]}
-            >
-              <Ionicons name="return-up-back" size={19} color={colors.primary} />
-            </Pressable>
+                style={({ pressed }) => [
+                  styles.reactionTrayTextAction,
+                  {
+                    backgroundColor: pressed ? colors.primarySoft : 'transparent',
+                  },
+                ]}
+              >
+                <Ionicons name="copy-outline" size={18} color={colors.primary} />
+                <Text style={[styles.reactionTrayActionLabel, { color: colors.primary }]}>
+                  {t('shared.chatCopyShort', 'Copy')}
+                </Text>
+              </Pressable>
+            </View>
           </Animated.View>
         </View>
       ) : null}
@@ -2353,6 +2368,12 @@ const styles = StyleSheet.create({
   threadList: {
     flex: 1,
   },
+  threadListPreparing: {
+    opacity: 0,
+  },
+  threadPreparingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+  },
   threadSkeletonContent: {
     flex: 1,
     justifyContent: 'flex-end',
@@ -2375,6 +2396,10 @@ const styles = StyleSheet.create({
     gap: 9,
     marginLeft: 22,
     minWidth: 0,
+  },
+  headerAvatarHost: {
+    width: 34,
+    height: 34,
   },
   headerAvatar: {
     width: 34,
@@ -2430,9 +2455,13 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   headerPresenceDot: {
-    width: 7,
-    height: 7,
-    borderRadius: 3.5,
+    position: 'absolute',
+    right: -1,
+    bottom: -1,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    borderWidth: 2,
   },
   memoryPreviewBlock: {
     width: '100%',
@@ -2731,17 +2760,21 @@ const styles = StyleSheet.create({
   reactionTray: {
     position: 'absolute',
     zIndex: 10,
-    borderRadius: 24,
+    borderRadius: 22,
     borderWidth: StyleSheet.hairlineWidth,
-    paddingHorizontal: 7,
-    paddingVertical: 5,
-    flexDirection: 'row',
-    gap: 3,
+    paddingHorizontal: 8,
+    paddingVertical: 7,
+    gap: 6,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.14,
     shadowRadius: 16,
     elevation: 8,
+  },
+  reactionTrayReactionRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 4,
   },
   reactionTrayButton: {
     width: 40,
@@ -2757,12 +2790,46 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     opacity: 0.8,
   },
+  reactionTrayHorizontalDivider: {
+    height: StyleSheet.hairlineWidth,
+    width: '100%',
+    opacity: 0.8,
+  },
+  reactionTrayActionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
   reactionTrayActionButton: {
     width: 40,
     height: 40,
     borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  reactionTrayTextAction: {
+    flex: 1,
+    minHeight: 38,
+    borderRadius: 19,
+    paddingHorizontal: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  reactionTrayActionLabel: {
+    fontSize: 13,
+    lineHeight: 17,
+    fontWeight: '800',
+    fontFamily: 'Noto Sans',
+  },
+  reactionDetailsText: {
+    paddingHorizontal: 8,
+    fontSize: 11,
+    lineHeight: 15,
+    fontWeight: '700',
+    textAlign: 'center',
+    fontFamily: 'Noto Sans',
   },
   reactionTrayText: {
     fontSize: 24,
@@ -2836,6 +2903,35 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     fontFamily: 'Noto Sans',
   },
+  jumpToLatestHost: {
+    position: 'absolute',
+    alignSelf: 'center',
+    zIndex: 8,
+  },
+  jumpToLatestButton: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  jumpToLatestBadge: {
+    position: 'absolute',
+    top: -5,
+    right: -5,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    paddingHorizontal: 3,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  jumpToLatestBadgeText: {
+    fontSize: 9,
+    lineHeight: 12,
+    fontWeight: '900',
+    fontFamily: 'Noto Sans',
+  },
   composerShell: {
     position: 'absolute',
     left: 0,
@@ -2894,16 +2990,30 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  composerReplyPreview: {
-    minHeight: 48,
-    borderRadius: 18,
-    borderWidth: StyleSheet.hairlineWidth,
-    paddingLeft: 14,
-    paddingRight: 8,
-    paddingVertical: 8,
+  composerStatusLine: {
+    minHeight: 22,
+    paddingHorizontal: 4,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 6,
+  },
+  composerStatusText: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 11,
+    lineHeight: 15,
+    fontWeight: '700',
+    fontFamily: 'Noto Sans',
+  },
+  composerReplyPreview: {
+    minHeight: 48,
+    borderRadius: 24,
+    paddingLeft: 22,
+    paddingRight: 12,
+    paddingVertical: 7,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   composerReplyCopy: {
     flex: 1,
@@ -2911,21 +3021,14 @@ const styles = StyleSheet.create({
     gap: 1,
   },
   composerReplyLabel: {
-    fontSize: 10,
-    lineHeight: 13,
-    fontWeight: '800',
-    fontFamily: 'Noto Sans',
-    textTransform: 'uppercase',
-  },
-  composerReplyAuthor: {
     fontSize: 12,
     lineHeight: 15,
     fontWeight: '900',
     fontFamily: 'Noto Sans',
   },
   composerReplyBody: {
-    fontSize: 12,
-    lineHeight: 16,
+    fontSize: 14,
+    lineHeight: 18,
     fontFamily: 'Noto Sans',
   },
   composerReplyClose: {

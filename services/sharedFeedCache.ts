@@ -865,6 +865,85 @@ export async function replaceCachedSharedPostResponses(
   });
 }
 
+export async function reconcileCachedSharedPostResponsesPage(
+  userUid: string,
+  postId: string,
+  responses: SharedPostResponse[],
+  options: { beforeCreatedAt?: string | null } = {}
+): Promise<void> {
+  const normalizedPostId = postId.trim();
+  if (!normalizedPostId) {
+    return;
+  }
+
+  const beforeCreatedAt = options.beforeCreatedAt?.trim() || null;
+
+  await withDatabaseTransaction(async (tx) => {
+    if (responses.length === 0) {
+      if (!beforeCreatedAt) {
+        await tx.runAsync(
+          'DELETE FROM shared_post_response_reactions_cache WHERE user_uid = ? AND post_id = ?',
+          userUid,
+          normalizedPostId
+        );
+        await tx.runAsync(
+          'DELETE FROM shared_post_responses_cache WHERE user_uid = ? AND post_id = ?',
+          userUid,
+          normalizedPostId
+        );
+        await upsertCachedSharedThreadSummaryInTransaction(
+          tx,
+          userUid,
+          deriveSharedThreadSummaryFromResponses(normalizedPostId, [])
+        );
+      }
+      return;
+    }
+
+    const oldestFetchedAt = responses[0]?.createdAt;
+    if (oldestFetchedAt) {
+      const rangeArgs = beforeCreatedAt
+        ? [userUid, normalizedPostId, oldestFetchedAt, beforeCreatedAt]
+        : [userUid, normalizedPostId, oldestFetchedAt];
+      const rangePredicate = beforeCreatedAt
+        ? `user_uid = ? AND post_id = ? AND created_at >= ? AND created_at < ?`
+        : `user_uid = ? AND post_id = ? AND created_at >= ?`;
+
+      await tx.runAsync(
+        `DELETE FROM shared_post_response_reactions_cache
+         WHERE user_uid = ?
+           AND post_id = ?
+           AND response_id IN (
+             SELECT id
+             FROM shared_post_responses_cache
+             WHERE ${rangePredicate}
+           )`,
+        userUid,
+        normalizedPostId,
+        ...rangeArgs
+      );
+      await tx.runAsync(
+        `DELETE FROM shared_post_responses_cache WHERE ${rangePredicate}`,
+        ...rangeArgs
+      );
+    }
+
+    for (const response of responses) {
+      await insertCachedSharedPostResponse(tx, userUid, response);
+      for (const reaction of response.reactions ?? []) {
+        await insertCachedSharedPostResponseReaction(tx, userUid, reaction);
+      }
+    }
+
+    const currentResponses = await selectCachedSharedPostResponses(tx, userUid, normalizedPostId);
+    await upsertCachedSharedThreadSummaryInTransaction(
+      tx,
+      userUid,
+      deriveSharedThreadSummaryFromResponses(normalizedPostId, currentResponses)
+    );
+  });
+}
+
 export async function upsertCachedSharedPostResponse(
   userUid: string,
   response: SharedPostResponse
@@ -885,6 +964,44 @@ export async function upsertCachedSharedPostResponse(
       tx,
       userUid,
       deriveSharedThreadSummaryFromResponses(response.postId, nextResponses)
+    );
+  });
+}
+
+export async function deleteCachedSharedPostResponse(
+  userUid: string,
+  input: { postId: string; responseId: string }
+): Promise<void> {
+  const normalizedPostId = input.postId.trim();
+  const responseId = input.responseId.trim();
+  if (!normalizedPostId || !responseId) {
+    return;
+  }
+
+  await withDatabaseTransaction(async (tx) => {
+    await tx.runAsync(
+      `DELETE FROM shared_post_response_reactions_cache
+       WHERE user_uid = ?
+         AND post_id = ?
+         AND response_id = ?`,
+      userUid,
+      normalizedPostId,
+      responseId
+    );
+    await tx.runAsync(
+      `DELETE FROM shared_post_responses_cache
+       WHERE user_uid = ?
+         AND post_id = ?
+         AND id = ?`,
+      userUid,
+      normalizedPostId,
+      responseId
+    );
+    const currentResponses = await selectCachedSharedPostResponses(tx, userUid, normalizedPostId);
+    await upsertCachedSharedThreadSummaryInTransaction(
+      tx,
+      userUid,
+      deriveSharedThreadSummaryFromResponses(normalizedPostId, currentResponses)
     );
   });
 }
@@ -911,6 +1028,35 @@ export async function upsertCachedSharedPostResponseReaction(
       tx,
       userUid,
       deriveSharedThreadSummaryFromResponses(reaction.postId, nextResponses)
+    );
+  });
+}
+
+export async function deleteCachedSharedPostResponseReactionById(
+  userUid: string,
+  input: { postId: string; reactionId: string }
+): Promise<void> {
+  const normalizedPostId = input.postId.trim();
+  const reactionId = input.reactionId.trim();
+  if (!normalizedPostId || !reactionId) {
+    return;
+  }
+
+  await withDatabaseTransaction(async (tx) => {
+    await tx.runAsync(
+      `DELETE FROM shared_post_response_reactions_cache
+       WHERE user_uid = ?
+         AND post_id = ?
+         AND id = ?`,
+      userUid,
+      normalizedPostId,
+      reactionId
+    );
+    const currentResponses = await selectCachedSharedPostResponses(tx, userUid, normalizedPostId);
+    await upsertCachedSharedThreadSummaryInTransaction(
+      tx,
+      userUid,
+      deriveSharedThreadSummaryFromResponses(normalizedPostId, currentResponses)
     );
   });
 }

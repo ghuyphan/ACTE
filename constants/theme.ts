@@ -66,6 +66,7 @@ export const Shadows = {
 
 export const CaptureChrome = {
   shadowDark: '#000000',
+  shutterContent: '#FFFFFF',
   stickerPastePopoverBackground: 'rgba(255, 250, 242, 0.96)',
   stickerPasteButtonText: '#FFFDFC',
   livePhotoBorder: {

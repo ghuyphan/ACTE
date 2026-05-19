@@ -172,6 +172,25 @@ export function mergeResponseReactions(
   );
 }
 
+export function removeResponseReaction(
+  existingReactions: SharedPostResponseReaction[] = [],
+  input: { id?: string | null; authorUid?: string | null }
+) {
+  const reactionId = input.id?.trim() || null;
+  const authorUid = input.authorUid?.trim() || null;
+  if (!reactionId && !authorUid) {
+    return existingReactions;
+  }
+
+  return existingReactions.filter((reaction) => {
+    if (reactionId && reaction.id === reactionId) {
+      return false;
+    }
+
+    return !(authorUid && reaction.authorUid === authorUid);
+  });
+}
+
 export function mergeChatResponses(
   remoteResponses: ChatThreadResponse[],
   pendingResponses: ChatThreadResponse[]

@@ -162,6 +162,26 @@ export interface SharedPostResponseReaction {
   createdAt: string;
 }
 
+export type SharedPostResponsesConnectionStatus = 'connecting' | 'connected' | 'disconnected';
+
+export type DeletedSharedPostResponseReaction = {
+  id: string;
+  postId: string;
+  responseId: string | null;
+  authorUid: string | null;
+};
+
+export type SharedPostResponsesSubscriptionOptions = {
+  initialPageSize?: number;
+  onResponses: (responses: SharedPostResponse[]) => void | Promise<void>;
+  onResponse?: (response: SharedPostResponse) => void | Promise<void>;
+  onResponseDeleted?: (responseId: string) => void | Promise<void>;
+  onReaction?: (reaction: SharedPostResponseReaction) => void | Promise<void>;
+  onReactionDeleted?: (reaction: DeletedSharedPostResponseReaction) => void | Promise<void>;
+  onError?: (error: unknown) => void;
+  onStatus?: (status: SharedPostResponsesConnectionStatus) => void;
+};
+
 export interface SharedThreadSummary {
   postId: string;
   latestResponseId: string | null;
@@ -752,6 +772,22 @@ function mapSharedPostResponseReaction(
     emoji: row.emoji.trim(),
     createdAt: row.created_at,
   };
+}
+
+function getRealtimeRecord<T extends { id?: string }>(
+  payload: unknown,
+  key: 'new' | 'old'
+): T | null {
+  if (!payload || typeof payload !== 'object') {
+    return null;
+  }
+
+  const record = (payload as Record<string, unknown>)[key];
+  if (!record || typeof record !== 'object') {
+    return null;
+  }
+
+  return record as T;
 }
 
 function mapSharedThreadSummary(row: SharedThreadSummaryRow): SharedThreadSummary {
@@ -2539,11 +2575,7 @@ export function subscribeToSharedPostTyping(
 export function subscribeToSharedPostResponses(
   user: AppUser,
   postId: string,
-  options: {
-    onResponses: (responses: SharedPostResponse[]) => void | Promise<void>;
-    onError?: (error: unknown) => void;
-    onStatus?: (status: 'connecting' | 'connected' | 'disconnected') => void;
-  }
+  options: SharedPostResponsesSubscriptionOptions
 ) {
   const normalizedPostId = postId.trim();
   if (!normalizedPostId) {
@@ -2566,7 +2598,9 @@ export function subscribeToSharedPostResponses(
       return;
     }
 
-    refreshInFlight = getSharedPostResponses(user, normalizedPostId)
+    refreshInFlight = getSharedPostResponsesPage(user, normalizedPostId, {
+      limit: options.initialPageSize,
+    })
       .then((responses) => {
         if (!disposed) {
           options.onResponses(responses);
@@ -2597,6 +2631,14 @@ export function subscribeToSharedPostResponses(
     }, 100);
   };
 
+  const safelyApplyDelta = (operation: () => void | Promise<void>) => {
+    void Promise.resolve(operation()).catch((error) => {
+      if (!disposed) {
+        options.onError?.(error);
+      }
+    });
+  };
+
   options.onStatus?.('connecting');
   const channel = supabase
     .channel(`shared-post-responses:${normalizedPostId}`)
@@ -2608,7 +2650,27 @@ export function subscribeToSharedPostResponses(
         table: 'shared_post_responses',
         filter: `post_id=eq.${normalizedPostId}`,
       },
-      () => scheduleRefresh()
+      (payload) => {
+        const eventType = (payload as { eventType?: string }).eventType;
+        if (eventType === 'DELETE') {
+          const oldResponse = getRealtimeRecord<Partial<SharedPostResponseRow>>(payload, 'old');
+          if (oldResponse?.id && options.onResponseDeleted) {
+            safelyApplyDelta(() => options.onResponseDeleted?.(oldResponse.id!));
+            return;
+          }
+
+          scheduleRefresh();
+          return;
+        }
+
+        const nextResponse = getRealtimeRecord<SharedPostResponseRow>(payload, 'new');
+        if (nextResponse?.id && options.onResponse) {
+          safelyApplyDelta(() => options.onResponse?.(mapSharedPostResponse(nextResponse)));
+          return;
+        }
+
+        scheduleRefresh();
+      }
     )
     .on(
       'postgres_changes',
@@ -2618,7 +2680,37 @@ export function subscribeToSharedPostResponses(
         table: 'shared_post_response_reactions',
         filter: `post_id=eq.${normalizedPostId}`,
       },
-      () => scheduleRefresh()
+      (payload) => {
+        const eventType = (payload as { eventType?: string }).eventType;
+        if (eventType === 'DELETE') {
+          const oldReaction = getRealtimeRecord<Partial<SharedPostResponseReactionRow>>(
+            payload,
+            'old'
+          );
+          if (oldReaction?.id && options.onReactionDeleted) {
+            safelyApplyDelta(() =>
+              options.onReactionDeleted?.({
+                id: oldReaction.id!,
+                postId: oldReaction.post_id ?? normalizedPostId,
+                responseId: oldReaction.response_id ?? null,
+                authorUid: oldReaction.author_user_id ?? null,
+              })
+            );
+            return;
+          }
+
+          scheduleRefresh();
+          return;
+        }
+
+        const nextReaction = getRealtimeRecord<SharedPostResponseReactionRow>(payload, 'new');
+        if (nextReaction?.id && options.onReaction) {
+          safelyApplyDelta(() => options.onReaction?.(mapSharedPostResponseReaction(nextReaction)));
+          return;
+        }
+
+        scheduleRefresh();
+      }
     )
     .subscribe((status) => {
       if (disposed) {

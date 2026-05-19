@@ -1,4 +1,5 @@
 import { getGlassSurfacePalette } from '../../ui/glassTokens';
+import { CaptureChrome } from '../../../constants/theme';
 import type { CaptureCardColors } from './captureShared';
 
 export type CaptureControlVisualState = 'idle' | 'active' | 'disabled' | 'busy';
@@ -63,6 +64,6 @@ export function getCaptureShutterVisuals(colors: CaptureCardColors) {
   return {
     fillColor: colors.primary,
     ringColor: colors.border,
-    contentColor: '#FFFFFF',
+    contentColor: CaptureChrome.shutterContent,
   } as const;
 }
