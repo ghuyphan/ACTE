@@ -99,6 +99,10 @@ Lightweight emoji/text responses attached to a shared post.
 - Foreign keys: `post_id -> public.shared_posts(id)`, `author_user_id -> auth.users(id)`, optional `reply_to_response_id -> public.shared_post_responses(id)`
 - Important fields: author snapshots, optional emoji, short response text, optional reply target, `created_at`
 
+### Direct shared chats
+
+Direct friend chats reuse `public.shared_posts` as hidden chat anchors with `is_direct_chat = true` and a unique `direct_chat_key` for the two participants. These rows are excluded from the shared memories feed but can receive `public.shared_post_responses` like memory threads.
+
 ### `public.shared_post_response_reactions`
 
 One reaction per user per shared-post response.

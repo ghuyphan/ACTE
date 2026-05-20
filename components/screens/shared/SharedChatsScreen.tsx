@@ -19,9 +19,9 @@ import type { SharedThreadReadState } from '../../../services/sharedFeedCache';
 import { formatChatTimestamp } from '../../../utils/dateUtils';
 import {
   getSharedChatIdentity,
-  getSharedChatMemoryPreview,
   getSharedChatThreadIconName,
   getSharedThreadSummaryBody,
+  isDirectChatPost,
   isSharedThreadUnread,
 } from '../../../utils/sharedChatPresentation';
 
@@ -143,6 +143,7 @@ export default function SharedChatsScreen() {
     friends = [],
     loading,
     sharedPosts = [],
+    getSharedChatThreadPosts = async () => [],
     getSharedPostResponsesPage = async () => [],
     getSharedPostThreadSummaries = async () => [],
     getSharedThreadReadStates = async () => [],
@@ -160,9 +161,37 @@ export default function SharedChatsScreen() {
   const [typingUsersByPostId, setTypingUsersByPostId] = useState<
     Record<string, SharedPostTypingUser[]>
   >({});
+  const [activityThreadPosts, setActivityThreadPosts] = useState<SharedPost[]>([]);
+  const [loadingActivityThreads, setLoadingActivityThreads] = useState(false);
+  const listContentStyle = useMemo(
+    () => ({
+      paddingTop: 8,
+      paddingBottom: insets.bottom + 32,
+      paddingHorizontal: Layout.screenPadding,
+    }),
+    [insets.bottom]
+  );
+  const renderThreadSeparator = useCallback(
+    () => <View style={[styles.threadSeparator, { backgroundColor: colors.border }]} />,
+    [colors.border]
+  );
+  const mergedThreadPosts = useMemo(() => {
+    const postById = new Map<string, SharedPost>();
+    for (const post of activityThreadPosts) {
+      if (isDirectChatPost(post)) {
+        postById.set(post.id, post);
+      }
+    }
+    for (const post of sharedPosts) {
+      if (isDirectChatPost(post)) {
+        postById.set(post.id, post);
+      }
+    }
+    return Array.from(postById.values());
+  }, [activityThreadPosts, sharedPosts]);
   const threadPostIdsKey = useMemo(
-    () => sharedPosts.map((post) => post.id).join('|'),
-    [sharedPosts]
+    () => mergedThreadPosts.map((post) => post.id).join('|'),
+    [mergedThreadPosts]
   );
   const friendById = useMemo(() => {
     const next = new Map<string, (typeof friends)[number]>();
@@ -171,6 +200,43 @@ export default function SharedChatsScreen() {
     }
     return next;
   }, [friends]);
+  const openFriendChat = useCallback(
+    (friendUid: string) => {
+      router.push(`/shared/chat/direct-${friendUid}?friendUid=${encodeURIComponent(friendUid)}` as any);
+    },
+    [router]
+  );
+  useEffect(() => {
+    if (!authReady || !user?.uid) {
+      setActivityThreadPosts([]);
+      setLoadingActivityThreads(false);
+      return;
+    }
+
+    let cancelled = false;
+    setLoadingActivityThreads(true);
+    void getSharedChatThreadPosts()
+      .then((posts) => {
+        if (!cancelled) {
+          setActivityThreadPosts(posts);
+        }
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          console.warn('Failed to load shared chat threads:', error);
+          setActivityThreadPosts([]);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setLoadingActivityThreads(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authReady, getSharedChatThreadPosts, user?.uid]);
   useEffect(() => {
     const postIds = threadPostIdsKey ? threadPostIdsKey.split('|') : [];
     if (!authReady || !user?.uid || postIds.length === 0) {
@@ -218,14 +284,14 @@ export default function SharedChatsScreen() {
 
   const threads = useMemo(
     () =>
-      [...sharedPosts].sort((left, right) => {
+      [...mergedThreadPosts].sort((left, right) => {
         const leftSummary = threadSummaryByPostId[left.id];
         const rightSummary = threadSummaryByPostId[right.id];
         const leftTime = new Date(leftSummary?.latestActivityAt ?? left.createdAt).getTime();
         const rightTime = new Date(rightSummary?.latestActivityAt ?? right.createdAt).getTime();
         return rightTime - leftTime;
       }),
-    [sharedPosts, threadSummaryByPostId]
+    [mergedThreadPosts, threadSummaryByPostId]
   );
   const typingPreviewPostIdsKey = useMemo(
     () =>
@@ -351,6 +417,9 @@ export default function SharedChatsScreen() {
   );
   const renderThreadItem = useCallback(
     ({ item: post }: { item: SharedPost }) => {
+      const participantUid =
+        [post.authorUid, ...post.audienceUserIds].find((candidate) => candidate !== user?.uid) ??
+        post.authorUid;
       const participant = getThreadParticipant(post);
       const summary = threadSummaryByPostId[post.id] ?? null;
       const hasUnread = isSharedThreadUnread(summary, readStateByPostId[post.id], user?.uid);
@@ -366,12 +435,8 @@ export default function SharedChatsScreen() {
                 authorPhotoURLSnapshot: summary.latestActivityAuthorPhotoURLSnapshot,
               }).label
             : null;
-      const memoryPreview = getSharedChatMemoryPreview(post, {
-        photoMemory: t('shared.chatThreadPhoto', 'Photo memory'),
-        photoMemoryAtPlace: (place) =>
-          t('shared.chatThreadPhotoAtPlace', 'Photo memory from {{place}}', { place }),
-        sharedNote: t('shared.chatThreadNote', 'Shared note'),
-      });
+      const isDirectChat = isDirectChatPost(post);
+      const starterPreview = t('shared.directChatStarter', 'Message privately');
       const summaryBody = summary ? getSharedThreadSummaryBody(summary) : '';
       const typingUsers = typingUsersByPostId[post.id] ?? [];
       const typingPreview =
@@ -396,7 +461,7 @@ export default function SharedChatsScreen() {
               message: summaryBody || t('shared.chatThreadActivity', 'New activity'),
             })
           : summaryBody || t('shared.chatThreadActivity', 'New activity')
-        : memoryPreview;
+        : starterPreview;
       const latestTimestamp = summary?.latestActivityAt ?? post.createdAt;
       return (
         <Pressable
@@ -411,7 +476,11 @@ export default function SharedChatsScreen() {
                 })
           }
           onPress={() => {
-            router.push(`/shared/chat/${post.id}` as any);
+            router.push(
+              isDirectChat
+                ? (`/shared/chat/${post.id}?friendUid=${encodeURIComponent(participantUid)}` as any)
+                : (`/shared/chat/${post.id}` as any)
+            );
           }}
           onPressIn={() => prewarmThreadResponses(post.id)}
           style={({ pressed }) => [
@@ -560,11 +629,83 @@ export default function SharedChatsScreen() {
     ),
     [colors.border, colors.primarySoft, insets.bottom]
   );
+  const renderFriendStarterItem = useCallback(
+    ({ item: friend }: { item: (typeof friends)[number] }) => {
+      const identity = getSharedChatIdentity(
+        {
+          currentUserUid: user?.uid,
+          displayNameSnapshot: friend.displayNameSnapshot,
+          friend,
+          photoURLSnapshot: friend.photoURLSnapshot,
+          userId: friend.userId,
+        },
+        {
+          friendFallback: t('shared.friendFallback', 'Friend'),
+          someone: t('shared.someone', 'Someone'),
+          you: t('shared.chatYou', 'You'),
+        }
+      );
+      return (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={t('shared.openChatWithA11y', 'Open chat with {{name}}', {
+            name: identity.label,
+          })}
+          onPress={() => {
+            openFriendChat(friend.userId);
+          }}
+          style={({ pressed }) => [
+            styles.threadRow,
+            {
+              backgroundColor: pressed ? colors.surface : 'transparent',
+              opacity: pressed ? 0.86 : 1,
+            },
+          ]}
+        >
+          {identity.avatarUri ? (
+            <Image source={{ uri: identity.avatarUri }} style={styles.avatar} contentFit="cover" />
+          ) : (
+            <View style={[styles.avatar, { backgroundColor: colors.primarySoft }]}>
+              <Text style={[styles.avatarLabel, { color: colors.primary }]}>
+                {identity.avatarInitial}
+              </Text>
+            </View>
+          )}
+          <View style={styles.threadCopy}>
+            <Text numberOfLines={1} style={[styles.threadTitle, { color: colors.text }]}>
+              {identity.label}
+            </Text>
+            <Text numberOfLines={1} style={[styles.threadPreview, { color: colors.secondaryText }]}>
+              {t('shared.directChatStarter', 'Message privately')}
+            </Text>
+          </View>
+          <View style={styles.threadMeta}>
+            <Ionicons name="chevron-forward" size={16} color={colors.secondaryText} />
+          </View>
+        </Pressable>
+      );
+    },
+    [
+      colors,
+      openFriendChat,
+      t,
+      user?.uid,
+    ]
+  );
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      {!authReady || (loading && threads.length === 0) ? (
+      {!authReady || ((loading || loadingActivityThreads) && threads.length === 0) ? (
         renderLoadingThreads()
+      ) : threads.length === 0 && friends.length > 0 ? (
+        <FlashList
+          data={friends}
+          keyExtractor={(item) => item.userId}
+          renderItem={renderFriendStarterItem}
+          ItemSeparatorComponent={renderThreadSeparator}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={listContentStyle}
+        />
       ) : threads.length === 0 ? (
         <View style={styles.emptyScreen}>
           <View style={styles.emptyState}>
@@ -575,13 +716,16 @@ export default function SharedChatsScreen() {
               {t('shared.chatsEmptyTitle', 'No chats yet')}
             </Text>
             <Text style={[styles.emptyBody, { color: colors.secondaryText }]}>
-              {t('shared.chatsEmptyBody', 'Share a memory with a friend to start a thread.')}
+              {t(
+                'shared.chatsEmptyBody',
+                'Connect with a friend from Home, then start a private chat here.'
+              )}
             </Text>
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel={t('shared.chatsEmptyAction', 'Open shared moments')}
+              accessibilityLabel={t('shared.chatsEmptyAction', 'Open Home')}
               onPress={() => {
-                router.push('/shared' as any);
+                router.push('/' as any);
               }}
               style={({ pressed }) => [
                 styles.emptyAction,
@@ -589,7 +733,7 @@ export default function SharedChatsScreen() {
               ]}
             >
               <Text style={[styles.emptyActionLabel, { color: colors.onPrimary }]}>
-                {t('shared.chatsEmptyAction', 'Open shared moments')}
+                {t('shared.chatsEmptyAction', 'Open Home')}
               </Text>
             </Pressable>
           </View>
@@ -599,15 +743,9 @@ export default function SharedChatsScreen() {
           data={threads}
           keyExtractor={(item) => item.id}
           renderItem={renderThreadItem}
-          ItemSeparatorComponent={() => (
-            <View style={[styles.threadSeparator, { backgroundColor: colors.border }]} />
-          )}
+          ItemSeparatorComponent={renderThreadSeparator}
           showsVerticalScrollIndicator={false}
-          contentContainerStyle={{
-            paddingTop: 8,
-            paddingBottom: insets.bottom + 32,
-            paddingHorizontal: Layout.screenPadding,
-          }}
+          contentContainerStyle={listContentStyle}
         />
       )}
     </View>

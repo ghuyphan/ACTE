@@ -132,6 +132,8 @@ export interface SharedPost {
   noteColor?: string | null;
   placeName: string | null;
   sourceNoteId: string | null;
+  isDirectChat?: boolean;
+  directChatKey?: string | null;
   latitude?: number | null;
   longitude?: number | null;
   createdAt: string;
@@ -303,6 +305,8 @@ interface SharedPostRow {
   note_color?: string | null;
   place_name: string | null;
   source_note_id: string | null;
+  is_direct_chat?: boolean | null;
+  direct_chat_key?: string | null;
   latitude: number | null;
   longitude: number | null;
   created_at: string;
@@ -357,6 +361,10 @@ const SHARED_FEED_REFRESH_DEDUPE_WINDOW_MS = 400;
 const EXPIRED_SHARED_FEED_SESSION_ERROR = 'Server session unavailable. Sign in again to use shared moments.';
 const MISMATCHED_SHARED_FEED_SESSION_ERROR =
   'Signed-in session does not match this account. Sign out and sign in again.';
+const SHARED_POST_SELECT_FIELDS =
+  'id, author_user_id, author_display_name, author_photo_url_snapshot, audience_user_ids, type, text, photo_path, capture_variant, dual_primary_photo_path, dual_secondary_photo_path, dual_primary_facing, dual_secondary_facing, dual_layout_preset, is_live_photo, paired_video_path, doodle_strokes_json, sticker_placements_json, note_color, place_name, source_note_id, latitude, longitude, created_at, updated_at';
+const SHARED_POST_WITH_CHAT_FIELDS =
+  'id, author_user_id, author_display_name, author_photo_url_snapshot, audience_user_ids, type, text, photo_path, capture_variant, dual_primary_photo_path, dual_secondary_photo_path, dual_primary_facing, dual_secondary_facing, dual_layout_preset, is_live_photo, paired_video_path, doodle_strokes_json, sticker_placements_json, note_color, place_name, source_note_id, is_direct_chat, direct_chat_key, latitude, longitude, created_at, updated_at';
 const sharedFeedRefreshState = new Map<
   string,
   {
@@ -988,6 +996,14 @@ async function uploadSharedPostMediaArtifacts(options: {
 }
 
 function shouldIncludeSharedPostInFeed(post: SharedPost, viewerUid: string) {
+  if (isDirectChatAnchor(post)) {
+    return false;
+  }
+
+  return isSharedPostVisibleToUser(post, viewerUid);
+}
+
+function isSharedPostVisibleToUser(post: SharedPost, viewerUid: string) {
   if (post.authorUid === viewerUid) {
     return post.audienceUserIds.some((audienceUid) => audienceUid !== viewerUid);
   }
@@ -1010,6 +1026,19 @@ function resolveAudienceFromFriends(
 
   return Array.from(new Set([authorUid, ...requestedRecipientUids]));
 }
+
+function getDirectChatKey(userUid: string, friendUid: string) {
+  return [userUid.trim(), friendUid.trim()].sort().join(':');
+}
+
+function isDirectChatAnchor(post: SharedPost) {
+  return Boolean(
+    post.isDirectChat ||
+      post.directChatKey?.trim() ||
+      post.id.startsWith('direct-chat-')
+  );
+}
+
 
 function safelyDecodeInviteText(value: string) {
   try {
@@ -1275,6 +1304,8 @@ function mapSharedPost(record: SharedPostRow): SharedPost {
         : null,
     placeName: record.place_name ?? null,
     sourceNoteId: record.source_note_id ?? null,
+    isDirectChat: Boolean(record.is_direct_chat),
+    directChatKey: record.direct_chat_key ?? null,
     latitude: normalizeCoordinate(record.latitude),
     longitude: normalizeCoordinate(record.longitude),
     createdAt: record.created_at,
@@ -1452,9 +1483,7 @@ async function performSharedFeedRefresh(user: AppUser): Promise<SharedFeedSnapsh
     getOwnedSharedSourceNoteIds(user.id, friends),
     requireSupabase()
       .from('shared_posts')
-      .select(
-        'id, author_user_id, author_display_name, author_photo_url_snapshot, audience_user_ids, type, text, photo_path, capture_variant, dual_primary_photo_path, dual_secondary_photo_path, dual_primary_facing, dual_secondary_facing, dual_layout_preset, is_live_photo, paired_video_path, doodle_strokes_json, sticker_placements_json, note_color, place_name, source_note_id, latitude, longitude, created_at, updated_at'
-      )
+      .select(SHARED_POST_SELECT_FIELDS)
       .contains('audience_user_ids', [user.id])
       .order('created_at', { ascending: false })
       .limit(20),
@@ -2115,6 +2144,8 @@ export async function createSharedPost(
       source_note_id: shareableNote.id,
       latitude: shareableNote.latitude,
       longitude: shareableNote.longitude,
+      is_direct_chat: false,
+      direct_chat_key: null,
       created_at: now,
       updated_at: null,
     };
@@ -2171,6 +2202,198 @@ export async function getSharedPostResponses(
   postId: string
 ): Promise<SharedPostResponse[]> {
   return getSharedPostResponsesPage(user, postId);
+}
+
+export async function getSharedChatThreadPost(
+  user: AppUser,
+  postId: string
+): Promise<SharedPost | null> {
+  await ensureSupabaseSessionMatchesUser(user.id);
+
+  const normalizedPostId = postId.trim();
+  if (!normalizedPostId) {
+    return null;
+  }
+
+  const { data, error } = await requireSupabase()
+    .from('shared_posts')
+    .select(SHARED_POST_WITH_CHAT_FIELDS)
+    .eq('id', normalizedPostId)
+    .maybeSingle();
+
+  if (error) {
+    if (!isSupabaseSchemaMismatchError(error)) {
+      throw error;
+    }
+
+    const fallback = await requireSupabase()
+      .from('shared_posts')
+      .select(SHARED_POST_SELECT_FIELDS)
+      .eq('id', normalizedPostId)
+      .maybeSingle();
+
+    if (fallback.error) {
+      throw fallback.error;
+    }
+
+    const post = fallback.data ? mapSharedPost(fallback.data as SharedPostRow) : null;
+    return post && isSharedPostVisibleToUser(post, user.id) ? post : null;
+  }
+
+  const post = data ? mapSharedPost(data as SharedPostRow) : null;
+  return post && isSharedPostVisibleToUser(post, user.id) ? post : null;
+}
+
+export async function getOrCreateDirectChatPost(
+  user: AppUser,
+  friendUid: string
+): Promise<SharedPost> {
+  await ensureSupabaseSessionMatchesUser(user.id);
+
+  const normalizedFriendUid = friendUid.trim();
+  if (!normalizedFriendUid || normalizedFriendUid === user.id) {
+    throw new Error('Choose a friend to message.');
+  }
+
+  const friends = await getFriendsForUser(user.id);
+  if (!friends.some((friend) => friend.userId === normalizedFriendUid)) {
+    throw new Error('You can only message connected friends.');
+  }
+
+  const supabase = requireSupabase();
+  const directChatKey = getDirectChatKey(user.id, normalizedFriendUid);
+  const existing = await supabase
+    .from('shared_posts')
+    .select(SHARED_POST_WITH_CHAT_FIELDS)
+    .eq('direct_chat_key', directChatKey)
+    .maybeSingle();
+
+  if (existing.error) {
+    throw existing.error;
+  }
+
+  if (existing.data) {
+    return mapSharedPost(existing.data as SharedPostRow);
+  }
+
+  const now = getNowIso();
+  const record: SharedPostRow = {
+    id: `direct-chat-${Date.now()}-${Crypto.randomUUID().slice(0, 8)}`,
+    author_user_id: user.id,
+    author_display_name: getDisplayName(user),
+    author_photo_url_snapshot: user.photoURL ?? null,
+    audience_user_ids: [user.id, normalizedFriendUid],
+    type: 'text',
+    text: '',
+    photo_path: null,
+    capture_variant: null,
+    dual_primary_photo_path: null,
+    dual_secondary_photo_path: null,
+    dual_primary_facing: null,
+    dual_secondary_facing: null,
+    dual_layout_preset: null,
+    is_live_photo: false,
+    paired_video_path: null,
+    doodle_strokes_json: null,
+    sticker_placements_json: null,
+    note_color: null,
+    place_name: null,
+    source_note_id: null,
+    is_direct_chat: true,
+    direct_chat_key: directChatKey,
+    latitude: null,
+    longitude: null,
+    created_at: now,
+    updated_at: null,
+  };
+
+  const { error } = await supabase.from('shared_posts').insert(record);
+  if (!error) {
+    return mapSharedPost(record);
+  }
+
+  const retry = await supabase
+    .from('shared_posts')
+    .select(SHARED_POST_WITH_CHAT_FIELDS)
+    .eq('direct_chat_key', directChatKey)
+    .maybeSingle();
+
+  if (retry.data) {
+    return mapSharedPost(retry.data as SharedPostRow);
+  }
+
+  throw error;
+}
+
+export async function getSharedChatThreadPosts(
+  user: AppUser,
+  limit = 50
+): Promise<SharedPost[]> {
+  await ensureSupabaseSessionMatchesUser(user.id);
+
+  const resolvedLimit = Math.max(1, Math.min(limit, 80));
+  const candidateLimit = Math.min(resolvedLimit * 4, 200);
+  const { data: responseRows, error: responseError } = await requireSupabase()
+    .from('shared_post_responses')
+    .select('post_id, created_at')
+    .order('created_at', { ascending: false })
+    .limit(candidateLimit);
+
+  if (responseError) {
+    throw responseError;
+  }
+
+  const orderedPostIds: string[] = [];
+  const seenPostIds = new Set<string>();
+  for (const row of (responseRows ?? []) as Array<{ post_id?: string | null }>) {
+    const postId = row.post_id?.trim();
+    if (!postId || seenPostIds.has(postId)) {
+      continue;
+    }
+
+    seenPostIds.add(postId);
+    orderedPostIds.push(postId);
+    if (orderedPostIds.length >= candidateLimit) {
+      break;
+    }
+  }
+
+  if (orderedPostIds.length === 0) {
+    return [];
+  }
+
+  const { data: postRows, error: postError } = await requireSupabase()
+    .from('shared_posts')
+    .select(SHARED_POST_WITH_CHAT_FIELDS)
+    .in('id', orderedPostIds);
+
+  let resolvedPostRows: unknown[] | null = postRows ?? null;
+  if (postError && isSupabaseSchemaMismatchError(postError)) {
+    const fallback = await requireSupabase()
+      .from('shared_posts')
+      .select(SHARED_POST_SELECT_FIELDS)
+      .in('id', orderedPostIds);
+    if (fallback.error) {
+      throw fallback.error;
+    }
+    resolvedPostRows = fallback.data;
+  } else if (postError) {
+    throw postError;
+  }
+
+  const postById = new Map(
+    ((resolvedPostRows ?? []) as SharedPostRow[])
+      .map(mapSharedPost)
+      .filter((post) => isDirectChatAnchor(post) && isSharedPostVisibleToUser(post, user.id))
+      .map((post) => [post.id, post] as const)
+  );
+
+  return orderedPostIds
+    .flatMap((postId) => {
+      const post = postById.get(postId);
+      return post ? [post] : [];
+    })
+    .slice(0, resolvedLimit);
 }
 
 export async function getSharedPostResponsesPage(
@@ -2858,9 +3081,7 @@ export async function updateSharedPost(
   const supabase = requireSupabase();
   const { data: existing, error: fetchError } = await supabase
     .from('shared_posts')
-    .select(
-      'id, author_user_id, author_display_name, author_photo_url_snapshot, audience_user_ids, type, text, photo_path, capture_variant, dual_primary_photo_path, dual_secondary_photo_path, dual_primary_facing, dual_secondary_facing, dual_layout_preset, is_live_photo, paired_video_path, doodle_strokes_json, sticker_placements_json, note_color, place_name, source_note_id, latitude, longitude, created_at, updated_at'
-    )
+    .select(SHARED_POST_SELECT_FIELDS)
     .eq('id', postId)
     .eq('author_user_id', user.id)
     .maybeSingle();

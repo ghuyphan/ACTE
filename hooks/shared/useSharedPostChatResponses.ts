@@ -30,6 +30,7 @@ type SubscribeToSharedPostResponses = (
 ) => () => void;
 
 type UseSharedPostChatResponsesOptions = {
+  enabled?: boolean;
   getSharedPostResponsesPage: GetSharedPostResponsesPage;
   isOnline: boolean;
   pageSize: number;
@@ -51,6 +52,7 @@ function getErrorMessage(error: unknown, fallback: string) {
 }
 
 export function useSharedPostChatResponses({
+  enabled = true,
   getSharedPostResponsesPage,
   isOnline,
   pageSize,
@@ -193,6 +195,20 @@ export function useSharedPostChatResponses({
   );
 
   useEffect(() => {
+    if (!enabled) {
+      pendingResponsesRef.current.clear();
+      isThreadEndVisibleRef.current = true;
+      setIsThreadEndVisibleState(true);
+      setResponses((current) => (current.length > 0 ? [] : current));
+      setIsLoadingResponses(false);
+      setHasOlderResponses(false);
+      setIsLoadingOlderResponses(false);
+      setErrorMessage(null);
+      setNewMessageCount(0);
+      setConnectionStatus('disconnected');
+      return undefined;
+    }
+
     const rememberedResponses = getRememberedResponses(postId);
     pendingResponsesRef.current.clear();
     isThreadEndVisibleRef.current = true;
@@ -266,6 +282,7 @@ export function useSharedPostChatResponses({
     applyRemoteResponseDeleted,
     applyRemoteReaction,
     applyRemoteReactionDeleted,
+    enabled,
     getSharedPostResponsesPage,
     isOnline,
     pageSize,

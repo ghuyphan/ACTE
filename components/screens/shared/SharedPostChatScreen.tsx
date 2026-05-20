@@ -27,7 +27,7 @@ import {
   type ViewStyle,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Layout, Shadows } from '../../../constants/theme';
+import { Layout } from '../../../constants/theme';
 import { useAuth } from '../../../hooks/useAuth';
 import { useConnectivity } from '../../../hooks/useConnectivity';
 import * as Haptics from '../../../hooks/useHaptics';
@@ -58,11 +58,13 @@ import {
   formatSharedResponseBody,
   getSharedChatIdentity,
   getSharedChatMemoryPreview,
+  isDirectChatPost,
 } from '../../../utils/sharedChatPresentation';
 import { setActiveSharedChatPostId } from '../../../utils/socialNotificationPresentation';
 import TextFieldEditSheet from '../../sheets/TextFieldEditSheet';
 
 type SharedPostChatScreenProps = {
+  directFriendUid?: string | string[] | null;
   initialResponseId?: string | string[] | null;
   postId: string;
 };
@@ -80,6 +82,21 @@ type ReactionOverlay = {
   pageY: number;
 } | null;
 
+type ChatMode = 'direct' | 'memory';
+
+type ChatRenderContext = {
+  canSendMessage: boolean;
+  composerPlaceholder: string;
+  hasPost: boolean;
+  isResolvingInitialChat: boolean;
+  notFoundBody: string;
+  notFoundTitle: string;
+  shouldRenderChatShell: boolean;
+  shouldRenderPendingThread: boolean;
+  shouldShowIdentityHeader: boolean;
+  shouldShowMemoryHeader: boolean;
+};
+
 const RESPONSE_SKELETON_ROWS = [
   { key: 'incoming-short', isSelf: false, width: '44%', minHeight: 40 },
   { key: 'self-reaction', isSelf: true, width: 54, minHeight: 44 },
@@ -89,6 +106,8 @@ const RESPONSE_SKELETON_ROWS = [
 const QUICK_RESPONSES = ['💛', '🥹', '✨', '😂'] as const;
 const RESPONSE_PAGE_SIZE = 50;
 const INFO_MESSAGE_VISIBLE_MS = 1800;
+const COMPOSER_KEYBOARD_GAP = 12;
+const REACTION_TRAY_ESTIMATED_HEIGHT = 58;
 const TYPING_IDLE_MS = 3500;
 const TYPING_HEARTBEAT_MS = 2500;
 const THREAD_SCROLL_POSITION_CONFIG = {
@@ -163,11 +182,13 @@ function ReplyableBubble({
   children,
   iconColor,
   isSelf,
+  containerStyle,
   onReply,
   onLongPress,
   style,
 }: {
   children: ReactNode;
+  containerStyle?: StyleProp<ViewStyle>;
   iconColor: string;
   isSelf: boolean;
   onReply: () => void;
@@ -210,7 +231,7 @@ function ReplyableBubble({
   return (
     <Animated.View
       {...panResponder.panHandlers}
-      style={{ transform: [{ translateX }] }}
+      style={[containerStyle, { transform: [{ translateX }] }]}
     >
       <Animated.View
         pointerEvents="none"
@@ -452,7 +473,82 @@ function MiniMemoryCard({
   );
 }
 
+function SharedChatHeaderTitle({
+  avatarInitial,
+  avatarUri,
+  colors,
+  label,
+  presenceStatus,
+  shouldShowIdentity,
+  shouldShowPresence,
+  subtitle,
+  titleFallback,
+}: {
+  avatarInitial: string;
+  avatarUri: string | null;
+  colors: ReturnType<typeof useTheme>['colors'];
+  label: string;
+  presenceStatus: 'online' | 'offline' | 'unknown';
+  shouldShowIdentity: boolean;
+  shouldShowPresence: boolean;
+  subtitle: string | null;
+  titleFallback: string;
+}) {
+  if (!shouldShowIdentity) {
+    return (
+      <Text numberOfLines={1} style={[styles.headerFallbackTitle, { color: colors.text }]}>
+        {titleFallback}
+      </Text>
+    );
+  }
+
+  return (
+    <View style={styles.headerIdentity}>
+      <View style={styles.headerAvatarHost}>
+        {avatarUri ? (
+          <Image source={{ uri: avatarUri }} style={styles.headerAvatar} contentFit="cover" />
+        ) : (
+          <View style={[styles.headerAvatar, { backgroundColor: colors.primarySoft }]}>
+            <Text style={[styles.headerAvatarLabel, { color: colors.primary }]}>
+              {avatarInitial}
+            </Text>
+          </View>
+        )}
+        {shouldShowPresence ? (
+          <View
+            style={[
+              styles.headerPresenceDot,
+              {
+                backgroundColor:
+                  presenceStatus === 'online' ? colors.success : colors.secondaryText,
+                borderColor: colors.background,
+                opacity: presenceStatus === 'unknown' ? 0.42 : 1,
+              },
+            ]}
+          />
+        ) : null}
+      </View>
+      <View style={styles.headerCopy}>
+        <Text numberOfLines={1} style={[styles.headerIdentityText, { color: colors.text }]}>
+          {label}
+        </Text>
+        {subtitle ? (
+          <View style={styles.headerSubtitleRow}>
+            <Text
+              numberOfLines={1}
+              style={[styles.headerSubtitle, { color: colors.secondaryText }]}
+            >
+              {subtitle}
+            </Text>
+          </View>
+        ) : null}
+      </View>
+    </View>
+  );
+}
+
 export default function SharedPostChatScreen({
+  directFriendUid,
   initialResponseId,
   postId,
 }: SharedPostChatScreenProps) {
@@ -470,6 +566,10 @@ export default function SharedPostChatScreen({
     loading,
     refreshSharedFeed,
     sharedPosts = [],
+    getOrCreateDirectChatPost = async () => {
+      throw new Error(t('shared.directChatStartFailed', 'Could not start chat.'));
+    },
+    getSharedChatThreadPost = async () => null,
     getSharedPostResponsesPage = async () => [],
     subscribeToSharedPostResponses,
     subscribeToSharedPostTyping = () => ({
@@ -495,6 +595,9 @@ export default function SharedPostChatScreen({
   const [replyTarget, setReplyTarget] = useState<SharedPostResponse | null>(null);
   const [reactionOverlay, setReactionOverlay] = useState<ReactionOverlay>(null);
   const [infoMessage, setInfoMessage] = useState<string | null>(null);
+  const [loadedChatPost, setLoadedChatPost] = useState<SharedPost | null>(null);
+  const [isLoadingChatPost, setIsLoadingChatPost] = useState(false);
+  const [chatPostErrorMessage, setChatPostErrorMessage] = useState<string | null>(null);
   const [highlightedResponseId, setHighlightedResponseId] = useState<string | null>(null);
   const [isThreadFirstPaintReady, setIsThreadFirstPaintReady] = useState(false);
   const [isJumpToLatestMounted, setIsJumpToLatestMounted] = useState(false);
@@ -511,7 +614,18 @@ export default function SharedPostChatScreen({
   const sendButtonPulse = useRef(new Animated.Value(0)).current;
   const pendingInitialResponseIdRef = useRef<string | null>(null);
 
-  const post = sharedPosts.find((item) => item.id === postId) ?? null;
+  const normalizedDirectFriendUid = Array.isArray(directFriendUid)
+    ? directFriendUid[0]?.trim() || null
+    : directFriendUid?.trim() || null;
+  const post = sharedPosts.find((item) => item.id === postId) ?? loadedChatPost;
+  const isDirectChat = Boolean(
+    normalizedDirectFriendUid ||
+      (post ? isDirectChatPost(post) : postId.startsWith('direct-chat-'))
+  );
+  const activePostId = post?.id ?? postId;
+  const pendingDirectFriend = normalizedDirectFriendUid
+    ? friends.find((friend) => friend.userId === normalizedDirectFriendUid) ?? null
+    : null;
   const normalizedInitialResponseId = Array.isArray(initialResponseId)
     ? initialResponseId[0]?.trim() || null
     : initialResponseId?.trim() || null;
@@ -532,10 +646,11 @@ export default function SharedPostChatScreen({
     setThreadEndVisible,
     updateResponses,
   } = useSharedPostChatResponses({
+    enabled: Boolean(post),
     getSharedPostResponsesPage,
     isOnline,
     pageSize: RESPONSE_PAGE_SIZE,
-    postId,
+    postId: activePostId,
     responseLoadFailedMessage: t('shared.responseLoadFailed', 'Could not load responses.'),
     subscribeToSharedPostResponses,
   });
@@ -548,7 +663,7 @@ export default function SharedPostChatScreen({
     enabled: Boolean(post && user?.uid),
     heartbeatMs: TYPING_HEARTBEAT_MS,
     idleMs: TYPING_IDLE_MS,
-    postId,
+    postId: activePostId,
     subscribeToSharedPostTyping,
   });
   const chatThreadLabels = useMemo(
@@ -654,20 +769,20 @@ export default function SharedPostChatScreen({
   );
 
   useEffect(() => {
-    setActiveSharedChatPostId(postId);
+    setActiveSharedChatPostId(activePostId);
     return () => {
       setActiveSharedChatPostId(null);
     };
-  }, [postId]);
+  }, [activePostId]);
 
   useEffect(() => {
     pendingInitialResponseIdRef.current = normalizedInitialResponseId;
-  }, [normalizedInitialResponseId, postId]);
+  }, [activePostId, normalizedInitialResponseId]);
 
   useEffect(() => {
     lastMarkedReadSignatureRef.current = null;
     setIsThreadFirstPaintReady(false);
-  }, [postId]);
+  }, [activePostId]);
 
   useEffect(() => clearHighlightResetTimer, [clearHighlightResetTimer]);
   useEffect(() => clearInfoMessageTimer, [clearInfoMessageTimer]);
@@ -708,8 +823,18 @@ export default function SharedPostChatScreen({
 
   const postAuthorLabel = post
     ? getAuthorLabel(post.authorUid, post.authorDisplayName)
-    : t('shared.someone', 'Someone');
+    : pendingDirectFriend
+      ? getAuthorIdentity(
+          pendingDirectFriend.userId,
+          pendingDirectFriend.displayNameSnapshot,
+          pendingDirectFriend.photoURLSnapshot
+        ).label
+      : t('shared.someone', 'Someone');
   const participantIds = useMemo(() => {
+    if (!post && normalizedDirectFriendUid) {
+      return [normalizedDirectFriendUid];
+    }
+
     if (!post) {
       return [];
     }
@@ -717,8 +842,18 @@ export default function SharedPostChatScreen({
     return Array.from(new Set([post.authorUid, ...post.audienceUserIds])).filter(
       (participantUid) => participantUid !== user?.uid
     );
-  }, [post, user?.uid]);
+  }, [normalizedDirectFriendUid, post, user?.uid]);
   const participantLabels = useMemo(() => {
+    if (!post && pendingDirectFriend) {
+      return [
+        getAuthorIdentity(
+          pendingDirectFriend.userId,
+          pendingDirectFriend.displayNameSnapshot,
+          pendingDirectFriend.photoURLSnapshot
+        ).label,
+      ];
+    }
+
     if (!post) {
       return [];
     }
@@ -730,7 +865,7 @@ export default function SharedPostChatScreen({
           : getAuthorLabel(participantUid, null)
       )
       .filter((label) => Boolean(label.trim()));
-  }, [getAuthorLabel, participantIds, post, postAuthorLabel]);
+  }, [getAuthorIdentity, getAuthorLabel, participantIds, pendingDirectFriend, post, postAuthorLabel]);
   const primaryParticipantLabel =
     participantLabels[0] ?? postAuthorLabel ?? t('shared.someone', 'Someone');
   const primaryParticipantUid = participantIds[0] ?? null;
@@ -751,7 +886,12 @@ export default function SharedPostChatScreen({
   );
   const headerIdentityLabel = useMemo(() => {
     if (!post) {
-      return t('shared.chatTitle', 'Chat');
+      return (
+        primaryFriend?.nickname?.trim() ||
+        (primaryFriend?.username ? `@${primaryFriend.username}` : null) ||
+        primaryParticipantLabel ||
+        t('shared.chatTitle', 'Chat')
+      );
     }
 
     if (participantIds.length > 1) {
@@ -788,7 +928,17 @@ export default function SharedPostChatScreen({
   const headerPresenceStatus = primaryPresence?.status ?? 'unknown';
   const headerSubtitle = useMemo(() => {
     if (!post) {
-      return null;
+      if (!normalizedDirectFriendUid) {
+        return null;
+      }
+
+      if (!isOnline) {
+        return t('shared.chatOfflineConnection', 'Offline');
+      }
+
+      return isLoadingChatPost
+        ? t('shared.chatConnecting', 'Syncing')
+        : chatPostErrorMessage ?? t('shared.chatWaitingForConnection', 'Waiting for connection');
     }
 
     if (participantIds.length > 1) {
@@ -823,33 +973,101 @@ export default function SharedPostChatScreen({
     return presenceText;
   }, [
     headerPresenceStatus,
+    chatPostErrorMessage,
     connectionStatus,
+    isLoadingChatPost,
     isOnline,
+    normalizedDirectFriendUid,
     participantIds.length,
     post,
     primaryPresence?.lastSeenAt,
     t,
   ]);
-  const shouldShowHeaderPresence = Boolean(post && participantIds.length <= 1);
+  const shouldShowHeaderPresence = Boolean((post || normalizedDirectFriendUid) && participantIds.length <= 1);
 
   useEffect(() => {
-    if (!post && !loading) {
+    if (!post && !loading && !isDirectChat) {
       void refreshSharedFeed?.().catch(() => undefined);
     }
-  }, [loading, post, refreshSharedFeed]);
+  }, [isDirectChat, loading, post, refreshSharedFeed]);
+
+  useEffect(() => {
+    if (!normalizedDirectFriendUid || post) {
+      return;
+    }
+
+    let cancelled = false;
+    setIsLoadingChatPost(true);
+    setChatPostErrorMessage(null);
+    void getOrCreateDirectChatPost(normalizedDirectFriendUid)
+      .then((nextPost) => {
+        if (!cancelled) {
+          setLoadedChatPost(nextPost);
+        }
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setLoadedChatPost(null);
+          setChatPostErrorMessage(
+            error instanceof Error
+              ? error.message
+              : t('shared.directChatStartFailed', 'Could not start chat.')
+          );
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsLoadingChatPost(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [getOrCreateDirectChatPost, normalizedDirectFriendUid, post, t]);
+
+  useEffect(() => {
+    if (normalizedDirectFriendUid || post || loading) {
+      return;
+    }
+
+    let cancelled = false;
+    setIsLoadingChatPost(true);
+    void getSharedChatThreadPost(postId)
+      .then((nextPost) => {
+        if (!cancelled) {
+          setChatPostErrorMessage(null);
+          setLoadedChatPost(nextPost);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setLoadedChatPost(null);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsLoadingChatPost(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [getSharedChatThreadPost, loading, normalizedDirectFriendUid, post, postId]);
 
   const markThreadReadThroughLatest = useCallback(() => {
     const lastResponse = responses[responses.length - 1] ?? null;
-    const nextSignature = `${postId}:${lastResponse?.id ?? 'empty'}`;
+    const nextSignature = `${activePostId}:${lastResponse?.id ?? 'empty'}`;
     if (lastMarkedReadSignatureRef.current === nextSignature) {
       return;
     }
 
     lastMarkedReadSignatureRef.current = nextSignature;
-    void markSharedThreadRead(postId, lastResponse?.id ?? null).catch(() => {
+    void markSharedThreadRead(activePostId, lastResponse?.id ?? null).catch(() => {
       lastMarkedReadSignatureRef.current = null;
     });
-  }, [markSharedThreadRead, postId, responses]);
+  }, [activePostId, markSharedThreadRead, responses]);
 
   useEffect(() => {
     if (isLoadingResponses || !isThreadEndVisibleRef.current) {
@@ -857,7 +1075,7 @@ export default function SharedPostChatScreen({
     }
 
     markThreadReadThroughLatest();
-  }, [isLoadingResponses, markThreadReadThroughLatest, responses]);
+  }, [isLoadingResponses, isThreadEndVisibleRef, markThreadReadThroughLatest, responses]);
 
   const handleThreadScroll = useCallback(
     (event: NativeSyntheticEvent<NativeScrollEvent>) => {
@@ -1052,9 +1270,11 @@ export default function SharedPostChatScreen({
       isSending,
       isOnline,
       markThreadReadThroughLatest,
+      pendingResponsesRef,
       post,
       publishTypingState,
       replyTarget,
+      setErrorMessage,
       t,
       updateResponses,
       user,
@@ -1097,7 +1317,7 @@ export default function SharedPostChatScreen({
         );
       }
     },
-    [showInfoMessage, t]
+    [setErrorMessage, showInfoMessage, t]
   );
 
   const sendReaction = useCallback(
@@ -1226,6 +1446,7 @@ export default function SharedPostChatScreen({
       deleteSharedPostResponseReaction,
       post,
       responseById,
+      setErrorMessage,
       t,
       updateResponses,
       user,
@@ -1306,7 +1527,7 @@ export default function SharedPostChatScreen({
     }
 
     scrollToThreadEnd(false);
-  }, [scrollToThreadEnd]);
+  }, [isThreadEndVisibleRef, scrollToThreadEnd]);
 
   useEffect(() => {
     const showSubscription = Keyboard.addListener(
@@ -1347,11 +1568,22 @@ export default function SharedPostChatScreen({
     []
   );
 
-  const composerKeyboardOffset = Math.max(0, keyboardHeight - insets.bottom);
+  const isKeyboardVisible = keyboardHeight > 0;
+  const composerKeyboardOffset = Math.max(
+    0,
+    keyboardHeight - insets.bottom + (isKeyboardVisible ? COMPOSER_KEYBOARD_GAP : 0)
+  );
   const contentBottomPadding =
     composerHeight +
     composerKeyboardOffset +
     (typingUsers.some((typingUser) => typingUser.userId !== user?.uid) ? 42 : 18);
+  const threadVerticalPaddingStyle = useMemo(
+    () => ({
+      paddingBottom: contentBottomPadding,
+      paddingTop: 20,
+    }),
+    [contentBottomPadding]
+  );
 
   useEffect(() => {
     requestAnimationFrame(() => {
@@ -1360,7 +1592,7 @@ export default function SharedPostChatScreen({
   }, [contentBottomPadding, replyTarget, settleThreadEndIfVisible]);
 
   const renderMemoryHeader = useCallback(() => {
-    if (!post) {
+    if (!post || isDirectChat) {
       return null;
     }
 
@@ -1417,7 +1649,7 @@ export default function SharedPostChatScreen({
         <Ionicons name="chevron-forward" size={16} color={colors.secondaryText} />
       </Pressable>
     );
-  }, [colors, isDark, openMemory, post, postAuthorLabel, t]);
+  }, [colors, isDark, isDirectChat, openMemory, post, postAuthorLabel, t]);
   const isThreadHydrating = isLoadingResponses && responses.length === 0;
   useEffect(() => {
     if (isThreadHydrating || isThreadFirstPaintReady) {
@@ -1441,12 +1673,15 @@ export default function SharedPostChatScreen({
     () => (
       <View style={styles.messageList}>
         <Text style={[styles.emptyThreadHint, { color: colors.secondaryText }]}>
-          {t('shared.chatEmptyHint', 'Start with a quick reaction.')}
+          {isDirectChat
+            ? t('shared.directChatEmptyHint', 'Say hi to start the chat.')
+            : t('shared.chatEmptyHint', 'Start with a quick reaction.')}
         </Text>
       </View>
     ),
-    [colors.secondaryText, t]
+    [colors.secondaryText, isDirectChat, t]
   );
+  const renderMessageSeparator = useCallback(() => <View style={styles.messageSeparator} />, []);
   const renderResponseLoadingFooter = useCallback(
     () => (
       <ResponseSkeletonRows
@@ -1537,6 +1772,7 @@ export default function SharedPostChatScreen({
                 const isLastInGroup = responseIndex === group.responses.length - 1;
                 const isReactionOnly = isReactionOnlyResponse(response);
                 const replyPreview = getResponseReplyPreview(response);
+                const hasReplyPreview = Boolean(replyPreview);
                 const reactions = response.reactions ?? [];
                 const isHighlighted = highlightedResponseId === response.id;
                 const deliveryStatus = getResponseDeliveryStatus(response);
@@ -1545,10 +1781,57 @@ export default function SharedPostChatScreen({
                 return (
                   <View
                     key={response.id}
-                    style={styles.messageInteractionWrap}
+                    style={[
+                      styles.messageInteractionWrap,
+                      hasReplyPreview ? styles.messageInteractionWrapWithReply : null,
+                    ]}
                   >
+                    {replyPreview ? (
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel={t('shared.chatJumpToReply', 'Jump to replied message')}
+                        onPress={() => {
+                          scrollToResponse(response.replyToResponseId);
+                        }}
+                        style={({ pressed }) => [
+                          styles.replyPreviewBubble,
+                          isSelf ? styles.selfReplyPreviewBubble : styles.friendReplyPreviewBubble,
+                          {
+                            backgroundColor: isSelf ? colors.primarySoft : colors.surface,
+                            borderColor: colors.border,
+                            opacity: pressed ? 0.72 : 1,
+                          },
+                        ]}
+                      >
+                        <View style={styles.replyPreviewCopy}>
+                          <View style={styles.replyPreviewLabelRow}>
+                            <Ionicons
+                              name="return-up-back"
+                              size={12}
+                              color={colors.secondaryText}
+                              style={styles.replyPreviewIcon}
+                            />
+                            <Text
+                              numberOfLines={1}
+                              style={[styles.replyPreviewLabel, { color: colors.secondaryText }]}
+                            >
+                              {t('shared.chatReplyingToName', 'Replying to {{name}}', {
+                                name: replyPreview.authorLabel,
+                              })}
+                            </Text>
+                          </View>
+                          <Text
+                            numberOfLines={1}
+                            style={[styles.replyPreviewBody, { color: colors.secondaryText }]}
+                          >
+                            {replyPreview.body}
+                          </Text>
+                        </View>
+                      </Pressable>
+                    ) : null}
                     <ReplyableBubble
                       isSelf={isSelf}
+                      containerStyle={hasReplyPreview ? styles.replyMessageBubbleContainer : null}
                       iconColor={colors.secondaryText}
                       onReply={() => {
                         setReplyTarget(response);
@@ -1570,6 +1853,11 @@ export default function SharedPostChatScreen({
                         isSelf && !isLastInGroup ? styles.selfBubbleGroupedBottom : null,
                         !isSelf && !isFirstInGroup ? styles.friendBubbleGroupedTop : null,
                         !isSelf && !isLastInGroup ? styles.friendBubbleGroupedBottom : null,
+                        hasReplyPreview
+                          ? isSelf
+                            ? styles.selfBubbleWithReply
+                            : styles.friendBubbleWithReply
+                          : null,
                         {
                           backgroundColor: isSelf ? colors.primary : colors.surface,
                           borderColor: isHighlighted
@@ -1580,38 +1868,6 @@ export default function SharedPostChatScreen({
                         },
                       ]}
                     >
-                    {replyPreview ? (
-                      <Pressable
-                        accessibilityRole="button"
-                        accessibilityLabel={t('shared.chatJumpToReply', 'Jump to replied message')}
-                        onPress={() => {
-                          scrollToResponse(response.replyToResponseId);
-                        }}
-                        style={[
-                          styles.replyPreviewBubble,
-                          { backgroundColor: 'transparent' },
-                        ]}
-                      >
-                        <Text
-                          numberOfLines={1}
-                          style={[
-                            styles.replyPreviewAuthor,
-                            { color: isSelf ? colors.onPrimary : colors.primary },
-                          ]}
-                        >
-                          {replyPreview.authorLabel}
-                        </Text>
-                        <Text
-                          numberOfLines={1}
-                          style={[
-                            styles.replyPreviewBody,
-                            { color: isSelf ? colors.onPrimary : colors.secondaryText },
-                          ]}
-                        >
-                          {replyPreview.body}
-                        </Text>
-                      </Pressable>
-                    ) : null}
                     <Text
                       android_hyphenationFrequency="normal"
                       lineBreakStrategyIOS="standard"
@@ -1727,7 +1983,13 @@ export default function SharedPostChatScreen({
       )
     : 0;
   const reactionOverlayTop = reactionOverlay
-    ? Math.max(headerTopInset + 10, reactionOverlay.pageY - 72)
+    ? Math.min(
+        Math.max(headerTopInset + 10, reactionOverlay.pageY - 72),
+        Math.max(
+          headerTopInset + 10,
+          screenHeight - contentBottomPadding - REACTION_TRAY_ESTIMATED_HEIGHT - 12
+        )
+      )
     : 0;
   const activeReactionOverlayResponse = reactionOverlay
     ? responseById.get(reactionOverlay.response.id) ?? reactionOverlay.response
@@ -1763,161 +2025,191 @@ export default function SharedPostChatScreen({
         : t('shared.chatTypingMany', '{{count}} people are typing', {
             count: visibleTypingUsers.length,
           });
+  const chatContext: ChatRenderContext = useMemo(() => {
+    const mode: ChatMode = isDirectChat ? 'direct' : 'memory';
+    const isResolvingInitialChat = !post && (loading || isLoadingChatPost);
+    const shouldRenderPendingThread = mode === 'direct' && isResolvingInitialChat;
+    const hasPost = Boolean(post);
+    return {
+      canSendMessage: Boolean(post && draft.trim() && !isSending),
+      composerPlaceholder:
+        mode === 'direct'
+          ? t('shared.directChatComposerPlaceholder', 'Message')
+          : t('shared.chatComposerPlaceholder', 'Reply to this memory'),
+      hasPost,
+      isResolvingInitialChat,
+      notFoundBody:
+        chatPostErrorMessage ??
+        t('shared.chatNotFoundBody', 'This chat may no longer be available.'),
+      notFoundTitle:
+        mode === 'direct'
+          ? t('shared.directChatStartFailed', 'Could not start chat.')
+          : t('shared.detailNotFound', 'Shared moment not found'),
+      shouldRenderChatShell: Boolean(post || shouldRenderPendingThread),
+      shouldRenderPendingThread,
+      shouldShowIdentityHeader: Boolean(post || primaryParticipantUid),
+      shouldShowMemoryHeader: Boolean(post && mode === 'memory'),
+    };
+  }, [
+    chatPostErrorMessage,
+    draft,
+    isDirectChat,
+    isLoadingChatPost,
+    isSending,
+    loading,
+    post,
+    primaryParticipantUid,
+    t,
+  ]);
+  const renderHeaderTitle = useCallback(
+    () =>
+      <SharedChatHeaderTitle
+        avatarInitial={headerAvatarInitial}
+        avatarUri={headerAvatarUri}
+        colors={colors}
+        label={headerIdentityLabel}
+        presenceStatus={headerPresenceStatus}
+        shouldShowIdentity={chatContext.shouldShowIdentityHeader}
+        shouldShowPresence={shouldShowHeaderPresence}
+        subtitle={headerSubtitle}
+        titleFallback={t('shared.chatTitle', 'Chat')}
+      />,
+    [
+      chatContext.shouldShowIdentityHeader,
+      colors,
+      headerAvatarInitial,
+      headerAvatarUri,
+      headerIdentityLabel,
+      headerPresenceStatus,
+      headerSubtitle,
+      shouldShowHeaderPresence,
+      t,
+    ]
+  );
+  const renderHeaderRight = useCallback(
+    () =>
+      canEditHeaderNickname ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={t('shared.friendNicknameEdit', 'Edit nickname')}
+          hitSlop={8}
+          onPress={openNicknameEditor}
+          style={({ pressed }) => [
+            styles.chatHeaderSideButton,
+            {
+              opacity: pressed ? 0.64 : 1,
+            },
+          ]}
+        >
+          <Ionicons name="pencil-outline" size={21} color={colors.text} />
+        </Pressable>
+      ) : (
+        <View style={styles.chatHeaderSideButton} />
+      ),
+    [canEditHeaderNickname, colors.text, openNicknameEditor, t]
+  );
+  const screenOptions = useMemo(
+    () => ({
+      headerRight: renderHeaderRight,
+      headerTitle: renderHeaderTitle,
+      headerTitleAlign: 'left' as const,
+    }),
+    [renderHeaderRight, renderHeaderTitle]
+  );
 
   return (
     <View
       style={[styles.container, { backgroundColor: colors.background }]}
     >
-      <Stack.Screen
-        options={{
-          headerTitleAlign: 'left',
-          headerTitle: () =>
-            post ? (
-              <View style={styles.headerIdentity}>
-                <View style={styles.headerAvatarHost}>
-                  {headerAvatarUri ? (
-                    <Image
-                      source={{ uri: headerAvatarUri }}
-                      style={styles.headerAvatar}
-                      contentFit="cover"
-                    />
-                  ) : (
-                    <View style={[styles.headerAvatar, { backgroundColor: colors.primarySoft }]}>
-                      <Text style={[styles.headerAvatarLabel, { color: colors.primary }]}>
-                        {headerAvatarInitial}
-                      </Text>
-                    </View>
-                  )}
-                  {shouldShowHeaderPresence ? (
-                    <View
-                      style={[
-                        styles.headerPresenceDot,
-                        {
-                          backgroundColor:
-                            headerPresenceStatus === 'online'
-                              ? colors.success
-                              : colors.secondaryText,
-                          borderColor: colors.background,
-                          opacity: headerPresenceStatus === 'unknown' ? 0.42 : 1,
-                        },
-                      ]}
-                    />
-                  ) : null}
-                </View>
-                <View style={styles.headerCopy}>
-                  <Text numberOfLines={1} style={[styles.headerIdentityText, { color: colors.text }]}>
-                    {headerIdentityLabel}
-                  </Text>
-                  {headerSubtitle ? (
-                    <View style={styles.headerSubtitleRow}>
-                      <Text
-                        numberOfLines={1}
-                        style={[styles.headerSubtitle, { color: colors.secondaryText }]}
-                      >
-                        {headerSubtitle}
-                      </Text>
-                    </View>
-                  ) : null}
-                </View>
-              </View>
-            ) : (
-              <Text numberOfLines={1} style={[styles.headerFallbackTitle, { color: colors.text }]}>
-                {t('shared.chatTitle', 'Chat')}
-              </Text>
-            ),
-          headerRight: () =>
-            canEditHeaderNickname ? (
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={t('shared.friendNicknameEdit', 'Edit nickname')}
-                  hitSlop={8}
-                  onPress={openNicknameEditor}
-                  style={({ pressed }) => [
-                    styles.chatHeaderSideButton,
-                    {
-                      opacity: pressed ? 0.64 : 1,
-                    },
-                  ]}
-                >
-                  <Ionicons name="pencil-outline" size={21} color={colors.text} />
-                </Pressable>
-              ) : (
-                <View style={styles.chatHeaderSideButton} />
-              ),
-        }}
-      />
+      <Stack.Screen options={screenOptions} />
 
-      {!post && loading ? (
+      {!chatContext.hasPost &&
+      !chatContext.shouldRenderChatShell &&
+      chatContext.isResolvingInitialChat ? (
         <View style={styles.loadingChatContent} pointerEvents="none">
-          <View
-            style={[
-              styles.memoryPreviewBlock,
-              {
-                backgroundColor: colors.surface,
-                borderColor: colors.border,
-              },
-            ]}
-          >
-            <View style={[styles.loadingMemoryCard, { backgroundColor: colors.primarySoft }]} />
-            <View style={styles.memoryCopy}>
-              <View
-                style={[
-                  styles.loadingLine,
-                  styles.loadingLineWide,
-                  { backgroundColor: colors.primarySoft },
-                ]}
-              />
-              <View style={styles.memoryMetaLine}>
-                <View style={[styles.memoryAvatar, { backgroundColor: colors.primarySoft }]} />
+          {!isDirectChat ? (
+            <View
+              style={[
+                styles.memoryPreviewBlock,
+                {
+                  backgroundColor: colors.surface,
+                  borderColor: colors.border,
+                },
+              ]}
+            >
+              <View style={[styles.loadingMemoryCard, { backgroundColor: colors.primarySoft }]} />
+              <View style={styles.memoryCopy}>
                 <View
                   style={[
                     styles.loadingLine,
-                    styles.loadingLineMedium,
+                    styles.loadingLineWide,
                     { backgroundColor: colors.primarySoft },
                   ]}
                 />
+                <View style={styles.memoryMetaLine}>
+                  <View style={[styles.memoryAvatar, { backgroundColor: colors.primarySoft }]} />
+                  <View
+                    style={[
+                      styles.loadingLine,
+                      styles.loadingLineMedium,
+                      { backgroundColor: colors.primarySoft },
+                    ]}
+                  />
+                </View>
               </View>
             </View>
+          ) : null}
+          <View
+            style={[
+              styles.loadingResponseSkeletonHost,
+              { paddingBottom: contentBottomPadding },
+            ]}
+          >
+            {renderResponseLoadingFooter()}
           </View>
-          <ResponseSkeletonRows
-            colors={{
-              border: colors.border,
-              primarySoft: colors.primarySoft,
-              surface: colors.surface,
-            }}
-          />
         </View>
-      ) : !post ? (
+      ) : !chatContext.shouldRenderChatShell ? (
         <View style={styles.center}>
           <Text style={[styles.emptyTitle, { color: colors.text }]}>
-            {t('shared.detailNotFound', 'Shared moment not found')}
+            {chatContext.notFoundTitle}
           </Text>
           <Text style={[styles.emptyBody, { color: colors.secondaryText }]}>
-            {t('shared.chatNotFoundBody', 'This chat may no longer be available.')}
+            {chatContext.notFoundBody}
           </Text>
         </View>
       ) : (
         <>
-          <View
-            style={[
-              styles.memoryPreviewHost,
-              {
-                backgroundColor: colors.background,
-              },
-            ]}
-          >
-            {renderMemoryHeader()}
-          </View>
-          {isThreadHydrating ? (
+          {chatContext.shouldShowMemoryHeader ? (
+            <View
+              style={[
+                styles.memoryPreviewHost,
+                {
+                  backgroundColor: colors.background,
+                },
+              ]}
+            >
+              {renderMemoryHeader()}
+            </View>
+          ) : null}
+          {chatContext.shouldRenderPendingThread ? (
             <View style={styles.threadList} pointerEvents="none">
               <View
                 style={[
                   styles.threadContent,
                   styles.threadSkeletonContent,
-                  {
-                    paddingTop: 20,
-                    paddingBottom: contentBottomPadding,
-                  },
+                  threadVerticalPaddingStyle,
+                ]}
+              >
+                {renderResponseLoadingFooter()}
+              </View>
+            </View>
+          ) : isThreadHydrating ? (
+            <View style={styles.threadList} pointerEvents="none">
+              <View
+                style={[
+                  styles.threadContent,
+                  styles.threadSkeletonContent,
+                  threadVerticalPaddingStyle,
                 ]}
               >
                 {renderResponseLoadingFooter()}
@@ -1926,7 +2218,7 @@ export default function SharedPostChatScreen({
           ) : (
             <View style={styles.threadList}>
               <FlashList
-                key={postId}
+                key={activePostId}
                 ref={listRef}
                 style={[
                   styles.threadList,
@@ -1936,7 +2228,7 @@ export default function SharedPostChatScreen({
                 keyExtractor={(item) => item.id}
                 renderItem={renderResponseItem}
                 extraData={responses}
-                ItemSeparatorComponent={() => <View style={styles.messageSeparator} />}
+                ItemSeparatorComponent={renderMessageSeparator}
                 ListEmptyComponent={renderEmptyThread}
                 maintainVisibleContentPosition={THREAD_SCROLL_POSITION_CONFIG}
                 onStartReached={loadOlderResponses}
@@ -1950,10 +2242,7 @@ export default function SharedPostChatScreen({
                 showsVerticalScrollIndicator={false}
                 contentContainerStyle={[
                   styles.threadContent,
-                  {
-                    paddingTop: 20,
-                    paddingBottom: contentBottomPadding,
-                  },
+                  threadVerticalPaddingStyle,
                 ]}
               />
               {!isThreadFirstPaintReady ? (
@@ -1962,10 +2251,7 @@ export default function SharedPostChatScreen({
                     style={[
                       styles.threadContent,
                       styles.threadSkeletonContent,
-                      {
-                        paddingTop: 20,
-                        paddingBottom: contentBottomPadding,
-                      },
+                      threadVerticalPaddingStyle,
                     ]}
                   >
                     {renderResponseLoadingFooter()}
@@ -2029,10 +2315,16 @@ export default function SharedPostChatScreen({
                 styles.composerShell,
                 {
                   bottom: composerKeyboardOffset,
-                  paddingBottom: Math.max(insets.bottom, 12),
+                  paddingBottom: isKeyboardVisible ? 12 : Math.max(insets.bottom, 12),
                 },
               ]}
             >
+            <LinearGradient
+              pointerEvents="none"
+              colors={[`${colors.background}00`, colors.background]}
+              locations={[0, 0.72]}
+              style={styles.composerFade}
+            />
             {typingIndicatorLabel ? (
               <View
                 accessibilityRole="text"
@@ -2132,7 +2424,9 @@ export default function SharedPostChatScreen({
               <TextInput
                 value={draft}
                 onChangeText={handleDraftChange}
-                placeholder={t('shared.chatComposerPlaceholder', 'Reply to this memory')}
+                placeholder={
+                  chatContext.composerPlaceholder
+                }
                 placeholderTextColor={colors.secondaryText}
                 accessibilityLabel={t('shared.chatComposerA11y', 'Message')}
                 maxLength={160}
@@ -2162,16 +2456,16 @@ export default function SharedPostChatScreen({
                 accessibilityLabel={
                   isSending ? t('shared.chatSending', 'Sending...') : t('common.send', 'Send')
                 }
-                accessibilityState={{ disabled: isSending || !draft.trim() }}
+                accessibilityState={{ disabled: !chatContext.canSendMessage }}
                 onPress={() => {
                   void sendResponse();
                 }}
-                disabled={isSending || !draft.trim()}
+                disabled={!chatContext.canSendMessage}
                 style={({ pressed }) => [
                   styles.sendButton,
                   {
                     backgroundColor: colors.primary,
-                    opacity: isSending || !draft.trim() ? 0.44 : pressed ? 0.82 : 1,
+                    opacity: !chatContext.canSendMessage ? 0.44 : pressed ? 0.82 : 1,
                   },
                 ]}
               >
@@ -2260,6 +2554,44 @@ export default function SharedPostChatScreen({
                 />
               ))}
             </View>
+            <View style={[styles.reactionTrayVerticalDivider, { backgroundColor: colors.border }]} />
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={t('shared.chatReplyToMessage', 'Reply to message')}
+              onPress={() => {
+                const target =
+                  responseById.get(reactionOverlay.response.id) ?? reactionOverlay.response;
+                void Haptics.selectionAsync();
+                setReplyTarget(target);
+                setReactionOverlay(null);
+              }}
+              style={({ pressed }) => [
+                styles.reactionTrayIconAction,
+                {
+                  backgroundColor: pressed ? colors.primarySoft : 'transparent',
+                },
+              ]}
+            >
+              <Ionicons name="return-up-back" size={18} color={colors.primary} />
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={t('shared.chatCopyMessage', 'Copy message')}
+              onPress={() => {
+                void Haptics.selectionAsync();
+                void copyResponseText(
+                  responseById.get(reactionOverlay.response.id) ?? reactionOverlay.response
+                );
+              }}
+              style={({ pressed }) => [
+                styles.reactionTrayIconAction,
+                {
+                  backgroundColor: pressed ? colors.primarySoft : 'transparent',
+                },
+              ]}
+            >
+              <Ionicons name="copy-outline" size={18} color={colors.primary} />
+            </Pressable>
             {reactionDetailsLabel ? (
               <Text
                 numberOfLines={2}
@@ -2268,52 +2600,6 @@ export default function SharedPostChatScreen({
                 {reactionDetailsLabel}
               </Text>
             ) : null}
-            <View style={[styles.reactionTrayHorizontalDivider, { backgroundColor: colors.border }]} />
-            <View style={styles.reactionTrayActionRow}>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={t('shared.chatReplyToMessage', 'Reply to message')}
-                onPress={() => {
-                  const target =
-                    responseById.get(reactionOverlay.response.id) ?? reactionOverlay.response;
-                  void Haptics.selectionAsync();
-                  setReplyTarget(target);
-                  setReactionOverlay(null);
-                }}
-                style={({ pressed }) => [
-                  styles.reactionTrayTextAction,
-                  {
-                    backgroundColor: pressed ? colors.primarySoft : 'transparent',
-                  },
-                ]}
-              >
-                <Ionicons name="return-up-back" size={18} color={colors.primary} />
-                <Text style={[styles.reactionTrayActionLabel, { color: colors.primary }]}>
-                  {t('shared.chatReplyShort', 'Reply')}
-                </Text>
-              </Pressable>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={t('shared.chatCopyMessage', 'Copy message')}
-                onPress={() => {
-                  void Haptics.selectionAsync();
-                  void copyResponseText(
-                    responseById.get(reactionOverlay.response.id) ?? reactionOverlay.response
-                  );
-                }}
-                style={({ pressed }) => [
-                  styles.reactionTrayTextAction,
-                  {
-                    backgroundColor: pressed ? colors.primarySoft : 'transparent',
-                  },
-                ]}
-              >
-                <Ionicons name="copy-outline" size={18} color={colors.primary} />
-                <Text style={[styles.reactionTrayActionLabel, { color: colors.primary }]}>
-                  {t('shared.chatCopyShort', 'Copy')}
-                </Text>
-              </Pressable>
-            </View>
           </Animated.View>
         </View>
       ) : null}
@@ -2381,6 +2667,11 @@ const styles = StyleSheet.create({
   loadingChatContent: {
     flex: 1,
     paddingHorizontal: Layout.screenPadding,
+    paddingTop: 20,
+  },
+  loadingResponseSkeletonHost: {
+    flex: 1,
+    justifyContent: 'flex-end',
     paddingTop: 20,
   },
   memoryPreviewHost: {
@@ -2622,6 +2913,13 @@ const styles = StyleSheet.create({
     gap: 5,
     position: 'relative',
   },
+  messageInteractionWrapWithReply: {
+    gap: 0,
+    marginTop: 8,
+  },
+  replyMessageBubbleContainer: {
+    marginTop: -1,
+  },
   replySwipeHint: {
     position: 'absolute',
     top: '50%',
@@ -2687,22 +2985,50 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   replyPreviewBubble: {
-    minWidth: 120,
-    maxWidth: 220,
-    borderRadius: 10,
-    paddingHorizontal: 9,
-    paddingVertical: 6,
+    minWidth: 152,
+    maxWidth: 230,
+    minHeight: 44,
+    borderRadius: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 11,
+    paddingVertical: 7,
+    flexDirection: 'row',
+    alignItems: 'center',
+    overflow: 'hidden',
+  },
+  selfReplyPreviewBubble: {
+    alignSelf: 'flex-end',
+    borderBottomRightRadius: 7,
+  },
+  friendReplyPreviewBubble: {
+    alignSelf: 'flex-start',
+    borderBottomLeftRadius: 7,
+  },
+  replyPreviewCopy: {
+    flex: 1,
+    minWidth: 0,
     gap: 1,
   },
-  replyPreviewAuthor: {
-    fontSize: 11,
-    lineHeight: 14,
+  replyPreviewLabelRow: {
+    minWidth: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  replyPreviewIcon: {
+    opacity: 0.82,
+  },
+  replyPreviewLabel: {
+    flexShrink: 1,
+    fontSize: 12,
+    lineHeight: 16,
     fontWeight: '900',
     fontFamily: 'Noto Sans',
   },
   replyPreviewBody: {
-    fontSize: 11,
-    lineHeight: 14,
+    fontSize: 12,
+    lineHeight: 15,
+    fontWeight: '700',
     fontFamily: 'Noto Sans',
   },
   reactionChip: {
@@ -2760,71 +3086,50 @@ const styles = StyleSheet.create({
   reactionTray: {
     position: 'absolute',
     zIndex: 10,
-    borderRadius: 22,
+    minHeight: 50,
+    borderRadius: 25,
     borderWidth: StyleSheet.hairlineWidth,
-    paddingHorizontal: 8,
-    paddingVertical: 7,
-    gap: 6,
+    paddingHorizontal: 7,
+    paddingVertical: 5,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.14,
-    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
     elevation: 8,
   },
   reactionTrayReactionRow: {
     flexDirection: 'row',
     justifyContent: 'center',
-    gap: 4,
+    gap: 2,
   },
   reactionTrayButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     borderWidth: StyleSheet.hairlineWidth,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  reactionTrayDivider: {
+  reactionTrayVerticalDivider: {
     width: StyleSheet.hairlineWidth,
     height: 28,
     alignSelf: 'center',
     opacity: 0.8,
   },
-  reactionTrayHorizontalDivider: {
-    height: StyleSheet.hairlineWidth,
-    width: '100%',
-    opacity: 0.8,
-  },
-  reactionTrayActionRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  reactionTrayActionButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  reactionTrayTextAction: {
-    flex: 1,
-    minHeight: 38,
+  reactionTrayIconAction: {
+    width: 38,
+    height: 38,
     borderRadius: 19,
-    paddingHorizontal: 10,
-    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
-  },
-  reactionTrayActionLabel: {
-    fontSize: 13,
-    lineHeight: 17,
-    fontWeight: '800',
-    fontFamily: 'Noto Sans',
   },
   reactionDetailsText: {
-    paddingHorizontal: 8,
+    maxWidth: 92,
+    paddingHorizontal: 4,
     fontSize: 11,
     lineHeight: 15,
     fontWeight: '700',
@@ -2867,6 +3172,18 @@ const styles = StyleSheet.create({
   },
   friendBubbleGroupedBottom: {
     borderBottomLeftRadius: 8,
+  },
+  selfBubbleWithReply: {
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 8,
+    borderBottomLeftRadius: 18,
+    borderBottomRightRadius: 6,
+  },
+  friendBubbleWithReply: {
+    borderTopLeftRadius: 8,
+    borderTopRightRadius: 16,
+    borderBottomLeftRadius: 6,
+    borderBottomRightRadius: 18,
   },
   messageText: {
     flexShrink: 1,
@@ -2939,6 +3256,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: Layout.screenPadding,
     paddingTop: 9,
     gap: 7,
+  },
+  composerFade: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: -24,
+    bottom: 0,
   },
   typingIndicator: {
     alignSelf: 'flex-start',

@@ -38,6 +38,16 @@ function trimToNull(value: string | null | undefined) {
   return normalized ? normalized : null;
 }
 
+export function isDirectChatPost(
+  post: Pick<SharedPost, 'directChatKey' | 'id' | 'isDirectChat'>
+) {
+  return Boolean(
+    post.isDirectChat ||
+      trimToNull(post.directChatKey) ||
+      post.id.startsWith('direct-chat-')
+  );
+}
+
 export function getSharedChatIdentity(
   input: FriendIdentityInput,
   labels: Pick<Labels, 'friendFallback' | 'someone' | 'you'>
@@ -69,6 +79,10 @@ export function getSharedChatMemoryPreview(
   post: SharedPost,
   labels: Pick<Labels, 'photoMemory' | 'photoMemoryAtPlace' | 'sharedNote'>
 ) {
+  if (isDirectChatPost(post)) {
+    return labels.sharedNote;
+  }
+
   if (post.type === 'photo') {
     return post.placeName ? labels.photoMemoryAtPlace(post.placeName) : labels.photoMemory;
   }
@@ -77,6 +91,10 @@ export function getSharedChatMemoryPreview(
 }
 
 export function getSharedChatThreadIconName(post: SharedPost) {
+  if (isDirectChatPost(post)) {
+    return 'chatbubble-ellipses-outline';
+  }
+
   return post.type === 'photo' ? 'image-outline' : 'document-text-outline';
 }
 
@@ -100,4 +118,3 @@ export function isSharedThreadUnread(
   const lastReadAt = readState?.lastReadAt ? new Date(readState.lastReadAt).getTime() : 0;
   return new Date(summary.latestActivityAt).getTime() > lastReadAt;
 }
-
