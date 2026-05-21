@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { FlashList } from '@shopify/flash-list';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -15,7 +15,11 @@ import type {
   SharedPostTypingUser,
   SharedThreadSummary,
 } from '../../../services/sharedFeedService';
-import type { SharedThreadReadState } from '../../../services/sharedFeedCache';
+import { rememberSharedChatThreadPosts } from '../../../services/sharedChatPostMemory';
+import {
+  getCachedSharedThreadSummaries,
+  type SharedThreadReadState,
+} from '../../../services/sharedFeedCache';
 import { formatChatTimestamp } from '../../../utils/dateUtils';
 import {
   getSharedChatIdentity,
@@ -34,9 +38,18 @@ const CHAT_PREWARM_RESPONSE_LIMIT = 30;
 const MAX_PREWARM_THREADS = 8;
 const MAX_CACHED_THREAD_SUMMARIES = 80;
 const MAX_TYPING_PREVIEW_THREADS = 12;
+const CHAT_THREAD_VIEWABILITY_CONFIG = {
+  itemVisiblePercentThreshold: 40,
+} as const;
+const cachedActivityThreadPostsByUserUid = new Map<string, SharedPost[]>();
 const cachedThreadSummaryByPostId = new Map<string, SharedThreadSummary>();
 const cachedReadStateByUserUid = new Map<string, Record<string, SharedThreadReadState>>();
 const prewarmedResponsePageKeys = new Set<string>();
+
+type FriendListItem = ReturnType<typeof useSharedFeedStore>['friends'][number];
+type ChatListItem =
+  | { key: string; type: 'thread'; post: SharedPost }
+  | { key: string; type: 'friend'; friend: FriendListItem };
 
 function getCachedThreadSummaries(postIds: readonly string[]) {
   return Object.fromEntries(
@@ -141,6 +154,7 @@ export default function SharedChatsScreen() {
   const { isReady: authReady, user } = useAuth();
   const {
     friends = [],
+    friendPresence = {},
     loading,
     sharedPosts = [],
     getSharedChatThreadPosts = async () => [],
@@ -161,7 +175,10 @@ export default function SharedChatsScreen() {
   const [typingUsersByPostId, setTypingUsersByPostId] = useState<
     Record<string, SharedPostTypingUser[]>
   >({});
-  const [activityThreadPosts, setActivityThreadPosts] = useState<SharedPost[]>([]);
+  const [visibleThreadPostIds, setVisibleThreadPostIds] = useState<string[]>([]);
+  const [activityThreadPosts, setActivityThreadPosts] = useState<SharedPost[]>(() =>
+    user?.uid ? cachedActivityThreadPostsByUserUid.get(user.uid) ?? [] : []
+  );
   const [loadingActivityThreads, setLoadingActivityThreads] = useState(false);
   const listContentStyle = useMemo(
     () => ({
@@ -193,6 +210,9 @@ export default function SharedChatsScreen() {
     () => mergedThreadPosts.map((post) => post.id).join('|'),
     [mergedThreadPosts]
   );
+  useEffect(() => {
+    rememberSharedChatThreadPosts(mergedThreadPosts);
+  }, [mergedThreadPosts]);
   const friendById = useMemo(() => {
     const next = new Map<string, (typeof friends)[number]>();
     for (const friend of friends) {
@@ -206,81 +226,110 @@ export default function SharedChatsScreen() {
     },
     [router]
   );
-  useEffect(() => {
-    if (!authReady || !user?.uid) {
-      setActivityThreadPosts([]);
-      setLoadingActivityThreads(false);
-      return;
-    }
+  useFocusEffect(
+    useCallback(() => {
+      if (!authReady || !user?.uid) {
+        setActivityThreadPosts([]);
+        setLoadingActivityThreads(false);
+        return undefined;
+      }
 
-    let cancelled = false;
-    setLoadingActivityThreads(true);
-    void getSharedChatThreadPosts()
-      .then((posts) => {
-        if (!cancelled) {
-          setActivityThreadPosts(posts);
+      let cancelled = false;
+      const cachedActivityThreadPosts = cachedActivityThreadPostsByUserUid.get(user.uid) ?? [];
+      if (cachedActivityThreadPosts.length > 0) {
+        setActivityThreadPosts(cachedActivityThreadPosts);
+      }
+      setLoadingActivityThreads(
+        cachedActivityThreadPosts.length === 0 && !threadPostIdsKey && friends.length === 0
+      );
+      void getSharedChatThreadPosts()
+        .then((posts) => {
+          if (!cancelled) {
+            cachedActivityThreadPostsByUserUid.set(user.uid, posts);
+            setActivityThreadPosts(posts);
+          }
+        })
+        .catch((error) => {
+          if (!cancelled) {
+            console.warn('Failed to load shared chat threads:', error);
+            if (cachedActivityThreadPosts.length === 0) {
+              setActivityThreadPosts([]);
+            }
+          }
+        })
+        .finally(() => {
+          if (!cancelled) {
+            setLoadingActivityThreads(false);
+          }
+        });
+
+      return () => {
+        cancelled = true;
+      };
+    }, [authReady, friends.length, getSharedChatThreadPosts, threadPostIdsKey, user?.uid])
+  );
+  useFocusEffect(
+    useCallback(() => {
+      const postIds = threadPostIdsKey ? threadPostIdsKey.split('|') : [];
+      if (!authReady || !user?.uid || postIds.length === 0) {
+        if (postIds.length === 0) {
+          setThreadSummaryByPostId({});
+          setReadStateByPostId({});
         }
-      })
-      .catch((error) => {
-        if (!cancelled) {
-          console.warn('Failed to load shared chat threads:', error);
-          setActivityThreadPosts([]);
+        return undefined;
+      }
+
+      setThreadSummaryByPostId((current) => ({
+        ...getCachedThreadSummaries(postIds),
+        ...current,
+      }));
+      setReadStateByPostId(cachedReadStateByUserUid.get(user.uid) ?? {});
+
+      let cancelled = false;
+      void getCachedSharedThreadSummaries(user.uid, postIds)
+        .then((cachedSummaries) => {
+          if (cancelled || cachedSummaries.length === 0) {
+            return;
+          }
+
+          rememberThreadSummaries(cachedSummaries);
+          setThreadSummaryByPostId((current) => ({
+            ...current,
+            ...Object.fromEntries(
+              cachedSummaries.map((summary) => [summary.postId, summary])
+            ),
+          }));
+        })
+        .catch(() => undefined);
+
+      void Promise.all([
+        getSharedPostThreadSummaries(postIds).catch(() => []),
+        getSharedThreadReadStates().catch(() => []),
+      ]).then(([summaries, readStates]) => {
+        if (cancelled) {
+          return;
         }
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setLoadingActivityThreads(false);
-        }
+
+        rememberThreadSummaries(summaries);
+        const nextReadStateByPostId = Object.fromEntries(
+          readStates.map((readState) => [readState.postId, readState])
+        );
+        cachedReadStateByUserUid.set(user.uid, nextReadStateByPostId);
+        setThreadSummaryByPostId(Object.fromEntries(summaries.map((summary) => [summary.postId, summary])));
+        setReadStateByPostId(nextReadStateByPostId);
       });
 
-    return () => {
-      cancelled = true;
-    };
-  }, [authReady, getSharedChatThreadPosts, user?.uid]);
-  useEffect(() => {
-    const postIds = threadPostIdsKey ? threadPostIdsKey.split('|') : [];
-    if (!authReady || !user?.uid || postIds.length === 0) {
-      if (postIds.length === 0) {
-        setThreadSummaryByPostId({});
-        setReadStateByPostId({});
-      }
-      return;
-    }
-
-    setThreadSummaryByPostId((current) => ({
-      ...getCachedThreadSummaries(postIds),
-      ...current,
-    }));
-    setReadStateByPostId(cachedReadStateByUserUid.get(user.uid) ?? {});
-
-    let cancelled = false;
-    void Promise.all([
-      getSharedPostThreadSummaries(postIds).catch(() => []),
-      getSharedThreadReadStates().catch(() => []),
-    ]).then(([summaries, readStates]) => {
-      if (cancelled) {
-        return;
-      }
-
-      rememberThreadSummaries(summaries);
-      const nextReadStateByPostId = Object.fromEntries(
-        readStates.map((readState) => [readState.postId, readState])
-      );
-      cachedReadStateByUserUid.set(user.uid, nextReadStateByPostId);
-      setThreadSummaryByPostId(Object.fromEntries(summaries.map((summary) => [summary.postId, summary])));
-      setReadStateByPostId(nextReadStateByPostId);
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    authReady,
-    getSharedPostThreadSummaries,
-    getSharedThreadReadStates,
-    threadPostIdsKey,
-    user?.uid,
-  ]);
+      return () => {
+        cancelled = true;
+      };
+    }, [
+      authReady,
+      getSharedPostThreadSummaries,
+      getSharedThreadReadStates,
+      threadPostIdsKey,
+      user?.uid,
+    ])
+  );
 
   const threads = useMemo(
     () =>
@@ -293,16 +342,62 @@ export default function SharedChatsScreen() {
       }),
     [mergedThreadPosts, threadSummaryByPostId]
   );
-  const typingPreviewPostIdsKey = useMemo(
-    () =>
-      threads
-        .slice(0, MAX_TYPING_PREVIEW_THREADS)
-        .map((post) => post.id)
-        .join('|'),
-    [threads]
+  const getDirectChatParticipantUid = useCallback(
+    (post: SharedPost) =>
+      [post.authorUid, ...post.audienceUserIds].find((candidate) => candidate !== user?.uid) ??
+      post.authorUid,
+    [user?.uid]
   );
+  const chatListItems = useMemo<ChatListItem[]>(() => {
+    const directThreadFriendIds = new Set(
+      threads.filter(isDirectChatPost).map((post) => getDirectChatParticipantUid(post))
+    );
+    const starterItems = friends
+      .filter((friend) => !directThreadFriendIds.has(friend.userId))
+      .map((friend) => ({
+        key: `friend-${friend.userId}`,
+        type: 'friend' as const,
+        friend,
+      }));
+
+    return [
+      ...threads.map((post) => ({
+        key: `thread-${post.id}`,
+        type: 'thread' as const,
+        post,
+      })),
+      ...starterItems,
+    ];
+  }, [friends, getDirectChatParticipantUid, threads]);
+  const visibleTypingPostIdsKey = useMemo(() => {
+    const threadPostIds = new Set(threads.map((post) => post.id));
+    const visiblePostIds = visibleThreadPostIds.filter((postId) => threadPostIds.has(postId));
+    const sourcePostIds =
+      visiblePostIds.length > 0
+        ? visiblePostIds
+        : threads
+            .slice(0, MAX_TYPING_PREVIEW_THREADS)
+            .map((post) => post.id);
+
+    return sourcePostIds
+      .slice(0, MAX_TYPING_PREVIEW_THREADS)
+      .join('|');
+  }, [threads, visibleThreadPostIds]);
+  const handleThreadViewableItemsChanged = useRef(
+    ({ viewableItems }: { viewableItems: { item?: ChatListItem; isViewable?: boolean }[] }) => {
+      const nextVisiblePostIds = viewableItems.flatMap((viewableItem) =>
+        viewableItem.isViewable !== false && viewableItem.item?.type === 'thread'
+          ? [viewableItem.item.post.id]
+          : []
+      );
+
+      setVisibleThreadPostIds((current) =>
+        current.join('|') === nextVisiblePostIds.join('|') ? current : nextVisiblePostIds
+      );
+    }
+  ).current;
   useEffect(() => {
-    const postIds = typingPreviewPostIdsKey ? typingPreviewPostIdsKey.split('|') : [];
+    const postIds = visibleTypingPostIdsKey ? visibleTypingPostIdsKey.split('|') : [];
     if (!authReady || !user?.uid || postIds.length === 0) {
       setTypingUsersByPostId({});
       return;
@@ -338,7 +433,7 @@ export default function SharedChatsScreen() {
         subscription.unsubscribe();
       }
     };
-  }, [authReady, subscribeToSharedPostTyping, typingPreviewPostIdsKey, user?.uid]);
+  }, [authReady, subscribeToSharedPostTyping, visibleTypingPostIdsKey, user?.uid]);
   const prewarmThreadResponses = useCallback(
     (postId: string) => {
       if (!authReady || !user?.uid) {
@@ -357,7 +452,7 @@ export default function SharedChatsScreen() {
     },
     [authReady, getSharedPostResponsesPage, user?.uid]
   );
-  const prewarmPostIdsKey = useMemo(
+  const prewarmThreadPostIdsKey = useMemo(
     () =>
       threads
         .slice(0, MAX_PREWARM_THREADS)
@@ -366,7 +461,7 @@ export default function SharedChatsScreen() {
     [threads]
   );
   useEffect(() => {
-    const postIds = prewarmPostIdsKey ? prewarmPostIdsKey.split('|') : [];
+    const postIds = prewarmThreadPostIdsKey ? prewarmThreadPostIdsKey.split('|') : [];
     if (!authReady || !user?.uid || postIds.length === 0) {
       return;
     }
@@ -385,12 +480,10 @@ export default function SharedChatsScreen() {
     return () => {
       cancelled = true;
     };
-  }, [authReady, prewarmPostIdsKey, prewarmThreadResponses, user?.uid]);
+  }, [authReady, prewarmThreadPostIdsKey, prewarmThreadResponses, user?.uid]);
   const getThreadParticipant = useCallback(
     (post: SharedPost) => {
-      const participantUid =
-        [post.authorUid, ...post.audienceUserIds].find((candidate) => candidate !== user?.uid) ??
-        post.authorUid;
+      const participantUid = getDirectChatParticipantUid(post);
       const friend = friendById.get(participantUid) ?? null;
       const identity = getSharedChatIdentity(
         {
@@ -413,13 +506,11 @@ export default function SharedChatsScreen() {
         avatarInitial: identity.avatarInitial,
       };
     },
-    [friendById, t, user?.uid]
+    [friendById, getDirectChatParticipantUid, t, user?.uid]
   );
   const renderThreadItem = useCallback(
-    ({ item: post }: { item: SharedPost }) => {
-      const participantUid =
-        [post.authorUid, ...post.audienceUserIds].find((candidate) => candidate !== user?.uid) ??
-        post.authorUid;
+    (post: SharedPost) => {
+      const participantUid = getDirectChatParticipantUid(post);
       const participant = getThreadParticipant(post);
       const summary = threadSummaryByPostId[post.id] ?? null;
       const hasUnread = isSharedThreadUnread(summary, readStateByPostId[post.id], user?.uid);
@@ -463,6 +554,7 @@ export default function SharedChatsScreen() {
           : summaryBody || t('shared.chatThreadActivity', 'New activity')
         : starterPreview;
       const latestTimestamp = summary?.latestActivityAt ?? post.createdAt;
+      const participantPresenceStatus = friendPresence[participantUid]?.status ?? 'unknown';
       return (
         <Pressable
           accessibilityRole="button"
@@ -487,11 +579,12 @@ export default function SharedChatsScreen() {
             styles.threadRow,
             {
               backgroundColor: pressed ? colors.surface : 'transparent',
+              borderColor: 'transparent',
               opacity: pressed ? 0.86 : 1,
             },
           ]}
         >
-          <View>
+          <View style={styles.avatarHost}>
             {participant.photoUri ? (
               <Image
                 source={{ uri: participant.photoUri }}
@@ -505,6 +598,17 @@ export default function SharedChatsScreen() {
                 </Text>
               </View>
             )}
+            {isDirectChat && participantPresenceStatus === 'online' ? (
+              <View
+                style={[
+                  styles.avatarPresenceDot,
+                  {
+                    backgroundColor: colors.primary,
+                    borderColor: colors.background,
+                  },
+                ]}
+              />
+            ) : null}
             <View
               style={[
                 styles.threadKindBadge,
@@ -528,26 +632,37 @@ export default function SharedChatsScreen() {
             >
               {participant.label}
             </Text>
-            <Text
-              numberOfLines={1}
-              style={[
-                styles.threadPreview,
-                hasUnread ? styles.threadPreviewUnread : null,
-                typingPreview ? styles.threadPreviewTyping : null,
-                {
-                  color: typingPreview
-                    ? colors.primary
-                    : hasUnread
-                      ? colors.text
-                      : colors.secondaryText,
-                },
-              ]}
-            >
-              {typingPreview ?? latestPreview}
-            </Text>
+            <View style={styles.threadPreviewRow}>
+              <Text
+                numberOfLines={1}
+                style={[
+                  styles.threadPreview,
+                  hasUnread ? styles.threadPreviewUnread : null,
+                  {
+                    color: hasUnread ? colors.text : colors.secondaryText,
+                  },
+                ]}
+              >
+                {latestPreview}
+              </Text>
+              {typingPreview ? (
+                <Text
+                  numberOfLines={1}
+                  style={[styles.threadTypingInline, { color: colors.primary }]}
+                >
+                  {typingPreview}
+                </Text>
+              ) : null}
+            </View>
           </View>
           <View style={styles.threadMeta}>
-            <Text style={[styles.threadTime, { color: colors.secondaryText }]}>
+            <Text
+              style={[
+                styles.threadTime,
+                hasUnread ? styles.threadTimeUnread : null,
+                { color: hasUnread ? colors.text : colors.secondaryText },
+              ]}
+            >
               {formatChatTimestamp(latestTimestamp)}
             </Text>
             {hasUnread ? (
@@ -563,6 +678,8 @@ export default function SharedChatsScreen() {
     },
     [
       colors,
+      friendPresence,
+      getDirectChatParticipantUid,
       getThreadParticipant,
       prewarmThreadResponses,
       readStateByPostId,
@@ -588,7 +705,7 @@ export default function SharedChatsScreen() {
       >
         {CHAT_LIST_SKELETON_ROWS.map((row) => (
           <View key={row.key}>
-            <View style={styles.threadRow}>
+            <View style={styles.skeletonThreadRow}>
               <View style={[styles.avatar, { backgroundColor: colors.primarySoft }]} />
               <View style={styles.threadCopy}>
                 <View
@@ -630,7 +747,7 @@ export default function SharedChatsScreen() {
     [colors.border, colors.primarySoft, insets.bottom]
   );
   const renderFriendStarterItem = useCallback(
-    ({ item: friend }: { item: (typeof friends)[number] }) => {
+    (friend: FriendListItem) => {
       const identity = getSharedChatIdentity(
         {
           currentUserUid: user?.uid,
@@ -658,21 +775,35 @@ export default function SharedChatsScreen() {
             styles.threadRow,
             {
               backgroundColor: pressed ? colors.surface : 'transparent',
+              borderColor: 'transparent',
               opacity: pressed ? 0.86 : 1,
             },
           ]}
         >
-          {identity.avatarUri ? (
-            <Image source={{ uri: identity.avatarUri }} style={styles.avatar} contentFit="cover" />
-          ) : (
-            <View style={[styles.avatar, { backgroundColor: colors.primarySoft }]}>
-              <Text style={[styles.avatarLabel, { color: colors.primary }]}>
-                {identity.avatarInitial}
-              </Text>
-            </View>
-          )}
+          <View style={styles.avatarHost}>
+            {identity.avatarUri ? (
+              <Image source={{ uri: identity.avatarUri }} style={styles.avatar} contentFit="cover" />
+            ) : (
+              <View style={[styles.avatar, { backgroundColor: colors.background }]}>
+                <Text style={[styles.avatarLabel, { color: colors.primary }]}>
+                  {identity.avatarInitial}
+                </Text>
+              </View>
+            )}
+            {friendPresence[friend.userId]?.status === 'online' ? (
+              <View
+                style={[
+                  styles.avatarPresenceDot,
+                  {
+                    backgroundColor: colors.primary,
+                    borderColor: colors.background,
+                  },
+                ]}
+              />
+            ) : null}
+          </View>
           <View style={styles.threadCopy}>
-            <Text numberOfLines={1} style={[styles.threadTitle, { color: colors.text }]}>
+            <Text numberOfLines={1} style={[styles.threadTitle, styles.threadStarterTitle, { color: colors.text }]}>
               {identity.label}
             </Text>
             <Text numberOfLines={1} style={[styles.threadPreview, { color: colors.secondaryText }]}>
@@ -687,26 +818,26 @@ export default function SharedChatsScreen() {
     },
     [
       colors,
+      friendPresence,
       openFriendChat,
       t,
       user?.uid,
     ]
   );
+  const renderChatListItem = useCallback(
+    ({ item }: { item: ChatListItem }) =>
+      item.type === 'thread'
+        ? renderThreadItem(item.post)
+        : renderFriendStarterItem(item.friend),
+    [renderFriendStarterItem, renderThreadItem]
+  );
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      {!authReady || ((loading || loadingActivityThreads) && threads.length === 0) ? (
+      {!authReady ||
+      ((loading || loadingActivityThreads) && chatListItems.length === 0) ? (
         renderLoadingThreads()
-      ) : threads.length === 0 && friends.length > 0 ? (
-        <FlashList
-          data={friends}
-          keyExtractor={(item) => item.userId}
-          renderItem={renderFriendStarterItem}
-          ItemSeparatorComponent={renderThreadSeparator}
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={listContentStyle}
-        />
-      ) : threads.length === 0 ? (
+      ) : chatListItems.length === 0 ? (
         <View style={styles.emptyScreen}>
           <View style={styles.emptyState}>
             <View style={styles.emptyIconWrap}>
@@ -740,10 +871,12 @@ export default function SharedChatsScreen() {
         </View>
       ) : (
         <FlashList
-          data={threads}
-          keyExtractor={(item) => item.id}
-          renderItem={renderThreadItem}
+          data={chatListItems}
+          keyExtractor={(item) => item.key}
+          renderItem={renderChatListItem}
           ItemSeparatorComponent={renderThreadSeparator}
+          onViewableItemsChanged={handleThreadViewableItemsChanged}
+          viewabilityConfig={CHAT_THREAD_VIEWABILITY_CONFIG}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={listContentStyle}
         />
@@ -814,6 +947,14 @@ const styles = StyleSheet.create({
     flex: 1,
     opacity: 0.78,
   },
+  skeletonThreadRow: {
+    minHeight: 76,
+    paddingHorizontal: 8,
+    paddingVertical: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
   skeletonLine: {
     height: 13,
     borderRadius: 7,
@@ -834,11 +975,15 @@ const styles = StyleSheet.create({
   threadRow: {
     minHeight: 76,
     borderRadius: 16,
+    borderWidth: StyleSheet.hairlineWidth,
     paddingHorizontal: 8,
     paddingVertical: 12,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
+  },
+  avatarHost: {
+    position: 'relative',
   },
   avatar: {
     width: 50,
@@ -852,6 +997,15 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     fontWeight: '900',
     fontFamily: 'Noto Sans',
+  },
+  avatarPresenceDot: {
+    position: 'absolute',
+    right: 1,
+    top: 1,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    borderWidth: 2,
   },
   threadKindBadge: {
     position: 'absolute',
@@ -878,7 +1032,18 @@ const styles = StyleSheet.create({
   threadTitleUnread: {
     fontWeight: '900',
   },
+  threadStarterTitle: {
+    fontWeight: '800',
+  },
+  threadPreviewRow: {
+    minWidth: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+  },
   threadPreview: {
+    flexShrink: 1,
+    minWidth: 0,
     fontSize: 13,
     lineHeight: 18,
     fontFamily: 'Noto Sans',
@@ -886,8 +1051,13 @@ const styles = StyleSheet.create({
   threadPreviewUnread: {
     fontWeight: '800',
   },
-  threadPreviewTyping: {
+  threadTypingInline: {
+    flexShrink: 0,
+    maxWidth: '44%',
+    fontSize: 11,
+    lineHeight: 15,
     fontWeight: '900',
+    fontFamily: 'Noto Sans',
   },
   threadMeta: {
     alignItems: 'flex-end',
@@ -898,6 +1068,9 @@ const styles = StyleSheet.create({
     fontSize: 11,
     lineHeight: 14,
     fontFamily: 'Noto Sans',
+  },
+  threadTimeUnread: {
+    fontWeight: '900',
   },
   unreadWrap: {
     minHeight: 18,

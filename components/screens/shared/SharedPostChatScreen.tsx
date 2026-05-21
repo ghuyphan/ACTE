@@ -3,7 +3,7 @@ import * as Clipboard from 'expo-clipboard';
 import { FlashList, type FlashListRef } from '@shopify/flash-list';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Stack, useRouter } from 'expo-router';
+import { Stack } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
@@ -44,23 +44,23 @@ import {
   type ChatThreadResponse as SharedPostChatThreadResponse,
 } from '../../../hooks/shared/useSharedPostChatThread';
 import { useTheme } from '../../../hooks/useTheme';
-import {
-  getNoteCardTextPalette,
-  getTextNoteCardGradient,
-} from '../../../services/noteAppearance';
 import type {
   SharedPost,
   SharedPostResponse,
 } from '../../../services/sharedFeedService';
+import {
+  getRememberedSharedChatThreadPost,
+  rememberSharedChatThreadPost,
+} from '../../../services/sharedChatPostMemory';
+import { rememberSharedPostResponses } from '../../../services/sharedPostResponseMemory';
 import { getUserSocialName } from '../../../utils/appUser';
-import { formatChatTimestamp } from '../../../utils/dateUtils';
 import {
   formatSharedResponseBody,
   getSharedChatIdentity,
-  getSharedChatMemoryPreview,
   isDirectChatPost,
 } from '../../../utils/sharedChatPresentation';
 import { setActiveSharedChatPostId } from '../../../utils/socialNotificationPresentation';
+import { withAlpha } from '../../../utils/colors';
 import TextFieldEditSheet from '../../sheets/TextFieldEditSheet';
 
 type SharedPostChatScreenProps = {
@@ -94,7 +94,6 @@ type ChatRenderContext = {
   shouldRenderChatShell: boolean;
   shouldRenderPendingThread: boolean;
   shouldShowIdentityHeader: boolean;
-  shouldShowMemoryHeader: boolean;
 };
 
 const RESPONSE_SKELETON_ROWS = [
@@ -106,10 +105,12 @@ const RESPONSE_SKELETON_ROWS = [
 const QUICK_RESPONSES = ['💛', '🥹', '✨', '😂'] as const;
 const RESPONSE_PAGE_SIZE = 50;
 const INFO_MESSAGE_VISIBLE_MS = 1800;
-const COMPOSER_KEYBOARD_GAP = 12;
+const COMPOSER_KEYBOARD_GAP = 16;
+const COMPACT_REACTION_TRAY_WIDTH = 260;
+const REACTION_TRAY_WITH_DETAILS_WIDTH = 316;
 const REACTION_TRAY_ESTIMATED_HEIGHT = 58;
-const TYPING_IDLE_MS = 3500;
-const TYPING_HEARTBEAT_MS = 2500;
+const TYPING_IDLE_HIDE_MS = 1500;
+const TYPING_REFRESH_MS = 900;
 const THREAD_SCROLL_POSITION_CONFIG = {
   startRenderingFromBottom: true,
   autoscrollToBottomThreshold: 0.25,
@@ -406,73 +407,6 @@ function formatOfflineDuration(
   });
 }
 
-function getSharedPostPreviewUri(post: SharedPost) {
-  if (post.type !== 'photo') {
-    return null;
-  }
-
-  return post.photoLocalUri ?? null;
-}
-
-function getMemoryPreviewTitle(post: SharedPost, t: ReturnType<typeof useTranslation>['t']) {
-  return getSharedChatMemoryPreview(post, {
-    photoMemory: t('shared.chatThreadPhoto', 'Photo memory'),
-    photoMemoryAtPlace: (place) =>
-      t('shared.chatThreadPhotoAtPlace', 'Photo memory from {{place}}', { place }),
-    sharedNote: t('shared.chatThreadNote', 'Shared note'),
-  });
-}
-
-function MiniMemoryCard({
-  fallbackText,
-  isDark,
-  post,
-}: {
-  fallbackText: string;
-  isDark: boolean;
-  post: SharedPost;
-}) {
-  const photoUri = getSharedPostPreviewUri(post);
-  const previewText = post.text.trim() || fallbackText;
-  const gradient = useMemo(
-    () =>
-      getTextNoteCardGradient({
-        text: previewText,
-        noteId: post.id,
-        noteColor: post.noteColor,
-        colorScheme: isDark ? 'dark' : 'light',
-      }),
-    [isDark, post.id, post.noteColor, previewText]
-  );
-  const textPalette = useMemo(() => getNoteCardTextPalette(gradient), [gradient]);
-
-  if (photoUri) {
-    return <Image source={{ uri: photoUri }} style={styles.miniMemoryFill} contentFit="cover" />;
-  }
-
-  return (
-    <LinearGradient
-      colors={gradient}
-      start={{ x: 0, y: 0 }}
-      end={{ x: 1, y: 1 }}
-      style={styles.miniMemoryFill}
-    >
-      <Text
-        numberOfLines={5}
-        style={[
-          styles.miniMemoryText,
-          {
-            color: textPalette.color,
-            textShadowColor: textPalette.shadowColor,
-          },
-        ]}
-      >
-        {previewText}
-      </Text>
-    </LinearGradient>
-  );
-}
-
 function SharedChatHeaderTitle({
   avatarInitial,
   avatarUri,
@@ -553,11 +487,10 @@ export default function SharedPostChatScreen({
   postId,
 }: SharedPostChatScreenProps) {
   const { t } = useTranslation();
-  const { colors, isDark } = useTheme();
+  const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const headerTopInset = getHeaderTopInset(insets.top);
   const { height: screenHeight, width: screenWidth } = useWindowDimensions();
-  const router = useRouter();
   const { user } = useAuth();
   const { isOnline } = useConnectivity();
   const {
@@ -595,7 +528,9 @@ export default function SharedPostChatScreen({
   const [replyTarget, setReplyTarget] = useState<SharedPostResponse | null>(null);
   const [reactionOverlay, setReactionOverlay] = useState<ReactionOverlay>(null);
   const [infoMessage, setInfoMessage] = useState<string | null>(null);
-  const [loadedChatPost, setLoadedChatPost] = useState<SharedPost | null>(null);
+  const [loadedChatPost, setLoadedChatPost] = useState<SharedPost | null>(() =>
+    getRememberedSharedChatThreadPost(postId)
+  );
   const [isLoadingChatPost, setIsLoadingChatPost] = useState(false);
   const [chatPostErrorMessage, setChatPostErrorMessage] = useState<string | null>(null);
   const [highlightedResponseId, setHighlightedResponseId] = useState<string | null>(null);
@@ -617,7 +552,25 @@ export default function SharedPostChatScreen({
   const normalizedDirectFriendUid = Array.isArray(directFriendUid)
     ? directFriendUid[0]?.trim() || null
     : directFriendUid?.trim() || null;
-  const post = sharedPosts.find((item) => item.id === postId) ?? loadedChatPost;
+  const sharedPostForRoute = sharedPosts.find((item) => item.id === postId) ?? null;
+  const sharedDirectPostForFriend = normalizedDirectFriendUid
+    ? sharedPosts.find(
+        (item) =>
+          isDirectChatPost(item) && item.audienceUserIds.includes(normalizedDirectFriendUid)
+      ) ?? null
+    : null;
+  const loadedChatPostMatchesRoute =
+    loadedChatPost?.id === postId ||
+    Boolean(
+      loadedChatPost &&
+        normalizedDirectFriendUid &&
+        isDirectChatPost(loadedChatPost) &&
+        loadedChatPost.audienceUserIds.includes(normalizedDirectFriendUid)
+    );
+  const post =
+    sharedPostForRoute ??
+    sharedDirectPostForFriend ??
+    (loadedChatPostMatchesRoute ? loadedChatPost : null);
   const isDirectChat = Boolean(
     normalizedDirectFriendUid ||
       (post ? isDirectChatPost(post) : postId.startsWith('direct-chat-'))
@@ -633,6 +586,7 @@ export default function SharedPostChatScreen({
     clearNewMessageCount,
     connectionStatus,
     errorMessage,
+    hasHydratedResponses,
     hasOlderResponses,
     isLoadingOlderResponses,
     isLoadingResponses,
@@ -661,8 +615,8 @@ export default function SharedPostChatScreen({
     typingUsers,
   } = useSharedPostTypingPresence({
     enabled: Boolean(post && user?.uid),
-    heartbeatMs: TYPING_HEARTBEAT_MS,
-    idleMs: TYPING_IDLE_MS,
+    heartbeatMs: TYPING_REFRESH_MS,
+    idleMs: TYPING_IDLE_HIDE_MS,
     postId: activePostId,
     subscribeToSharedPostTyping,
   });
@@ -780,7 +734,22 @@ export default function SharedPostChatScreen({
   }, [activePostId, normalizedInitialResponseId]);
 
   useEffect(() => {
+    if (sharedPostForRoute || sharedDirectPostForFriend || loadedChatPostMatchesRoute) {
+      return;
+    }
+
+    setLoadedChatPost(getRememberedSharedChatThreadPost(postId));
+  }, [loadedChatPostMatchesRoute, postId, sharedDirectPostForFriend, sharedPostForRoute]);
+
+  useEffect(() => {
+    if (post) {
+      rememberSharedChatThreadPost(post);
+    }
+  }, [post]);
+
+  useEffect(() => {
     lastMarkedReadSignatureRef.current = null;
+    setReplyTarget(null);
     setIsThreadFirstPaintReady(false);
   }, [activePostId]);
 
@@ -992,41 +961,6 @@ export default function SharedPostChatScreen({
   }, [isDirectChat, loading, post, refreshSharedFeed]);
 
   useEffect(() => {
-    if (!normalizedDirectFriendUid || post) {
-      return;
-    }
-
-    let cancelled = false;
-    setIsLoadingChatPost(true);
-    setChatPostErrorMessage(null);
-    void getOrCreateDirectChatPost(normalizedDirectFriendUid)
-      .then((nextPost) => {
-        if (!cancelled) {
-          setLoadedChatPost(nextPost);
-        }
-      })
-      .catch((error) => {
-        if (!cancelled) {
-          setLoadedChatPost(null);
-          setChatPostErrorMessage(
-            error instanceof Error
-              ? error.message
-              : t('shared.directChatStartFailed', 'Could not start chat.')
-          );
-        }
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setIsLoadingChatPost(false);
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [getOrCreateDirectChatPost, normalizedDirectFriendUid, post, t]);
-
-  useEffect(() => {
     if (normalizedDirectFriendUid || post || loading) {
       return;
     }
@@ -1037,6 +971,7 @@ export default function SharedPostChatScreen({
       .then((nextPost) => {
         if (!cancelled) {
           setChatPostErrorMessage(null);
+          rememberSharedChatThreadPost(nextPost);
           setLoadedChatPost(nextPost);
         }
       })
@@ -1170,13 +1105,57 @@ export default function SharedPostChatScreen({
       explicitReplyToResponseId?: string | null,
       retryResponse?: ChatThreadResponse
     ) => {
-      if (!post || isSending) {
+      if (isSending) {
         return;
       }
 
       const text = retryResponse ? retryResponse.text.trim() : draft.trim();
       const responseEmoji = retryResponse ? retryResponse.emoji ?? undefined : emoji;
       if (!responseEmoji && !text) {
+        return;
+      }
+
+      if (!post && normalizedDirectFriendUid) {
+        if (!isOnline) {
+          setErrorMessage(t('shared.chatOfflineSendMessage', 'You are offline. Retry when connected.'));
+          return;
+        }
+
+        setIsSending(true);
+        setChatPostErrorMessage(null);
+        setErrorMessage(null);
+        try {
+          const nextPost = await getOrCreateDirectChatPost(normalizedDirectFriendUid);
+          const response = await createSharedPostResponse(nextPost.id, {
+            emoji: responseEmoji ?? null,
+            text: responseEmoji ? null : text,
+            replyToResponseId: replyTarget?.id ?? null,
+          });
+          rememberSharedPostResponses(nextPost.id, [response]);
+          rememberSharedChatThreadPost(nextPost);
+          setLoadedChatPost(nextPost);
+          if (!retryResponse && !responseEmoji) {
+            setDraft('');
+            clearTypingIdleTimer();
+            publishTypingState(false, { force: true });
+          }
+          if (!retryResponse && !explicitReplyToResponseId) {
+            setReplyTarget(null);
+          }
+        } catch (error) {
+          const failureMessage =
+            error instanceof Error
+              ? error.message
+              : t('shared.directChatStartFailed', 'Could not start chat.');
+          setChatPostErrorMessage(failureMessage);
+          setErrorMessage(failureMessage);
+        } finally {
+          setIsSending(false);
+        }
+        return;
+      }
+
+      if (!post) {
         return;
       }
 
@@ -1267,14 +1246,17 @@ export default function SharedPostChatScreen({
       clearTypingIdleTimer,
       createSharedPostResponse,
       draft,
+      getOrCreateDirectChatPost,
       isSending,
       isOnline,
       markThreadReadThroughLatest,
+      normalizedDirectFriendUid,
       pendingResponsesRef,
       post,
       publishTypingState,
       replyTarget,
       setErrorMessage,
+      setLoadedChatPost,
       t,
       updateResponses,
       user,
@@ -1509,10 +1491,6 @@ export default function SharedPostChatScreen({
     scrollToResponse,
   ]);
 
-  const openMemory = useCallback(() => {
-    router.push(`/shared/${postId}` as any);
-  }, [postId, router]);
-
   const scrollToThreadEnd = useCallback((animated = true) => {
     clearNewMessageCount();
     setThreadEndVisible(true);
@@ -1571,12 +1549,12 @@ export default function SharedPostChatScreen({
   const isKeyboardVisible = keyboardHeight > 0;
   const composerKeyboardOffset = Math.max(
     0,
-    keyboardHeight - insets.bottom + (isKeyboardVisible ? COMPOSER_KEYBOARD_GAP : 0)
+    isKeyboardVisible ? keyboardHeight + COMPOSER_KEYBOARD_GAP : 0
   );
   const contentBottomPadding =
     composerHeight +
     composerKeyboardOffset +
-    (typingUsers.some((typingUser) => typingUser.userId !== user?.uid) ? 42 : 18);
+    (typingUsers.some((typingUser) => typingUser.userId !== user?.uid) ? 32 : 18);
   const threadVerticalPaddingStyle = useMemo(
     () => ({
       paddingBottom: contentBottomPadding,
@@ -1591,66 +1569,8 @@ export default function SharedPostChatScreen({
     });
   }, [contentBottomPadding, replyTarget, settleThreadEndIfVisible]);
 
-  const renderMemoryHeader = useCallback(() => {
-    if (!post || isDirectChat) {
-      return null;
-    }
-
-    return (
-      <Pressable
-        accessibilityRole="button"
-        onPress={openMemory}
-        style={({ pressed }) => [
-          styles.memoryPreviewBlock,
-          {
-            backgroundColor: colors.surface,
-            borderColor: colors.border,
-            opacity: pressed ? 0.86 : 1,
-          },
-        ]}
-      >
-        <View style={styles.memoryCard}>
-          <MiniMemoryCard
-            post={post}
-            fallbackText={t('shared.noteFallback', 'Shared note')}
-            isDark={isDark}
-          />
-        </View>
-        <View style={styles.memoryCopy}>
-          <Text numberOfLines={1} style={[styles.memoryTitle, { color: colors.text }]}>
-            {getMemoryPreviewTitle(post, t)}
-          </Text>
-          <View style={styles.memoryMetaLine}>
-            {post.authorPhotoURLSnapshot ? (
-              <Image
-                source={{ uri: post.authorPhotoURLSnapshot }}
-                style={styles.memoryAvatar}
-                contentFit="cover"
-              />
-            ) : (
-              <View style={[styles.memoryAvatar, { backgroundColor: colors.primarySoft }]}>
-                <Text style={[styles.memoryAvatarLabel, { color: colors.primary }]}>
-                  {postAuthorLabel.charAt(0).toUpperCase()}
-                </Text>
-              </View>
-            )}
-            <Text
-              numberOfLines={1}
-              style={[styles.memoryAuthorText, { color: colors.secondaryText }]}
-            >
-              {postAuthorLabel}
-            </Text>
-            <View style={[styles.memoryMetaDot, { backgroundColor: colors.secondaryText }]} />
-            <Text style={[styles.memoryMetaTime, { color: colors.secondaryText }]}>
-              {formatChatTimestamp(post.createdAt)}
-            </Text>
-          </View>
-        </View>
-        <Ionicons name="chevron-forward" size={16} color={colors.secondaryText} />
-      </Pressable>
-    );
-  }, [colors, isDark, isDirectChat, openMemory, post, postAuthorLabel, t]);
   const isThreadHydrating = isLoadingResponses && responses.length === 0;
+  const shouldPrepareThreadFirstPaint = !hasHydratedResponses && !isThreadFirstPaintReady;
   useEffect(() => {
     if (isThreadHydrating || isThreadFirstPaintReady) {
       return;
@@ -1670,15 +1590,14 @@ export default function SharedPostChatScreen({
   }, [isThreadFirstPaintReady, isThreadHydrating, responseGroups.length]);
 
   const renderEmptyThread = useCallback(
-    () => (
-      <View style={styles.messageList}>
-        <Text style={[styles.emptyThreadHint, { color: colors.secondaryText }]}>
-          {isDirectChat
-            ? t('shared.directChatEmptyHint', 'Say hi to start the chat.')
-            : t('shared.chatEmptyHint', 'Start with a quick reaction.')}
-        </Text>
-      </View>
-    ),
+    () =>
+      isDirectChat ? null : (
+        <View style={styles.messageList}>
+          <Text style={[styles.emptyThreadHint, { color: colors.secondaryText }]}>
+            {t('shared.chatEmptyHint', 'Start with a quick reaction.')}
+          </Text>
+        </View>
+      ),
     [colors.secondaryText, isDirectChat, t]
   );
   const renderMessageSeparator = useCallback(() => <View style={styles.messageSeparator} />, []);
@@ -1775,6 +1694,7 @@ export default function SharedPostChatScreen({
                 const hasReplyPreview = Boolean(replyPreview);
                 const reactions = response.reactions ?? [];
                 const isHighlighted = highlightedResponseId === response.id;
+                const isReactionOverlayTarget = reactionOverlay?.response.id === response.id;
                 const deliveryStatus = getResponseDeliveryStatus(response);
                 const isFailedDelivery =
                   deliveryStatus === 'failed' || deliveryStatus === 'offline';
@@ -1860,7 +1780,7 @@ export default function SharedPostChatScreen({
                           : null,
                         {
                           backgroundColor: isSelf ? colors.primary : colors.surface,
-                          borderColor: isHighlighted
+                          borderColor: isHighlighted || isReactionOverlayTarget
                             ? colors.primary
                             : isSelf
                               ? 'transparent'
@@ -1868,17 +1788,17 @@ export default function SharedPostChatScreen({
                         },
                       ]}
                     >
-                    <Text
-                      android_hyphenationFrequency="normal"
-                      lineBreakStrategyIOS="standard"
-                      style={[
-                        styles.messageText,
-                        isReactionOnly ? styles.reactionMessageText : null,
-                        { color: isSelf ? colors.onPrimary : colors.text },
-                      ]}
-                    >
-                      {formatSharedResponseBody(response)}
-                    </Text>
+                      <Text
+                        android_hyphenationFrequency="normal"
+                        lineBreakStrategyIOS="standard"
+                        style={[
+                          styles.messageText,
+                          isReactionOnly ? styles.reactionMessageText : null,
+                          { color: isSelf ? colors.onPrimary : colors.text },
+                        ]}
+                      >
+                        {formatSharedResponseBody(response)}
+                      </Text>
                     </ReplyableBubble>
                     {reactions.length > 0 ? (
                       <View
@@ -1968,6 +1888,7 @@ export default function SharedPostChatScreen({
       getAuthorIdentity,
       getResponseReplyPreview,
       highlightedResponseId,
+      reactionOverlay?.response.id,
       removeFailedResponse,
       retryFailedResponse,
       scrollToResponse,
@@ -1975,22 +1896,6 @@ export default function SharedPostChatScreen({
       user?.uid,
     ]
   );
-  const reactionOverlayWidth = Math.min(316, Math.max(284, screenWidth - 24));
-  const reactionOverlayLeft = reactionOverlay
-    ? Math.min(
-        Math.max(reactionOverlay.pageX - reactionOverlayWidth / 2, 12),
-        Math.max(12, screenWidth - reactionOverlayWidth - 12)
-      )
-    : 0;
-  const reactionOverlayTop = reactionOverlay
-    ? Math.min(
-        Math.max(headerTopInset + 10, reactionOverlay.pageY - 72),
-        Math.max(
-          headerTopInset + 10,
-          screenHeight - contentBottomPadding - REACTION_TRAY_ESTIMATED_HEIGHT - 12
-        )
-      )
-    : 0;
   const activeReactionOverlayResponse = reactionOverlay
     ? responseById.get(reactionOverlay.response.id) ?? reactionOverlay.response
     : null;
@@ -2010,6 +1915,25 @@ export default function SharedPostChatScreen({
         })
         .join('  ·  ')
     : null;
+  const reactionOverlayWidth = Math.min(
+    reactionDetailsLabel ? REACTION_TRAY_WITH_DETAILS_WIDTH : COMPACT_REACTION_TRAY_WIDTH,
+    screenWidth - 24
+  );
+  const reactionOverlayLeft = reactionOverlay
+    ? Math.min(
+        Math.max(reactionOverlay.pageX - reactionOverlayWidth / 2, 12),
+        Math.max(12, screenWidth - reactionOverlayWidth - 12)
+      )
+    : 0;
+  const reactionOverlayTop = reactionOverlay
+    ? Math.min(
+        Math.max(headerTopInset + 10, reactionOverlay.pageY - 72),
+        Math.max(
+          headerTopInset + 10,
+          screenHeight - contentBottomPadding - REACTION_TRAY_ESTIMATED_HEIGHT - 12
+        )
+      )
+    : 0;
   const visibleTypingUsers = typingUsers.filter((typingUser) => typingUser.userId !== user?.uid);
   const typingIndicatorLabel =
     visibleTypingUsers.length === 0
@@ -2025,13 +1949,24 @@ export default function SharedPostChatScreen({
         : t('shared.chatTypingMany', '{{count}} people are typing', {
             count: visibleTypingUsers.length,
           });
+  const latestResponse = responses[responses.length - 1] ?? null;
+  const jumpToLatestPreviewLabel =
+    newMessageCount > 0 && latestResponse
+      ? t('shared.chatThreadLatestBy', '{{name}}: {{message}}', {
+          name: getAuthorLabel(latestResponse.authorUid, latestResponse.authorDisplayName),
+          message:
+            formatSharedResponseBody(latestResponse).trim() ||
+            t('shared.chatThreadActivity', 'New activity'),
+        })
+      : null;
   const chatContext: ChatRenderContext = useMemo(() => {
     const mode: ChatMode = isDirectChat ? 'direct' : 'memory';
-    const isResolvingInitialChat = !post && (loading || isLoadingChatPost);
+    const canComposePendingDirectChat = Boolean(mode === 'direct' && normalizedDirectFriendUid);
+    const isResolvingInitialChat = !post && !canComposePendingDirectChat && (loading || isLoadingChatPost);
     const shouldRenderPendingThread = mode === 'direct' && isResolvingInitialChat;
     const hasPost = Boolean(post);
     return {
-      canSendMessage: Boolean(post && draft.trim() && !isSending),
+      canSendMessage: Boolean((post || canComposePendingDirectChat) && draft.trim() && !isSending),
       composerPlaceholder:
         mode === 'direct'
           ? t('shared.directChatComposerPlaceholder', 'Message')
@@ -2045,10 +1980,9 @@ export default function SharedPostChatScreen({
         mode === 'direct'
           ? t('shared.directChatStartFailed', 'Could not start chat.')
           : t('shared.detailNotFound', 'Shared moment not found'),
-      shouldRenderChatShell: Boolean(post || shouldRenderPendingThread),
+      shouldRenderChatShell: Boolean(post || shouldRenderPendingThread || canComposePendingDirectChat),
       shouldRenderPendingThread,
       shouldShowIdentityHeader: Boolean(post || primaryParticipantUid),
-      shouldShowMemoryHeader: Boolean(post && mode === 'memory'),
     };
   }, [
     chatPostErrorMessage,
@@ -2057,10 +1991,17 @@ export default function SharedPostChatScreen({
     isLoadingChatPost,
     isSending,
     loading,
+    normalizedDirectFriendUid,
     post,
     primaryParticipantUid,
     t,
   ]);
+  const shouldShowDirectEmptyNudge =
+    chatContext.shouldRenderChatShell &&
+    isDirectChat &&
+    responseGroups.length === 0 &&
+    !isLoadingResponses &&
+    !chatContext.shouldRenderPendingThread;
   const renderHeaderTitle = useCallback(
     () =>
       <SharedChatHeaderTitle
@@ -2179,18 +2120,6 @@ export default function SharedPostChatScreen({
         </View>
       ) : (
         <>
-          {chatContext.shouldShowMemoryHeader ? (
-            <View
-              style={[
-                styles.memoryPreviewHost,
-                {
-                  backgroundColor: colors.background,
-                },
-              ]}
-            >
-              {renderMemoryHeader()}
-            </View>
-          ) : null}
           {chatContext.shouldRenderPendingThread ? (
             <View style={styles.threadList} pointerEvents="none">
               <View
@@ -2222,7 +2151,7 @@ export default function SharedPostChatScreen({
                 ref={listRef}
                 style={[
                   styles.threadList,
-                  !isThreadFirstPaintReady ? styles.threadListPreparing : null,
+                  shouldPrepareThreadFirstPaint ? styles.threadListPreparing : null,
                 ]}
                 data={responseGroups}
                 keyExtractor={(item) => item.id}
@@ -2245,7 +2174,7 @@ export default function SharedPostChatScreen({
                   threadVerticalPaddingStyle,
                 ]}
               />
-              {!isThreadFirstPaintReady ? (
+              {shouldPrepareThreadFirstPaint ? (
                 <View style={styles.threadPreparingOverlay} pointerEvents="none">
                   <View
                     style={[
@@ -2291,6 +2220,7 @@ export default function SharedPostChatScreen({
                   onPress={() => scrollToThreadEnd(true)}
                   style={({ pressed }) => [
                     styles.jumpToLatestButton,
+                    jumpToLatestPreviewLabel ? styles.jumpToLatestButtonWithPreview : null,
                     {
                       backgroundColor: colors.primary,
                       opacity: pressed ? 0.82 : 1,
@@ -2298,6 +2228,14 @@ export default function SharedPostChatScreen({
                   ]}
                 >
                   <Ionicons name="arrow-down" size={17} color={colors.onPrimary} />
+                  {jumpToLatestPreviewLabel ? (
+                    <Text
+                      numberOfLines={1}
+                      style={[styles.jumpToLatestText, { color: colors.onPrimary }]}
+                    >
+                      {jumpToLatestPreviewLabel}
+                    </Text>
+                  ) : null}
                   {newMessageCount > 0 ? (
                     <View style={[styles.jumpToLatestBadge, { backgroundColor: colors.danger }]}>
                       <Text style={[styles.jumpToLatestBadgeText, { color: colors.onPrimary }]}>
@@ -2307,6 +2245,31 @@ export default function SharedPostChatScreen({
                   ) : null}
                 </Pressable>
               </Animated.View>
+            ) : null}
+            {shouldShowDirectEmptyNudge ? (
+              <View
+                pointerEvents="none"
+                style={[
+                  styles.emptyDirectChatNudgeHost,
+                  {
+                    bottom: contentBottomPadding + 18,
+                  },
+                ]}
+              >
+                <View
+                  style={[
+                    styles.emptyDirectChatNudge,
+                    {
+                      backgroundColor: colors.surface,
+                      borderColor: colors.border,
+                    },
+                  ]}
+                >
+                  <Text style={[styles.emptyDirectChatNudgeText, { color: colors.secondaryText }]}>
+                    {t('shared.directChatEmptyHint', 'Say hi to start the chat.')}
+                  </Text>
+                </View>
+              </View>
             ) : null}
 
             <View
@@ -2319,33 +2282,27 @@ export default function SharedPostChatScreen({
                 },
               ]}
             >
-            <LinearGradient
-              pointerEvents="none"
-              colors={[`${colors.background}00`, colors.background]}
-              locations={[0, 0.72]}
-              style={styles.composerFade}
-            />
-            {typingIndicatorLabel ? (
-              <View
-                accessibilityRole="text"
-                accessibilityLabel={typingIndicatorLabel}
-                style={[
-                  styles.typingIndicator,
-                  {
-                    backgroundColor: colors.surface,
-                    borderColor: colors.border,
-                  },
-                ]}
-              >
-                <TypingIndicatorDots color={colors.primary} />
-                <Text
-                  numberOfLines={1}
-                  style={[styles.typingIndicatorText, { color: colors.secondaryText }]}
+              <LinearGradient
+                pointerEvents="none"
+                colors={[withAlpha(colors.background, 0), withAlpha(colors.background, 0.85)]}
+                locations={[0, 1]}
+                style={styles.composerFade}
+              />
+              {typingIndicatorLabel ? (
+                <View
+                  accessibilityRole="text"
+                  accessibilityLabel={typingIndicatorLabel}
+                  style={styles.typingIndicator}
                 >
-                  {typingIndicatorLabel}
-                </Text>
-              </View>
-            ) : null}
+                  <TypingIndicatorDots color={colors.primary} />
+                  <Text
+                    numberOfLines={1}
+                    style={[styles.typingIndicatorText, { color: colors.secondaryText }]}
+                  >
+                    {typingIndicatorLabel}
+                  </Text>
+                </View>
+              ) : null}
             {errorMessage ? (
               <View style={styles.errorRow}>
                 <Text style={[styles.errorText, { color: colors.danger }]} numberOfLines={2}>
@@ -2503,7 +2460,7 @@ export default function SharedPostChatScreen({
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={t('common.close', 'Close')}
-            style={StyleSheet.absoluteFill}
+            style={[StyleSheet.absoluteFill, styles.reactionOverlayScrim]}
             onPress={() => setReactionOverlay(null)}
           />
           <Animated.View
@@ -2674,11 +2631,6 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
     paddingTop: 20,
   },
-  memoryPreviewHost: {
-    paddingHorizontal: Layout.screenPadding,
-    paddingTop: 8,
-    paddingBottom: 8,
-  },
   headerIdentity: {
     maxWidth: '100%',
     flexDirection: 'row',
@@ -2765,39 +2717,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 10,
   },
-  memoryCard: {
-    width: 48,
-    height: 48,
-    borderRadius: 14,
-    overflow: 'hidden',
-  },
-  miniMemoryFill: {
-    flex: 1,
-    width: '100%',
-    height: '100%',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 7,
-  },
-  miniMemoryText: {
-    fontSize: 10,
-    lineHeight: 13,
-    fontWeight: '900',
-    textAlign: 'center',
-    fontFamily: 'Noto Sans',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
-  },
   memoryCopy: {
     flex: 1,
     minWidth: 0,
     gap: 5,
-  },
-  memoryTitle: {
-    fontSize: 14,
-    lineHeight: 18,
-    fontWeight: '900',
-    fontFamily: 'Noto Sans',
   },
   memoryMetaLine: {
     flexDirection: 'row',
@@ -2810,30 +2733,6 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  memoryAvatarLabel: {
-    fontSize: 11,
-    lineHeight: 14,
-    fontWeight: '900',
-    fontFamily: 'Noto Sans',
-  },
-  memoryMetaDot: {
-    width: 3,
-    height: 3,
-    borderRadius: 1.5,
-    opacity: 0.7,
-  },
-  memoryAuthorText: {
-    flex: 1,
-    minWidth: 0,
-    fontSize: 10,
-    lineHeight: 14,
-    fontFamily: 'Noto Sans',
-  },
-  memoryMetaTime: {
-    fontSize: 10,
-    lineHeight: 14,
-    fontFamily: 'Noto Sans',
   },
   loadingMemoryCard: {
     width: 48,
@@ -3086,20 +2985,20 @@ const styles = StyleSheet.create({
   reactionTray: {
     position: 'absolute',
     zIndex: 10,
-    minHeight: 50,
-    borderRadius: 25,
+    minHeight: 48,
+    borderRadius: 24,
     borderWidth: StyleSheet.hairlineWidth,
-    paddingHorizontal: 7,
-    paddingVertical: 5,
+    paddingHorizontal: 6,
+    paddingVertical: 4,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 4,
+    gap: 3,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 5 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 8,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
+    elevation: 6,
   },
   reactionTrayReactionRow: {
     flexDirection: 'row',
@@ -3107,23 +3006,23 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   reactionTrayButton: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
+    width: 37,
+    height: 37,
+    borderRadius: 18.5,
     borderWidth: StyleSheet.hairlineWidth,
     alignItems: 'center',
     justifyContent: 'center',
   },
   reactionTrayVerticalDivider: {
     width: StyleSheet.hairlineWidth,
-    height: 28,
+    height: 24,
     alignSelf: 'center',
-    opacity: 0.8,
+    opacity: 0.38,
   },
   reactionTrayIconAction: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
+    width: 37,
+    height: 37,
+    borderRadius: 18.5,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -3137,8 +3036,8 @@ const styles = StyleSheet.create({
     fontFamily: 'Noto Sans',
   },
   reactionTrayText: {
-    fontSize: 24,
-    lineHeight: 29,
+    fontSize: 23,
+    lineHeight: 28,
   },
   typingDotsText: {
     width: 34,
@@ -3220,17 +3119,56 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     fontFamily: 'Noto Sans',
   },
+  emptyDirectChatNudgeHost: {
+    position: 'absolute',
+    left: Layout.screenPadding,
+    right: Layout.screenPadding,
+    alignItems: 'center',
+    zIndex: 7,
+  },
+  emptyDirectChatNudge: {
+    minHeight: 34,
+    maxWidth: '86%',
+    borderRadius: 17,
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyDirectChatNudgeText: {
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '700',
+    fontFamily: 'Noto Sans',
+    textAlign: 'center',
+  },
   jumpToLatestHost: {
     position: 'absolute',
     alignSelf: 'center',
     zIndex: 8,
   },
   jumpToLatestButton: {
-    width: 34,
+    minWidth: 34,
     height: 34,
     borderRadius: 17,
+    paddingHorizontal: 9,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 5,
+  },
+  jumpToLatestButtonWithPreview: {
+    maxWidth: 260,
+    paddingRight: 13,
+  },
+  jumpToLatestText: {
+    flexShrink: 1,
+    minWidth: 0,
+    maxWidth: 198,
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '800',
+    fontFamily: 'Noto Sans',
   },
   jumpToLatestBadge: {
     position: 'absolute',
@@ -3254,32 +3192,25 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     paddingHorizontal: Layout.screenPadding,
-    paddingTop: 9,
-    gap: 7,
+    paddingTop: 6,
+    gap: 5,
   },
   composerFade: {
     position: 'absolute',
     left: 0,
     right: 0,
-    top: -24,
+    top: -20,
     bottom: 0,
   },
   typingIndicator: {
     alignSelf: 'flex-start',
     maxWidth: '82%',
-    minHeight: 32,
-    borderRadius: 16,
-    borderWidth: StyleSheet.hairlineWidth,
-    paddingLeft: 7,
-    paddingRight: 12,
+    minHeight: 22,
+    paddingLeft: 3,
+    paddingRight: 8,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 2,
+    gap: 4,
   },
   typingIndicatorText: {
     flexShrink: 1,
@@ -3292,6 +3223,9 @@ const styles = StyleSheet.create({
   reactionOverlayLayer: {
     ...StyleSheet.absoluteFillObject,
     zIndex: 50,
+  },
+  reactionOverlayScrim: {
+    backgroundColor: 'rgba(0,0,0,0.03)',
   },
   errorText: {
     flex: 1,
@@ -3330,11 +3264,11 @@ const styles = StyleSheet.create({
     fontFamily: 'Noto Sans',
   },
   composerReplyPreview: {
-    minHeight: 48,
-    borderRadius: 24,
-    paddingLeft: 22,
-    paddingRight: 12,
-    paddingVertical: 7,
+    minHeight: 44,
+    borderRadius: 22,
+    paddingLeft: 16,
+    paddingRight: 8,
+    paddingVertical: 6,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
@@ -3363,13 +3297,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   composer: {
-    minHeight: 46,
-    maxHeight: 88,
-    borderRadius: 23,
+    minHeight: 44,
+    maxHeight: 108,
+    borderRadius: 22,
     borderWidth: StyleSheet.hairlineWidth,
-    paddingLeft: 15,
-    paddingRight: 5,
-    paddingVertical: 4,
+    paddingLeft: 14,
+    paddingRight: 4,
+    paddingVertical: 3,
     flexDirection: 'row',
     alignItems: 'flex-end',
     gap: 8,
@@ -3379,15 +3313,15 @@ const styles = StyleSheet.create({
     minWidth: 0,
     fontSize: 15,
     lineHeight: 20,
-    maxHeight: 72,
-    paddingTop: 8,
-    paddingBottom: 8,
+    maxHeight: 88,
+    paddingTop: 7,
+    paddingBottom: 7,
     fontFamily: 'Noto Sans',
   },
   sendButton: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
   },

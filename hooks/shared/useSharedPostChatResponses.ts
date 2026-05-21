@@ -67,6 +67,9 @@ export function useSharedPostChatResponses({
   const [isLoadingResponses, setIsLoadingResponses] = useState(
     () => !hasRememberedSharedPostResponses(postId)
   );
+  const [hasHydratedResponses, setHasHydratedResponses] = useState(
+    () => hasRememberedSharedPostResponses(postId)
+  );
   const [isLoadingOlderResponses, setIsLoadingOlderResponses] = useState(false);
   const [hasOlderResponses, setHasOlderResponses] = useState(
     () => getRememberedResponses(postId).length >= pageSize
@@ -83,6 +86,7 @@ export function useSharedPostChatResponses({
       setResponses((current) => {
         const next = updater(current);
         rememberResponses(postId, next);
+        setHasHydratedResponses(true);
         return areChatResponseListsEqual(current, next) ? current : next;
       });
     },
@@ -101,6 +105,7 @@ export function useSharedPostChatResponses({
           Array.from(pendingResponsesRef.current.values())
         );
         rememberResponses(postId, next);
+        setHasHydratedResponses(true);
         if (incomingNewCount > 0 && !isThreadEndVisibleRef.current) {
           setNewMessageCount((count) => Math.min(99, count + incomingNewCount));
         }
@@ -119,6 +124,7 @@ export function useSharedPostChatResponses({
           Array.from(pendingResponsesRef.current.values())
         );
         rememberResponses(postId, next);
+        setHasHydratedResponses(true);
         if (isIncomingNew && !isThreadEndVisibleRef.current) {
           setNewMessageCount((count) => Math.min(99, count + 1));
         }
@@ -138,6 +144,7 @@ export function useSharedPostChatResponses({
 
         pendingResponsesRef.current.delete(responseId);
         rememberResponses(postId, next);
+        setHasHydratedResponses(true);
         return next;
       });
     },
@@ -203,6 +210,7 @@ export function useSharedPostChatResponses({
       setIsLoadingResponses(false);
       setHasOlderResponses(false);
       setIsLoadingOlderResponses(false);
+      setHasHydratedResponses(false);
       setErrorMessage(null);
       setNewMessageCount(0);
       setConnectionStatus('disconnected');
@@ -210,11 +218,13 @@ export function useSharedPostChatResponses({
     }
 
     const rememberedResponses = getRememberedResponses(postId);
+    const hasRememberedResponses = hasRememberedSharedPostResponses(postId);
     pendingResponsesRef.current.clear();
     isThreadEndVisibleRef.current = true;
     setIsThreadEndVisibleState(true);
     setResponses(rememberedResponses);
-    setIsLoadingResponses(!hasRememberedSharedPostResponses(postId));
+    setIsLoadingResponses(!hasRememberedResponses);
+    setHasHydratedResponses(hasRememberedResponses);
     setHasOlderResponses(rememberedResponses.length >= pageSize);
     setIsLoadingOlderResponses(false);
     setErrorMessage(null);
@@ -352,6 +362,7 @@ export function useSharedPostChatResponses({
     connectionStatus,
     errorMessage,
     hasOlderResponses,
+    hasHydratedResponses,
     isLoadingOlderResponses,
     isLoadingResponses,
     isThreadEndVisible,

@@ -1974,7 +1974,7 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
         requireOnline();
         const activeUser = requireUser();
         const response = await createPostResponse(activeUser, postId, input);
-        void upsertCachedSharedPostResponse(activeUser.uid, response).catch((error) => {
+        await upsertCachedSharedPostResponse(activeUser.uid, response).catch((error) => {
           console.warn('Failed to persist shared response cache:', error);
         });
         return response;
@@ -1987,7 +1987,7 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
         requireOnline();
         const activeUser = requireUser();
         const reaction = await createPostResponseReaction(activeUser, postId, responseId, emoji);
-        void upsertCachedSharedPostResponseReaction(activeUser.uid, reaction).catch((error) => {
+        await upsertCachedSharedPostResponseReaction(activeUser.uid, reaction).catch((error) => {
           console.warn('Failed to persist shared response reaction cache:', error);
         });
         return reaction;

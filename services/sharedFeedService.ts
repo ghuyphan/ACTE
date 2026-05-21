@@ -2516,7 +2516,7 @@ type SharedPostTypingPresenceMeta = {
   typing_at?: string | null;
 };
 
-const SHARED_POST_TYPING_STALE_MS = 8000;
+const SHARED_POST_TYPING_STALE_HIDE_MS = 3500;
 
 export function getTypingUsersFromPresenceState(
   state: Record<string, unknown>,
@@ -2543,7 +2543,7 @@ export function getTypingUsersFromPresenceState(
     }
 
     const typingTime = new Date(latestTypingPresence.typing_at).getTime();
-    if (!Number.isFinite(typingTime) || now - typingTime > SHARED_POST_TYPING_STALE_MS) {
+    if (!Number.isFinite(typingTime) || now - typingTime > SHARED_POST_TYPING_STALE_HIDE_MS) {
       continue;
     }
 

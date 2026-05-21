@@ -36,6 +36,8 @@ import PrimaryButton from '../ui/PrimaryButton';
 
 const FIXED_SHEET_HEIGHT = Math.min(Sheet.maxHeight, Math.round(Dimensions.get('window').height * 0.82));
 const FriendsList = Platform.OS === 'android' ? BottomSheetFlatList : FlatList;
+const MIN_EXISTING_FRIENDS_SHEET_HEIGHT = Math.min(FIXED_SHEET_HEIGHT, 560);
+const MIN_EMPTY_FRIENDS_SHEET_HEIGHT = Math.min(FIXED_SHEET_HEIGHT, 540);
 const COLLAPSIBLE_LAYOUT_TRANSITION = LinearTransition.duration(180).easing(Easing.out(Easing.cubic));
 const COLLAPSIBLE_ENTERING = FadeIn.duration(140).easing(Easing.out(Easing.cubic));
 const COLLAPSIBLE_EXITING = FadeOut.duration(110).easing(Easing.in(Easing.cubic));
@@ -137,12 +139,14 @@ function resolveFriendLabels(
 function InviteActionsCard({
   activeInvite,
   creatingInvite,
+  hasFriends,
   onCreateInvite,
   onShareInvite,
   onRevokeInvite,
 }: {
   activeInvite: FriendInvite | null;
   creatingInvite: boolean;
+  hasFriends: boolean;
   onCreateInvite: () => void;
   onShareInvite: () => void;
   onRevokeInvite: () => void;
@@ -166,16 +170,78 @@ function InviteActionsCard({
       ? t('shared.inviteReadyTitle', 'Invite link ready')
       : inviteState === 'creating'
         ? t('shared.creatingInviteTitle', 'Preparing invite link')
-        : t('shared.inviteFirstTitle', 'Invite your first friend');
+        : hasFriends
+          ? t('shared.inviteAnotherTitle', 'Invite another friend')
+          : t('shared.inviteFirstTitle', 'Invite your first friend');
   const inviteBody =
     inviteState === 'ready'
       ? t('shared.inviteReadyBody', 'Share this link to connect.')
       : inviteState === 'creating'
         ? t('shared.creatingInviteBody', 'Getting your invite link ready...')
-        : t(
-            'shared.inviteFirstBody',
-            'One invite link is all you need to start sharing notes from Home.'
-          );
+        : hasFriends
+          ? t('shared.inviteAnotherBody', 'Share a link when you want to add someone new.')
+          : t(
+              'shared.inviteFirstBody',
+              'One invite link is all you need to start sharing notes from Home.'
+            );
+
+  if (hasFriends) {
+    return (
+      <View
+        style={[
+          styles.inviteCompactCard,
+          {
+            backgroundColor: softFill,
+            borderColor: outlineColor,
+          },
+        ]}
+      >
+        <View style={[styles.inviteCompactIcon, { backgroundColor: colors.primarySoft }]}>
+          <Ionicons name={invitePrimaryIcon} size={17} color={colors.primary} />
+        </View>
+        <View style={styles.inviteCardCopy}>
+          <Text numberOfLines={1} style={[styles.inviteCompactTitle, { color: colors.text }]}>
+            {inviteTitle}
+          </Text>
+          <Text numberOfLines={1} style={[styles.inviteCompactBody, { color: colors.secondaryText }]}>
+            {inviteBody}
+          </Text>
+        </View>
+        <Pressable
+          onPress={invitePrimaryAction}
+          disabled={inviteState === 'creating'}
+          style={({ pressed }) => [
+            styles.compactInviteAction,
+            {
+              backgroundColor: colors.primary,
+              opacity: inviteState === 'creating' ? 0.72 : pressed ? 0.9 : 1,
+            },
+          ]}
+        >
+          <Text numberOfLines={1} style={styles.compactInviteActionText}>
+            {inviteState === 'ready'
+              ? t('shared.shareInviteButtonShort', 'Share')
+              : inviteState === 'creating'
+                ? t('shared.creatingInviteButtonShort', 'Preparing')
+                : t('shared.inviteButtonShort', 'Invite')}
+          </Text>
+        </Pressable>
+        {inviteState === 'ready' ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={t('shared.revokeInviteButton', 'Revoke invite')}
+            onPress={onRevokeInvite}
+            style={({ pressed }) => [
+              styles.compactRevokeAction,
+              { backgroundColor: softFill, opacity: pressed ? 0.84 : 1 },
+            ]}
+          >
+            <Ionicons name="trash-outline" size={15} color={colors.secondaryText} />
+          </Pressable>
+        ) : null}
+      </View>
+    );
+  }
 
   return (
     <View
@@ -347,14 +413,18 @@ function FriendsSectionHeader({
   count,
   expanded,
   onToggle,
+  onCreateGroup,
   compactTop = false,
 }: {
   count: number;
   expanded: boolean;
   onToggle: () => void;
+  onCreateGroup?: () => void;
   compactTop?: boolean;
 }) {
+  const { colors, isDark } = useTheme();
   const { t } = useTranslation();
+  const softFill = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)';
 
   return (
     <CollapsibleSectionHeader
@@ -363,6 +433,21 @@ function FriendsSectionHeader({
       expanded={expanded}
       onToggle={onToggle}
       compactTop={compactTop}
+      trailing={onCreateGroup ? (
+        <Pressable
+          accessibilityRole="button"
+          onPress={onCreateGroup}
+          style={({ pressed }) => [
+            styles.inlineGroupAction,
+            { backgroundColor: softFill, opacity: pressed ? 0.84 : 1 },
+          ]}
+        >
+          <Ionicons name="add" size={14} color={colors.secondaryText} />
+          <Text numberOfLines={1} style={[styles.inlineGroupActionText, { color: colors.secondaryText }]}>
+            {t('shared.friendGroupCreateShort', 'New group')}
+          </Text>
+        </Pressable>
+      ) : undefined}
     />
   );
 }
@@ -443,24 +528,35 @@ function FriendRow({
   friendFallback,
   connectedCopyTemplate,
   locale,
-  onRemoveFriend,
-  onEditNickname,
+  onManageFriend,
 }: {
   friend: FriendConnection;
   friendFallback: string;
   connectedCopyTemplate: string;
   locale?: string;
-  onRemoveFriend: (friendUid: string) => void;
-  onEditNickname: (friend: FriendConnection) => void;
+  onManageFriend: (friend: FriendConnection) => void;
 }) {
-  const { colors, isDark } = useTheme();
-  const softFill = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)';
+  const { colors } = useTheme();
+  const { t } = useTranslation();
   const labels = resolveFriendLabels(friend, friendFallback, connectedCopyTemplate, locale);
+  const compactMeta = friend.nickname?.trim()
+    ? (friend.username?.trim() ? `@${friend.username.trim().toLowerCase()}` : labels.meta.split(' • ')[0])
+    : labels.meta.includes(' • ')
+      ? labels.meta.split(' • ')[0]
+      : '';
   const avatarSeed = (friend.nickname || friend.username || friend.displayNameSnapshot || friendFallback).trim();
   const avatarLabel = avatarSeed.charAt(0).toUpperCase();
 
   return (
-    <View style={styles.friendRow}>
+    <Pressable
+      accessibilityLabel={`${labels.title}, ${t('shared.friendManageAction', 'Manage friend')}`}
+      accessibilityRole="button"
+      onPress={() => onManageFriend(friend)}
+      style={({ pressed }) => [
+        styles.friendRow,
+        pressed ? styles.friendRowPressed : null,
+      ]}
+    >
       {friend.photoURLSnapshot ? (
         <Image
           source={{ uri: friend.photoURLSnapshot }}
@@ -476,37 +572,274 @@ function FriendRow({
         <Text numberOfLines={1} style={[styles.friendName, { color: colors.text }]}>
           {labels.title}
         </Text>
-        <Text numberOfLines={1} style={[styles.friendMeta, { color: colors.secondaryText }]}>
-          {labels.meta}
-        </Text>
+        {compactMeta ? (
+          <Text numberOfLines={1} style={[styles.friendMeta, { color: colors.secondaryText }]}>
+            {compactMeta}
+          </Text>
+        ) : null}
       </View>
-      <Pressable
-        accessibilityLabel={labels.title}
-        accessibilityRole="button"
-        onPress={() => onEditNickname(friend)}
-        style={({ pressed }) => [
-          styles.iconButton,
-          {
-            backgroundColor: softFill,
-            opacity: pressed ? 0.92 : 1,
-          },
-        ]}
+    </Pressable>
+  );
+}
+
+function FriendActionsSheet({
+  friend,
+  friendFallback,
+  connectedCopyTemplate,
+  locale,
+  onClose,
+  onEditNickname,
+  onRemoveFriend,
+}: {
+  friend: FriendConnection | null;
+  friendFallback: string;
+  connectedCopyTemplate: string;
+  locale?: string;
+  onClose: () => void;
+  onEditNickname: (friend: FriendConnection) => void;
+  onRemoveFriend: (friendUid: string) => void;
+}) {
+  const { colors } = useTheme();
+  const { t } = useTranslation();
+  const horizontalPadding =
+    Platform.OS === 'ios' ? Sheet.ios.horizontalPadding : Sheet.android.horizontalPadding;
+  const labels = friend
+    ? resolveFriendLabels(friend, friendFallback, connectedCopyTemplate, locale)
+    : null;
+  const actionRows = [
+    {
+      key: 'nickname',
+      icon: 'pencil-outline' as const,
+      label: t('shared.friendNicknameEdit', 'Edit nickname'),
+      color: colors.primary,
+      onPress: () => {
+        if (!friend) {
+          return;
+        }
+        onEditNickname(friend);
+      },
+    },
+    {
+      key: 'remove',
+      icon: 'person-remove-outline' as const,
+      label: t('shared.removeFriendConfirm', 'Remove'),
+      color: colors.danger,
+      onPress: () => {
+        if (!friend) {
+          return;
+        }
+        onRemoveFriend(friend.userId);
+      },
+    },
+  ];
+
+  return (
+    <AppSheet visible={Boolean(friend)} onClose={onClose}>
+      <AppSheetScaffold
+        headerVariant="standard"
+        title={labels?.title ?? t('shared.friendFallback', 'Friend')}
+        subtitle={labels?.meta}
+        useHorizontalPadding={false}
+        footer={(
+          <View style={styles.friendActionsFooter}>
+            <SheetFooterButton
+              label={t('common.done', 'Done')}
+              onPress={onClose}
+              style={styles.compactDoneButton}
+            />
+          </View>
+        )}
       >
-        <Ionicons name="pencil-outline" size={16} color={colors.secondaryText} />
-      </Pressable>
-      <Pressable
-        onPress={() => onRemoveFriend(friend.userId)}
-        style={({ pressed }) => [
-          styles.iconButton,
+        <View style={styles.friendActionsList}>
+          {actionRows.map((action, index) => (
+            <View key={action.key}>
+              <Pressable
+                accessibilityRole="button"
+                disabled={!friend}
+                onPress={action.onPress}
+                style={({ pressed }) => [
+                  styles.friendActionOption,
+                  { paddingHorizontal: horizontalPadding },
+                  pressed ? styles.friendActionOptionPressed : null,
+                  !friend ? styles.friendActionOptionDisabled : null,
+                ]}
+              >
+                <View style={[styles.friendActionIconBadge, { backgroundColor: `${action.color}18` }]}>
+                  <Ionicons name={action.icon} size={18} color={action.color} />
+                </View>
+                <Text style={[styles.friendActionOptionLabel, { color: action.color === colors.danger ? colors.danger : colors.text }]}>
+                  {action.label}
+                </Text>
+                <Ionicons
+                  name="chevron-forward"
+                  size={18}
+                  color={action.color === colors.danger ? colors.danger : colors.secondaryText}
+                />
+              </Pressable>
+              {index < actionRows.length - 1 ? (
+                <View
+                  style={[
+                    styles.friendActionDivider,
+                    {
+                      backgroundColor: colors.border,
+                      marginLeft: horizontalPadding + 54,
+                    },
+                  ]}
+                />
+              ) : null}
+            </View>
+          ))}
+        </View>
+      </AppSheetScaffold>
+    </AppSheet>
+  );
+}
+
+function FriendCreateActionsSheet({
+  visible,
+  activeInvite,
+  creatingInvite,
+  canCreateGroup,
+  onClose,
+  onCreateInvite,
+  onShareInvite,
+  onRevokeInvite,
+  onCreateGroup,
+}: {
+  visible: boolean;
+  activeInvite: FriendInvite | null;
+  creatingInvite: boolean;
+  canCreateGroup: boolean;
+  onClose: () => void;
+  onCreateInvite: () => void;
+  onShareInvite: () => void;
+  onRevokeInvite: () => void;
+  onCreateGroup: () => void;
+}) {
+  const { colors } = useTheme();
+  const { t } = useTranslation();
+  const horizontalPadding =
+    Platform.OS === 'ios' ? Sheet.ios.horizontalPadding : Sheet.android.horizontalPadding;
+  const inviteAction = activeInvite
+    ? {
+        key: 'share-invite',
+        icon: 'paper-plane-outline' as const,
+        label: t('shared.shareInviteButton', 'Share invite link'),
+        color: colors.primary,
+        onPress: onShareInvite,
+        disabled: false,
+        closeOnPress: false,
+      }
+    : {
+        key: 'create-invite',
+        icon: 'person-add-outline' as const,
+        label: creatingInvite
+          ? t('shared.creatingInviteButton', 'Preparing invite...')
+          : t('shared.createInviteButton', 'Create invite'),
+        color: colors.primary,
+        onPress: onCreateInvite,
+        disabled: creatingInvite,
+        closeOnPress: false,
+      };
+  const actionRows = [
+    inviteAction,
+    ...(canCreateGroup
+      ? [
           {
-            backgroundColor: softFill,
-            opacity: pressed ? 0.92 : 1,
+            key: 'new-group',
+            icon: 'people-outline' as const,
+            label: t('shared.friendGroupCreateTitle', 'New group'),
+            color: colors.text,
+            onPress: onCreateGroup,
+            disabled: false,
+            closeOnPress: true,
           },
-        ]}
+        ]
+      : []),
+    ...(activeInvite
+      ? [
+          {
+            key: 'revoke-invite',
+            icon: 'trash-outline' as const,
+            label: t('shared.revokeInviteButton', 'Revoke invite'),
+            color: colors.danger,
+            onPress: onRevokeInvite,
+            disabled: false,
+            closeOnPress: false,
+          },
+        ]
+      : []),
+  ];
+
+  return (
+    <AppSheet visible={visible} onClose={onClose}>
+      <AppSheetScaffold
+        headerVariant="standard"
+        title={t('shared.friendActionsTitle', 'Add or organize')}
+        subtitle={t('shared.friendActionsSubtitle', 'Invite friends or create a group.')}
+        useHorizontalPadding={false}
+        footer={(
+          <View style={styles.friendActionsFooter}>
+            <SheetFooterButton
+              label={t('common.done', 'Done')}
+              onPress={onClose}
+              style={styles.compactDoneButton}
+            />
+          </View>
+        )}
       >
-        <Ionicons name="close-outline" size={19} color={colors.secondaryText} />
-      </Pressable>
-    </View>
+        <View style={styles.friendActionsList}>
+          {actionRows.map((action, index) => (
+            <View key={action.key}>
+              <Pressable
+                accessibilityRole="button"
+                disabled={action.disabled}
+                onPress={() => {
+                  if (action.closeOnPress) {
+                    onClose();
+                  }
+                  action.onPress();
+                }}
+                style={({ pressed }) => [
+                  styles.friendActionOption,
+                  { paddingHorizontal: horizontalPadding },
+                  pressed ? styles.friendActionOptionPressed : null,
+                  action.disabled ? styles.friendActionOptionDisabled : null,
+                ]}
+              >
+                <View style={[styles.friendActionIconBadge, { backgroundColor: `${action.color}18` }]}>
+                  <Ionicons name={action.icon} size={18} color={action.color} />
+                </View>
+                <Text
+                  style={[
+                    styles.friendActionOptionLabel,
+                    { color: action.color === colors.danger ? colors.danger : colors.text },
+                  ]}
+                >
+                  {action.label}
+                </Text>
+                <Ionicons
+                  name="chevron-forward"
+                  size={18}
+                  color={action.color === colors.danger ? colors.danger : colors.secondaryText}
+                />
+              </Pressable>
+              {index < actionRows.length - 1 ? (
+                <View
+                  style={[
+                    styles.friendActionDivider,
+                    {
+                      backgroundColor: colors.border,
+                      marginLeft: horizontalPadding + 54,
+                    },
+                  ]}
+                />
+              ) : null}
+            </View>
+          ))}
+        </View>
+      </AppSheetScaffold>
+    </AppSheet>
   );
 }
 
@@ -553,6 +886,8 @@ export default function SharedManageSheet(props: {
     onDeleteFriendGroup,
   } = props;
   const [nicknameFriend, setNicknameFriend] = useState<FriendConnection | null>(null);
+  const [actionFriend, setActionFriend] = useState<FriendConnection | null>(null);
+  const [isCreateActionsVisible, setIsCreateActionsVisible] = useState(false);
   const [nicknameDraft, setNicknameDraft] = useState('');
   const [nicknameErrorMessage, setNicknameErrorMessage] = useState<string | null>(null);
   const [isSavingNickname, setIsSavingNickname] = useState(false);
@@ -592,17 +927,50 @@ export default function SharedManageSheet(props: {
     !isSavingNickname &&
     normalizedNicknameDraft.length <= 40 &&
     normalizedNicknameDraft !== currentNickname;
-  const friendBadgeLabel = friends.length > 0 ? (friends.length > 9 ? '9+' : String(friends.length)) : undefined;
   const unreadChatsBadgeLabel =
     unreadChatsCount > 0 ? (unreadChatsCount > 9 ? '9+' : String(unreadChatsCount)) : undefined;
-  const iosManageSheetDetents = useMemo(() => [{ height: FIXED_SHEET_HEIGHT }], []);
+  const hasFriends = friends.length > 0;
+  const shouldShowGroupsSection = friendGroups.length > 0;
+  const canCreateFirstGroup = friends.length > 1 && !shouldShowGroupsSection;
+  const manageSheetHeight = useMemo(() => {
+    const headerAndFooterHeight = hasFriends ? 118 : 162;
+    const inviteHeight = hasFriends ? 0 : 124;
+    const visibleFriendRowLimit = shouldShowGroupsSection ? 6 : 9;
+    const groupHeight = shouldShowGroupsSection
+      ? 42 + (areGroupsExpanded ? Math.min(friendGroups.length, 3) * 58 : 0)
+      : 0;
+    const friendRowsHeight = areFriendsExpanded
+      ? friends.length > 0
+        ? Math.min(friends.length, visibleFriendRowLimit) * 62
+        : 106
+      : 0;
+    const friendHeaderHeight = hasFriends && !shouldShowGroupsSection ? 0 : 44;
+    const preferredHeight =
+      headerAndFooterHeight + inviteHeight + groupHeight + friendHeaderHeight + friendRowsHeight;
+
+    return Math.min(
+      FIXED_SHEET_HEIGHT,
+      Math.max(
+        hasFriends ? MIN_EXISTING_FRIENDS_SHEET_HEIGHT : MIN_EMPTY_FRIENDS_SHEET_HEIGHT,
+        preferredHeight
+      )
+    );
+  }, [
+    areFriendsExpanded,
+    areGroupsExpanded,
+    friendGroups.length,
+    friends.length,
+    hasFriends,
+    shouldShowGroupsSection,
+  ]);
+  const iosManageSheetDetents = useMemo(() => [{ height: manageSheetHeight }], [manageSheetHeight]);
   const iosManageSheetModifiers = useMemo(
     () => [
       presentationDragIndicator('visible'),
       environment('colorScheme', isDark ? 'dark' : 'light'),
-      presentationDetents(iosManageSheetDetents, { selection: { height: FIXED_SHEET_HEIGHT } }),
+      presentationDetents(iosManageSheetDetents, { selection: { height: manageSheetHeight } }),
     ],
-    [iosManageSheetDetents, isDark]
+    [iosManageSheetDetents, isDark, manageSheetHeight]
   );
 
   useEffect(() => {
@@ -637,6 +1005,8 @@ export default function SharedManageSheet(props: {
   useEffect(() => {
     if (!visible) {
       setNicknameFriend(null);
+      setActionFriend(null);
+      setIsCreateActionsVisible(false);
       setNicknameDraft('');
       setNicknameErrorMessage(null);
       setIsGroupEditorVisible(false);
@@ -651,6 +1021,32 @@ export default function SharedManageSheet(props: {
     setNicknameFriend(friend);
     setNicknameDraft(friend.nickname ?? '');
     setNicknameErrorMessage(null);
+  };
+
+  const openFriendActions = (friend: FriendConnection) => {
+    setActionFriend(friend);
+  };
+
+  const closeFriendActions = () => {
+    setActionFriend(null);
+  };
+
+  const editActionFriendNickname = (friend: FriendConnection) => {
+    setActionFriend(null);
+    openNicknameEditor(friend);
+  };
+
+  const removeActionFriend = (friendUid: string) => {
+    setActionFriend(null);
+    onRemoveFriend(friendUid);
+  };
+
+  const openCreateActions = () => {
+    setIsCreateActionsVisible(true);
+  };
+
+  const closeCreateActions = () => {
+    setIsCreateActionsVisible(false);
   };
 
   const closeNicknameEditor = () => {
@@ -786,8 +1182,8 @@ export default function SharedManageSheet(props: {
         onClose={onClose}
         androidDynamicSizing={false}
         androidInitialIndex={0}
-        androidSnapPoints={[FIXED_SHEET_HEIGHT]}
-        androidContentContainerStyle={styles.androidSheetContainer}
+        androidSnapPoints={[manageSheetHeight]}
+        androidContentContainerStyle={[styles.androidSheetContainer, { height: manageSheetHeight }]}
         fitToContents={false}
         iosGroupModifiers={iosManageSheetModifiers}
       >
@@ -808,14 +1204,19 @@ export default function SharedManageSheet(props: {
                 ]
               : []),
             {
-              icon: 'search',
+              icon: 'search-outline',
               accessibilityLabel: t('shared.searchByUsernameButton', 'Find by Noto ID'),
               onPress: onOpenFriendSearch,
               testID: 'shared-manage-find-friend-button',
-              badgeLabel: friendBadgeLabel,
+            },
+            {
+              icon: 'add',
+              accessibilityLabel: t('shared.friendActionsTitle', 'Add or organize'),
+              onPress: openCreateActions,
+              testID: 'shared-manage-actions-button',
             },
           ]}
-          footer={(
+          footer={hasFriends ? undefined : (
             <SheetFooterButton
               label={t('common.done', 'Done')}
               onPress={onClose}
@@ -824,49 +1225,59 @@ export default function SharedManageSheet(props: {
           )}
           useHorizontalPadding={false}
           contentBottomPaddingWhenFooter={0}
-          footerTopSpacing={12}
-          style={styles.sheetScaffold}
+          footerTopSpacing={18}
+          style={[styles.sheetScaffold, { height: manageSheetHeight }]}
           contentContainerStyle={styles.sheetBody}
         >
           <View style={[styles.fixedContent, { paddingHorizontal: horizontalPadding }]}>
-            <InviteActionsCard
-              activeInvite={activeInvite}
-              creatingInvite={creatingInvite}
-              onCreateInvite={onCreateInvite}
-              onShareInvite={onShareInvite}
-              onRevokeInvite={onRevokeInvite}
-            />
-            <GroupsSectionHeader
-              count={friendGroups.length}
-              expanded={areGroupsExpanded}
-              onToggle={() => updateCollapseState({ groupsExpanded: !areGroupsExpanded })}
-              onCreateGroup={() => openGroupEditor(null)}
-            />
-            {areGroupsExpanded && friendGroups.length > 0 ? (
-              <Animated.View
-                entering={COLLAPSIBLE_ENTERING}
-                exiting={COLLAPSIBLE_EXITING}
-                layout={COLLAPSIBLE_LAYOUT_TRANSITION}
-                style={styles.groupList}
-              >
-                {friendGroups.map((group) => (
-                  <GroupRow
-                    key={group.id}
-                    group={group}
-                    memberCount={group.memberUserIds.length}
-                    onPress={openGroupEditor}
-                  />
-                ))}
-              </Animated.View>
+            {!hasFriends ? (
+              <InviteActionsCard
+                activeInvite={activeInvite}
+                creatingInvite={creatingInvite}
+                hasFriends={hasFriends}
+                onCreateInvite={onCreateInvite}
+                onShareInvite={onShareInvite}
+                onRevokeInvite={onRevokeInvite}
+              />
             ) : null}
-            <FriendsSectionHeader
-              count={friends.length}
-              expanded={areFriendsExpanded}
-              onToggle={() => updateCollapseState({ friendsExpanded: !areFriendsExpanded })}
-              compactTop={!areGroupsExpanded || friendGroups.length === 0}
-            />
+            {shouldShowGroupsSection ? (
+              <>
+                <GroupsSectionHeader
+                  count={friendGroups.length}
+                  expanded={areGroupsExpanded}
+                  onToggle={() => updateCollapseState({ groupsExpanded: !areGroupsExpanded })}
+                  onCreateGroup={() => openGroupEditor(null)}
+                />
+                {areGroupsExpanded ? (
+                  <Animated.View
+                    entering={COLLAPSIBLE_ENTERING}
+                    exiting={COLLAPSIBLE_EXITING}
+                    layout={COLLAPSIBLE_LAYOUT_TRANSITION}
+                    style={styles.groupList}
+                  >
+                    {friendGroups.map((group) => (
+                      <GroupRow
+                        key={group.id}
+                        group={group}
+                        memberCount={group.memberUserIds.length}
+                        onPress={openGroupEditor}
+                      />
+                    ))}
+                  </Animated.View>
+                ) : null}
+              </>
+            ) : null}
+            {hasFriends && !shouldShowGroupsSection ? null : (
+              <FriendsSectionHeader
+                count={friends.length}
+                expanded={areFriendsExpanded}
+                onToggle={() => updateCollapseState({ friendsExpanded: !areFriendsExpanded })}
+                onCreateGroup={canCreateFirstGroup ? () => openGroupEditor(null) : undefined}
+                compactTop={!areGroupsExpanded || !shouldShowGroupsSection}
+              />
+            )}
           </View>
-          {areFriendsExpanded ? (
+          {areFriendsExpanded || (hasFriends && !shouldShowGroupsSection) ? (
             <Animated.View
               entering={COLLAPSIBLE_ENTERING}
               exiting={COLLAPSIBLE_EXITING}
@@ -882,8 +1293,7 @@ export default function SharedManageSheet(props: {
                     friendFallback={friendFallback}
                     connectedCopyTemplate={connectedCopyTemplate}
                     locale={i18n.language}
-                    onRemoveFriend={onRemoveFriend}
-                    onEditNickname={openNicknameEditor}
+                    onManageFriend={openFriendActions}
                   />
                 )}
                 ListEmptyComponent={(
@@ -931,6 +1341,26 @@ export default function SharedManageSheet(props: {
         placeholder={t('shared.friendNicknamePlaceholder', 'Add nickname')}
         autoComplete="name"
         testIDPrefix="friend-nickname"
+      />
+      <FriendActionsSheet
+        friend={actionFriend}
+        friendFallback={friendFallback}
+        connectedCopyTemplate={connectedCopyTemplate}
+        locale={i18n.language}
+        onClose={closeFriendActions}
+        onEditNickname={editActionFriendNickname}
+        onRemoveFriend={removeActionFriend}
+      />
+      <FriendCreateActionsSheet
+        visible={isCreateActionsVisible}
+        activeInvite={activeInvite}
+        creatingInvite={creatingInvite}
+        canCreateGroup={friends.length > 1}
+        onClose={closeCreateActions}
+        onCreateInvite={onCreateInvite}
+        onShareInvite={onShareInvite}
+        onRevokeInvite={onRevokeInvite}
+        onCreateGroup={() => openGroupEditor(null)}
       />
       <AppSheet
         visible={isGroupEditorVisible}
@@ -1049,7 +1479,7 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   listContent: {
-    paddingBottom: 18,
+    paddingBottom: 30,
   },
   sectionHeaderRow: {
     flexDirection: 'row',
@@ -1062,7 +1492,7 @@ const styles = StyleSheet.create({
     marginTop: 16,
   },
   sectionHeaderCompactTop: {
-    marginTop: 8,
+    marginTop: 16,
   },
   groupsHeaderTop: {
     marginTop: 14,
@@ -1112,6 +1542,59 @@ const styles = StyleSheet.create({
     marginTop: 2,
     fontSize: 13,
     lineHeight: 18,
+  },
+  inviteCompactCard: {
+    minHeight: 66,
+    borderRadius: 17,
+    borderWidth: 1,
+    paddingVertical: 8,
+    paddingLeft: 10,
+    paddingRight: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  inviteCompactIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  inviteCompactTitle: {
+    fontSize: 14,
+    lineHeight: 18,
+    fontWeight: '800',
+  },
+  inviteCompactBody: {
+    ...Typography.body,
+    marginTop: 1,
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  compactInviteAction: {
+    minWidth: 68,
+    minHeight: 34,
+    borderRadius: 17,
+    paddingHorizontal: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  compactInviteActionText: {
+    fontSize: 13,
+    lineHeight: 16,
+    fontWeight: '800',
+    color: '#1C1C1E',
+  },
+  compactRevokeAction: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
   },
   inviteActionsRow: {
     marginTop: 9,
@@ -1172,6 +1655,23 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  inlineGroupAction: {
+    minHeight: 30,
+    maxWidth: 116,
+    borderRadius: 15,
+    paddingHorizontal: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    flexShrink: 0,
+  },
+  inlineGroupActionText: {
+    fontSize: 12,
+    lineHeight: 15,
+    fontWeight: '800',
+    flexShrink: 1,
+  },
   groupList: {
     gap: 6,
     marginBottom: 1,
@@ -1218,8 +1718,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 9,
-    minHeight: 58,
-    paddingVertical: 5,
+    minHeight: 62,
+    paddingVertical: 7,
+    paddingHorizontal: 2,
+    borderRadius: 16,
+  },
+  friendRowPressed: {
+    opacity: 0.78,
   },
   avatarImage: {
     width: 36,
@@ -1264,6 +1769,39 @@ const styles = StyleSheet.create({
   compactDoneButton: {
     minHeight: 48,
     borderRadius: 14,
+  },
+  friendActionsList: {
+    width: '100%',
+  },
+  friendActionOption: {
+    minHeight: 68,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+  },
+  friendActionOptionPressed: {
+    opacity: 0.82,
+  },
+  friendActionOptionDisabled: {
+    opacity: 0.5,
+  },
+  friendActionIconBadge: {
+    width: 40,
+    height: 40,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  friendActionOptionLabel: {
+    flex: 1,
+    ...Typography.body,
+    fontWeight: '600',
+  },
+  friendActionDivider: {
+    height: StyleSheet.hairlineWidth,
+  },
+  friendActionsFooter: {
+    marginTop: 16,
   },
   groupFooter: {
     width: '100%',
