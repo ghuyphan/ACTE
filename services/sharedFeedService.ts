@@ -2244,6 +2244,32 @@ export async function getSharedChatThreadPost(
   return post && isSharedPostVisibleToUser(post, user.id) ? post : null;
 }
 
+export async function getDirectChatThreadPost(
+  user: AppUser,
+  friendUid: string
+): Promise<SharedPost | null> {
+  await ensureSupabaseSessionMatchesUser(user.id);
+
+  const normalizedFriendUid = friendUid.trim();
+  if (!normalizedFriendUid || normalizedFriendUid === user.id) {
+    return null;
+  }
+
+  const directChatKey = getDirectChatKey(user.id, normalizedFriendUid);
+  const { data, error } = await requireSupabase()
+    .from('shared_posts')
+    .select(SHARED_POST_WITH_CHAT_FIELDS)
+    .eq('direct_chat_key', directChatKey)
+    .maybeSingle();
+
+  if (error) {
+    throw error;
+  }
+
+  const post = data ? mapSharedPost(data as SharedPostRow) : null;
+  return post && isSharedPostVisibleToUser(post, user.id) ? post : null;
+}
+
 export async function getOrCreateDirectChatPost(
   user: AppUser,
   friendUid: string

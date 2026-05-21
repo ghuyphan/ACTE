@@ -21,6 +21,7 @@ import {
   FriendConnection,
   FriendInvite,
   FriendPresenceSnapshot,
+  getDirectChatThreadPost as fetchDirectChatThreadPost,
   getOrCreateDirectChatPost as fetchOrCreateDirectChatPost,
   getSharedChatThreadPost as fetchSharedChatThreadPost,
   getSharedChatThreadPosts as fetchSharedChatThreadPosts,
@@ -122,6 +123,7 @@ interface SharedFeedStoreValue {
   updateFriendGroup: (groupId: string, input: { name: string; memberUserIds: string[] }) => Promise<void>;
   deleteFriendGroup: (groupId: string) => Promise<void>;
   createSharedPost: (note: Note, audienceUserIds?: string[]) => Promise<SharedPost>;
+  getDirectChatThreadPost: (friendUid: string) => Promise<SharedPost | null>;
   getOrCreateDirectChatPost: (friendUid: string) => Promise<SharedPost>;
   getSharedChatThreadPost: (postId: string) => Promise<SharedPost | null>;
   getSharedChatThreadPosts: (limit?: number) => Promise<SharedPost[]>;
@@ -1694,6 +1696,29 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
           new Date().toISOString()
         );
         return post;
+      },
+      getDirectChatThreadPost: async (friendUid: string) => {
+        const activeUser = requireUser();
+        const normalizedFriendUid = friendUid.trim();
+        if (!normalizedFriendUid) {
+          return null;
+        }
+
+        if (!isOnline) {
+          const cachedSnapshot = await getCachedSharedFeedSnapshot(activeUser.uid);
+          return (
+            cachedSnapshot.sharedPosts.find(
+              (post) =>
+                isDirectChatPost(post) &&
+                post.audienceUserIds.includes(normalizedFriendUid)
+            ) ?? null
+          );
+        }
+
+        const post = await fetchDirectChatThreadPost(activeUser, normalizedFriendUid);
+        return post
+          ? applyFriendNicknamesToSharedPosts([post], friendsRef.current, activeUser.uid)[0] ?? post
+          : null;
       },
       getOrCreateDirectChatPost: async (friendUid: string) => {
         requireOnline();

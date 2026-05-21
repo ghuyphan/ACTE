@@ -28,11 +28,10 @@ import HomeFeedEmptyState from '../home/HomeFeedEmptyState';
 import NotesFeed from '../home/NotesFeed';
 import PlacePulseStrip from '../home/PlacePulseStrip';
 import SavedNotePolaroidReveal from '../home/SavedNotePolaroidReveal';
-import SharedPlacePulseStrip, {
-  type SharedPlacePulseAvatar,
-} from '../home/SharedPlacePulseStrip';
+import SharedPlacePulseStrip from '../home/SharedPlacePulseStrip';
 import HomeFeedSurface from './home/HomeFeedSurface';
 import HomeScreenChrome from './home/HomeScreenChrome';
+import { useHomePlacePulse } from './home/useHomePlacePulse';
 import { useHomeFeedViewModel } from '../../hooks/app/useHomeFeedViewModel';
 import { useHomeRefresh } from '../../hooks/app/useHomeRefresh';
 import { useHomeSharedActions } from '../../hooks/app/useHomeSharedActions';
@@ -40,7 +39,7 @@ import { useStableHomeSharedFeedSnapshot } from '../../hooks/app/useStableHomeSh
 import { useAppSheetAlert } from '../../hooks/useAppSheetAlert';
 import { useActiveFeedTarget } from '../../hooks/useActiveFeedTarget';
 import { useAuth } from '../../hooks/useAuth';
-import { useCaptureFlow, type CaptureDraftState } from '../../hooks/useCaptureFlow';
+import { useCaptureFlow } from '../../hooks/useCaptureFlow';
 import { useFeedFocus } from '../../hooks/useFeedFocus';
 import { useHomeStartupReady } from '../../hooks/app/useHomeStartupReady';
 import {
@@ -64,7 +63,6 @@ import {
   countPhotoNotesCreatedToday,
   getRemainingPhotoSlots,
 } from '../../constants/subscription';
-import { DEFAULT_NOTE_RADIUS } from '../../constants/noteRadius';
 import {
   PREMIUM_NOTE_COLOR_IDS,
   resolveSavedTextNoteColor,
@@ -82,7 +80,6 @@ import {
 } from '../../services/livePhotoProcessing';
 import { resolveLocationNameFromCoordinates } from '../../services/locationLookup';
 import {
-  parseNoteStickerPlacements,
   saveNoteStickerPlacementsWithAssets,
   type NoteStickerPlacement,
 } from '../../services/noteStickers';
@@ -102,174 +99,28 @@ import {
   getDualCameraAvailability,
   type DualCameraStillCapture,
 } from '../../services/dualCamera';
-import { getDistanceMeters, getReminderPlaceGroups } from '../../services/reminderSelection';
+import { getReminderPlaceGroups } from '../../services/reminderSelection';
 import {
   getSharedFeedErrorMessage,
-  type SharedPost,
-  type SharedThreadSummary,
 } from '../../services/sharedFeedService';
-import type { SharedThreadReadState } from '../../services/sharedFeedCache';
 import type { NotesRouteTransitionRect } from '../../utils/notesRouteTransition';
 import { setPendingNotesRouteTransition } from '../../utils/notesRouteTransition';
 import { scheduleOnIdle } from '../../utils/scheduleOnIdle';
 import { getPersistentItem, removePersistentItem, setPersistentItem } from '../../utils/appStorage';
 import { setAndroidSoftInputMode } from '../../utils/androidSoftInputMode';
 import { isIOS26OrNewer } from '../../utils/platform';
+import {
+  CAPTURE_DRAFT_STORAGE_KEY,
+  getRequiredPersistedCaptureDraftPhotoUris,
+  isPersistableCaptureDraft,
+  parsePersistedCaptureDraft,
+  type PersistedCaptureDraft,
+} from './home/captureDraftPersistence';
+import { useUnreadSharedChatCount } from './home/useUnreadSharedChatCount';
 
 const LIVE_PHOTO_CAMERA_HINT_SEEN_KEY = 'noto.capture.live-photo-hint-seen.v1';
-const CAPTURE_DRAFT_STORAGE_KEY = 'noto.capture.home-draft.v1';
 const REMINDER_RECOVERY_PROMPT_KEY_PREFIX = 'noto.home.reminder-recovery-prompt.v1.';
-const PLACE_PULSE_RADIUS_METERS = 500;
-const SHARED_PLACE_PULSE_MAX_AVATARS = 3;
-const SHARED_PLACE_PULSE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
-const EMPTY_SHARED_PLACE_PULSE_AVATARS: SharedPlacePulseAvatar[] = [];
 type SaveButtonState = 'idle' | 'saving' | 'success';
-
-type PersistedCaptureDraft = CaptureDraftState & {
-  version: 1;
-  noteColor: string | null;
-  captureTarget: 'private' | 'shared';
-  selectedSharedAudienceUserId: string | null;
-  stickerPlacements: NoteStickerPlacement[];
-};
-
-function isUnreadSharedThreadSummary(
-  summary: SharedThreadSummary | null | undefined,
-  readState: SharedThreadReadState | null | undefined,
-  currentUserUid: string | null | undefined
-) {
-  if (!summary?.latestActivityAt || summary.latestActivityAuthorUid === currentUserUid) {
-    return false;
-  }
-
-  const lastReadAt = readState?.lastReadAt ? new Date(readState.lastReadAt).getTime() : 0;
-  return new Date(summary.latestActivityAt).getTime() > lastReadAt;
-}
-
-function isPersistableCaptureDraft(
-  draft: CaptureDraftState & { stickerPlacements?: readonly NoteStickerPlacement[] }
-) {
-  if ((draft.stickerPlacements?.length ?? 0) > 0) {
-    return true;
-  }
-
-  if (draft.captureMode !== 'camera') {
-    return draft.noteText.trim().length > 0;
-  }
-
-  if (draft.cameraSubmode === 'dual') {
-    return Boolean(
-      draft.capturedPhoto ||
-        (draft.dualPrimaryPhoto && draft.dualPrimaryFacing && !draft.dualSecondaryPhoto)
-    );
-  }
-
-  return Boolean(draft.capturedPhoto);
-}
-
-function getRequiredPersistedCaptureDraftPhotoUris(draft: PersistedCaptureDraft) {
-  if (draft.captureMode !== 'camera') {
-    return [];
-  }
-
-  return [
-    draft.capturedPhoto,
-    draft.cameraSubmode === 'dual' ? draft.dualPrimaryPhoto : null,
-    draft.cameraSubmode === 'dual' ? draft.dualSecondaryPhoto : null,
-  ].filter((value): value is string => Boolean(value?.trim()));
-}
-
-function hasFiniteCoordinate(value: number | null | undefined): value is number {
-  return typeof value === 'number' && Number.isFinite(value);
-}
-
-function getSharedPlacePulseFallbackLabel(post: SharedPost) {
-  const trimmedName = post.authorDisplayName?.trim();
-  if (trimmedName) {
-    return (trimmedName[0] ?? '?').toUpperCase();
-  }
-
-  return '?';
-}
-
-function parsePersistedCaptureDraft(rawValue: string | null): PersistedCaptureDraft | null {
-  if (!rawValue) {
-    return null;
-  }
-
-  try {
-    const parsed = JSON.parse(rawValue) as Partial<PersistedCaptureDraft> | null;
-    if (!parsed || parsed.version !== 1) {
-      return null;
-    }
-
-    const captureMode = parsed.captureMode === 'camera' ? 'camera' : 'text';
-    const cameraSubmode = parsed.cameraSubmode === 'dual' ? 'dual' : 'single';
-    const noteText = typeof parsed.noteText === 'string' ? parsed.noteText : '';
-    const capturedPhoto =
-      typeof parsed.capturedPhoto === 'string' && parsed.capturedPhoto.trim().length > 0
-        ? parsed.capturedPhoto
-        : null;
-    const capturedPairedVideo =
-      typeof parsed.capturedPairedVideo === 'string' && parsed.capturedPairedVideo.trim().length > 0
-        ? parsed.capturedPairedVideo
-        : null;
-    const dualPrimaryPhoto =
-      typeof parsed.dualPrimaryPhoto === 'string' && parsed.dualPrimaryPhoto.trim().length > 0
-        ? parsed.dualPrimaryPhoto
-        : null;
-    const dualSecondaryPhoto =
-      typeof parsed.dualSecondaryPhoto === 'string' && parsed.dualSecondaryPhoto.trim().length > 0
-        ? parsed.dualSecondaryPhoto
-        : null;
-    const dualPrimaryFacing = parsed.dualPrimaryFacing === 'front' ? 'front' : parsed.dualPrimaryFacing === 'back' ? 'back' : null;
-    const dualSecondaryFacing = parsed.dualSecondaryFacing === 'front' ? 'front' : parsed.dualSecondaryFacing === 'back' ? 'back' : null;
-    const facing = parsed.facing === 'front' ? 'front' : 'back';
-    const radius = typeof parsed.radius === 'number' && Number.isFinite(parsed.radius)
-      ? parsed.radius
-      : DEFAULT_NOTE_RADIUS;
-    const selectedPhotoFilterId =
-      typeof parsed.selectedPhotoFilterId === 'string'
-        ? parsed.selectedPhotoFilterId as PhotoFilterId
-        : 'original';
-    const noteColor = typeof parsed.noteColor === 'string' ? parsed.noteColor : null;
-    const captureTarget = parsed.captureTarget === 'shared' ? 'shared' : 'private';
-    const selectedSharedAudienceUserId =
-      typeof parsed.selectedSharedAudienceUserId === 'string' &&
-      parsed.selectedSharedAudienceUserId.trim().length > 0
-        ? parsed.selectedSharedAudienceUserId
-        : null;
-    const stickerPlacements = parseNoteStickerPlacements(
-      Array.isArray(parsed.stickerPlacements)
-        ? JSON.stringify(parsed.stickerPlacements)
-        : null
-    );
-
-    const normalizedDraft: PersistedCaptureDraft = {
-      version: 1,
-      captureMode,
-      cameraSubmode,
-      noteText,
-      capturedPhoto,
-      capturedPairedVideo,
-      dualPrimaryPhoto,
-      dualSecondaryPhoto,
-      dualPrimaryFacing,
-      dualSecondaryFacing,
-      facing,
-      radius,
-      selectedPhotoFilterId,
-      noteColor,
-      captureTarget,
-      selectedSharedAudienceUserId,
-      stickerPlacements,
-    };
-
-    return isPersistableCaptureDraft(normalizedDraft) ? normalizedDraft : null;
-  } catch {
-    return null;
-  }
-}
 
 type MapSaveCoordinate = {
   latitude: number;
@@ -324,7 +175,6 @@ export default function HomeScreen() {
     createSharedPost,
     createSharedPostResponse,
   } = useSharedFeedStore();
-  const [unreadSharedChatCount, setUnreadSharedChatCount] = useState(0);
   const captureAudienceFriends = useMemo(
     () => friends.filter((friend) => friend.userId !== user?.uid),
     [friends, user?.uid]
@@ -354,47 +204,14 @@ export default function HomeScreen() {
         : post;
     });
   }, [friends, sharedPosts]);
-  const sharedPostIdsKey = useMemo(
-    () => sharedPosts.map((post) => post.id).join('|'),
-    [sharedPosts]
-  );
-  useEffect(() => {
-    const postIds = sharedPostIdsKey ? sharedPostIdsKey.split('|') : [];
-    if (!sharedEnabled || !sharedReady || !user?.uid || postIds.length === 0) {
-      setUnreadSharedChatCount(0);
-      return;
-    }
-
-    let cancelled = false;
-    void Promise.all([
-      getSharedPostThreadSummaries(postIds).catch(() => []),
-      getSharedThreadReadStates().catch(() => []),
-    ]).then(([summaries, readStates]) => {
-      if (cancelled) {
-        return;
-      }
-
-      const readStateByPostId = new Map(
-        readStates.map((readState) => [readState.postId, readState])
-      );
-      setUnreadSharedChatCount(
-        summaries.filter((summary) =>
-          isUnreadSharedThreadSummary(summary, readStateByPostId.get(summary.postId), user.uid)
-        ).length
-      );
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [
+  const unreadSharedChatCount = useUnreadSharedChatCount({
+    enabled: sharedEnabled,
     getSharedPostThreadSummaries,
     getSharedThreadReadStates,
-    sharedPostIdsKey,
-    sharedEnabled,
-    sharedReady,
-    user?.uid,
-  ]);
+    posts: sharedPosts,
+    ready: sharedReady,
+    userUid: user?.uid,
+  });
   const {
     bootstrapState: syncBootstrapState,
     requestSync,
@@ -1795,128 +1612,15 @@ export default function HomeScreen() {
     });
   }, [showAlert, t]);
 
-  const placePulseSummary = useMemo(() => {
-    if (!location) {
-      return {
-        nearbyNoteCount: 0,
-        targetNoteId: null as string | null,
-      };
-    }
-
-    const nearbyGroups = getReminderPlaceGroups(notes)
-      .map((group) => ({
-        group,
-        distanceMeters: getDistanceMeters(
-          {
-            latitude: location.coords.latitude,
-            longitude: location.coords.longitude,
-          },
-          {
-            latitude: group.latitude,
-            longitude: group.longitude,
-          }
-        ),
-      }))
-      .filter((entry) => entry.distanceMeters <= PLACE_PULSE_RADIUS_METERS)
-      .sort((left, right) => left.distanceMeters - right.distanceMeters);
-
-    const highlightedPlace = nearbyGroups[0]?.group ?? null;
-    const latestNearbyNote = highlightedPlace
-      ? [...highlightedPlace.notes].sort(
-          (left, right) =>
-            new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime()
-        )[0] ?? null
-      : null;
-
-    return {
-      nearbyNoteCount: nearbyGroups.reduce(
-        (sum, entry) => sum + entry.group.notes.length,
-        0
-      ),
-      targetNoteId: latestNearbyNote?.id ?? null,
-    };
-  }, [location, notes]);
-  const sharedPlacePulseSummary = useMemo(() => {
-    if (
-      captureTarget !== 'private' ||
-      !location ||
-      !sharedEnabled ||
-      !sharedReady
-    ) {
-      return {
-        nearbySharedPostCount: 0,
-        targetPostId: null as string | null,
-        avatars: EMPTY_SHARED_PLACE_PULSE_AVATARS,
-        overflowCount: 0,
-      };
-    }
-
-    const currentCoordinates = {
-      latitude: location.coords.latitude,
-      longitude: location.coords.longitude,
-    };
-    const minimumCreatedAt = Date.now() - SHARED_PLACE_PULSE_MAX_AGE_MS;
-
-    const nearbySharedPosts = sharedPostsWithFriendNicknames
-      .filter((post) => {
-        if (user?.uid && post.authorUid === user.uid) {
-          return false;
-        }
-
-        if (!hasFiniteCoordinate(post.latitude) || !hasFiniteCoordinate(post.longitude)) {
-          return false;
-        }
-
-        const createdAtMs = new Date(post.createdAt).getTime();
-        if (!Number.isFinite(createdAtMs) || createdAtMs < minimumCreatedAt) {
-          return false;
-        }
-
-        return (
-          getDistanceMeters(currentCoordinates, {
-            latitude: post.latitude,
-            longitude: post.longitude,
-          }) <= PLACE_PULSE_RADIUS_METERS
-        );
-      })
-      .sort(
-        (left, right) =>
-          new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime()
-      );
-
-    const uniqueNearbyAuthorIds = new Set<string>();
-    for (const post of nearbySharedPosts) {
-      uniqueNearbyAuthorIds.add(post.authorUid.trim() || post.id);
-    }
-
-    const avatars: SharedPlacePulseAvatar[] = [];
-    const renderedAuthorIds = new Set<string>();
-
-    for (const post of nearbySharedPosts) {
-      const authorKey = post.authorUid.trim() || post.id;
-      if (renderedAuthorIds.has(authorKey)) {
-        continue;
-      }
-
-      renderedAuthorIds.add(authorKey);
-      avatars.push({
-        id: authorKey,
-        photoUrl: post.authorPhotoURLSnapshot,
-        fallbackLabel: getSharedPlacePulseFallbackLabel(post),
-      });
-
-      if (avatars.length >= SHARED_PLACE_PULSE_MAX_AVATARS) {
-        break;
-      }
-    }
-
-    return {
-      nearbySharedPostCount: nearbySharedPosts.length,
-      targetPostId: nearbySharedPosts[0]?.id ?? null,
-      avatars,
-      overflowCount: Math.max(uniqueNearbyAuthorIds.size - avatars.length, 0),
-    };
-  }, [captureTarget, location, sharedEnabled, sharedPostsWithFriendNicknames, sharedReady, user?.uid]);
+  const { placePulseSummary, sharedPlacePulseSummary } = useHomePlacePulse({
+    captureTarget,
+    location,
+    notes,
+    sharedEnabled,
+    sharedPosts: sharedPostsWithFriendNicknames,
+    sharedReady,
+    userUid: user?.uid,
+  });
 
   const handlePlacePulsePress = useCallback(() => {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);

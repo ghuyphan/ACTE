@@ -105,7 +105,7 @@ const RESPONSE_SKELETON_ROWS = [
 const QUICK_RESPONSES = ['💛', '🥹', '✨', '😂'] as const;
 const RESPONSE_PAGE_SIZE = 50;
 const INFO_MESSAGE_VISIBLE_MS = 1800;
-const COMPOSER_KEYBOARD_GAP = 16;
+const COMPOSER_KEYBOARD_GAP = 4;
 const COMPACT_REACTION_TRAY_WIDTH = 260;
 const REACTION_TRAY_WITH_DETAILS_WIDTH = 316;
 const REACTION_TRAY_ESTIMATED_HEIGHT = 58;
@@ -499,6 +499,7 @@ export default function SharedPostChatScreen({
     loading,
     refreshSharedFeed,
     sharedPosts = [],
+    getDirectChatThreadPost = async () => null,
     getOrCreateDirectChatPost = async () => {
       throw new Error(t('shared.directChatStartFailed', 'Could not start chat.'));
     },
@@ -582,6 +583,9 @@ export default function SharedPostChatScreen({
   const normalizedInitialResponseId = Array.isArray(initialResponseId)
     ? initialResponseId[0]?.trim() || null
     : initialResponseId?.trim() || null;
+  const isSyntheticDirectChatRoute = Boolean(
+    normalizedDirectFriendUid && postId.trim() === `direct-${normalizedDirectFriendUid}`
+  );
   const {
     clearNewMessageCount,
     connectionStatus,
@@ -961,13 +965,18 @@ export default function SharedPostChatScreen({
   }, [isDirectChat, loading, post, refreshSharedFeed]);
 
   useEffect(() => {
-    if (normalizedDirectFriendUid || post || loading) {
+    if (post || loading) {
       return;
     }
 
     let cancelled = false;
     setIsLoadingChatPost(true);
-    void getSharedChatThreadPost(postId)
+
+    const loadChatPost = isSyntheticDirectChatRoute && normalizedDirectFriendUid
+      ? getDirectChatThreadPost(normalizedDirectFriendUid)
+      : getSharedChatThreadPost(postId);
+
+    void loadChatPost
       .then((nextPost) => {
         if (!cancelled) {
           setChatPostErrorMessage(null);
@@ -989,7 +998,15 @@ export default function SharedPostChatScreen({
     return () => {
       cancelled = true;
     };
-  }, [getSharedChatThreadPost, loading, normalizedDirectFriendUid, post, postId]);
+  }, [
+    getDirectChatThreadPost,
+    getSharedChatThreadPost,
+    isSyntheticDirectChatRoute,
+    loading,
+    normalizedDirectFriendUid,
+    post,
+    postId,
+  ]);
 
   const markThreadReadThroughLatest = useCallback(() => {
     const lastResponse = responses[responses.length - 1] ?? null;
@@ -1962,8 +1979,12 @@ export default function SharedPostChatScreen({
   const chatContext: ChatRenderContext = useMemo(() => {
     const mode: ChatMode = isDirectChat ? 'direct' : 'memory';
     const canComposePendingDirectChat = Boolean(mode === 'direct' && normalizedDirectFriendUid);
+    const isResolvingPendingDirectChat = Boolean(
+      !post && canComposePendingDirectChat && (loading || isLoadingChatPost)
+    );
     const isResolvingInitialChat = !post && !canComposePendingDirectChat && (loading || isLoadingChatPost);
-    const shouldRenderPendingThread = mode === 'direct' && isResolvingInitialChat;
+    const shouldRenderPendingThread =
+      mode === 'direct' && (isResolvingInitialChat || isResolvingPendingDirectChat);
     const hasPost = Boolean(post);
     return {
       canSendMessage: Boolean((post || canComposePendingDirectChat) && draft.trim() && !isSending),
@@ -2121,7 +2142,11 @@ export default function SharedPostChatScreen({
       ) : (
         <>
           {chatContext.shouldRenderPendingThread ? (
-            <View style={styles.threadList} pointerEvents="none">
+            <View
+              testID="shared-chat-thread-skeleton"
+              style={styles.threadList}
+              pointerEvents="none"
+            >
               <View
                 style={[
                   styles.threadContent,
@@ -2278,7 +2303,7 @@ export default function SharedPostChatScreen({
                 styles.composerShell,
                 {
                   bottom: composerKeyboardOffset,
-                  paddingBottom: isKeyboardVisible ? 12 : Math.max(insets.bottom, 12),
+                  paddingBottom: isKeyboardVisible ? 6 : Math.max(insets.bottom, 12),
                 },
               ]}
             >
