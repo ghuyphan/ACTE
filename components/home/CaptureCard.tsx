@@ -62,7 +62,10 @@ import StampPreviewEditor from './capture/StampPreviewEditor';
 import StickerCutoutPreviewEditor from './capture/StickerCutoutPreviewEditor';
 import type { WindowRect } from './capture/stickerCreationTypes';
 import {
+  BELOW_CARD_SECTION_HEIGHT,
   CARD_SIZE,
+  CAPTURE_FOOTER_CLUSTER_GAP,
+  CAPTURE_FOOTER_SLOT_HEIGHT,
   FLOATING_CAPTURE_FOOTER_BOTTOM_OFFSET,
   LIVE_PHOTO_RING_STROKE_WIDTH,
   PHOTO_DOODLE_DEFAULT_COLOR,
@@ -898,15 +901,37 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
     extraBottomInset: androidTextEntryBottomInset,
   });
   const footerSlotStyle = useMemo(
-    () => ({
-      bottom: captureBottomPadding + FLOATING_CAPTURE_FOOTER_BOTTOM_OFFSET,
-      paddingTop: getCaptureFooterTopPadding({
-        snapHeight,
-        topInset,
-        extraBottomInset: androidTextEntryBottomInset,
-      }),
-    }),
-    [androidTextEntryBottomInset, captureBottomPadding, snapHeight, topInset]
+    () => {
+      const captureStackHeight = CARD_SIZE + BELOW_CARD_SECTION_HEIGHT;
+      const captureContentHeight = snapHeight - captureTopPadding - captureBottomPadding;
+      const centeredStackOffset = Math.max(0, (captureContentHeight - captureStackHeight) / 2);
+      const captureStackBottom = captureTopPadding + centeredStackOffset + captureStackHeight;
+      const preferredFooterTop =
+        snapHeight -
+        captureBottomPadding -
+        FLOATING_CAPTURE_FOOTER_BOTTOM_OFFSET -
+        CAPTURE_FOOTER_SLOT_HEIGHT;
+      const safeFooterTop = Math.max(
+        preferredFooterTop,
+        captureStackBottom + CAPTURE_FOOTER_CLUSTER_GAP
+      );
+
+      return {
+        top: safeFooterTop,
+        paddingTop: getCaptureFooterTopPadding({
+          snapHeight,
+          topInset,
+          extraBottomInset: androidTextEntryBottomInset,
+        }),
+      };
+    },
+    [
+      androidTextEntryBottomInset,
+      captureBottomPadding,
+      captureTopPadding,
+      snapHeight,
+      topInset,
+    ]
   );
 
   useEffect(() => {

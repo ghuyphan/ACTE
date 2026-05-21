@@ -63,6 +63,8 @@ export const CAMERA_BOTTOM_CHROME_RADIUS = CAMERA_BOTTOM_CHROME_HEIGHT / 2;
 export const DOCKED_HEADER_CONTENT_OVERLAP = 8;
 export const CAMERA_ZOOM_BADGE_BACKGROUND = 'rgba(28,28,30,0.52)';
 export const BELOW_CARD_SECTION_HEIGHT = 168;
+export const CAPTURE_FOOTER_CLUSTER_GAP = 16;
+export const CAPTURE_FOOTER_SLOT_HEIGHT = 66;
 export const FLOATING_CAPTURE_FOOTER_BOTTOM_OFFSET = 20;
 export const COMPACT_CAPTURE_FOOTER_TOP_PADDING = 4;
 export const DEFAULT_CAPTURE_FOOTER_TOP_PADDING = 8;
@@ -1009,7 +1011,7 @@ export const styles = StyleSheet.create({
     left: 0,
     right: 0,
     width: '100%',
-    minHeight: 66,
+    minHeight: CAPTURE_FOOTER_SLOT_HEIGHT,
     paddingTop: DEFAULT_CAPTURE_FOOTER_TOP_PADDING,
   },
   noteColorSheet: {
