@@ -381,11 +381,8 @@ export default function FriendJoinScreen() {
           subtitle={
             user
               ? joinMode === 'username'
-                ? t(
-                    'shared.searchByUsernameBody',
-                    'Search a Noto ID to connect and start sharing on Home.'
-                  )
-                : t('shared.joinBody', 'Paste the invite link to connect and start sharing on Home.')
+                ? t('shared.searchByUsernameHint', 'Search by Noto ID.')
+                : t('shared.joinBody', 'Paste an invite link or code to connect.')
               : isAuthAvailable
                 ? t('shared.joinSignInBody', 'Sign in first so we can connect you to this friend.')
                 : t('shared.unavailableBody', 'This build does not have shared social enabled right now.')

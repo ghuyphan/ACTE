@@ -7,7 +7,8 @@ import {
   DOCKED_HEADER_CONTENT_OVERLAP,
 } from './captureCardStyles';
 
-export const CAPTURE_PAGE_VISUAL_BOTTOM_INSET = 90;
+export const CAPTURE_PAGE_VISUAL_BOTTOM_INSET =
+  Layout.headerHeight - DOCKED_HEADER_CONTENT_OVERLAP;
 
 interface CaptureCardVerticalPaddingOptions {
   topInset: number;

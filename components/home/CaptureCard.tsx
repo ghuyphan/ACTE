@@ -63,6 +63,7 @@ import StickerCutoutPreviewEditor from './capture/StickerCutoutPreviewEditor';
 import type { WindowRect } from './capture/stickerCreationTypes';
 import {
   CARD_SIZE,
+  FLOATING_CAPTURE_FOOTER_BOTTOM_OFFSET,
   LIVE_PHOTO_RING_STROKE_WIDTH,
   PHOTO_DOODLE_DEFAULT_COLOR,
   styles,
@@ -898,13 +899,14 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   });
   const footerSlotStyle = useMemo(
     () => ({
+      bottom: captureBottomPadding + FLOATING_CAPTURE_FOOTER_BOTTOM_OFFSET,
       paddingTop: getCaptureFooterTopPadding({
         snapHeight,
         topInset,
         extraBottomInset: androidTextEntryBottomInset,
       }),
     }),
-    [androidTextEntryBottomInset, snapHeight, topInset]
+    [androidTextEntryBottomInset, captureBottomPadding, snapHeight, topInset]
   );
 
   useEffect(() => {
@@ -1573,13 +1575,14 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
               shutterOuterAnimatedStyle={shutterOuterAnimatedStyle}
               t={t}
             />
-            {footerContent ? (
-              <View testID="capture-footer-slot" style={[styles.footerSlot, footerSlotStyle]}>
-                {footerContent}
-              </View>
-            ) : null}
           </Reanimated.View>
         </KeyboardAvoidingView>
+
+        {footerContent ? (
+          <View testID="capture-footer-slot" style={[styles.footerSlot, footerSlotStyle]}>
+            {footerContent}
+          </View>
+        ) : null}
       </View>
 
       <StickerSourceSheet

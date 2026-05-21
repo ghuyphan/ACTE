@@ -41,7 +41,16 @@ export const SHUTTER_OUTER_SIZE = 74;
 export const SHUTTER_INNER_SIZE = 58;
 export const SIDE_ACTION_SIZE = 46;
 export const DOODLE_COLOR_BUTTON_SIZE = 32;
-export const SHUTTER_SIDE_ACTION_GAP = 52;
+export const CAPTURE_CONTROL_ROW_GAP = CARD_SIZE < 300 ? 6 : 8;
+export const DOODLE_COLOR_PALETTE_WIDTH = CARD_SIZE < 300 ? 84 : 96;
+export const LIVE_CAMERA_FILTER_RAIL_WIDTH = Math.max(
+  86,
+  Math.min(110, CARD_SIZE - 190)
+);
+export const SHUTTER_SIDE_ACTION_GAP = Math.max(
+  8,
+  Math.min(52, (CARD_SIZE - 8) / 2 - SHUTTER_OUTER_SIZE / 2 - SIDE_ACTION_SIZE - 8)
+);
 export const SHUTTER_SIDE_ACTION_OFFSET =
   SHUTTER_OUTER_SIZE / 2 + SHUTTER_SIDE_ACTION_GAP + SIDE_ACTION_SIZE;
 export const PHOTO_DOODLE_DEFAULT_COLOR = '#FFFFFF';
@@ -53,7 +62,8 @@ export const CAMERA_BOTTOM_CHROME_HEIGHT = 42;
 export const CAMERA_BOTTOM_CHROME_RADIUS = CAMERA_BOTTOM_CHROME_HEIGHT / 2;
 export const DOCKED_HEADER_CONTENT_OVERLAP = 8;
 export const CAMERA_ZOOM_BADGE_BACKGROUND = 'rgba(28,28,30,0.52)';
-export const BELOW_CARD_SECTION_HEIGHT = 204;
+export const BELOW_CARD_SECTION_HEIGHT = 168;
+export const FLOATING_CAPTURE_FOOTER_BOTTOM_OFFSET = 20;
 export const COMPACT_CAPTURE_FOOTER_TOP_PADDING = 4;
 export const DEFAULT_CAPTURE_FOOTER_TOP_PADDING = 8;
 const SHEET_HORIZONTAL_PADDING =
@@ -246,7 +256,7 @@ export const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   doodleColorPalette: {
-    width: 96,
+    width: DOODLE_COLOR_PALETTE_WIDTH,
     overflow: 'hidden',
   },
   doodleColorPaletteScroll: {
@@ -255,7 +265,7 @@ export const styles = StyleSheet.create({
   doodleColorPaletteContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: CARD_SIZE < 300 ? 4 : 6,
     paddingRight: 4,
   },
   doodleColorButton: {
@@ -654,7 +664,9 @@ export const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     alignSelf: 'center',
-    gap: 6,
+    maxWidth: '100%',
+    minWidth: 0,
+    gap: CAPTURE_CONTROL_ROW_GAP,
   },
   liveCameraLensButton: {
     minWidth: 52,
@@ -673,7 +685,7 @@ export const styles = StyleSheet.create({
     includeFontPadding: false,
   },
   liveCameraFilterRail: {
-    width: 110,
+    width: LIVE_CAMERA_FILTER_RAIL_WIDTH,
     overflow: 'hidden',
     flexGrow: 0,
     flexShrink: 0,
@@ -750,6 +762,7 @@ export const styles = StyleSheet.create({
   },
   textBottomToolsBar: {
     alignSelf: 'center',
+    maxWidth: '100%',
     minHeight: 46,
     borderRadius: Radii.pill,
     borderWidth: StyleSheet.hairlineWidth,
@@ -764,9 +777,11 @@ export const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     alignSelf: 'center',
+    maxWidth: '100%',
+    minWidth: 0,
     flexWrap: 'nowrap',
     minHeight: TOP_CONTROL_HEIGHT,
-    gap: 8,
+    gap: CAPTURE_CONTROL_ROW_GAP,
   },
   textBottomToolsButton: {
     width: TOP_CONTROL_HEIGHT,
@@ -990,6 +1005,9 @@ export const styles = StyleSheet.create({
     maxWidth: '100%',
   },
   footerSlot: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
     width: '100%',
     minHeight: 66,
     paddingTop: DEFAULT_CAPTURE_FOOTER_TOP_PADDING,

@@ -143,7 +143,7 @@ export default function FriendInviteJoinBody({
   const isUsernameMode = mode === 'username';
   const primaryLabel = user
     ? isUsernameMode
-      ? t('shared.searchByUsernamePrimary', 'Search Noto ID')
+      ? t('shared.searchByUsernamePrimaryShort', 'Search')
       : t('shared.joinButton', 'Continue')
     : t('shared.signInButton', 'Sign in');
   const primaryLoading = user ? (isUsernameMode ? searching : joining) : false;
@@ -166,40 +166,6 @@ export default function FriendInviteJoinBody({
 
   return (
     <View style={[styles.content, { paddingBottom: bottomPadding }, contentStyle]}>
-      <View style={[styles.segmentedWrap, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-        {(['username', 'invite'] as const).map((option) => {
-          const selected = option === mode;
-          return (
-            <Pressable
-              key={option}
-              onPress={() => {
-                dismissKeyboard();
-                onChangeMode(option);
-              }}
-              style={({ pressed }) => [
-                styles.segmentedButton,
-                {
-                  backgroundColor: selected ? colors.primary : 'transparent',
-                  opacity: pressed ? 0.92 : 1,
-                },
-              ]}
-              testID={`friend-join-mode-${option}`}
-            >
-              <Text
-                style={[
-                  styles.segmentedLabel,
-                  { color: selected ? colors.onPrimary : colors.secondaryText },
-                ]}
-              >
-                {option === 'username'
-                  ? t('shared.searchByUsernameTab', 'Noto ID')
-                  : t('shared.searchByInviteTab', 'Invite link')}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </View>
-
       {isOfflineSignedIn ? (
         <OfflineNotice
           title={t('auth.offlineTitle', 'You are offline')}
@@ -214,9 +180,6 @@ export default function FriendInviteJoinBody({
         isUsernameMode ? (
           <>
             <View style={styles.formBlock}>
-              <Text style={[styles.fieldLabel, { color: colors.secondaryText }]}>
-                {t('shared.searchByUsernameLabel', 'Noto ID')}
-              </Text>
               <SheetTextInput
                 ref={(node) => {
                   usernameInputRef.current = node ?? null;
@@ -255,9 +218,6 @@ export default function FriendInviteJoinBody({
           </>
         ) : (
           <View style={styles.formBlock}>
-            <Text style={[styles.fieldLabel, { color: colors.secondaryText }]}>
-              {t('shared.joinCardTitle', 'Invite link')}
-            </Text>
             <SheetTextInput
               ref={(node) => {
                 inviteInputRef.current = node ?? null;
@@ -320,13 +280,39 @@ export default function FriendInviteJoinBody({
         style={[styles.primaryAction, primaryActionStyle]}
         testID="friend-join-primary-button"
       />
+
+      {user ? (
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => {
+            dismissKeyboard();
+            onChangeMode(isUsernameMode ? 'invite' : 'username');
+          }}
+          style={({ pressed }) => [
+            styles.modeSwitchRow,
+            { opacity: pressed ? 0.78 : 1 },
+          ]}
+          testID={`friend-join-mode-${isUsernameMode ? 'invite' : 'username'}`}
+        >
+          <Ionicons
+            name={isUsernameMode ? 'link-outline' : 'at-outline'}
+            size={16}
+            color={colors.secondaryText}
+          />
+          <Text style={[styles.modeSwitchText, { color: colors.secondaryText }]}>
+            {isUsernameMode
+              ? t('shared.useInviteLinkAction', 'Use an invite link instead')
+              : t('shared.useNotoIdAction', 'Search by Noto ID instead')}
+          </Text>
+        </Pressable>
+      ) : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   content: {
-    gap: 16,
+    gap: 14,
   },
   segmentedWrap: {
     borderRadius: 18,
@@ -348,7 +334,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   formBlock: {
-    gap: 6,
+    gap: 0,
   },
   fieldLabel: {
     ...Typography.pill,
@@ -413,6 +399,20 @@ const styles = StyleSheet.create({
   },
   primaryAction: {
     width: '100%',
-    marginTop: 10,
+    marginTop: 8,
+  },
+  modeSwitchRow: {
+    minHeight: 34,
+    alignSelf: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingHorizontal: 8,
+  },
+  modeSwitchText: {
+    ...Typography.pill,
+    fontSize: 13,
+    fontWeight: '700',
   },
 });

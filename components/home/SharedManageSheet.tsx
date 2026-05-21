@@ -1192,17 +1192,6 @@ export default function SharedManageSheet(props: {
           title={t('shared.manageTitle', 'Friends')}
           overlayHeaderActions
           trailingActions={[
-            ...(onOpenChats
-              ? [
-                  {
-                    icon: 'chatbubble-ellipses-outline',
-                    accessibilityLabel: t('shared.chatsTitle', 'Chats'),
-                    onPress: onOpenChats,
-                    testID: 'shared-manage-chats-button',
-                    badgeLabel: unreadChatsBadgeLabel,
-                  } as const,
-                ]
-              : []),
             {
               icon: 'search-outline',
               accessibilityLabel: t('shared.searchByUsernameButton', 'Find by Noto ID'),
@@ -1215,6 +1204,17 @@ export default function SharedManageSheet(props: {
               onPress: openCreateActions,
               testID: 'shared-manage-actions-button',
             },
+            ...(onOpenChats
+              ? [
+                  {
+                    icon: 'chatbubble-ellipses-outline',
+                    accessibilityLabel: t('shared.chatsTitle', 'Chats'),
+                    onPress: onOpenChats,
+                    testID: 'shared-manage-chats-button',
+                    badgeLabel: unreadChatsBadgeLabel,
+                  } as const,
+                ]
+              : []),
           ]}
           footer={hasFriends ? undefined : (
             <SheetFooterButton
