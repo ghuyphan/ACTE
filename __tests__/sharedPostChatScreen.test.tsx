@@ -5,6 +5,10 @@ import SharedPostChatScreen from '../components/screens/shared/SharedPostChatScr
 const mockGetSharedChatThreadPost = jest.fn();
 const mockGetDirectChatThreadPost = jest.fn();
 const mockGetSharedPostResponsesPage = jest.fn();
+const mockScrollToEnd = jest.fn();
+const mockScrollToIndex = jest.fn();
+let mockLatestThreadOnStartReached: (() => void) | null = null;
+let mockLatestThreadOnScroll: ((event: unknown) => void) | null = null;
 
 const directPost = {
   id: 'direct-chat-1',
@@ -43,16 +47,43 @@ jest.mock('@shopify/flash-list', () => {
   const React = require('react');
   const { View } = require('react-native');
   return {
-    FlashList: React.forwardRef(({ data, keyExtractor, renderItem, ListEmptyComponent }: any, _ref: any) => (
-      <View>
-        {(data ?? []).length === 0 && ListEmptyComponent ? <ListEmptyComponent /> : null}
-        {(data ?? []).map((item: any, index: number) => (
-          <View key={keyExtractor ? keyExtractor(item, index) : item.id ?? index}>
-            {renderItem({ item, index })}
+    FlashList: React.forwardRef(
+      (
+        { data, keyExtractor, onScroll, onStartReached, renderItem, ListEmptyComponent, onLoad }: any,
+        ref: any
+      ) => {
+        React.useImperativeHandle(ref, () => ({
+          scrollToEnd: mockScrollToEnd,
+          scrollToIndex: mockScrollToIndex,
+        }));
+        React.useEffect(() => {
+          mockLatestThreadOnStartReached = onStartReached ?? null;
+          mockLatestThreadOnScroll = onScroll ?? null;
+          return () => {
+            if (mockLatestThreadOnStartReached === onStartReached) {
+              mockLatestThreadOnStartReached = null;
+            }
+            if (mockLatestThreadOnScroll === onScroll) {
+              mockLatestThreadOnScroll = null;
+            }
+          };
+        }, [onScroll, onStartReached]);
+        React.useEffect(() => {
+          onLoad?.({ elapsedTimeInMs: 0 });
+        }, [onLoad]);
+
+        return (
+          <View>
+            {(data ?? []).length === 0 && ListEmptyComponent ? <ListEmptyComponent /> : null}
+            {(data ?? []).map((item: any, index: number) => (
+              <View key={keyExtractor ? keyExtractor(item, index) : item.id ?? index}>
+                {renderItem({ item, index })}
+              </View>
+            ))}
           </View>
-        ))}
-      </View>
-    )),
+        );
+      }
+    ),
   };
 });
 
@@ -181,6 +212,10 @@ jest.mock('../hooks/useSharedFeed', () => ({
 describe('SharedPostChatScreen', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockScrollToEnd.mockClear();
+    mockScrollToIndex.mockClear();
+    mockLatestThreadOnStartReached = null;
+    mockLatestThreadOnScroll = null;
     mockGetSharedChatThreadPost.mockResolvedValue(directPost);
     mockGetDirectChatThreadPost.mockResolvedValue(null);
     mockGetSharedPostResponsesPage.mockResolvedValue([
@@ -212,6 +247,93 @@ describe('SharedPostChatScreen', () => {
       expect(getByText('hello from cache miss')).toBeTruthy();
     });
     expect(mockGetDirectChatThreadPost).not.toHaveBeenCalled();
+  });
+
+  it('anchors loaded chats to the newest message on first render', async () => {
+    render(
+      <SharedPostChatScreen
+        directFriendUid="friend-1"
+        postId="direct-chat-1"
+      />
+    );
+
+    await waitFor(() => {
+      expect(mockScrollToEnd).toHaveBeenCalledWith({ animated: false });
+    });
+  });
+
+  it('requests only the newest message page on initial load', async () => {
+    render(
+      <SharedPostChatScreen
+        directFriendUid="friend-1"
+        postId="direct-chat-1"
+      />
+    );
+
+    await waitFor(() => {
+      expect(mockGetSharedPostResponsesPage).toHaveBeenCalledWith('direct-chat-1', {
+        limit: 24,
+      });
+    });
+  });
+
+  it('does not load older messages until the user scrolls upward', async () => {
+    mockGetSharedPostResponsesPage.mockResolvedValueOnce(
+      Array.from({ length: 24 }, (_, index) => ({
+        id: `response-${index + 1}`,
+        postId: directPost.id,
+        authorUid: index % 2 === 0 ? 'friend-1' : 'me',
+        authorDisplayName: index % 2 === 0 ? 'Lan' : 'Me',
+        authorPhotoURLSnapshot: null,
+        emoji: null,
+        text: `message ${index + 1}`,
+        replyToResponseId: null,
+        reactions: [],
+        createdAt: `2026-05-20T01:${String(index + 1).padStart(2, '0')}:00.000Z`,
+      }))
+    );
+    render(
+      <SharedPostChatScreen
+        directFriendUid="friend-1"
+        postId="direct-chat-1"
+      />
+    );
+
+    await waitFor(() => {
+      expect(mockLatestThreadOnStartReached).toBeTruthy();
+    });
+    mockGetSharedPostResponsesPage.mockClear();
+
+    await act(async () => {
+      mockLatestThreadOnStartReached?.();
+      await Promise.resolve();
+    });
+
+    expect(mockGetSharedPostResponsesPage).not.toHaveBeenCalled();
+
+    await act(async () => {
+      mockLatestThreadOnScroll?.({
+        nativeEvent: {
+          contentOffset: { y: 420 },
+          contentSize: { height: 900 },
+          layoutMeasurement: { height: 300 },
+        },
+      });
+      mockLatestThreadOnScroll?.({
+        nativeEvent: {
+          contentOffset: { y: 360 },
+          contentSize: { height: 900 },
+          layoutMeasurement: { height: 300 },
+        },
+      });
+      mockLatestThreadOnStartReached?.();
+      await Promise.resolve();
+    });
+
+    expect(mockGetSharedPostResponsesPage).toHaveBeenCalledWith('direct-chat-1', {
+      beforeCreatedAt: '2026-05-20T01:01:00.000Z',
+      limit: 24,
+    });
   });
 
   it('shows the thread skeleton while resolving an existing direct chat', async () => {

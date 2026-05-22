@@ -103,7 +103,7 @@ const RESPONSE_SKELETON_ROWS = [
   { key: 'self-medium', isSelf: true, width: '50%', minHeight: 40 },
 ] as const;
 const QUICK_RESPONSES = ['💛', '🥹', '✨', '😂'] as const;
-const RESPONSE_PAGE_SIZE = 50;
+const RESPONSE_PAGE_SIZE = 24;
 const INFO_MESSAGE_VISIBLE_MS = 1800;
 const COMPOSER_KEYBOARD_GAP = 4;
 const COMPACT_REACTION_TRAY_WIDTH = 260;
@@ -549,6 +549,8 @@ export default function SharedPostChatScreen({
   const jumpToLatestProgress = useRef(new Animated.Value(0)).current;
   const sendButtonPulse = useRef(new Animated.Value(0)).current;
   const pendingInitialResponseIdRef = useRef<string | null>(null);
+  const canLoadOlderResponsesRef = useRef(false);
+  const lastThreadScrollYRef = useRef<number | null>(null);
 
   const normalizedDirectFriendUid = Array.isArray(directFriendUid)
     ? directFriendUid[0]?.trim() || null
@@ -753,6 +755,8 @@ export default function SharedPostChatScreen({
 
   useEffect(() => {
     lastMarkedReadSignatureRef.current = null;
+    canLoadOlderResponsesRef.current = false;
+    lastThreadScrollYRef.current = null;
     setReplyTarget(null);
     setIsThreadFirstPaintReady(false);
   }, [activePostId]);
@@ -1032,6 +1036,14 @@ export default function SharedPostChatScreen({
   const handleThreadScroll = useCallback(
     (event: NativeSyntheticEvent<NativeScrollEvent>) => {
       const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
+      const previousScrollY = lastThreadScrollYRef.current;
+      if (
+        previousScrollY !== null &&
+        contentOffset.y < previousScrollY - 12
+      ) {
+        canLoadOlderResponsesRef.current = true;
+      }
+      lastThreadScrollYRef.current = contentOffset.y;
       const distanceFromEnd =
         contentSize.height - (contentOffset.y + layoutMeasurement.height);
       const isNearEnd = distanceFromEnd < 96;
@@ -1043,6 +1055,13 @@ export default function SharedPostChatScreen({
     },
     [clearNewMessageCount, isLoadingResponses, markThreadReadThroughLatest, setThreadEndVisible]
   );
+  const handleLoadOlderResponses = useCallback(() => {
+    if (!canLoadOlderResponsesRef.current) {
+      return;
+    }
+
+    void loadOlderResponses();
+  }, [loadOlderResponses]);
 
   const openNicknameEditor = useCallback(() => {
     if (!primaryFriend) {
@@ -1588,6 +1607,10 @@ export default function SharedPostChatScreen({
 
   const isThreadHydrating = isLoadingResponses && responses.length === 0;
   const shouldPrepareThreadFirstPaint = !hasHydratedResponses && !isThreadFirstPaintReady;
+  const initialThreadScrollIndex = responseGroups.length > 0 ? responseGroups.length - 1 : null;
+  const handleThreadListLoad = useCallback(() => {
+    scrollToThreadEnd(false);
+  }, [scrollToThreadEnd]);
   useEffect(() => {
     if (isThreadHydrating || isThreadFirstPaintReady) {
       return;
@@ -1652,6 +1675,8 @@ export default function SharedPostChatScreen({
       const authorLabel = authorIdentity.label;
       const avatarLabel = authorIdentity.avatarInitial;
       const avatarUri = authorIdentity.avatarUri;
+      const shouldShowAuthorLabel = !isSelf && !isDirectChat;
+      const shouldShowGroupTime = Boolean(group.showTimeLabel && group.timeLabel);
       const shouldShowStatus =
         isSelf &&
         group.responses.some((response) => getResponseDeliveryStatus(response) === 'sending');
@@ -1666,14 +1691,17 @@ export default function SharedPostChatScreen({
             avatarUri ? (
               <Image
                 source={{ uri: avatarUri }}
-                style={[styles.messageAvatar, styles.messageAvatarAlignedToBubble]}
+                style={[
+                  styles.messageAvatar,
+                  shouldShowGroupTime ? styles.messageAvatarAlignedToBubble : null,
+                ]}
                 contentFit="cover"
               />
             ) : (
               <View
                 style={[
                   styles.messageAvatar,
-                  styles.messageAvatarAlignedToBubble,
+                  shouldShowGroupTime ? styles.messageAvatarAlignedToBubble : null,
                   { backgroundColor: colors.primarySoft },
                 ]}
               >
@@ -1686,10 +1714,10 @@ export default function SharedPostChatScreen({
           <View
             style={[
               styles.messageStack,
-              isSelf ? styles.selfMessageStack : styles.friendMessageStack,
+            isSelf ? styles.selfMessageStack : styles.friendMessageStack,
             ]}
           >
-            {!isSelf ? (
+            {shouldShowAuthorLabel ? (
               <Text
                 numberOfLines={1}
                 style={[styles.messageIdentity, { color: colors.secondaryText }]}
@@ -1869,20 +1897,22 @@ export default function SharedPostChatScreen({
                 );
               })}
             </View>
-            <View style={styles.messageTimeRow}>
-              <Text
-                numberOfLines={1}
-                style={[
-                  styles.messageTime,
-                  {
-                    color: colors.secondaryText,
-                    textAlign: isSelf ? 'right' : 'left',
-                  },
-                ]}
-              >
-                {group.timeLabel || ' '}
-              </Text>
-            </View>
+            {shouldShowGroupTime ? (
+              <View style={styles.messageTimeRow}>
+                <Text
+                  numberOfLines={1}
+                  style={[
+                    styles.messageTime,
+                    {
+                      color: colors.secondaryText,
+                      textAlign: isSelf ? 'right' : 'left',
+                    },
+                  ]}
+                >
+                  {group.timeLabel}
+                </Text>
+              </View>
+            ) : null}
             {shouldShowStatus ? (
               <Text
                 style={[
@@ -1905,6 +1935,7 @@ export default function SharedPostChatScreen({
       getAuthorIdentity,
       getResponseReplyPreview,
       highlightedResponseId,
+      isDirectChat,
       reactionOverlay?.response.id,
       removeFailedResponse,
       retryFailedResponse,
@@ -2182,10 +2213,13 @@ export default function SharedPostChatScreen({
                 keyExtractor={(item) => item.id}
                 renderItem={renderResponseItem}
                 extraData={responses}
+                initialScrollIndex={initialThreadScrollIndex}
                 ItemSeparatorComponent={renderMessageSeparator}
                 ListEmptyComponent={renderEmptyThread}
                 maintainVisibleContentPosition={THREAD_SCROLL_POSITION_CONFIG}
-                onStartReached={loadOlderResponses}
+                onContentSizeChange={settleThreadEndIfVisible}
+                onLoad={handleThreadListLoad}
+                onStartReached={handleLoadOlderResponses}
                 onStartReachedThreshold={0.2}
                 onScroll={handleThreadScroll}
                 onScrollEndDrag={handleThreadScroll}

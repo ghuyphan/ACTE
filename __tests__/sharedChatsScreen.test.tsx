@@ -7,7 +7,10 @@ const mockGetSharedChatThreadPosts = jest.fn();
 const mockGetSharedPostThreadSummaries = jest.fn();
 const mockGetSharedThreadReadStates = jest.fn();
 const mockGetCachedSharedThreadSummaries = jest.fn();
+const mockGetCachedSharedChatThreadPosts = jest.fn();
+const mockGetCachedSharedThreadReadStates = jest.fn();
 const mockSubscribeToSharedPostTyping = jest.fn();
+let mockSharedChatThreadChangeListener: ((event: { userUid: string; postId?: string | null }) => void) | null = null;
 let mockFocusCallbacks: Array<() => void | (() => void)> = [];
 
 const mockDirectPost = {
@@ -179,19 +182,60 @@ jest.mock('../hooks/useSharedFeed', () => ({
 }));
 
 jest.mock('../services/sharedFeedCache', () => ({
+  getCachedSharedChatThreadPosts: (...args: unknown[]) =>
+    mockGetCachedSharedChatThreadPosts(...args),
+  getCachedSharedThreadReadStates: (...args: unknown[]) =>
+    mockGetCachedSharedThreadReadStates(...args),
   getCachedSharedThreadSummaries: (...args: unknown[]) =>
     mockGetCachedSharedThreadSummaries(...args),
+}));
+
+jest.mock('../services/sharedChatThreadEvents', () => ({
+  subscribeToSharedChatThreadChanges: (listener: (event: { userUid: string; postId?: string | null }) => void) => {
+    mockSharedChatThreadChangeListener = listener;
+    return () => {
+      if (mockSharedChatThreadChangeListener === listener) {
+        mockSharedChatThreadChangeListener = null;
+      }
+    };
+  },
 }));
 
 describe('SharedChatsScreen', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockSharedChatThreadChangeListener = null;
     mockFocusCallbacks = [];
+    mockSharedFeedState.friends = [
+      {
+        userId: 'friend-1',
+        username: 'lan',
+        displayNameSnapshot: 'Lan',
+        nickname: null,
+        photoURLSnapshot: null,
+        friendedAt: '2026-05-20T00:00:00.000Z',
+        lastSharedAt: null,
+        createdByInviteId: null,
+      },
+      {
+        userId: 'friend-2',
+        username: 'mai',
+        displayNameSnapshot: 'Mai',
+        nickname: null,
+        photoURLSnapshot: null,
+        friendedAt: '2026-05-20T00:05:00.000Z',
+        lastSharedAt: null,
+        createdByInviteId: null,
+      },
+    ];
+    mockSharedFeedState.sharedPosts = [mockDirectPost];
     mockGetSharedChatThreadPosts.mockResolvedValue([mockDirectPost]);
     mockGetSharedPostThreadSummaries.mockResolvedValue([
       threadSummary('Old message', '2026-05-20T01:01:00.000Z'),
     ]);
     mockGetSharedThreadReadStates.mockResolvedValue([]);
+    mockGetCachedSharedChatThreadPosts.mockResolvedValue([]);
+    mockGetCachedSharedThreadReadStates.mockResolvedValue([]);
     mockGetCachedSharedThreadSummaries.mockResolvedValue([
       threadSummary('Old message', '2026-05-20T01:01:00.000Z'),
     ]);
@@ -234,6 +278,76 @@ describe('SharedChatsScreen', () => {
       expect(getByText('@lan: Old message')).toBeTruthy();
       expect(getByText('@mai')).toBeTruthy();
     });
-    expect(getAllByText('Message privately')).toHaveLength(1);
+    expect(getAllByText('Message')).toHaveLength(1);
+  });
+
+  it('renders empty direct chat anchors like starter rows without badge or timestamp', async () => {
+    mockSharedFeedState.friends = [mockSharedFeedState.friends[0]];
+    mockGetCachedSharedThreadSummaries.mockResolvedValue([]);
+    mockGetSharedPostThreadSummaries.mockResolvedValue([]);
+
+    const { getByText, queryByText } = render(<SharedChatsScreen />);
+
+    await waitFor(() => {
+      expect(getByText('@lan')).toBeTruthy();
+      expect(getByText('Message')).toBeTruthy();
+    });
+    expect(queryByText('chatbubble-ellipses-outline')).toBeNull();
+    expect(queryByText('Wed')).toBeNull();
+  });
+
+  it('does not show unread before cached read state hydration finishes', async () => {
+    mockGetSharedThreadReadStates.mockReturnValue(new Promise(() => undefined));
+
+    const { getByLabelText, getByText, queryByLabelText } = render(<SharedChatsScreen />);
+
+    await waitFor(() => {
+      expect(getByText('@lan: Old message')).toBeTruthy();
+    });
+    expect(queryByLabelText('Open unread chat with @lan')).toBeNull();
+    expect(getByLabelText('Open chat with @lan')).toBeTruthy();
+  });
+
+  it('paints cached direct threads before the remote thread list resolves', async () => {
+    mockSharedFeedState.sharedPosts = [];
+    mockGetSharedChatThreadPosts.mockReturnValue(new Promise(() => undefined));
+    mockGetCachedSharedChatThreadPosts.mockResolvedValue([mockDirectPost]);
+
+    const { getByText } = render(<SharedChatsScreen />);
+
+    await waitFor(() => {
+      expect(getByText('@lan: Old message')).toBeTruthy();
+    });
+    expect(mockGetSharedChatThreadPosts).toHaveBeenCalled();
+  });
+
+  it('refreshes preview and unread state from cache events without waiting for refocus', async () => {
+    const { getByText, queryByText } = render(<SharedChatsScreen />);
+
+    await waitFor(() => {
+      expect(getByText('@lan: Old message')).toBeTruthy();
+    });
+
+    mockGetCachedSharedThreadSummaries.mockResolvedValue([
+      threadSummary('Read message', '2026-05-20T01:03:00.000Z'),
+    ]);
+    mockGetCachedSharedThreadReadStates.mockResolvedValue([
+      {
+        postId: mockDirectPost.id,
+        userUid: 'me',
+        lastReadResponseId: 'response-Read message',
+        lastReadAt: '2026-05-20T01:04:00.000Z',
+      },
+    ]);
+
+    await act(async () => {
+      mockSharedChatThreadChangeListener?.({ userUid: 'me', postId: mockDirectPost.id });
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(getByText('@lan: Read message')).toBeTruthy();
+    });
+    expect(queryByText('@lan: Old message')).toBeNull();
   });
 });

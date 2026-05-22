@@ -19,6 +19,7 @@ import {
   getOwnedSharedNoteIdsFromPosts,
   normalizeOwnedSharedNoteIds,
 } from './sharedFeedOwnership';
+import { emitSharedChatThreadChange } from './sharedChatThreadEvents';
 
 interface FriendRow {
   friend_uid: string;
@@ -57,6 +58,8 @@ interface SharedPostRow {
   note_color: string | null;
   place_name: string | null;
   source_note_id: string | null;
+  is_direct_chat: number;
+  direct_chat_key: string | null;
   latitude: number | null;
   longitude: number | null;
   created_at: string;
@@ -150,6 +153,8 @@ const SHARED_POST_CACHE_COLUMNS = [
   'note_color',
   'place_name',
   'source_note_id',
+  'is_direct_chat',
+  'direct_chat_key',
   'latitude',
   'longitude',
   'created_at',
@@ -200,6 +205,8 @@ function getSharedPostInsertValues(userUid: string, post: SharedPost) {
     post.noteColor ?? null,
     post.placeName,
     post.sourceNoteId,
+    post.isDirectChat ? 1 : 0,
+    post.directChatKey ?? null,
     post.latitude ?? null,
     post.longitude ?? null,
     post.createdAt,
@@ -219,6 +226,32 @@ async function insertCachedSharedPost(
       ${SHARED_POST_CACHE_COLUMNS.join(',\n      ')}
     )
     VALUES (${values.map(() => '?').join(', ')})`,
+    ...values
+  );
+}
+
+async function upsertCachedSharedPostRecord(
+  tx: SQLiteTransactionExecutor,
+  userUid: string,
+  post: SharedPost
+) {
+  const values = getSharedPostInsertValues(userUid, post);
+  const updateAssignments = SHARED_POST_CACHE_COLUMNS
+    .filter((column) => column !== 'user_uid' && column !== 'id')
+    .map((column) =>
+      column.endsWith('_local_uri')
+        ? `${column} = COALESCE(excluded.${column}, shared_posts_cache.${column})`
+        : `${column} = excluded.${column}`
+    )
+    .join(',\n      ');
+
+  await tx.runAsync(
+    `INSERT INTO shared_posts_cache (
+      ${SHARED_POST_CACHE_COLUMNS.join(',\n      ')}
+    )
+    VALUES (${values.map(() => '?').join(', ')})
+    ON CONFLICT(user_uid, id) DO UPDATE SET
+      ${updateAssignments}`,
     ...values
   );
 }
@@ -278,6 +311,8 @@ function rowToSharedPost(row: SharedPostRow): SharedPost {
         : null,
     placeName: row.place_name,
     sourceNoteId: row.source_note_id,
+    isDirectChat: row.is_direct_chat === 1,
+    directChatKey: row.direct_chat_key,
     latitude: row.latitude,
     longitude: row.longitude,
     createdAt: row.created_at,
@@ -730,6 +765,62 @@ export async function getCachedSharedPostById(
   return row ? rowToSharedPost(row) : null;
 }
 
+export async function getCachedDirectChatThreadPost(
+  userUid: string,
+  friendUid: string
+): Promise<SharedPost | null> {
+  const normalizedFriendUid = friendUid.trim();
+  if (!normalizedFriendUid) {
+    return null;
+  }
+
+  const db = await getDB();
+  const rows = await db.getAllAsync<SharedPostRow>(
+    `SELECT *
+     FROM shared_posts_cache
+     WHERE user_uid = ?
+       AND (
+         is_direct_chat = 1
+         OR direct_chat_key IS NOT NULL
+         OR id LIKE 'direct-chat-%'
+       )`,
+    userUid
+  );
+
+  return (
+    rows
+      .map(rowToSharedPost)
+      .find((post) => post.audienceUserIds.includes(normalizedFriendUid)) ?? null
+  );
+}
+
+export async function getCachedSharedChatThreadPosts(
+  userUid: string,
+  limit = 50
+): Promise<SharedPost[]> {
+  const resolvedLimit = Math.max(1, Math.min(limit, 80));
+  const db = await getDB();
+  const rows = await db.getAllAsync<SharedPostRow>(
+    `SELECT p.*
+     FROM shared_posts_cache p
+     LEFT JOIN shared_thread_summaries_cache s
+       ON s.user_uid = p.user_uid
+      AND s.post_id = p.id
+     WHERE p.user_uid = ?
+       AND (
+         p.is_direct_chat = 1
+         OR p.direct_chat_key IS NOT NULL
+         OR p.id LIKE 'direct-chat-%'
+       )
+     ORDER BY COALESCE(s.latest_activity_at, p.created_at) DESC
+     LIMIT ?`,
+    userUid,
+    resolvedLimit
+  );
+
+  return rows.map(rowToSharedPost);
+}
+
 export async function replaceCachedSharedPosts(userUid: string, posts: SharedPost[]): Promise<void> {
   const cachedAt = new Date().toISOString();
   await withDatabaseTransaction(async (tx) => {
@@ -748,6 +839,24 @@ export async function replaceCachedSharedPosts(userUid: string, posts: SharedPos
       cachedAt
     );
   });
+}
+
+export async function upsertCachedSharedPosts(
+  userUid: string,
+  posts: SharedPost[]
+): Promise<void> {
+  if (posts.length === 0) {
+    return;
+  }
+
+  await withDatabaseTransaction(async (tx) => {
+    for (const post of posts) {
+      await upsertCachedSharedPostRecord(tx, userUid, post);
+    }
+  });
+  for (const post of posts) {
+    emitSharedChatThreadChange({ userUid, postId: post.id });
+  }
 }
 
 export async function getCachedSharedPostResponses(
@@ -827,6 +936,9 @@ export async function replaceCachedSharedThreadSummaries(
       await upsertCachedSharedThreadSummaryInTransaction(tx, userUid, summary);
     }
   });
+  for (const summary of summaries) {
+    emitSharedChatThreadChange({ userUid, postId: summary.postId });
+  }
 }
 
 export async function replaceCachedSharedPostResponses(
@@ -863,6 +975,7 @@ export async function replaceCachedSharedPostResponses(
       deriveSharedThreadSummaryFromResponses(normalizedPostId, responses)
     );
   });
+  emitSharedChatThreadChange({ userUid, postId: normalizedPostId });
 }
 
 export async function reconcileCachedSharedPostResponsesPage(
@@ -942,6 +1055,7 @@ export async function reconcileCachedSharedPostResponsesPage(
       deriveSharedThreadSummaryFromResponses(normalizedPostId, currentResponses)
     );
   });
+  emitSharedChatThreadChange({ userUid, postId: normalizedPostId });
 }
 
 export async function upsertCachedSharedPostResponse(
@@ -966,6 +1080,7 @@ export async function upsertCachedSharedPostResponse(
       deriveSharedThreadSummaryFromResponses(response.postId, nextResponses)
     );
   });
+  emitSharedChatThreadChange({ userUid, postId: response.postId });
 }
 
 export async function deleteCachedSharedPostResponse(
@@ -1004,6 +1119,7 @@ export async function deleteCachedSharedPostResponse(
       deriveSharedThreadSummaryFromResponses(normalizedPostId, currentResponses)
     );
   });
+  emitSharedChatThreadChange({ userUid, postId: normalizedPostId });
 }
 
 export async function upsertCachedSharedPostResponseReaction(
@@ -1030,6 +1146,7 @@ export async function upsertCachedSharedPostResponseReaction(
       deriveSharedThreadSummaryFromResponses(reaction.postId, nextResponses)
     );
   });
+  emitSharedChatThreadChange({ userUid, postId: reaction.postId });
 }
 
 export async function deleteCachedSharedPostResponseReactionById(
@@ -1059,6 +1176,7 @@ export async function deleteCachedSharedPostResponseReactionById(
       deriveSharedThreadSummaryFromResponses(normalizedPostId, currentResponses)
     );
   });
+  emitSharedChatThreadChange({ userUid, postId: normalizedPostId });
 }
 
 export async function deleteCachedSharedPostResponseReaction(
@@ -1084,6 +1202,7 @@ export async function deleteCachedSharedPostResponseReaction(
       deriveSharedThreadSummaryFromResponses(input.postId, currentResponses)
     );
   });
+  emitSharedChatThreadChange({ userUid, postId: input.postId });
 }
 
 export async function getCachedSharedThreadReadStates(
@@ -1132,6 +1251,7 @@ export async function markCachedSharedThreadRead(
       readAt
     );
   });
+  emitSharedChatThreadChange({ userUid, postId: normalizedPostId });
 
   return {
     postId: normalizedPostId,
@@ -1266,7 +1386,14 @@ export async function cacheSharedFeedSnapshot(
 
   await withDatabaseTransaction(async (tx) => {
     await tx.runAsync('DELETE FROM shared_friends_cache WHERE user_uid = ?', userUid);
-    await tx.runAsync('DELETE FROM shared_posts_cache WHERE user_uid = ?', userUid);
+    await tx.runAsync(
+      `DELETE FROM shared_posts_cache
+       WHERE user_uid = ?
+         AND is_direct_chat != 1
+         AND (direct_chat_key IS NULL OR trim(direct_chat_key) = '')
+         AND id NOT LIKE 'direct-chat-%'`,
+      userUid
+    );
     await tx.runAsync('DELETE FROM shared_invites_cache WHERE user_uid = ?', userUid);
 
     for (const friend of snapshot.friends) {

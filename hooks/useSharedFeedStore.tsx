@@ -50,6 +50,9 @@ import {
 import {
   cacheSharedFeedSnapshot,
   clearSharedFeedCache,
+  getCachedDirectChatThreadPost,
+  getCachedSharedChatThreadPosts,
+  getCachedSharedPostById,
   getCachedSharedPostResponses,
   getCachedSharedPostResponsesPage,
   getCachedSharedFeedSnapshot,
@@ -63,6 +66,7 @@ import {
   reconcileCachedSharedPostResponsesPage,
   replaceCachedSharedPostResponses,
   replaceCachedSharedThreadSummaries,
+  upsertCachedSharedPosts,
   upsertCachedSharedPostResponse,
   upsertCachedSharedPostResponseReaction,
   type SharedThreadReadState,
@@ -87,7 +91,6 @@ import {
   normalizeOwnedSharedNoteIds,
 } from '../services/sharedFeedOwnership';
 import { scheduleWidgetDataUpdate } from '../services/widgetService';
-import { isDirectChatPost } from '../utils/sharedChatPresentation';
 import { useStartupInteraction } from './app/useHomeStartupReady';
 import { useAuth } from './useAuth';
 import { useConnectivity } from './useConnectivity';
@@ -1704,18 +1707,34 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
           return null;
         }
 
-        if (!isOnline) {
-          const cachedSnapshot = await getCachedSharedFeedSnapshot(activeUser.uid);
-          return (
-            cachedSnapshot.sharedPosts.find(
-              (post) =>
-                isDirectChatPost(post) &&
-                post.audienceUserIds.includes(normalizedFriendUid)
-            ) ?? null
-          );
+        const cachedPost = await getCachedDirectChatThreadPost(
+          activeUser.uid,
+          normalizedFriendUid
+        ).catch(() => null);
+
+        if (!isOnline || cachedPost) {
+          if (isOnline && cachedPost) {
+            void fetchDirectChatThreadPost(activeUser, normalizedFriendUid)
+              .then((post) => {
+                if (post) {
+                  return upsertCachedSharedPosts(activeUser.uid, [post]);
+                }
+                return undefined;
+              })
+              .catch(() => undefined);
+          }
+          return cachedPost
+            ? applyFriendNicknamesToSharedPosts([cachedPost], friendsRef.current, activeUser.uid)[0] ??
+                cachedPost
+            : null;
         }
 
         const post = await fetchDirectChatThreadPost(activeUser, normalizedFriendUid);
+        if (post) {
+          void upsertCachedSharedPosts(activeUser.uid, [post]).catch((error) => {
+            console.warn('Failed to persist shared chat post cache:', error);
+          });
+        }
         return post
           ? applyFriendNicknamesToSharedPosts([post], friendsRef.current, activeUser.uid)[0] ?? post
           : null;
@@ -1723,16 +1742,38 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
       getOrCreateDirectChatPost: async (friendUid: string) => {
         requireOnline();
         const activeUser = requireUser();
-        return fetchOrCreateDirectChatPost(activeUser, friendUid);
+        const post = await fetchOrCreateDirectChatPost(activeUser, friendUid);
+        void upsertCachedSharedPosts(activeUser.uid, [post]).catch((error) => {
+          console.warn('Failed to persist shared chat post cache:', error);
+        });
+        return post;
       },
       getSharedChatThreadPost: async (postId: string) => {
         const activeUser = requireUser();
-        if (!isOnline) {
-          const cachedSnapshot = await getCachedSharedFeedSnapshot(activeUser.uid);
-          return cachedSnapshot.sharedPosts.find((post) => post.id === postId) ?? null;
+        const cachedPost = await getCachedSharedPostById(activeUser.uid, postId).catch(() => null);
+        if (!isOnline || cachedPost) {
+          if (isOnline && cachedPost) {
+            void fetchSharedChatThreadPost(activeUser, postId)
+              .then((post) => {
+                if (post) {
+                  return upsertCachedSharedPosts(activeUser.uid, [post]);
+                }
+                return undefined;
+              })
+              .catch(() => undefined);
+          }
+          return cachedPost
+            ? applyFriendNicknamesToSharedPosts([cachedPost], friendsRef.current, activeUser.uid)[0] ??
+                cachedPost
+            : null;
         }
 
         const post = await fetchSharedChatThreadPost(activeUser, postId);
+        if (post) {
+          void upsertCachedSharedPosts(activeUser.uid, [post]).catch((error) => {
+            console.warn('Failed to persist shared chat post cache:', error);
+          });
+        }
         return post
           ? applyFriendNicknamesToSharedPosts([post], friendsRef.current, activeUser.uid)[0] ?? post
           : null;
@@ -1740,30 +1781,13 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
       getSharedChatThreadPosts: async (limit?: number) => {
         const activeUser = requireUser();
         if (!isOnline) {
-          const [summaries, cachedSnapshot] = await Promise.all([
-            getCachedSharedThreadSummaries(activeUser.uid),
-            getCachedSharedFeedSnapshot(activeUser.uid),
-          ]);
-          const postById = new Map(
-            cachedSnapshot.sharedPosts.map((post) => [post.id, post] as const)
-          );
-          return summaries
-            .slice()
-            .sort((left, right) => {
-              const leftTime = new Date(left.latestActivityAt ?? '').getTime();
-              const rightTime = new Date(right.latestActivityAt ?? '').getTime();
-              const resolvedLeftTime = Number.isFinite(leftTime) ? leftTime : 0;
-              const resolvedRightTime = Number.isFinite(rightTime) ? rightTime : 0;
-              return resolvedRightTime - resolvedLeftTime;
-            })
-            .slice(0, Math.max(1, limit ?? 50))
-            .flatMap((summary) => {
-              const post = postById.get(summary.postId);
-              return post && isDirectChatPost(post) ? [post] : [];
-            });
+          return getCachedSharedChatThreadPosts(activeUser.uid, limit);
         }
 
         const posts = await fetchSharedChatThreadPosts(activeUser, limit);
+        void upsertCachedSharedPosts(activeUser.uid, posts).catch((error) => {
+          console.warn('Failed to persist shared chat post cache:', error);
+        });
         return applyFriendNicknamesToSharedPosts(posts, friendsRef.current, activeUser.uid);
       },
       getSharedPostResponses: async (postId: string) => {

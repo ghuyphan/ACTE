@@ -608,7 +608,7 @@
         "chatsEmptyTitle": "No chats yet",
         "chatsEmptyBody": "Connect with a friend from Home, then start a private chat here.",
         "chatsEmptyAction": "Open Home",
-        "directChatStarter": "Message privately",
+        "directChatStarter": "Message",
         "directChatStarting": "Opening chat...",
         "directChatStartFailed": "Could not start chat.",
         "chatThreadPhoto": "Photo memory",

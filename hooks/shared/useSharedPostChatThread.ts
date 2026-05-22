@@ -19,6 +19,7 @@ export type ChatResponseGroup = {
   authorPhotoURLSnapshot: string | null;
   responses: ChatThreadResponse[];
   createdAt: string;
+  showTimeLabel: boolean;
   timeLabel: string;
 };
 
@@ -35,9 +36,16 @@ type Labels = {
   yesterday: string;
 };
 
-function getReactionTime(reaction: SharedPostResponseReaction) {
-  const time = new Date(reaction.createdAt).getTime();
+const RESPONSE_GROUP_WINDOW_MS = 5 * 60 * 1000;
+const TIME_LABEL_GAP_MS = 15 * 60 * 1000;
+
+function getResponseTime(value: string) {
+  const time = new Date(value).getTime();
   return Number.isFinite(time) ? time : 0;
+}
+
+function getReactionTime(reaction: SharedPostResponseReaction) {
+  return getResponseTime(reaction.createdAt);
 }
 
 export function getResponseDeliveryStatus(response: SharedPostResponse): ChatDeliveryStatus | null {
@@ -106,9 +114,13 @@ export function groupChatResponses(
 ): ChatListItem[] {
   const groups: ChatListItem[] = [];
   let currentDayKey: string | null = null;
+  let previousResponseDayKey: string | null = null;
+  let previousResponseTime: number | null = null;
 
   for (const response of responses) {
     const responseDayKey = getDayKey(response.createdAt);
+    const responseTime = getResponseTime(response.createdAt);
+    const startsNewDay = responseDayKey !== currentDayKey;
     if (responseDayKey !== currentDayKey) {
       currentDayKey = responseDayKey;
       groups.push({
@@ -119,14 +131,32 @@ export function groupChatResponses(
     }
 
     const previousGroup = groups[groups.length - 1];
-    if (previousGroup?.type === 'group' && previousGroup.authorUid === response.authorUid) {
+    const previousGroupTime = previousGroup?.type === 'group'
+      ? getResponseTime(previousGroup.createdAt)
+      : 0;
+    const isCloseToPreviousGroup =
+      previousGroupTime > 0 &&
+      responseTime > 0 &&
+      responseTime - previousGroupTime <= RESPONSE_GROUP_WINDOW_MS;
+    if (
+      previousGroup?.type === 'group' &&
+      previousGroup.authorUid === response.authorUid &&
+      isCloseToPreviousGroup
+    ) {
       previousGroup.responses.push(response);
       previousGroup.createdAt = response.createdAt;
       previousGroup.timeLabel = formatMessageGroupTime(response.createdAt);
       previousGroup.id = `${previousGroup.responses[0]?.id ?? response.id}:${response.id}`;
+      previousResponseDayKey = responseDayKey;
+      previousResponseTime = responseTime;
       continue;
     }
 
+    const shouldShowTimeLabel =
+      !previousResponseTime ||
+      startsNewDay ||
+      previousResponseDayKey !== responseDayKey ||
+      responseTime - previousResponseTime >= TIME_LABEL_GAP_MS;
     groups.push({
       type: 'group',
       id: response.id,
@@ -135,8 +165,11 @@ export function groupChatResponses(
       authorPhotoURLSnapshot: response.authorPhotoURLSnapshot,
       responses: [response],
       createdAt: response.createdAt,
+      showTimeLabel: shouldShowTimeLabel,
       timeLabel: formatMessageGroupTime(response.createdAt),
     });
+    previousResponseDayKey = responseDayKey;
+    previousResponseTime = responseTime;
   }
 
   return groups;

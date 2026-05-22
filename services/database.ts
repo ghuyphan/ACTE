@@ -807,6 +807,8 @@ export async function getDB(): Promise<SQLite.SQLiteDatabase> {
         note_color TEXT,
         place_name TEXT,
         source_note_id TEXT,
+        is_direct_chat INTEGER NOT NULL DEFAULT 0,
+        direct_chat_key TEXT,
         latitude REAL,
         longitude REAL,
         created_at TEXT NOT NULL,
@@ -1253,6 +1255,8 @@ export async function getDB(): Promise<SQLite.SQLiteDatabase> {
                     note_color TEXT,
                     place_name TEXT,
                     source_note_id TEXT,
+                    is_direct_chat INTEGER NOT NULL DEFAULT 0,
+                    direct_chat_key TEXT,
                     latitude REAL,
                     longitude REAL,
                     created_at TEXT NOT NULL,
@@ -1299,6 +1303,12 @@ export async function getDB(): Promise<SQLite.SQLiteDatabase> {
             }
             if (!sharedPostsCacheColumns.includes('note_color')) {
                 await database.execAsync(`ALTER TABLE shared_posts_cache ADD COLUMN note_color TEXT`);
+            }
+            if (!sharedPostsCacheColumns.includes('is_direct_chat')) {
+                await database.execAsync(`ALTER TABLE shared_posts_cache ADD COLUMN is_direct_chat INTEGER NOT NULL DEFAULT 0`);
+            }
+            if (!sharedPostsCacheColumns.includes('direct_chat_key')) {
+                await database.execAsync(`ALTER TABLE shared_posts_cache ADD COLUMN direct_chat_key TEXT`);
             }
             if (!sharedPostsCacheColumns.includes('latitude')) {
                 await database.execAsync(`ALTER TABLE shared_posts_cache ADD COLUMN latitude REAL`);

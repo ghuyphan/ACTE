@@ -1,6 +1,7 @@
 import type { SharedPostResponse } from './sharedFeedService';
 
 const MAX_REMEMBERED_RESPONSE_THREADS = 24;
+const MAX_REMEMBERED_RESPONSES_PER_THREAD = 32;
 const responseSnapshotByPostId = new Map<string, SharedPostResponse[]>();
 const hydratedResponsePostIds = new Set<string>();
 
@@ -19,7 +20,10 @@ export function rememberSharedPostResponses(postId: string, responses: SharedPos
   }
 
   responseSnapshotByPostId.delete(normalizedPostId);
-  responseSnapshotByPostId.set(normalizedPostId, responses);
+  responseSnapshotByPostId.set(
+    normalizedPostId,
+    responses.slice(-MAX_REMEMBERED_RESPONSES_PER_THREAD)
+  );
   hydratedResponsePostIds.add(normalizedPostId);
 
   while (responseSnapshotByPostId.size > MAX_REMEMBERED_RESPONSE_THREADS) {

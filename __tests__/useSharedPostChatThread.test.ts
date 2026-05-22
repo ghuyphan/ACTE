@@ -41,6 +41,39 @@ describe('useSharedPostChatThread helpers', () => {
     }
   });
 
+  it('starts a new group after a long pause from the same author', () => {
+    const groups = groupChatResponses(
+      [
+        response({ id: 'a', authorUid: 'friend-1', createdAt: '2026-05-01T01:00:00.000Z' }),
+        response({ id: 'b', authorUid: 'friend-1', createdAt: '2026-05-01T01:03:00.000Z' }),
+        response({ id: 'c', authorUid: 'friend-1', createdAt: '2026-05-01T01:20:00.000Z' }),
+      ],
+      { today: 'Today', yesterday: 'Yesterday' }
+    );
+
+    expect(groups.map((group) => group.type)).toEqual(['day', 'group', 'group']);
+    if (groups[1].type === 'group' && groups[2].type === 'group') {
+      expect(groups[1].responses.map((item) => item.id)).toEqual(['a', 'b']);
+      expect(groups[1].showTimeLabel).toBe(true);
+      expect(groups[2].responses.map((item) => item.id)).toEqual(['c']);
+      expect(groups[2].showTimeLabel).toBe(true);
+    }
+  });
+
+  it('suppresses repeated time labels for quick back-and-forth groups', () => {
+    const groups = groupChatResponses(
+      [
+        response({ id: 'a', authorUid: 'friend-1', createdAt: '2026-05-01T01:00:00.000Z' }),
+        response({ id: 'b', authorUid: 'me', createdAt: '2026-05-01T01:01:00.000Z' }),
+        response({ id: 'c', authorUid: 'friend-1', createdAt: '2026-05-01T01:02:00.000Z' }),
+      ],
+      { today: 'Today', yesterday: 'Yesterday' }
+    );
+
+    const messageGroups = groups.filter((group) => group.type === 'group');
+    expect(messageGroups.map((group) => group.showTimeLabel)).toEqual([true, false, false]);
+  });
+
   it('keeps failed local delivery state when merging snapshots', () => {
     const failed = response({
       id: 'local-shared-response-1',

@@ -60,6 +60,9 @@ const mockUpdateFriendNickname = jest.fn();
 const mockUpdateOwnPresenceLastSeen = jest.fn();
 const mockUpdateSharedPost = jest.fn();
 const mockGetCachedSharedFeedSnapshot = jest.fn();
+const mockGetCachedDirectChatThreadPost = jest.fn();
+const mockGetCachedSharedChatThreadPosts = jest.fn();
+const mockGetCachedSharedPostById = jest.fn();
 const mockGetCachedSharedPostResponses = jest.fn();
 const mockGetCachedSharedPostResponsesPage = jest.fn();
 const mockGetCachedSharedThreadSummaries = jest.fn();
@@ -69,6 +72,7 @@ const mockClearSharedFeedCache = jest.fn();
 const mockPatchCachedSharedPostMedia = jest.fn();
 const mockReplaceCachedSharedPostResponses = jest.fn();
 const mockReplaceCachedActiveInvite = jest.fn();
+const mockUpsertCachedSharedPosts = jest.fn();
 const mockUpsertCachedSharedPostResponse = jest.fn();
 const mockScheduleWidgetDataUpdate = jest.fn();
 const mockDownloadPhotoFromStorage = jest.fn();
@@ -95,7 +99,12 @@ jest.mock('../hooks/app/useHomeStartupReady', () => ({
 
 jest.mock('../services/sharedFeedCache', () => ({
   cacheSharedFeedSnapshot: (...args: unknown[]) => mockCacheSharedFeedSnapshot(...args),
+  getCachedDirectChatThreadPost: (...args: unknown[]) =>
+    mockGetCachedDirectChatThreadPost(...args),
   getCachedSharedFeedSnapshot: (...args: unknown[]) => mockGetCachedSharedFeedSnapshot(...args),
+  getCachedSharedChatThreadPosts: (...args: unknown[]) =>
+    mockGetCachedSharedChatThreadPosts(...args),
+  getCachedSharedPostById: (...args: unknown[]) => mockGetCachedSharedPostById(...args),
   getCachedSharedPostResponses: (...args: unknown[]) => mockGetCachedSharedPostResponses(...args),
   getCachedSharedPostResponsesPage: (...args: unknown[]) =>
     mockGetCachedSharedPostResponsesPage(...args),
@@ -107,6 +116,7 @@ jest.mock('../services/sharedFeedCache', () => ({
   replaceCachedSharedThreadSummaries: (...args: unknown[]) =>
     mockReplaceCachedSharedThreadSummaries(...args),
   replaceCachedActiveInvite: (...args: unknown[]) => mockReplaceCachedActiveInvite(...args),
+  upsertCachedSharedPosts: (...args: unknown[]) => mockUpsertCachedSharedPosts(...args),
   upsertCachedSharedPostResponse: (...args: unknown[]) => mockUpsertCachedSharedPostResponse(...args),
 }));
 
@@ -243,6 +253,9 @@ describe('useSharedFeedStore', () => {
       activeInvite: null,
     };
     mockGetCachedSharedFeedSnapshot.mockImplementation(async () => mockCachedSnapshot);
+    mockGetCachedDirectChatThreadPost.mockResolvedValue(null);
+    mockGetCachedSharedChatThreadPosts.mockResolvedValue([]);
+    mockGetCachedSharedPostById.mockResolvedValue(null);
     mockGetCachedSharedPostResponses.mockResolvedValue([]);
     mockGetCachedSharedPostResponsesPage.mockResolvedValue([]);
     mockGetCachedSharedThreadSummaries.mockResolvedValue([]);
@@ -309,6 +322,7 @@ describe('useSharedFeedStore', () => {
     mockPatchCachedSharedPostMedia.mockResolvedValue(undefined);
     mockReplaceCachedSharedPostResponses.mockResolvedValue(undefined);
     mockReplaceCachedActiveInvite.mockResolvedValue(undefined);
+    mockUpsertCachedSharedPosts.mockResolvedValue(undefined);
     mockUpsertCachedSharedPostResponse.mockResolvedValue(undefined);
     jest.spyOn(AppState, 'addEventListener').mockImplementation((_type, listener: (state: AppStateStatus) => void) => {
       appStateListener = listener;

@@ -21,6 +21,7 @@ import Animated, {
   type AnimatedStyle,
   Easing,
   interpolate,
+  interpolateColor,
   useAnimatedStyle,
   useSharedValue,
   withSpring,
@@ -53,16 +54,16 @@ const BAR_CONTENT_INSET = BAR_PADDING - 1;
 const TAB_GAP = ANDROID_TAB_SHELL_TAB_GAP;
 const TAB_MIN_HEIGHT = ANDROID_TAB_SHELL_HEIGHT;
 const SEARCH_MORPH_ANIMATION = {
-  duration: 320,
-  easing: Easing.bezier(0.2, 1, 0.22, 1),
+  duration: 360,
+  easing: Easing.bezier(0.16, 1, 0.24, 1),
 } as const;
+const SEARCH_FOCUS_DELAY_MS = 260;
 const INDICATOR_SPRING = {
   damping: 18,
   mass: 0.78,
   overshootClamping: true,
   stiffness: 220,
 } as const;
-const SEARCH_NAVIGATION_DELAY_MS = 170;
 const KEYBOARD_AVOIDANCE_GAP = 10;
 const COMPACT_SCREEN_WIDTH = 390;
 const VERY_NARROW_SCREEN_WIDTH = 360;
@@ -250,7 +251,21 @@ const SearchFieldContent = memo(function SearchFieldContent({
   const { t } = useTranslation();
   const query = useAndroidTabSearchQuery();
   const focusRequestId = useAndroidTabSearchFocusRequestId();
+  const [nativePlaceholderVisible, setNativePlaceholderVisible] = useState(false);
   const searchInputRef = useRef<TextInput | null>(null);
+
+  useEffect(() => {
+    if (!searchSelected) {
+      setNativePlaceholderVisible(false);
+      return undefined;
+    }
+
+    const timeout = setTimeout(() => {
+      setNativePlaceholderVisible(true);
+    }, 120);
+
+    return () => clearTimeout(timeout);
+  }, [searchSelected]);
 
   useEffect(() => {
     if (!searchSelected) {
@@ -266,7 +281,7 @@ const SearchFieldContent = memo(function SearchFieldContent({
 
   return (
     <>
-      {searchMorphActive && !searchSelected ? (
+      {searchMorphActive && query.length === 0 && !nativePlaceholderVisible ? (
         <Animated.View pointerEvents="none" style={[styles.searchPreviewTextWrap, placeholderAnimatedStyle]}>
           <Text numberOfLines={1} style={[styles.searchPreviewText, { color: colors.androidTabShellInactive }]}>
             {placeholder}
@@ -282,7 +297,7 @@ const SearchFieldContent = memo(function SearchFieldContent({
             autoCapitalize="none"
             autoCorrect={false}
             onChangeText={setAndroidTabSearchQuery}
-            placeholder={placeholder}
+            placeholder={nativePlaceholderVisible ? placeholder : ''}
             placeholderTextColor={colors.androidTabShellInactive}
             returnKeyType="search"
             selectionColor={colors.androidTabShellActive}
@@ -328,6 +343,7 @@ export default function AndroidFloatingTabBar({
   const indicatorIndex = useSharedValue(state.index);
   const visibility = useSharedValue(1);
   const searchExpansion = useSharedValue(0);
+  const searchSelectionProgress = useSharedValue(0);
   const primaryDragOffset = useSharedValue(0);
   const activeRoute = state.routes[state.index];
   const searchRoute = useMemo(
@@ -469,13 +485,7 @@ export default function AndroidFloatingTabBar({
     : t('tabs.searchOpenHint', 'Opens search');
   const shellBackgroundColor = colors.androidTabShellBackground;
   const shellBorderColor = colors.androidTabShellBorder;
-  const selectedShellBackgroundColor = colors.androidTabShellMutedBackground;
-  const focusedSearchBackgroundColor = searchSelected
-    ? colors.androidTabShellSelectedBackground
-    : colors.androidTabShellBackground;
-  const focusedSearchBorderColor = searchSelected
-    ? colors.androidTabShellSelectedBorder
-    : colors.androidTabShellBorder;
+  const selectedShellBackgroundColor = colors.androidTabShellSelectedBackground;
   const shellGradientColors: [string, string] = [colors.androidTabShellScrim, 'transparent'];
   const searchShellGradientColors: [string, string] = searchSelected
     ? colors.androidTabShellSelectedGradient
@@ -524,6 +534,13 @@ export default function AndroidFloatingTabBar({
   useEffect(() => {
     searchExpansion.value = withTiming(searchMorphActive ? 1 : 0, SEARCH_MORPH_ANIMATION);
   }, [searchExpansion, searchMorphActive]);
+
+  useEffect(() => {
+    searchSelectionProgress.value = withTiming(searchSelected ? 1 : 0, {
+      duration: searchSelected ? 180 : 120,
+      easing: searchSelected ? Easing.out(Easing.cubic) : Easing.in(Easing.cubic),
+    });
+  }, [searchSelected, searchSelectionProgress]);
 
   useEffect(() => {
     if (Platform.OS !== 'android') {
@@ -597,13 +614,13 @@ export default function AndroidFloatingTabBar({
   );
 
   const primaryTabsAnimatedStyle = useAnimatedStyle(() => ({
-    opacity: interpolate(searchExpansion.value, [0, 0.55, 1], [1, 0.18, 0]),
-    transform: [{ scale: interpolate(searchExpansion.value, [0, 1], [1, 0.92]) }],
+    opacity: interpolate(searchExpansion.value, [0, 0.42, 0.82, 1], [1, 0.58, 0.08, 0]),
+    transform: [{ scale: interpolate(searchExpansion.value, [0, 1], [1, 0.94]) }],
   }));
 
   const compactPrimaryAnimatedStyle = useAnimatedStyle(() => ({
-    opacity: interpolate(searchExpansion.value, [0, 0.4, 1], [0, 0.25, 1]),
-    transform: [{ scale: interpolate(searchExpansion.value, [0, 1], [0.84, 1]) }],
+    opacity: interpolate(searchExpansion.value, [0, 0.54, 0.82, 1], [0, 0, 0.42, 1]),
+    transform: [{ scale: interpolate(searchExpansion.value, [0, 1], [0.9, 1]) }],
   }));
 
   const searchAnimatedStyle = useAnimatedStyle(
@@ -614,21 +631,57 @@ export default function AndroidFloatingTabBar({
   );
 
   const searchInputAnimatedStyle = useAnimatedStyle(() => ({
-    opacity: searchExpansion.value,
-    transform: [{ translateX: interpolate(searchExpansion.value, [0, 1], [12, 0]) }],
+    opacity: interpolate(searchExpansion.value, [0, 0.62, 0.84, 1], [0, 0, 0.48, 1]),
+    transform: [{ translateX: interpolate(searchExpansion.value, [0, 1], [8, 0]) }],
   }));
 
   const searchPlaceholderAnimatedStyle = useAnimatedStyle(() => ({
-    opacity: searchExpansion.value,
-    transform: [{ translateX: interpolate(searchExpansion.value, [0, 1], [12, 0]) }],
+    opacity: interpolate(searchExpansion.value, [0, 0.16, 0.78, 1], [0, 1, 0.88, 0]),
+    transform: [{ translateX: interpolate(searchExpansion.value, [0, 1], [8, 0]) }],
   }));
 
-  const searchIconAnimatedStyle = useAnimatedStyle(() => ({
-    transform: [
-      { scale: interpolate(searchExpansion.value, [0, 1], [1, 0.94]) },
-      { translateX: interpolate(searchExpansion.value, [0, 1], [0, -1]) },
-    ],
-  }));
+  const searchIconAnimatedStyle = useAnimatedStyle(
+    () => ({
+      height: responsiveMetrics.searchIconSize,
+      transform: [
+        {
+          translateX: interpolate(
+            searchExpansion.value,
+            [0, 1],
+            [
+              Math.max((searchCollapsedWidth - responsiveMetrics.searchIconSize) / 2, 0),
+              responsiveMetrics.searchIconLeft,
+            ]
+          ),
+        },
+        { translateY: -responsiveMetrics.searchIconSize / 2 },
+        { scale: interpolate(searchExpansion.value, [0, 0.72, 1], [1, 1, 0.96]) },
+      ],
+      width: responsiveMetrics.searchIconSize,
+    }),
+    [responsiveMetrics.searchIconLeft, responsiveMetrics.searchIconSize, searchCollapsedWidth]
+  );
+
+  const searchVisualAnimatedStyle = useAnimatedStyle(
+    () => ({
+      backgroundColor: interpolateColor(
+        searchSelectionProgress.value,
+        [0, 1],
+        [colors.androidTabShellBackground, colors.androidTabShellSelectedBackground]
+      ),
+      borderColor: interpolateColor(
+        searchSelectionProgress.value,
+        [0, 1],
+        [colors.androidTabShellBorder, colors.androidTabShellSelectedBorder]
+      ),
+    }),
+    [
+      colors.androidTabShellBackground,
+      colors.androidTabShellBorder,
+      colors.androidTabShellSelectedBackground,
+      colors.androidTabShellSelectedBorder,
+    ]
+  );
 
   const navigateToRoute = useCallback(
     (routeKey: string, routeName: string, routeParams: object | undefined, isFocused: boolean) => {
@@ -692,7 +745,7 @@ export default function AndroidFloatingTabBar({
       searchNavigationTimerRef.current = null;
       navigation.navigate(searchRoute.name, searchRoute.params);
       requestAndroidTabSearchFocus();
-    }, SEARCH_NAVIGATION_DELAY_MS);
+    }, SEARCH_FOCUS_DELAY_MS);
   }, [navigation, searchRoute, searchSelected]);
 
   const beginPrimarySelectionDrag = useCallback(() => {
@@ -844,11 +897,7 @@ export default function AndroidFloatingTabBar({
               ]}
             >
               <LinearGradient
-                colors={[
-                  colors.androidTabShellScrim,
-                  colors.androidTabShellMutedBackground,
-                  colors.androidTabShellBackground,
-                ]}
+                colors={colors.androidTabShellSelectedGradient}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
                 style={StyleSheet.absoluteFill}
@@ -894,7 +943,17 @@ export default function AndroidFloatingTabBar({
         </GestureDetector>
 
         {searchRoute ? (
-          <Animated.View style={searchAnimatedStyle}>
+          <Animated.View
+            style={[
+              styles.searchButton,
+              searchAnimatedStyle,
+              searchVisualAnimatedStyle,
+              {
+                height: responsiveMetrics.searchButtonSize,
+                shadowColor: colors.androidTabShellShadow,
+              },
+            ]}
+          >
             <Pressable
               accessibilityRole="tab"
               accessibilityState={searchSelected ? { selected: true } : {}}
@@ -905,13 +964,9 @@ export default function AndroidFloatingTabBar({
               onPress={activateSearch}
               testID={descriptors[searchRoute.key].options.tabBarButtonTestID}
               style={({ pressed }) => [
-                styles.searchButton,
+                styles.searchPressable,
                 {
-                  backgroundColor: focusedSearchBackgroundColor,
-                  borderColor: focusedSearchBorderColor,
-                  height: responsiveMetrics.searchButtonSize,
                   paddingHorizontal: responsiveMetrics.searchHorizontalPadding,
-                  shadowColor: colors.androidTabShellShadow,
                 },
                 pressed ? styles.tabButtonPressed : null,
               ]}
@@ -927,7 +982,6 @@ export default function AndroidFloatingTabBar({
                 style={[
                   styles.searchIconWrap,
                   searchIconAnimatedStyle,
-                  searchMorphActive ? { left: responsiveMetrics.searchIconLeft } : styles.searchIconCentered,
                 ]}
               >
                 {descriptors[searchRoute.key].options.tabBarIcon?.({
@@ -941,7 +995,10 @@ export default function AndroidFloatingTabBar({
 
               <SearchFieldContent
                 colors={colors}
-                inputAnimatedStyle={[searchInputAnimatedStyle, { marginLeft: responsiveMetrics.searchTextOffset }]}
+                inputAnimatedStyle={[
+                  searchInputAnimatedStyle,
+                  { marginLeft: responsiveMetrics.searchTextOffset, marginRight: responsiveMetrics.searchHorizontalPadding },
+                ]}
                 placeholder={searchPlaceholder}
                 placeholderAnimatedStyle={[
                   searchPlaceholderAnimatedStyle,
@@ -1040,20 +1097,27 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.16,
     shadowRadius: 22,
   },
+  searchPressable: {
+    alignItems: 'center',
+    flex: 1,
+    justifyContent: 'center',
+    width: '100%',
+  },
   searchIconWrap: {
     alignItems: 'center',
     justifyContent: 'center',
+    left: 0,
     position: 'absolute',
+    top: '50%',
     zIndex: 1,
   },
-  searchIconCentered: {
-    left: 0,
-    right: 0,
-  },
   searchPreviewTextWrap: {
-    alignSelf: 'stretch',
-    flex: 1,
+    bottom: 0,
     justifyContent: 'center',
+    left: 0,
+    position: 'absolute',
+    right: 0,
+    top: 0,
     zIndex: 1,
   },
   searchPreviewText: {
@@ -1062,10 +1126,13 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   searchInputWrap: {
-    alignSelf: 'stretch',
-    flex: 1,
+    bottom: 0,
     justifyContent: 'center',
-    zIndex: 1,
+    left: 0,
+    position: 'absolute',
+    right: 0,
+    top: 0,
+    zIndex: 2,
   },
   searchClearButton: {
     alignItems: 'center',

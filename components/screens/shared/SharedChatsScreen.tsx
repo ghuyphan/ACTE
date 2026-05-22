@@ -17,9 +17,12 @@ import type {
 } from '../../../services/sharedFeedService';
 import { rememberSharedChatThreadPosts } from '../../../services/sharedChatPostMemory';
 import {
+  getCachedSharedChatThreadPosts,
+  getCachedSharedThreadReadStates,
   getCachedSharedThreadSummaries,
   type SharedThreadReadState,
 } from '../../../services/sharedFeedCache';
+import { subscribeToSharedChatThreadChanges } from '../../../services/sharedChatThreadEvents';
 import { formatChatTimestamp } from '../../../utils/dateUtils';
 import {
   getSharedChatIdentity,
@@ -172,6 +175,7 @@ export default function SharedChatsScreen() {
   const [readStateByPostId, setReadStateByPostId] = useState<
     Record<string, SharedThreadReadState>
   >(() => (user?.uid ? cachedReadStateByUserUid.get(user.uid) ?? {} : {}));
+  const [hasHydratedReadStates, setHasHydratedReadStates] = useState(false);
   const [typingUsersByPostId, setTypingUsersByPostId] = useState<
     Record<string, SharedPostTypingUser[]>
   >({});
@@ -180,6 +184,35 @@ export default function SharedChatsScreen() {
     user?.uid ? cachedActivityThreadPostsByUserUid.get(user.uid) ?? [] : []
   );
   const [loadingActivityThreads, setLoadingActivityThreads] = useState(false);
+  const refreshCachedChatListState = useCallback(async () => {
+    if (!authReady || !user?.uid) {
+      return;
+    }
+
+    const [cachedThreads, summaries, readStates] = await Promise.all([
+      getCachedSharedChatThreadPosts(user.uid).catch(() => []),
+      getCachedSharedThreadSummaries(user.uid).catch(() => []),
+      getCachedSharedThreadReadStates(user.uid).catch(() => []),
+    ]);
+    if (cachedThreads.length > 0) {
+      cachedActivityThreadPostsByUserUid.set(user.uid, cachedThreads);
+      setActivityThreadPosts(cachedThreads);
+    }
+    rememberThreadSummaries(summaries);
+    const nextSummaryByPostId = Object.fromEntries(
+      summaries.map((summary) => [summary.postId, summary])
+    );
+    const nextReadStateByPostId = Object.fromEntries(
+      readStates.map((readState) => [readState.postId, readState])
+    );
+    cachedReadStateByUserUid.set(user.uid, nextReadStateByPostId);
+    setThreadSummaryByPostId((current) => ({
+      ...current,
+      ...nextSummaryByPostId,
+    }));
+    setReadStateByPostId(nextReadStateByPostId);
+    setHasHydratedReadStates(true);
+  }, [authReady, user?.uid]);
   const listContentStyle = useMemo(
     () => ({
       paddingTop: 8,
@@ -213,6 +246,18 @@ export default function SharedChatsScreen() {
   useEffect(() => {
     rememberSharedChatThreadPosts(mergedThreadPosts);
   }, [mergedThreadPosts]);
+  useEffect(() => {
+    if (!authReady || !user?.uid) {
+      return undefined;
+    }
+
+    return subscribeToSharedChatThreadChanges((event) => {
+      if (event.userUid !== user.uid) {
+        return;
+      }
+      void refreshCachedChatListState();
+    });
+  }, [authReady, refreshCachedChatListState, user?.uid]);
   const friendById = useMemo(() => {
     const next = new Map<string, (typeof friends)[number]>();
     for (const friend of friends) {
@@ -231,20 +276,43 @@ export default function SharedChatsScreen() {
       if (!authReady || !user?.uid) {
         setActivityThreadPosts([]);
         setLoadingActivityThreads(false);
+        setHasHydratedReadStates(false);
         return undefined;
       }
 
       let cancelled = false;
       const cachedActivityThreadPosts = cachedActivityThreadPostsByUserUid.get(user.uid) ?? [];
+      let hasLoadedRemoteThreads = false;
       if (cachedActivityThreadPosts.length > 0) {
         setActivityThreadPosts(cachedActivityThreadPosts);
       }
       setLoadingActivityThreads(
         cachedActivityThreadPosts.length === 0 && !threadPostIdsKey && friends.length === 0
       );
+      if (cachedActivityThreadPosts.length === 0) {
+        void Promise.all([
+          getCachedSharedThreadSummaries(user.uid).catch(() => []),
+          getCachedSharedChatThreadPosts(user.uid).catch(() => []),
+        ]).then(([summaries, cachedThreads]) => {
+          if (cancelled || hasLoadedRemoteThreads) {
+            return;
+          }
+
+          if (cachedThreads.length > 0) {
+            cachedActivityThreadPostsByUserUid.set(user.uid, cachedThreads);
+            setActivityThreadPosts(cachedThreads);
+            rememberThreadSummaries(summaries);
+            setThreadSummaryByPostId((current) => ({
+              ...Object.fromEntries(summaries.map((summary) => [summary.postId, summary])),
+              ...current,
+            }));
+          }
+        });
+      }
       void getSharedChatThreadPosts()
         .then((posts) => {
           if (!cancelled) {
+            hasLoadedRemoteThreads = true;
             cachedActivityThreadPostsByUserUid.set(user.uid, posts);
             setActivityThreadPosts(posts);
           }
@@ -275,6 +343,7 @@ export default function SharedChatsScreen() {
         if (postIds.length === 0) {
           setThreadSummaryByPostId({});
           setReadStateByPostId({});
+          setHasHydratedReadStates(false);
         }
         return undefined;
       }
@@ -284,6 +353,7 @@ export default function SharedChatsScreen() {
         ...current,
       }));
       setReadStateByPostId(cachedReadStateByUserUid.get(user.uid) ?? {});
+      setHasHydratedReadStates(false);
 
       let cancelled = false;
       void getCachedSharedThreadSummaries(user.uid, postIds)
@@ -317,6 +387,7 @@ export default function SharedChatsScreen() {
         cachedReadStateByUserUid.set(user.uid, nextReadStateByPostId);
         setThreadSummaryByPostId(Object.fromEntries(summaries.map((summary) => [summary.postId, summary])));
         setReadStateByPostId(nextReadStateByPostId);
+        setHasHydratedReadStates(true);
       });
 
       return () => {
@@ -513,7 +584,10 @@ export default function SharedChatsScreen() {
       const participantUid = getDirectChatParticipantUid(post);
       const participant = getThreadParticipant(post);
       const summary = threadSummaryByPostId[post.id] ?? null;
-      const hasUnread = isSharedThreadUnread(summary, readStateByPostId[post.id], user?.uid);
+      const hasThreadActivity = Boolean(summary?.latestActivityAt);
+      const hasUnread =
+        hasHydratedReadStates &&
+        isSharedThreadUnread(summary, readStateByPostId[post.id], user?.uid);
       const unreadCount = hasUnread ? 1 : 0;
       const latestAuthor =
         summary?.latestActivityAuthorUid && summary.latestActivityAuthorUid === user?.uid
@@ -527,7 +601,7 @@ export default function SharedChatsScreen() {
               }).label
             : null;
       const isDirectChat = isDirectChatPost(post);
-      const starterPreview = t('shared.directChatStarter', 'Message privately');
+      const starterPreview = t('shared.directChatStarter', 'Message');
       const summaryBody = summary ? getSharedThreadSummaryBody(summary) : '';
       const typingUsers = typingUsersByPostId[post.id] ?? [];
       const typingPreview =
@@ -609,17 +683,19 @@ export default function SharedChatsScreen() {
                 ]}
               />
             ) : null}
-            <View
-              style={[
-                styles.threadKindBadge,
-                {
-                  backgroundColor: colors.background,
-                  borderColor: colors.border,
-                },
-              ]}
-            >
-              <Ionicons name={getSharedChatThreadIconName(post)} size={12} color={colors.primary} />
-            </View>
+            {hasThreadActivity ? (
+              <View
+                style={[
+                  styles.threadKindBadge,
+                  {
+                    backgroundColor: colors.background,
+                    borderColor: colors.border,
+                  },
+                ]}
+              >
+                <Ionicons name={getSharedChatThreadIconName(post)} size={12} color={colors.primary} />
+              </View>
+            ) : null}
           </View>
           <View style={styles.threadCopy}>
             <Text
@@ -656,15 +732,17 @@ export default function SharedChatsScreen() {
             </View>
           </View>
           <View style={styles.threadMeta}>
-            <Text
-              style={[
-                styles.threadTime,
-                hasUnread ? styles.threadTimeUnread : null,
-                { color: hasUnread ? colors.text : colors.secondaryText },
-              ]}
-            >
-              {formatChatTimestamp(latestTimestamp)}
-            </Text>
+            {hasThreadActivity ? (
+              <Text
+                style={[
+                  styles.threadTime,
+                  hasUnread ? styles.threadTimeUnread : null,
+                  { color: hasUnread ? colors.text : colors.secondaryText },
+                ]}
+              >
+                {formatChatTimestamp(latestTimestamp)}
+              </Text>
+            ) : null}
             {hasUnread ? (
               <View style={styles.unreadWrap}>
                 <UnreadIndicator color={colors.primary} count={unreadCount} />
@@ -681,6 +759,7 @@ export default function SharedChatsScreen() {
       friendPresence,
       getDirectChatParticipantUid,
       getThreadParticipant,
+      hasHydratedReadStates,
       prewarmThreadResponses,
       readStateByPostId,
       router,
@@ -807,7 +886,7 @@ export default function SharedChatsScreen() {
               {identity.label}
             </Text>
             <Text numberOfLines={1} style={[styles.threadPreview, { color: colors.secondaryText }]}>
-              {t('shared.directChatStarter', 'Message privately')}
+              {t('shared.directChatStarter', 'Message')}
             </Text>
           </View>
           <View style={styles.threadMeta}>
