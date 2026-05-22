@@ -19,6 +19,9 @@ const mockArePlaceRemindersEnabled = jest.fn();
 let appStateListener: ((state: AppStateStatus) => void) | null = null;
 
 jest.mock('expo-location', () => ({
+  LocationAccuracy: {
+    Balanced: 3,
+  },
   getForegroundPermissionsAsync: (...args: unknown[]) => mockGetForegroundPermissionsAsync(...args),
   requestForegroundPermissionsAsync: (...args: unknown[]) => mockRequestForegroundPermissionsAsync(...args),
   getBackgroundPermissionsAsync: (...args: unknown[]) => mockGetBackgroundPermissionsAsync(...args),
@@ -212,6 +215,37 @@ describe('useGeofence', () => {
       expect(response.requiresSettings).toBe(false);
       expect(response.reason).toBeNull();
     });
+
+    expect(mockGetLastKnownPositionAsync).toHaveBeenCalledWith({ maxAge: 120_000 });
+  });
+
+  it('does not use a stale last known position for foreground saves', async () => {
+    const staleLocation = {
+      coords: { latitude: 10.7626, longitude: 106.6601 },
+      timestamp: Date.now() - 10 * 60_000,
+    };
+    const currentLocation = {
+      coords: { latitude: 10.8, longitude: 106.7 },
+      timestamp: Date.now(),
+    };
+    mockGetForegroundPermissionsAsync.mockResolvedValue({ status: 'granted', canAskAgain: true });
+    mockGetLastKnownPositionAsync.mockResolvedValue(staleLocation);
+    mockGetCurrentPositionAsync.mockResolvedValue(currentLocation);
+
+    const { result } = renderHook(() => useGeofence());
+
+    let response: Awaited<ReturnType<typeof result.current.requestForegroundLocation>> | null = null;
+    await act(async () => {
+      response = await result.current.requestForegroundLocation();
+    });
+
+    expect(response).toEqual({
+      location: currentLocation,
+      requiresSettings: false,
+      reason: null,
+    });
+    expect(result.current.location).toEqual(currentLocation);
+    expect(mockGetLastKnownPositionAsync).toHaveBeenCalledWith({ maxAge: 120_000 });
   });
 
   it('times out a stuck foreground location request and allows retrying', async () => {

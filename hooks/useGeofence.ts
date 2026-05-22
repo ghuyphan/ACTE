@@ -255,17 +255,21 @@ export function useGeofence() {
             }
 
             const cachedLocation = locationRef.current;
-            if (preferCached && isRecentLocation(cachedLocation)) {
+            const recentCachedLocation = isRecentLocation(cachedLocation) ? cachedLocation : null;
+            if (preferCached && recentCachedLocation) {
                 return {
-                    location: cachedLocation,
+                    location: recentCachedLocation,
                     requiresSettings: false,
                     reason: null,
                 };
             }
 
-            const known = await Location.getLastKnownPositionAsync();
-            if (known) {
-                commitLocation(known);
+            const known = await Location.getLastKnownPositionAsync({
+                maxAge: RECENT_LOCATION_MAX_AGE_MS,
+            });
+            const recentKnownLocation = isRecentLocation(known) ? known : null;
+            if (recentKnownLocation) {
+                commitLocation(recentKnownLocation);
                 if (preferCached) {
                     if (backgroundRefreshIfCached) {
                         const backgroundRefreshRequestId = ++backgroundRefreshRequestIdRef.current;
@@ -282,7 +286,7 @@ export function useGeofence() {
                             .catch(() => undefined);
                     }
                     return {
-                        location: known,
+                        location: recentKnownLocation,
                         requiresSettings: false,
                         reason: null,
                     };
@@ -293,9 +297,9 @@ export function useGeofence() {
 
             if (!currentLocation) {
                 return {
-                    location: known ?? cachedLocation ?? null,
+                    location: recentKnownLocation ?? recentCachedLocation,
                     requiresSettings: false,
-                    reason: known || cachedLocation ? null : 'timeout',
+                    reason: recentKnownLocation || recentCachedLocation ? null : 'timeout',
                 };
             }
 

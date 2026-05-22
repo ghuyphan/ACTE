@@ -1,5 +1,6 @@
-const mockStorage = new Map<string, string>();
+import { waitFor } from '@testing-library/react-native';
 
+const mockStorage = new Map<string, string>();
 const mockGetForegroundPermissionsAsync = jest.fn();
 const mockGetBackgroundPermissionsAsync = jest.fn();
 const mockHasStartedGeofencingAsync = jest.fn();
@@ -82,9 +83,12 @@ import {
   getMaxGeofenceRegionCount,
   getReminderPermissionState,
   prioritizeNotesForGeofencing,
+  skipImmediateReminderForNewNote,
   summarizeGeofenceSelection,
   syncGeofenceRegions,
 } from '../services/geofenceService';
+import { getReminderPlaceKey } from '../services/reminderSelection';
+import { getSkipNextEnterKey, getSkipNextEnterPlaceKey } from '../utils/geofenceKeys';
 
 function buildNote(overrides: Partial<Note> = {}): Note {
   return {
@@ -370,6 +374,39 @@ describe('geofenceService', () => {
     );
 
     expect(prioritized.map((note) => note.id)).toEqual(['newer-non-favorite']);
+  });
+
+  it('marks a new note skip before reminder permission checks finish', async () => {
+    let resolveBackgroundPermission!: (value: { status: string; canAskAgain: boolean }) => void;
+    mockGetBackgroundPermissionsAsync.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveBackgroundPermission = resolve;
+        })
+    );
+    const note = buildNote({ id: 'new-note' });
+
+    const skipPromise = skipImmediateReminderForNewNote(note);
+    await Promise.resolve();
+
+    expect(mockStorage.get(getSkipNextEnterKey('new-note'))).toBe('1');
+    expect(mockStorage.get(getSkipNextEnterPlaceKey(getReminderPlaceKey(note)))).toBe('1');
+
+    await waitFor(() => {
+      expect(mockGetBackgroundPermissionsAsync).toHaveBeenCalled();
+    });
+    resolveBackgroundPermission({ status: 'granted', canAskAgain: true });
+    await skipPromise;
+  });
+
+  it('clears the optimistic new-note skip when reminders are unavailable', async () => {
+    mockGetBackgroundPermissionsAsync.mockResolvedValue({ status: 'denied', canAskAgain: true });
+    const note = buildNote({ id: 'new-note' });
+
+    await skipImmediateReminderForNewNote(note);
+
+    expect(mockStorage.has(getSkipNextEnterKey('new-note'))).toBe(false);
+    expect(mockStorage.has(getSkipNextEnterPlaceKey(getReminderPlaceKey(note)))).toBe(false);
   });
 
   it('clears started geofences and signature', async () => {

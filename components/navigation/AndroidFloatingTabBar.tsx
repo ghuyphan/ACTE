@@ -389,7 +389,7 @@ export default function AndroidFloatingTabBar({
     const searchExpandedMinWidth = isVeryNarrow ? 164 : isCompact ? 184 : 212;
     const searchHorizontalPadding = isVeryNarrow ? 12 : 14;
     const searchIconLeft = isVeryNarrow ? 14 : isCompact ? 15 : 16;
-    const searchTextOffset = isVeryNarrow ? 30 : 34;
+    const searchTextOffset = searchIconLeft + searchIconSize + (isVeryNarrow ? 8 : isCompact ? 9 : 10);
     const tabMinWidth = tabLabelVisible ? (isCompact ? 70 : 82) : 50;
     const keyboardAvoidanceGap = isVeryNarrow ? 8 : KEYBOARD_AVOIDANCE_GAP;
 

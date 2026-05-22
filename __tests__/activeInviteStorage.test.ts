@@ -49,7 +49,7 @@ function createInvite(overrides: Partial<FriendInvite> = {}): FriendInvite {
     revokedAt: null,
     acceptedByUid: null,
     acceptedAt: null,
-    expiresAt: '2026-05-20T10:00:00.000Z',
+    expiresAt: '2026-06-20T10:00:00.000Z',
     url: 'https://example.com/friends/join/?inviteId=invite-1&invite=token-1',
     ...overrides,
   };

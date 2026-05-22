@@ -71,3 +71,20 @@ export async function consumeSkippedImmediateReminder(target: ReminderSkipTarget
 
   return false;
 }
+
+export async function clearSkippedImmediateReminder(target: ReminderSkipTarget): Promise<void> {
+  const { noteId, placeKey } = normalizeReminderSkipTarget(target);
+  const removals: Array<Promise<void>> = [];
+
+  if (noteId) {
+    skipNextEnterNoteIds.delete(noteId);
+    removals.push(removePersistentItem(getSkipNextEnterKey(noteId)).catch(() => undefined));
+  }
+
+  if (placeKey) {
+    skipNextEnterPlaceKeys.delete(placeKey);
+    removals.push(removePersistentItem(getSkipNextEnterPlaceKey(placeKey)).catch(() => undefined));
+  }
+
+  await Promise.all(removals);
+}
