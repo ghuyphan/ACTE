@@ -4,12 +4,13 @@ import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Href, Stack, useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
-import { useCallback, useDeferredValue, useEffect, useReducer, useState, useTransition, type ReactNode } from 'react';
+import { useCallback, useDeferredValue, useEffect, useMemo, useReducer, useState, useTransition, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   Keyboard,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -27,6 +28,11 @@ import { useNotesStore } from '../../../hooks/useNotes';
 import { Note } from '../../../services/database';
 import { getTextNoteCardGradient } from '../../../services/noteAppearance';
 import { getNotePhotoUri } from '../../../services/photoStorage';
+import {
+  filterNotesBySearchFilters,
+  NOTE_SEARCH_FILTER_OPTIONS,
+  type NoteSearchFilter,
+} from '../../../services/noteSearchFilters';
 import { getNotePreviewText } from '../../../services/noteTextPresentation';
 import { formatDate } from '../../../utils/dateUtils';
 import NotoLoader from '../../ui/NotoLoader';
@@ -127,6 +133,7 @@ export default function SearchScreen() {
   const { notes, loading, searchNotes } = useNotesStore();
   const router = useRouter();
   const [query, setQuery] = useState('');
+  const [activeFilters, setActiveFilters] = useState<NoteSearchFilter[]>([]);
   const [searchState, dispatchSearch] = useReducer(searchReducer, initialSearchState);
   const [showDelayedSearchLoading, setShowDelayedSearchLoading] = useState(false);
   const [, startSearchTransition] = useTransition();
@@ -135,6 +142,7 @@ export default function SearchScreen() {
   const trimmedActiveQuery = activeQuery.trim();
   const trimmedDeferredQuery = deferredQuery.trim();
   const hasQuery = trimmedActiveQuery.length > 0;
+  const hasActiveFilters = activeFilters.length > 0;
   const hasDeferredQuery = trimmedDeferredQuery.length > 0;
 
   useFocusEffect(
@@ -180,10 +188,19 @@ export default function SearchScreen() {
     };
   }, [hasDeferredQuery, searchNotes, trimmedDeferredQuery]);
 
-  const visibleNotes =
-    hasQuery && searchState.status === 'success' && searchState.query === trimmedActiveQuery
-      ? searchState.results
-      : [];
+  const candidateNotes = useMemo(
+    () =>
+      hasQuery && searchState.status === 'success' && searchState.query === trimmedActiveQuery
+        ? searchState.results
+        : !hasQuery
+          ? notes
+          : [],
+    [hasQuery, notes, searchState.query, searchState.results, searchState.status, trimmedActiveQuery]
+  );
+  const visibleNotes = useMemo(
+    () => filterNotesBySearchFilters(candidateNotes, activeFilters),
+    [activeFilters, candidateNotes]
+  );
   const isSearching = searchState.status === 'searching';
   const searchFailed = hasQuery && searchState.status === 'failed';
   const hasPendingSearch =
@@ -196,7 +213,7 @@ export default function SearchScreen() {
   const shouldShowEmptyState =
     !searchFailed && !hasPendingSearch && visibleNotes.length === 0;
   const emptyScreenInsetStyle = {
-    paddingTop: Platform.OS === 'android' ? insets.top + Layout.screenPadding : 10,
+    paddingTop: 10,
     paddingBottom: insets.bottom + 20 + bottomTabOverlayInset,
   };
 
@@ -233,6 +250,13 @@ export default function SearchScreen() {
       setQuery(nextQuery);
     });
   }, [startSearchTransition]);
+  const toggleFilter = useCallback((filter: NoteSearchFilter) => {
+    setActiveFilters((current) => (
+      current.includes(filter)
+        ? current.filter((item) => item !== filter)
+        : [...current, filter]
+    ));
+  }, []);
 
   const renderNote = useCallback(
     ({ item }: { item: Note }) => {
@@ -371,6 +395,56 @@ export default function SearchScreen() {
         />
       ) : null}
 
+      <View style={[
+        styles.filterWrap,
+        {
+          paddingTop: Platform.OS === 'android' ? insets.top + Layout.screenPadding : 10,
+          backgroundColor: colors.background,
+        },
+      ]}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.filterContent}
+          keyboardShouldPersistTaps="handled"
+        >
+          {NOTE_SEARCH_FILTER_OPTIONS.map((option) => {
+            const selected = activeFilters.includes(option.id);
+            return (
+              <Pressable
+                key={option.id}
+                accessibilityRole="button"
+                accessibilityState={{ selected }}
+                onPress={() => toggleFilter(option.id)}
+                style={({ pressed }) => [
+                  styles.filterChip,
+                  {
+                    backgroundColor: selected ? colors.primary : colors.surface,
+                    borderColor: selected ? colors.primary : colors.border,
+                    opacity: pressed ? 0.82 : 1,
+                  },
+                ]}
+              >
+                <Ionicons
+                  name={option.icon as keyof typeof Ionicons.glyphMap}
+                  size={14}
+                  color={selected ? '#FFFFFF' : colors.secondaryText}
+                />
+                <Text
+                  numberOfLines={1}
+                  style={[
+                    styles.filterChipText,
+                    { color: selected ? '#FFFFFF' : colors.text },
+                  ]}
+                >
+                  {t(option.labelKey, option.fallbackLabel)}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
+      </View>
+
       {loading ? (
         <View style={styles.centerWrap}>
           <NotoLoader variant="skeleton" size="large" color={colors.primary} />
@@ -445,10 +519,10 @@ export default function SearchScreen() {
         >
           <SearchEmptyMessage
             pointerEvents="none"
-            title={hasQuery
+            title={hasQuery || hasActiveFilters
               ? t('home.noResults', 'No notes found')
               : t('home.searchPlaceholder', 'Search notes...')}
-            subtitle={hasQuery
+            subtitle={hasQuery || hasActiveFilters
               ? t('home.noResultsMsg', 'Try a different keyword')
               : t('home.count', '{{count}} notes saved', { count: notes.length })}
             titleColor={colors.text}
@@ -498,7 +572,7 @@ export default function SearchScreen() {
           contentContainerStyle={[
             styles.listContent,
             {
-              paddingTop: Platform.OS === 'android' ? insets.top + Layout.screenPadding : 10,
+              paddingTop: 10,
               paddingBottom: insets.bottom + 20 + bottomTabOverlayInset,
             },
           ]}
@@ -517,8 +591,32 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   listContent: {
-    paddingTop: 16,
+    paddingTop: 10,
     paddingHorizontal: Layout.screenPadding,
+  },
+  filterWrap: {
+    paddingBottom: 8,
+  },
+  filterContent: {
+    gap: 8,
+    paddingHorizontal: Layout.screenPadding,
+  },
+  filterChip: {
+    minHeight: 34,
+    maxWidth: 150,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderRadius: 17,
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 12,
+  },
+  filterChipText: {
+    flexShrink: 1,
+    fontSize: 13,
+    lineHeight: 17,
+    fontFamily: 'Noto Sans',
+    fontWeight: '700',
   },
   resultPress: {
     width: '100%',

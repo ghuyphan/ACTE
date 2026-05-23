@@ -68,6 +68,7 @@ import {
   resolveSavedTextNoteColor,
 } from '../../services/noteAppearance';
 import { resolveAutoNoteEmoji } from '../../services/noteDecorations';
+import { buildMemoryPromptSuggestion } from '../../services/memoryPrompts';
 import { saveNoteDoodle } from '../../services/noteDoodles';
 import {
   PREMIUM_PHOTO_FILTER_IDS,
@@ -1621,6 +1622,18 @@ export default function HomeScreen() {
     sharedReady,
     userUid: user?.uid,
   });
+  const memoryPromptSuggestion = useMemo(
+    () => buildMemoryPromptSuggestion({
+      captureMode,
+      location,
+      notes,
+    }),
+    [captureMode, location, notes]
+  );
+  const memoryPromptText = useMemo(
+    () => t(`memoryPrompts.${memoryPromptSuggestion.id}`, memoryPromptSuggestion.text),
+    [memoryPromptSuggestion.id, memoryPromptSuggestion.text, t]
+  );
 
   const handlePlacePulsePress = useCallback(() => {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -1688,6 +1701,11 @@ export default function HomeScreen() {
     [captureTarget, handleCaptureTargetChange]
   );
 
+  const shouldShowMemoryPrompt =
+    !(captureTarget === 'shared' && captureAudienceFriends.length > 0) &&
+    sharedPlacePulseSummary.nearbySharedPostCount <= 0 &&
+    (!location || placePulseSummary.nearbyNoteCount <= 0);
+
   const captureFooterContent = useMemo(() => {
     if (captureTarget === 'shared' && captureAudienceFriends.length > 0) {
       return (
@@ -1725,6 +1743,18 @@ export default function HomeScreen() {
       );
     }
 
+    if (shouldShowMemoryPrompt) {
+      return (
+        <PlacePulseStrip
+          iconName="sparkles-outline"
+          label={memoryPromptText}
+          accessibilityLabel={t('capture.memoryPromptA11y', 'Suggested memory prompt: {{prompt}}', {
+            prompt: memoryPromptText,
+          })}
+        />
+      );
+    }
+
     if (!location) {
       return null;
     }
@@ -1752,8 +1782,10 @@ export default function HomeScreen() {
     handlePlacePulsePress,
     handleSharedPlacePulsePress,
     location,
+    memoryPromptText,
     placePulseSummary.nearbyNoteCount,
     selectedSharedAudienceUserId,
+    shouldShowMemoryPrompt,
     sharedPlacePulseSummary.avatars,
     sharedPlacePulseSummary.nearbySharedPostCount,
     sharedPlacePulseSummary.overflowCount,
@@ -2385,6 +2417,11 @@ export default function HomeScreen() {
               })
             : null;
 
+        const promptAnswer = noteText.trim();
+        const shouldSavePrompt =
+          shouldShowMemoryPrompt &&
+          promptAnswer.length > 0 &&
+          memoryPromptText.trim().length > 0;
         const createdNote = await createNote({
           id: pendingNoteId,
           type: captureMode === 'camera' ? 'photo' : 'text',
@@ -2395,9 +2432,9 @@ export default function HomeScreen() {
           pairedVideoLocalUri:
             captureMode === 'camera' ? pairedVideoDestinationPath : null,
           locationName,
-          promptId: null,
-          promptTextSnapshot: null,
-          promptAnswer: null,
+          promptId: shouldSavePrompt ? memoryPromptSuggestion.id : null,
+          promptTextSnapshot: shouldSavePrompt ? memoryPromptText : null,
+          promptAnswer: shouldSavePrompt ? promptAnswer : null,
           moodEmoji: autoEmoji,
           noteColor: persistedTextNoteColor,
           captureVariant: captureMode === 'camera' ? (cameraSubmode === 'dual' ? 'dual' : 'single') : null,
@@ -2550,6 +2587,9 @@ export default function HomeScreen() {
     cameraSubmode,
     noteText,
     noteColor,
+    memoryPromptSuggestion.id,
+    memoryPromptText,
+    shouldShowMemoryPrompt,
     capturedPhoto,
     capturedPairedVideo,
     dualPrimaryPhoto,

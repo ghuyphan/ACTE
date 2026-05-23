@@ -74,6 +74,7 @@
         "noteColorDefault": "Mặc định",
         "details": "Chi tiết",
         "restaurantPlaceholder": "Tên quán (VD: Phở Anh Hai)",
+        "memoryPromptA11y": "Gợi ý ký ức: {{prompt}}",
         "textPlaceholder": "Viết điều bạn muốn nhớ về nơi này...",
         "textPlaceholderVariants": [
             "Ghi lại một điều nhỏ ở đây...",
@@ -1127,7 +1128,22 @@
     },
     "search": {
         "errorTitle": "Tìm kiếm tạm thời chưa khả dụng",
-        "errorBody": "Noto chưa thể tìm trong nhật ký lúc này. Hãy thử lại sau ít phút nhé."
+        "errorBody": "Noto chưa thể tìm trong nhật ký lúc này. Hãy thử lại sau ít phút nhé.",
+        "filterPhotos": "Ảnh",
+        "filterText": "Chữ",
+        "filterFavorites": "Yêu thích",
+        "filterThisMonth": "Tháng này",
+        "filterStickers": "Nhãn dán",
+        "filterDoodles": "Nét vẽ",
+        "filterPrompts": "Gợi ý"
+    },
+    "memoryPrompts": {
+        "favorite-place": "Điều gì khiến nơi này đáng quay lại?",
+        "repeat-place": "Có gì khác so với lần trước bạn ghé đây?",
+        "new-place": "Bạn muốn phiên bản tương lai nhớ gì về nơi này?",
+        "photo-frame": "Điều gì đang diễn ra ngoài khung hình?",
+        "evening-check-in": "Điều gì làm hôm nay đáng giữ lại?",
+        "future-you": "Để lại một gợi ý nhỏ cho bạn của sau này."
     },
     "startup": {
         "databaseInitFailed": "Noto chưa thể mở cơ sở dữ liệu cục bộ. Hãy khởi động lại ứng dụng rồi thử lại nhé.",

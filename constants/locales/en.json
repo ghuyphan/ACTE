@@ -74,6 +74,7 @@
         "noteColorDefault": "Default",
         "details": "Details",
         "restaurantPlaceholder": "Place name (e.g. Phở Hòa)",
+        "memoryPromptA11y": "Suggested memory prompt: {{prompt}}",
         "textPlaceholder": "Note about this place...",
         "textPlaceholderVariants": [
             "Note about this place...",
@@ -1127,7 +1128,22 @@
     },
     "search": {
         "errorTitle": "Search is unavailable",
-        "errorBody": "We could not search your notes right now. Please try again in a moment."
+        "errorBody": "We could not search your notes right now. Please try again in a moment.",
+        "filterPhotos": "Photos",
+        "filterText": "Text",
+        "filterFavorites": "Favorites",
+        "filterThisMonth": "This month",
+        "filterStickers": "Stickers",
+        "filterDoodles": "Doodles",
+        "filterPrompts": "Prompts"
+    },
+    "memoryPrompts": {
+        "favorite-place": "What makes this spot worth coming back to?",
+        "repeat-place": "What changed since last time you were here?",
+        "new-place": "What should future you remember about this spot?",
+        "photo-frame": "What's happening outside the frame?",
+        "evening-check-in": "What made today worth keeping?",
+        "future-you": "Leave a tiny clue for future you."
     },
     "startup": {
         "databaseInitFailed": "Noto could not open its local database. Please restart the app and try again.",
