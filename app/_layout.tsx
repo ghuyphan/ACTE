@@ -8,6 +8,7 @@ import { View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider, initialWindowMetrics } from 'react-native-safe-area-context';
 import AppProviders from '../components/app/AppProviders';
+import AppUpdatePromptSheet from '../components/app/AppUpdatePromptSheet';
 import RootStackNavigator from '../components/app/RootStackNavigator';
 import SocialNotificationBanner from '../components/app/SocialNotificationBanner';
 import StartupErrorView from '../components/app/StartupErrorView';
@@ -23,6 +24,7 @@ import { useHomeInitialFeedGate } from '../hooks/app/useHomeInitialFeedGate';
 import { useAppNotificationRouting } from '../hooks/app/useAppNotificationRouting';
 import { useStartupInteraction } from '../hooks/app/useHomeStartupReady';
 import { useAppStartupBootstrap } from '../hooks/app/useAppStartupBootstrap';
+import { useAppUpdatePrompt } from '../hooks/app/useAppUpdatePrompt';
 import { useAppWidgetRefresh } from '../hooks/app/useAppWidgetRefresh';
 import { useSocialPushRegistration } from '../hooks/app/useSocialPushRegistration';
 import { showAppAlert } from '../utils/alert';
@@ -64,6 +66,14 @@ function AppContent() {
     notesReady: notesPhase !== 'bootstrapping',
     startupError,
     themeReady,
+  });
+  const {
+    dismissUpdate,
+    isRestarting: isUpdateRestarting,
+    isUpdateReady,
+    restartForUpdate,
+  } = useAppUpdatePrompt({
+    enabled: startupGateReady && startupInteractive && !startupError,
   });
 
   useEffect(() => {
@@ -190,6 +200,12 @@ function AppContent() {
           <RootStackNavigator homeTitle={homeTitle} rootScreenOptions={rootScreenOptions} />
         )}
         <SocialNotificationBanner />
+        <AppUpdatePromptSheet
+          visible={isUpdateReady}
+          isRestarting={isUpdateRestarting}
+          onDismiss={dismissUpdate}
+          onRestart={restartForUpdate}
+        />
       </View>
     </NavThemeProvider>
   );

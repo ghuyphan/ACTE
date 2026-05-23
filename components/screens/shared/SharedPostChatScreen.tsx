@@ -18,7 +18,6 @@ import {
   TextInput,
   useWindowDimensions,
   View,
-  type GestureResponderEvent,
   type KeyboardEvent,
   type LayoutChangeEvent,
   type NativeScrollEvent,
@@ -78,8 +77,6 @@ type ReplyPreview = {
 
 type ReactionOverlay = {
   response: SharedPostResponse;
-  pageX: number;
-  pageY: number;
 } | null;
 
 type ChatMode = 'direct' | 'memory';
@@ -108,7 +105,6 @@ const INFO_MESSAGE_VISIBLE_MS = 1800;
 const COMPOSER_KEYBOARD_GAP = 4;
 const COMPACT_REACTION_TRAY_WIDTH = 260;
 const REACTION_TRAY_WITH_DETAILS_WIDTH = 316;
-const REACTION_TRAY_ESTIMATED_HEIGHT = 58;
 const TYPING_IDLE_HIDE_MS = 1500;
 const TYPING_REFRESH_MS = 900;
 const THREAD_SCROLL_POSITION_CONFIG = {
@@ -193,7 +189,7 @@ function ReplyableBubble({
   iconColor: string;
   isSelf: boolean;
   onReply: () => void;
-  onLongPress: (event: GestureResponderEvent) => void;
+  onLongPress: () => void;
   style: StyleProp<ViewStyle>;
 }) {
   const translateX = useRef(new Animated.Value(0)).current;
@@ -244,7 +240,11 @@ function ReplyableBubble({
       >
         <Ionicons name="return-up-back" size={18} color={iconColor} />
       </Animated.View>
-      <Pressable onLongPress={onLongPress} delayLongPress={260} style={style}>
+      <Pressable
+        onLongPress={onLongPress}
+        delayLongPress={260}
+        style={style}
+      >
         {children}
       </Pressable>
     </Animated.View>
@@ -546,6 +546,7 @@ export default function SharedPostChatScreen({
   const lastMarkedReadSignatureRef = useRef<string | null>(null);
   const optimisticSequenceRef = useRef(0);
   const reactionOverlayProgress = useRef(new Animated.Value(0)).current;
+  const replyPreviewTextProgress = useRef(new Animated.Value(1)).current;
   const jumpToLatestProgress = useRef(new Animated.Value(0)).current;
   const sendButtonPulse = useRef(new Animated.Value(0)).current;
   const pendingInitialResponseIdRef = useRef<string | null>(null);
@@ -773,6 +774,20 @@ export default function SharedPostChatScreen({
       mass: 0.7,
     }).start();
   }, [reactionOverlay, reactionOverlayProgress]);
+
+  useEffect(() => {
+    if (!replyTarget) {
+      replyPreviewTextProgress.setValue(1);
+      return;
+    }
+
+    replyPreviewTextProgress.setValue(0);
+    Animated.timing(replyPreviewTextProgress, {
+      toValue: 1,
+      duration: 170,
+      useNativeDriver: true,
+    }).start();
+  }, [replyPreviewTextProgress, replyTarget?.id]);
 
   useEffect(() => {
     if (shouldShowJumpToLatest) {
@@ -1680,11 +1695,15 @@ export default function SharedPostChatScreen({
       const shouldShowStatus =
         isSelf &&
         group.responses.some((response) => getResponseDeliveryStatus(response) === 'sending');
+      const groupHasReactionOverlayTarget = group.responses.some(
+        (response) => response.id === reactionOverlay?.response.id
+      );
       return (
         <View
           style={[
             styles.messageRow,
             isSelf ? styles.selfMessageRow : styles.friendMessageRow,
+            groupHasReactionOverlayTarget ? styles.activeReactionMessageRow : null,
           ]}
         >
           {!isSelf ? (
@@ -1749,6 +1768,7 @@ export default function SharedPostChatScreen({
                     style={[
                       styles.messageInteractionWrap,
                       hasReplyPreview ? styles.messageInteractionWrapWithReply : null,
+                      isReactionOverlayTarget ? styles.activeReactionMessageWrap : null,
                     ]}
                   >
                     {replyPreview ? (
@@ -1802,12 +1822,10 @@ export default function SharedPostChatScreen({
                         setReplyTarget(response);
                         setReactionOverlay(null);
                       }}
-                      onLongPress={(event) => {
+                      onLongPress={() => {
                         void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                         setReactionOverlay({
                           response,
-                          pageX: event.nativeEvent.pageX,
-                          pageY: event.nativeEvent.pageY,
                         });
                       }}
                       style={[
@@ -1824,7 +1842,12 @@ export default function SharedPostChatScreen({
                             : styles.friendBubbleWithReply
                           : null,
                         {
-                          backgroundColor: isSelf ? colors.primary : colors.surface,
+                          backgroundColor:
+                            isReactionOverlayTarget && !isSelf
+                              ? colors.primarySoft
+                              : isSelf
+                                ? colors.primary
+                                : colors.surface,
                           borderColor: isHighlighted || isReactionOverlayTarget
                             ? colors.primary
                             : isSelf
@@ -1845,6 +1868,111 @@ export default function SharedPostChatScreen({
                         {formatSharedResponseBody(response)}
                       </Text>
                     </ReplyableBubble>
+                    {isReactionOverlayTarget ? (
+                      <Animated.View
+                        style={[
+                          styles.reactionTray,
+                          isSelf ? styles.selfInlineReactionTray : styles.friendInlineReactionTray,
+                          {
+                            width: reactionTrayWidth,
+                            backgroundColor: colors.surface,
+                            borderColor: colors.border,
+                            opacity: reactionOverlayProgress,
+                            transform: [
+                              {
+                                scale: reactionOverlayProgress.interpolate({
+                                  inputRange: [0, 1],
+                                  outputRange: [0.96, 1],
+                                }),
+                              },
+                            ],
+                          },
+                        ]}
+                      >
+                        <View
+                          pointerEvents="none"
+                          style={[
+                            styles.reactionTrayNub,
+                            styles.reactionTrayNubTop,
+                            isSelf ? styles.selfInlineReactionTrayNub : styles.friendInlineReactionTrayNub,
+                            {
+                              backgroundColor: colors.surface,
+                              borderColor: colors.border,
+                            },
+                          ]}
+                        />
+                        <View style={styles.reactionTrayReactionRow}>
+                          {QUICK_RESPONSES.map((reactionEmoji, index) => (
+                            <ReactionTrayButton
+                              key={`${response.id}:${reactionEmoji}`}
+                              emoji={reactionEmoji}
+                              index={index}
+                              selected={selectedReactionEmoji === reactionEmoji}
+                              colors={{
+                                primary: colors.primary,
+                                primarySoft: colors.primarySoft,
+                              }}
+                              label={
+                                selectedReactionEmoji === reactionEmoji
+                                  ? t('shared.chatRemoveReaction', 'Remove {{emoji}} reaction', {
+                                      emoji: reactionEmoji,
+                                    })
+                                  : t('shared.chatReactWith', 'React with {{emoji}}', {
+                                      emoji: reactionEmoji,
+                                    })
+                              }
+                              onPress={() => {
+                                void Haptics.selectionAsync();
+                                void sendReaction(response, reactionEmoji);
+                              }}
+                            />
+                          ))}
+                        </View>
+                        <View style={[styles.reactionTrayVerticalDivider, { backgroundColor: colors.border }]} />
+                        <Pressable
+                          accessibilityRole="button"
+                          accessibilityLabel={t('shared.chatReplyToMessage', 'Reply to message')}
+                          onPress={() => {
+                            const target = responseById.get(response.id) ?? response;
+                            void Haptics.selectionAsync();
+                            setReplyTarget(target);
+                            setReactionOverlay(null);
+                          }}
+                          style={({ pressed }) => [
+                            styles.reactionTrayIconAction,
+                            {
+                              backgroundColor: pressed ? colors.primarySoft : 'transparent',
+                            },
+                          ]}
+                        >
+                          <Ionicons name="return-up-back" size={18} color={colors.primary} />
+                        </Pressable>
+                        <Pressable
+                          accessibilityRole="button"
+                          accessibilityLabel={t('shared.chatCopyMessage', 'Copy message')}
+                          onPress={() => {
+                            void Haptics.selectionAsync();
+                            void copyResponseText(responseById.get(response.id) ?? response);
+                          }}
+                          style={({ pressed }) => [
+                            styles.reactionTrayIconAction,
+                            {
+                              backgroundColor: pressed ? colors.primarySoft : 'transparent',
+                            },
+                          ]}
+                        >
+                          <Ionicons name="copy-outline" size={18} color={colors.primary} />
+                        </Pressable>
+                        {reactionDetailsLabel ? (
+                          <Text
+                            numberOfLines={2}
+                            style={[styles.reactionDetailsText, { color: colors.secondaryText }]}
+                          >
+                            {reactionDetailsLabel}
+                          </Text>
+                        ) : null}
+                      </Animated.View>
+                    ) : null}
                     {reactions.length > 0 ? (
                       <View
                         style={[
@@ -1963,25 +2091,10 @@ export default function SharedPostChatScreen({
         })
         .join('  ·  ')
     : null;
-  const reactionOverlayWidth = Math.min(
+  const reactionTrayWidth = Math.min(
     reactionDetailsLabel ? REACTION_TRAY_WITH_DETAILS_WIDTH : COMPACT_REACTION_TRAY_WIDTH,
     screenWidth - 24
   );
-  const reactionOverlayLeft = reactionOverlay
-    ? Math.min(
-        Math.max(reactionOverlay.pageX - reactionOverlayWidth / 2, 12),
-        Math.max(12, screenWidth - reactionOverlayWidth - 12)
-      )
-    : 0;
-  const reactionOverlayTop = reactionOverlay
-    ? Math.min(
-        Math.max(headerTopInset + 10, reactionOverlay.pageY - 72),
-        Math.max(
-          headerTopInset + 10,
-          screenHeight - contentBottomPadding - REACTION_TRAY_ESTIMATED_HEIGHT - 12
-        )
-      )
-    : 0;
   const visibleTypingUsers = typingUsers.filter((typingUser) => typingUser.userId !== user?.uid);
   const typingIndicatorLabel =
     visibleTypingUsers.length === 0
@@ -2201,7 +2314,11 @@ export default function SharedPostChatScreen({
               </View>
             </View>
           ) : (
-            <View style={styles.threadList}>
+            <Pressable
+              disabled={!reactionOverlay}
+              onPress={() => setReactionOverlay(null)}
+              style={styles.threadList}
+            >
               <FlashList
                 key={activePostId}
                 ref={listRef}
@@ -2246,7 +2363,7 @@ export default function SharedPostChatScreen({
                   </View>
                 </View>
               ) : null}
-            </View>
+            </Pressable>
             )}
             {isJumpToLatestMounted ? (
               <Animated.View
@@ -2403,20 +2520,48 @@ export default function SharedPostChatScreen({
                 ]}
               >
                 <View style={styles.composerReplyCopy}>
-                  <Text
+                  <Animated.Text
                     numberOfLines={1}
-                    style={[styles.composerReplyLabel, { color: colors.primary }]}
+                    style={[
+                      styles.composerReplyLabel,
+                      {
+                        color: colors.primary,
+                        opacity: replyPreviewTextProgress,
+                        transform: [
+                          {
+                            translateY: replyPreviewTextProgress.interpolate({
+                              inputRange: [0, 1],
+                              outputRange: [3, 0],
+                            }),
+                          },
+                        ],
+                      },
+                    ]}
                   >
                     {t('shared.chatReplyingToName', 'Replying to {{name}}', {
                       name: getAuthorLabel(replyTarget.authorUid, replyTarget.authorDisplayName),
                     })}
-                  </Text>
-                  <Text
+                  </Animated.Text>
+                  <Animated.Text
                     numberOfLines={1}
-                    style={[styles.composerReplyBody, { color: colors.secondaryText }]}
+                    style={[
+                      styles.composerReplyBody,
+                      {
+                        color: colors.secondaryText,
+                        opacity: replyPreviewTextProgress,
+                        transform: [
+                          {
+                            translateY: replyPreviewTextProgress.interpolate({
+                              inputRange: [0, 1],
+                              outputRange: [4, 0],
+                            }),
+                          },
+                        ],
+                      },
+                    ]}
                   >
                     {formatSharedResponseBody(replyTarget)}
-                  </Text>
+                  </Animated.Text>
                 </View>
                 <Pressable
                   accessibilityRole="button"
@@ -2514,111 +2659,6 @@ export default function SharedPostChatScreen({
           </View>
         </>
       )}
-      {reactionOverlay ? (
-        <View style={styles.reactionOverlayLayer} pointerEvents="box-none">
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={t('common.close', 'Close')}
-            style={[StyleSheet.absoluteFill, styles.reactionOverlayScrim]}
-            onPress={() => setReactionOverlay(null)}
-          />
-          <Animated.View
-            style={[
-              styles.reactionTray,
-              {
-                left: reactionOverlayLeft,
-                top: reactionOverlayTop,
-                width: reactionOverlayWidth,
-                backgroundColor: colors.surface,
-                borderColor: colors.border,
-                opacity: reactionOverlayProgress,
-                transform: [
-                  {
-                    scale: reactionOverlayProgress.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: [0.92, 1],
-                    }),
-                  },
-                ],
-              },
-            ]}
-          >
-            <View style={styles.reactionTrayReactionRow}>
-              {QUICK_RESPONSES.map((reactionEmoji, index) => (
-                <ReactionTrayButton
-                  key={`${reactionOverlay.response.id}:${reactionEmoji}`}
-                  emoji={reactionEmoji}
-                  index={index}
-                  selected={selectedReactionEmoji === reactionEmoji}
-                  colors={{
-                    primary: colors.primary,
-                    primarySoft: colors.primarySoft,
-                  }}
-                  label={
-                    selectedReactionEmoji === reactionEmoji
-                      ? t('shared.chatRemoveReaction', 'Remove {{emoji}} reaction', {
-                          emoji: reactionEmoji,
-                        })
-                      : t('shared.chatReactWith', 'React with {{emoji}}', {
-                          emoji: reactionEmoji,
-                        })
-                  }
-                  onPress={() => {
-                    void Haptics.selectionAsync();
-                    void sendReaction(reactionOverlay.response, reactionEmoji);
-                  }}
-                />
-              ))}
-            </View>
-            <View style={[styles.reactionTrayVerticalDivider, { backgroundColor: colors.border }]} />
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={t('shared.chatReplyToMessage', 'Reply to message')}
-              onPress={() => {
-                const target =
-                  responseById.get(reactionOverlay.response.id) ?? reactionOverlay.response;
-                void Haptics.selectionAsync();
-                setReplyTarget(target);
-                setReactionOverlay(null);
-              }}
-              style={({ pressed }) => [
-                styles.reactionTrayIconAction,
-                {
-                  backgroundColor: pressed ? colors.primarySoft : 'transparent',
-                },
-              ]}
-            >
-              <Ionicons name="return-up-back" size={18} color={colors.primary} />
-            </Pressable>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={t('shared.chatCopyMessage', 'Copy message')}
-              onPress={() => {
-                void Haptics.selectionAsync();
-                void copyResponseText(
-                  responseById.get(reactionOverlay.response.id) ?? reactionOverlay.response
-                );
-              }}
-              style={({ pressed }) => [
-                styles.reactionTrayIconAction,
-                {
-                  backgroundColor: pressed ? colors.primarySoft : 'transparent',
-                },
-              ]}
-            >
-              <Ionicons name="copy-outline" size={18} color={colors.primary} />
-            </Pressable>
-            {reactionDetailsLabel ? (
-              <Text
-                numberOfLines={2}
-                style={[styles.reactionDetailsText, { color: colors.secondaryText }]}
-              >
-                {reactionDetailsLabel}
-              </Text>
-            ) : null}
-          </Animated.View>
-        </View>
-      ) : null}
       <TextFieldEditSheet
         visible={isNicknameEditorVisible}
         value={nicknameDraft}
@@ -2871,6 +2911,14 @@ const styles = StyleSheet.create({
     gap: 5,
     position: 'relative',
   },
+  activeReactionMessageRow: {
+    zIndex: 40,
+    elevation: 40,
+  },
+  activeReactionMessageWrap: {
+    zIndex: 45,
+    elevation: 45,
+  },
   messageInteractionWrapWithReply: {
     gap: 0,
     marginTop: 8,
@@ -2990,6 +3038,8 @@ const styles = StyleSheet.create({
     fontFamily: 'Noto Sans',
   },
   reactionChip: {
+    position: 'absolute',
+    bottom: -10,
     minHeight: 24,
     minWidth: 32,
     borderRadius: 12,
@@ -2997,19 +3047,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 3,
     marginTop: -6,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 4,
-    elevation: 1,
+    shadowOpacity: 0,
+    shadowRadius: 0,
+    zIndex: 3,
+    elevation: 0,
   },
   selfReactionChip: {
-    alignSelf: 'flex-end',
-    marginRight: 6,
+    right: -8,
   },
   friendReactionChip: {
-    alignSelf: 'flex-start',
-    marginLeft: 6,
+    right: -8,
   },
   reactionChipText: {
     fontSize: 13,
@@ -3043,7 +3090,8 @@ const styles = StyleSheet.create({
   },
   reactionTray: {
     position: 'absolute',
-    zIndex: 10,
+    top: '100%',
+    zIndex: 50,
     minHeight: 48,
     borderRadius: 24,
     borderWidth: StyleSheet.hairlineWidth,
@@ -3058,6 +3106,32 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.08,
     shadowRadius: 10,
     elevation: 6,
+  },
+  friendInlineReactionTray: {
+    left: -4,
+    marginTop: 7,
+  },
+  selfInlineReactionTray: {
+    right: -4,
+    marginTop: 7,
+  },
+  reactionTrayNub: {
+    position: 'absolute',
+    width: 12,
+    height: 12,
+    transform: [{ rotate: '45deg' }],
+  },
+  reactionTrayNubTop: {
+    top: -5,
+    borderLeftWidth: StyleSheet.hairlineWidth,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopLeftRadius: 3,
+  },
+  friendInlineReactionTrayNub: {
+    left: 48,
+  },
+  selfInlineReactionTrayNub: {
+    right: 30,
   },
   reactionTrayReactionRow: {
     flexDirection: 'row',
@@ -3278,13 +3352,6 @@ const styles = StyleSheet.create({
     lineHeight: 16,
     fontWeight: '700',
     fontFamily: 'Noto Sans',
-  },
-  reactionOverlayLayer: {
-    ...StyleSheet.absoluteFillObject,
-    zIndex: 50,
-  },
-  reactionOverlayScrim: {
-    backgroundColor: 'rgba(0,0,0,0.03)',
   },
   errorText: {
     flex: 1,

@@ -1145,6 +1145,13 @@
         "evening-check-in": "Điều gì làm hôm nay đáng giữ lại?",
         "future-you": "Để lại một gợi ý nhỏ cho bạn của sau này."
     },
+    "updates": {
+        "readyTitle": "Bản cập nhật đã sẵn sàng",
+        "readyBody": "Noto đã tải xong phiên bản mới. Khởi động lại ngay để dùng các sửa lỗi và tinh chỉnh mới nhất.",
+        "restartAction": "Khởi động lại ngay",
+        "restartingAction": "Đang khởi động lại...",
+        "laterAction": "Để sau"
+    },
     "startup": {
         "databaseInitFailed": "Noto chưa thể mở cơ sở dữ liệu cục bộ. Hãy khởi động lại ứng dụng rồi thử lại nhé.",
         "databaseInitTimeout": "Noto mất quá lâu để mở cơ sở dữ liệu cục bộ. Hãy thử lại, và chỉ đặt lại dữ liệu cục bộ nếu lỗi tiếp tục xảy ra.",

@@ -1145,6 +1145,13 @@
         "evening-check-in": "What made today worth keeping?",
         "future-you": "Leave a tiny clue for future you."
     },
+    "updates": {
+        "readyTitle": "Update ready",
+        "readyBody": "A fresh version of Noto has downloaded. Restart now to use the latest fixes and polish.",
+        "restartAction": "Restart now",
+        "restartingAction": "Restarting...",
+        "laterAction": "Later"
+    },
     "startup": {
         "databaseInitFailed": "Noto could not open its local database. Please restart the app and try again.",
         "databaseInitTimeout": "Noto is taking too long to open its local database. Try again, and reset local data only if it keeps happening.",

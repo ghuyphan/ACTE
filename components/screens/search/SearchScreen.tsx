@@ -192,10 +192,18 @@ export default function SearchScreen() {
     () =>
       hasQuery && searchState.status === 'success' && searchState.query === trimmedActiveQuery
         ? searchState.results
-        : !hasQuery
+        : !hasQuery && hasActiveFilters
           ? notes
           : [],
-    [hasQuery, notes, searchState.query, searchState.results, searchState.status, trimmedActiveQuery]
+    [
+      hasActiveFilters,
+      hasQuery,
+      notes,
+      searchState.query,
+      searchState.results,
+      searchState.status,
+      trimmedActiveQuery,
+    ]
   );
   const visibleNotes = useMemo(
     () => filterNotesBySearchFilters(candidateNotes, activeFilters),
