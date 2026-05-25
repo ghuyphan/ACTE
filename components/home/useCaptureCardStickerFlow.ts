@@ -25,6 +25,12 @@ import {
 import { useSelectedStickerActionsFlow } from '../../hooks/ui/useSelectedStickerActionsFlow';
 import { useStickerSourceSheetFlow } from '../../hooks/ui/useStickerSourceSheetFlow';
 import { useStickerCreationFlow } from '../../hooks/ui/useStickerCreationFlow';
+import {
+  buildCreatedStickerLibrary,
+  groupCollectibleStickerLibrary,
+  type CreatedStickerLibraryItem,
+} from '../screens/notes/stickerLibrary';
+import type { Note } from '../../services/database';
 
 type StickerImportIntent = 'sticker' | 'stamp';
 type PickedStickerImportSource = {
@@ -58,6 +64,7 @@ interface UseCaptureCardStickerFlowOptions {
   enablePhotoStickers: boolean;
   onChangeStickerPlacements?: (nextPlacements: NoteStickerPlacement[]) => void;
   onBeforeNativePicker?: () => void | Promise<void>;
+  stickerLibraryNotes?: readonly Note[];
   cardSize?: number;
 }
 
@@ -165,9 +172,11 @@ export function useCaptureCardStickerFlow({
   enablePhotoStickers,
   onChangeStickerPlacements,
   onBeforeNativePicker,
+  stickerLibraryNotes = [],
   cardSize = 0,
 }: UseCaptureCardStickerFlowOptions) {
   const [importingSticker, setImportingSticker] = useState(false);
+  const [showStickerLibraryPicker, setShowStickerLibraryPicker] = useState(false);
 
   const dismissStickerUi = useCallback(() => {
     dismissOverlay();
@@ -368,6 +377,35 @@ export function useCaptureCardStickerFlow({
     },
     [applyImportedSticker]
   );
+  const stickerLibraryItems = useMemo(
+    () => buildCreatedStickerLibrary(stickerLibraryNotes),
+    [stickerLibraryNotes]
+  );
+  const stickerLibrarySections = useMemo(
+    () => groupCollectibleStickerLibrary(stickerLibraryItems),
+    [stickerLibraryItems]
+  );
+  const handleCloseStickerLibraryPicker = useCallback(() => {
+    setShowStickerLibraryPicker(false);
+  }, []);
+  const handleOpenStickerLibraryPicker = useCallback(() => {
+    if (stickerLibraryItems.length <= 0) {
+      return;
+    }
+
+    setShowStickerLibraryPicker(true);
+  }, [stickerLibraryItems.length]);
+  const handleSelectStickerLibraryItem = useCallback(
+    (item: CreatedStickerLibraryItem) => {
+      const placement = createStickerPlacement(item.asset, stickerPlacements, {
+        renderMode: item.renderMode,
+        stampStyle: item.stampStyle,
+      });
+      applyImportedSticker(placement);
+      setShowStickerLibraryPicker(false);
+    },
+    [applyImportedSticker, stickerPlacements]
+  );
 
   const {
     clearStickerSourceSheetFlow,
@@ -381,11 +419,13 @@ export function useCaptureCardStickerFlow({
     dismissPastePrompt,
     enablePhotoStickers,
     handlePasteStickerFromClipboard,
+    onOpenStickerLibrary: handleOpenStickerLibraryPicker,
     handlePrepareStickerCutoutPreview,
     handlePrepareStampCutout,
     handlePrepareStampPreview,
     importingSticker,
     refreshStickerSourceClipboardAvailability,
+    stickerLibraryItemCount: stickerLibraryItems.length,
     stickerSourceCanPasteFromClipboard,
     t,
   });
@@ -417,6 +457,7 @@ export function useCaptureCardStickerFlow({
     clearStickerSourceSheetFlow();
     hideStickerActionsSheet();
     clearStickerCreationDraft();
+    setShowStickerLibraryPicker(false);
     dismissOverlay();
   }, [
     clearStickerCreationDraft,
@@ -481,6 +522,10 @@ export function useCaptureCardStickerFlow({
       handleInlinePasteStickerPress,
       handleNativeInlinePasteStickerPress,
       showStickerSourceSheet,
+      showStickerLibraryPicker,
+      handleCloseStickerLibraryPicker,
+      handleSelectStickerLibraryItem,
+      stickerLibrarySections,
       handleCloseStickerSourceSheet,
       handleCloseStampCutterEditor,
       handleCloseStampPreviewEditor,
@@ -513,6 +558,7 @@ export function useCaptureCardStickerFlow({
       closeStickerOverlays,
       dismissPastePrompt,
       handleCloseStickerActionsSheet,
+      handleCloseStickerLibraryPicker,
       handleCloseStampCutterEditor,
       handleCloseStampPreviewEditor,
       handleCloseStickerCutoutPreviewEditor,
@@ -524,6 +570,7 @@ export function useCaptureCardStickerFlow({
       handleConfirmPasteFromPrompt,
       handleInlinePasteStickerPress,
       handleNativeInlinePasteStickerPress,
+      handleSelectStickerLibraryItem,
       handleSelectSticker,
       handleSelectedStickerAction,
       handleShowCardPastePrompt,
@@ -538,6 +585,7 @@ export function useCaptureCardStickerFlow({
       selectedStickerOutlineEnabled,
       selectedStickerPlacement,
       showInlinePasteButton,
+      showStickerLibraryPicker,
       showStickerActionsSheet,
       showStampCutterEditor,
       showStampPreviewEditor,
@@ -546,6 +594,7 @@ export function useCaptureCardStickerFlow({
       stampCutterDraft,
       stampPreviewDraft,
       stickerCutoutPreviewDraft,
+      stickerLibrarySections,
       stickerSourceActions,
       useNativeInlinePasteButton,
     ]

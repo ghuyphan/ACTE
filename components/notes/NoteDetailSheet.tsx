@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { PAYWALL_RESULT } from 'react-native-purchases-ui';
 import StickerSourceSheet from '../sheets/StickerSourceSheet';
+import StickerLibraryPickerSheet from '../sheets/StickerLibraryPickerSheet';
 import {
     cancelAnimation,
     Easing,
@@ -60,6 +61,11 @@ import {
     type StickerStampStyle,
     updateStickerPlacementTransform,
 } from '../../services/noteStickers';
+import {
+    buildCreatedStickerLibrary,
+    groupCollectibleStickerLibrary,
+    type CreatedStickerLibraryItem,
+} from '../screens/notes/stickerLibrary';
 import {
     cleanupSubjectCutoutImportSource,
     createStickerImportSourceFromSubjectCutout,
@@ -279,7 +285,8 @@ interface NoteDetailSheetProps {
 }
 
 export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: NoteDetailSheetProps) {
-    const { getNoteById, deleteNote, refreshNotes, updateNote, toggleFavorite } = useNotes();
+    const notesStore = useNotes();
+    const { getNoteById, deleteNote, refreshNotes, updateNote, toggleFavorite } = notesStore;
     const { user } = useAuth();
     const { setActiveNote, clearActiveNote } = useActiveNote();
     const { deleteSharedNote, sharedPosts, updateSharedNote } = useSharedFeedStore();
@@ -309,6 +316,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
     const [doodleModeEnabled, setDoodleModeEnabled] = useState(false);
     const [stickerModeEnabled, setStickerModeEnabled] = useState(false);
     const [selectedStickerId, setSelectedStickerId] = useState<string | null>(null);
+    const [showStickerLibraryPicker, setShowStickerLibraryPicker] = useState(false);
     const [stickerEntryAnimation, setStickerEntryAnimation] = useState<StickerEntryAnimation | null>(null);
     const [importingSticker, setImportingSticker] = useState(false);
     const [stickerSourceCanPasteFromClipboard, setStickerSourceCanPasteFromClipboard] = useState(false);
@@ -957,6 +965,44 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
         setStickerModeEnabled(true);
         setDoodleModeEnabled(false);
     }, [handleChangeStickerPlacements]);
+    const noteStoreNotes = (notesStore as { notes?: Note[] }).notes;
+    const stickerLibraryItems = useMemo(
+        () => {
+            const stickerLibraryNotes = Array.isArray(noteStoreNotes)
+                ? noteStoreNotes
+                : note
+                    ? [note]
+                    : [];
+
+            return buildCreatedStickerLibrary(stickerLibraryNotes);
+        },
+        [note, noteStoreNotes]
+    );
+    const stickerLibrarySections = useMemo(
+        () => groupCollectibleStickerLibrary(stickerLibraryItems),
+        [stickerLibraryItems]
+    );
+    const handleCloseStickerLibraryPicker = useCallback(() => {
+        setShowStickerLibraryPicker(false);
+    }, []);
+    const handleOpenStickerLibraryPicker = useCallback(() => {
+        if (stickerLibraryItems.length <= 0) {
+            return;
+        }
+
+        setShowStickerLibraryPicker(true);
+    }, [stickerLibraryItems.length]);
+    const handleSelectStickerLibraryItem = useCallback(
+        (item: CreatedStickerLibraryItem) => {
+            const placement = createStickerPlacement(item.asset, editStickerPlacementsRef.current, {
+                renderMode: item.renderMode,
+                stampStyle: item.stampStyle,
+            });
+            applyImportedSticker(placement);
+            setShowStickerLibraryPicker(false);
+        },
+        [applyImportedSticker]
+    );
 
     const handleCompleteStickerCreationPlacement = useCallback(
         ({
@@ -1294,11 +1340,13 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
         dismissPastePrompt,
         enablePhotoStickers: ENABLE_PHOTO_STICKERS && isEditing && Boolean(note),
         handlePasteStickerFromClipboard,
+        onOpenStickerLibrary: handleOpenStickerLibraryPicker,
         handlePrepareStickerCutoutPreview,
         handlePrepareStampCutout,
         handlePrepareStampPreview,
         importingSticker,
         refreshStickerSourceClipboardAvailability,
+        stickerLibraryItemCount: stickerLibraryItems.length,
         stickerSourceCanPasteFromClipboard,
         t,
     });
@@ -1306,6 +1354,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
     useEffect(() => {
         if (!isEditing || !note || importingSticker) {
             hideStickerSourceSheet();
+            setShowStickerLibraryPicker(false);
         }
     }, [hideStickerSourceSheet, importingSticker, isEditing, note]);
 
@@ -1931,6 +1980,18 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                     actions={stickerSourceActions}
                     onClose={handleCloseStickerSourceSheet}
                 />
+                <StickerLibraryPickerSheet
+                    visible={showStickerLibraryPicker}
+                    title={t('capture.stickerLibraryPickerTitle', 'Sticker library')}
+                    subtitle={t(
+                        'capture.stickerLibraryPickerHint',
+                        'Pick a sticker or stamp you already made.'
+                    )}
+                    cancelLabel={t('common.cancel', 'Cancel')}
+                    sections={stickerLibrarySections}
+                    onSelectItem={handleSelectStickerLibraryItem}
+                    onClose={handleCloseStickerLibraryPicker}
+                />
                 {stampCutterDraft ? (
                     <StampCutterEditor
                         visible={showStampCutterEditor}
@@ -2004,6 +2065,18 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
                 cancelLabel={t('common.cancel', 'Cancel')}
                 actions={stickerSourceActions}
                 onClose={handleCloseStickerSourceSheet}
+            />
+            <StickerLibraryPickerSheet
+                visible={showStickerLibraryPicker}
+                title={t('capture.stickerLibraryPickerTitle', 'Sticker library')}
+                subtitle={t(
+                    'capture.stickerLibraryPickerHint',
+                    'Pick a sticker or stamp you already made.'
+                )}
+                cancelLabel={t('common.cancel', 'Cancel')}
+                sections={stickerLibrarySections}
+                onSelectItem={handleSelectStickerLibraryItem}
+                onClose={handleCloseStickerLibraryPicker}
             />
             {stampCutterDraft ? (
                 <StampCutterEditor

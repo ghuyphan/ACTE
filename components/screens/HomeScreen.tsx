@@ -2942,6 +2942,7 @@ export default function HomeScreen() {
           onDraftChange={schedulePersistCaptureDraft}
           onBeforeNativeStickerPicker={persistCaptureDraftNow}
           onTextEntryFocusChange={handleCaptureTextEntryFocusChange}
+          stickerLibraryNotes={notes}
           footerContent={captureFooterContent}
         />
       </View>
@@ -2999,6 +3000,7 @@ export default function HomeScreen() {
       lockedPremiumNoteColorIds,
       lockedPremiumPhotoFilterIds,
       needsCameraPermission,
+      notes,
       noteColor,
       noteText,
       permission?.granted,

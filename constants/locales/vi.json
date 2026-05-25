@@ -228,6 +228,12 @@
         "stickerOptionsHint": "Chọn thêm tùy chọn cho sticker tại đây.",
         "stampMore": "Thêm tùy chọn tem",
         "stickerMore": "Thêm tùy chọn sticker",
+        "savedStickersLabel": "Dùng từ thư viện",
+        "savedStickersDescription": "Dùng lại sticker hoặc tem bạn đã tạo",
+        "stickerLibraryPickerTitle": "Thư viện sticker",
+        "stickerLibraryPickerHint": "Chọn sticker hoặc tem bạn đã tạo.",
+        "useSavedStickerA11y": "Dùng sticker đã lưu",
+        "useSavedStampA11y": "Dùng tem đã lưu",
         "createStickerLabel": "Tạo sticker",
         "createStickerDescription": "Tách chủ thể chính từ bất kỳ ảnh nào",
         "cutStampLabel": "Cắt tem ảnh",
@@ -412,7 +418,11 @@
             "section": {
                 "today": "Hôm nay",
                 "yesterday": "Hôm qua",
-                "earlier": "Trước đó"
+                "earlier": "Trước đó",
+                "recent": "Gần đây",
+                "mostUsed": "Dùng nhiều",
+                "stickers": "Sticker",
+                "stamps": "Tem"
             }
         },
         "recap": {

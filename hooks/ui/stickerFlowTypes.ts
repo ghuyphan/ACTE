@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 
 export type StickerSourceAction = {
   key: string;
-  iconName: 'images-outline' | 'pricetag-outline' | 'clipboard-outline' | 'scan-outline';
+  iconName: 'albums-outline' | 'images-outline' | 'pricetag-outline' | 'clipboard-outline' | 'scan-outline';
   renderIcon?: ({ color, size }: { color: string; size: number }) => ReactNode;
   label: string;
   description: string;

@@ -35,12 +35,14 @@ import { formatRadiusLabel, NOTE_RADIUS_OPTIONS } from '../../constants/noteRadi
 import { Layout } from '../../constants/theme';
 import type { BackCameraLens, BackCameraLensZoomConfig } from '../../services/cameraZoom';
 import { useReducedMotion } from '../../hooks/useReducedMotion';
+import type { Note } from '../../services/database';
 import { type NoteStickerPlacement } from '../../services/noteStickers';
 import type { PhotoFilterId } from '../../services/photoFilters';
 import type { DoodleStroke } from '../notes/NoteDoodleCanvas';
 import type { StickerEntryAnimation } from '../notes/NoteStickerCanvas';
 import AppSheet from '../sheets/AppSheet';
 import AppSheetScaffold from '../sheets/AppSheetScaffold';
+import StickerLibraryPickerSheet from '../sheets/StickerLibraryPickerSheet';
 import StickerSourceSheet from '../sheets/StickerSourceSheet';
 import NoteColorPicker from '../ui/NoteColorPicker';
 import {
@@ -215,6 +217,7 @@ interface CaptureCardProps {
   onDraftChange?: () => void;
   onBeforeNativeStickerPicker?: () => void | Promise<void>;
   onTextEntryFocusChange?: (focused: boolean) => void;
+  stickerLibraryNotes?: readonly Note[];
   footerContent?: ReactNode;
 }
 
@@ -293,6 +296,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   onDraftChange,
   onBeforeNativeStickerPicker,
   onTextEntryFocusChange,
+  stickerLibraryNotes = [],
   footerContent,
 }, ref) {
   const reduceMotionEnabled = useReducedMotion();
@@ -660,6 +664,8 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
     handleNativeInlinePasteStickerPress,
     handleSelectedStickerAction,
     handleSelectSticker,
+    handleCloseStickerLibraryPicker,
+    handleSelectStickerLibraryItem,
     handleShowCardPastePrompt,
     handleShowStickerSourceOptions,
     handleToggleStickerMode: handleToggleStickerModeInternal,
@@ -667,12 +673,14 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
     inlinePasteLoading,
     pastePrompt,
     showInlinePasteButton,
+    showStickerLibraryPicker,
     showStampCutterEditor,
     showStampPreviewEditor,
     showStickerCutoutPreviewEditor,
     showStickerSourceSheet,
     stampCutterDraft,
     stampPreviewDraft,
+    stickerLibrarySections,
     stickerCutoutPreviewDraft,
     stickerSourceActions,
     useNativeInlinePasteButton,
@@ -692,6 +700,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
     dismissOverlay: dismissCaptureInputs,
     onChangeStickerPlacements: handleChangeStickerPlacements,
     onBeforeNativePicker: onBeforeNativeStickerPicker,
+    stickerLibraryNotes,
     selectSticker: selectStickerPlacement,
     toggleStickerMode: toggleStickerModeInternal,
   });
@@ -1620,6 +1629,18 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
         cancelLabel={t('common.cancel', 'Cancel')}
         actions={stickerSourceActions}
         onClose={handleCloseStickerSourceSheet}
+      />
+      <StickerLibraryPickerSheet
+        visible={showStickerLibraryPicker}
+        title={t('capture.stickerLibraryPickerTitle', 'Sticker library')}
+        subtitle={t(
+          'capture.stickerLibraryPickerHint',
+          'Pick a sticker or stamp you already made.'
+        )}
+        cancelLabel={t('common.cancel', 'Cancel')}
+        sections={stickerLibrarySections}
+        onSelectItem={handleSelectStickerLibraryItem}
+        onClose={handleCloseStickerLibraryPicker}
       />
 
       {noteColorSheetBody ? (

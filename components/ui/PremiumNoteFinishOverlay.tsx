@@ -1,6 +1,6 @@
 import { LinearGradient } from 'expo-linear-gradient';
 import { memo, useEffect } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet, View, type ColorValue, type DimensionValue } from 'react-native';
 import Animated, {
   cancelAnimation,
   Easing,
@@ -24,7 +24,47 @@ interface PremiumNoteFinishOverlayProps {
   strength?: number;
 }
 
-type GradientStops = [string, string, string];
+type GradientColors = readonly [ColorValue, ColorValue, ...ColorValue[]];
+type GradientLocations = readonly [number, number, ...number[]];
+type GradientStops = [ColorValue, ColorValue, ColorValue];
+
+interface HoloDiffractionBandSpec {
+  top: DimensionValue;
+  left: DimensionValue;
+  width: DimensionValue;
+  height: number;
+  rotate: string;
+  opacity: number;
+  travelX: number;
+  travelY: number;
+  colors: GradientColors;
+  locations: GradientLocations;
+}
+
+interface HoloInterferenceLineSpec {
+  top: DimensionValue;
+  left: DimensionValue;
+  width: DimensionValue;
+  opacity: number;
+  rotate: string;
+  travel: number;
+}
+
+const HOLO_BASE_COLORS: GradientColors = [
+  'rgba(255,255,255,0.28)',
+  'rgba(246,241,231,0.2)',
+  'rgba(217,231,242,0.13)',
+  'rgba(255,255,255,0.16)',
+];
+
+const HOLO_FIELD_COLORS: GradientColors = [
+  'rgba(255,224,108,0.22)',
+  'rgba(196,247,150,0.16)',
+  'rgba(89,227,255,0.18)',
+  'rgba(144,129,255,0.16)',
+  'rgba(255,163,229,0.14)',
+  'rgba(255,255,255,0.0)',
+];
 
 const STATIC_SHEEN_COLORS: Record<string, GradientStops> = {
   rgb: ['rgba(255,80,176,0.0)', 'rgba(255,255,255,0.18)', 'rgba(90,255,240,0.0)'],
@@ -39,22 +79,93 @@ const STATIC_WASH_COLORS: Record<string, GradientStops> = {
 };
 
 const HOLO_SPARKLES = [
-  { top: '12%' as const, left: '14%' as const, size: 5, opacity: 0.54 },
-  { top: '24%' as const, left: '72%' as const, size: 4, opacity: 0.45 },
-  { top: '38%' as const, left: '42%' as const, size: 3, opacity: 0.38 },
-  { top: '61%' as const, left: '18%' as const, size: 4, opacity: 0.48 },
-  { top: '74%' as const, left: '78%' as const, size: 6, opacity: 0.44 },
+  { top: '12%' as const, left: '14%' as const, size: 5, opacity: 0.46, travel: 9 },
+  { top: '24%' as const, left: '72%' as const, size: 4, opacity: 0.38, travel: -7 },
+  { top: '38%' as const, left: '42%' as const, size: 3, opacity: 0.32, travel: 5 },
+  { top: '61%' as const, left: '18%' as const, size: 4, opacity: 0.4, travel: -8 },
+  { top: '74%' as const, left: '78%' as const, size: 6, opacity: 0.36, travel: 10 },
+];
+
+const HOLO_DIFFRACTION_BANDS: HoloDiffractionBandSpec[] = [
+  {
+    top: '-8%',
+    left: '-34%',
+    width: '168%',
+    height: 46,
+    rotate: '-24deg',
+    opacity: 0.7,
+    travelX: 126,
+    travelY: -54,
+    colors: [
+      'rgba(255,255,255,0)',
+      'rgba(255,241,118,0.1)',
+      'rgba(255,242,120,0.46)',
+      'rgba(112,245,255,0.5)',
+      'rgba(152,128,255,0.38)',
+      'rgba(255,255,255,0)',
+    ],
+    locations: [0, 0.22, 0.38, 0.51, 0.64, 1],
+  },
+  {
+    top: '34%',
+    left: '-42%',
+    width: '184%',
+    height: 34,
+    rotate: '18deg',
+    opacity: 0.62,
+    travelX: -112,
+    travelY: 38,
+    colors: [
+      'rgba(255,255,255,0)',
+      'rgba(255,137,221,0.1)',
+      'rgba(255,137,221,0.4)',
+      'rgba(255,255,255,0.46)',
+      'rgba(87,226,255,0.34)',
+      'rgba(255,255,255,0)',
+    ],
+    locations: [0, 0.26, 0.42, 0.5, 0.62, 1],
+  },
+  {
+    top: '72%',
+    left: '-28%',
+    width: '156%',
+    height: 28,
+    rotate: '-38deg',
+    opacity: 0.5,
+    travelX: 86,
+    travelY: 58,
+    colors: [
+      'rgba(255,255,255,0)',
+      'rgba(160,255,166,0.28)',
+      'rgba(255,229,106,0.36)',
+      'rgba(255,255,255,0.32)',
+      'rgba(255,255,255,0)',
+    ],
+    locations: [0, 0.34, 0.48, 0.58, 1],
+  },
+];
+
+const HOLO_INTERFERENCE_LINES: HoloInterferenceLineSpec[] = [
+  { top: '9%', left: '-8%', width: '116%', opacity: 0.16, rotate: '-18deg', travel: 5 },
+  { top: '18%', left: '-14%', width: '124%', opacity: 0.12, rotate: '-18deg', travel: -3 },
+  { top: '29%', left: '-10%', width: '120%', opacity: 0.14, rotate: '-18deg', travel: 4 },
+  { top: '43%', left: '-16%', width: '132%', opacity: 0.12, rotate: '-18deg', travel: -5 },
+  { top: '56%', left: '-12%', width: '124%', opacity: 0.15, rotate: '-18deg', travel: 3 },
+  { top: '68%', left: '-18%', width: '134%', opacity: 0.11, rotate: '-18deg', travel: -4 },
+  { top: '81%', left: '-9%', width: '118%', opacity: 0.13, rotate: '-18deg', travel: 4 },
 ];
 
 function HoloSparkle({
   sparkle,
   index,
   tiltX,
+  tiltY,
   isInteractive,
 }: {
   sparkle: (typeof HOLO_SPARKLES)[number];
   index: number;
   tiltX: SharedValue<number>;
+  tiltY: SharedValue<number>;
   isInteractive: boolean;
 }) {
   const animatedStyle = useAnimatedStyle(() => {
@@ -72,8 +183,21 @@ function HoloSparkle({
 
     return {
       opacity,
+      transform: [
+        {
+          translateX: isInteractive
+            ? interpolate(tiltX.value, [-1, 1], [-sparkle.travel, sparkle.travel])
+            : 0,
+        },
+        {
+          translateY: isInteractive
+            ? interpolate(tiltY.value, [-1, 1], [sparkle.travel * 0.7, -sparkle.travel * 0.7])
+            : 0,
+        },
+        { scale: isInteractive ? interpolate(tiltX.value, [-1, 0, 1], [0.78, 1, 1.12]) : 1 },
+      ],
     };
-  }, [index, isInteractive, sparkle.opacity]);
+  }, [index, isInteractive, sparkle.opacity, sparkle.travel]);
 
   return (
     <Animated.View
@@ -85,6 +209,120 @@ function HoloSparkle({
           width: sparkle.size,
           height: sparkle.size,
           borderRadius: sparkle.size / 2,
+        },
+        animatedStyle,
+      ]}
+    />
+  );
+}
+
+function HoloDiffractionBand({
+  band,
+  index,
+  tiltX,
+  tiltY,
+  isInteractive,
+}: {
+  band: (typeof HOLO_DIFFRACTION_BANDS)[number];
+  index: number;
+  tiltX: SharedValue<number>;
+  tiltY: SharedValue<number>;
+  isInteractive: boolean;
+}) {
+  const animatedStyle = useAnimatedStyle(() => {
+    const direction = index % 2 === 0 ? 1 : -1;
+
+    return {
+      opacity: isInteractive
+        ? interpolate(tiltX.value, [-1, 0, 1], [
+            band.opacity * (direction > 0 ? 0.5 : 0.9),
+            band.opacity,
+            band.opacity * (direction > 0 ? 1.1 : 0.52),
+          ])
+        : band.opacity * 0.76,
+      transform: [
+        {
+          translateX: isInteractive
+            ? interpolate(tiltX.value, [-1, 1], [-band.travelX, band.travelX])
+            : index === 0
+              ? -18
+              : index === 1
+                ? 12
+                : 0,
+        },
+        {
+          translateY: isInteractive
+            ? interpolate(tiltY.value, [-1, 1], [band.travelY, -band.travelY])
+            : index === 2
+              ? 4
+              : 0,
+        },
+        { rotate: band.rotate },
+      ],
+    };
+  }, [band, index, isInteractive]);
+
+  return (
+    <Animated.View
+      style={[
+        styles.holoDiffractionBand,
+        {
+          top: band.top,
+          left: band.left,
+          width: band.width,
+          height: band.height,
+        },
+        animatedStyle,
+      ]}
+    >
+      <LinearGradient
+        colors={band.colors}
+        locations={band.locations}
+        start={{ x: 0, y: 0.5 }}
+        end={{ x: 1, y: 0.5 }}
+        style={styles.holoBandFill}
+      />
+    </Animated.View>
+  );
+}
+
+function HoloInterferenceLine({
+  line,
+  index,
+  tiltX,
+  isInteractive,
+}: {
+  line: (typeof HOLO_INTERFERENCE_LINES)[number];
+  index: number;
+  tiltX: SharedValue<number>;
+  isInteractive: boolean;
+}) {
+  const animatedStyle = useAnimatedStyle(() => ({
+    opacity: isInteractive
+      ? interpolate(tiltX.value, [-1, 0, 1], [
+          line.opacity * (index % 2 === 0 ? 0.6 : 1.1),
+          line.opacity,
+          line.opacity * (index % 2 === 0 ? 1.2 : 0.55),
+        ])
+      : line.opacity * 0.72,
+    transform: [
+      {
+        translateX: isInteractive
+          ? interpolate(tiltX.value, [-1, 1], [-line.travel, line.travel])
+          : 0,
+      },
+      { rotate: line.rotate },
+    ],
+  }), [index, isInteractive, line]);
+
+  return (
+    <Animated.View
+      style={[
+        styles.holoInterferenceLine,
+        {
+          top: line.top,
+          left: line.left,
+          width: line.width,
         },
         animatedStyle,
       ]}
@@ -203,34 +441,32 @@ function PremiumNoteFinishOverlay({
     return null;
   }
 
-  if (finish === 'holo' && shouldRenderInteractiveHolo) {
+  if (finish === 'holo') {
     return (
       <View pointerEvents="none" style={StyleSheet.absoluteFill}>
         <LinearGradient
-          colors={[
-            'rgba(255,255,255,0.34)',
-            'rgba(243,240,234,0.22)',
-            'rgba(225,232,241,0.18)',
-            'rgba(255,255,255,0.2)',
-          ]}
+          colors={HOLO_BASE_COLORS}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={[StyleSheet.absoluteFill, styles.holoBaseWash]}
         />
         <LinearGradient
-          colors={[
-            'rgba(255,224,108,0.34)',
-            'rgba(196,247,150,0.24)',
-            'rgba(89,227,255,0.28)',
-            'rgba(144,129,255,0.24)',
-            'rgba(255,163,229,0.2)',
-            'rgba(255,255,255,0.0)',
-          ]}
+          colors={HOLO_FIELD_COLORS}
           locations={[0.02, 0.24, 0.48, 0.72, 0.9, 1]}
           start={{ x: 0.02, y: 0.5 }}
           end={{ x: 0.98, y: 0.5 }}
           style={[StyleSheet.absoluteFill, styles.holoRainbowField]}
         />
+        {HOLO_DIFFRACTION_BANDS.map((band, index) => (
+          <HoloDiffractionBand
+            key={`holo-diffraction-band-${index}`}
+            band={band}
+            index={index}
+            tiltX={tiltX}
+            tiltY={tiltY}
+            isInteractive={isInteractive}
+          />
+        ))}
         <Animated.View style={[styles.holoRainbowSweepWrap, rainbowSweepAnimatedStyle]}>
           <LinearGradient
             colors={[
@@ -309,11 +545,22 @@ function PremiumNoteFinishOverlay({
               'rgba(255,255,255,0.22)',
               'rgba(255,255,255,0.0)',
             ]}
-            locations={[0, 0.4, 0.48, 0.5, 0.52, 0.6, 1]}
+            locations={[0, 0.38, 0.46, 0.5, 0.53, 0.58, 0.72, 1]}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 0 }}
             style={styles.holoSheen}
           />
+        </Animated.View>
+        <Animated.View style={[StyleSheet.absoluteFill, styles.holoInterferenceLayer]}>
+          {HOLO_INTERFERENCE_LINES.map((line, index) => (
+            <HoloInterferenceLine
+              key={`holo-interference-line-${index}`}
+              line={line}
+              index={index}
+              tiltX={tiltX}
+              isInteractive={isInteractive}
+            />
+          ))}
         </Animated.View>
         <Animated.View style={[StyleSheet.absoluteFill, sparkleLayerAnimatedStyle]}>
           {HOLO_SPARKLES.map((sparkle, index) => {
@@ -323,6 +570,7 @@ function PremiumNoteFinishOverlay({
                 sparkle={sparkle}
                 index={index}
                 tiltX={tiltX}
+                tiltY={tiltY}
                 isInteractive={isInteractive}
               />
             );
@@ -427,9 +675,12 @@ const styles = StyleSheet.create({
     opacity: 1,
   },
   holoRainbowField: {
-    opacity: 0.46,
+    opacity: 0.34,
   },
-  holoBand: {
+  holoDiffractionBand: {
+    position: 'absolute',
+  },
+  holoBandFill: {
     flex: 1,
   },
   holoRainbowSweepWrap: {
@@ -438,6 +689,7 @@ const styles = StyleSheet.create({
     left: '-18%',
     width: '126%',
     height: '126%',
+    opacity: 0.7,
   },
   holoRainbowSweep: {
     flex: 1,
@@ -479,6 +731,14 @@ const styles = StyleSheet.create({
     shadowColor: '#FFFFFF',
     shadowOpacity: 0.8,
     shadowRadius: 6,
+  },
+  holoInterferenceLayer: {
+    opacity: 0.72,
+  },
+  holoInterferenceLine: {
+    position: 'absolute',
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: 'rgba(255,255,255,0.85)',
   },
   holoNoiseVeil: {
     ...StyleSheet.absoluteFill,

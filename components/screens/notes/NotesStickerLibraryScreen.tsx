@@ -1,6 +1,5 @@
 import { FlashList } from '@shopify/flash-list';
 import { Ionicons } from '@expo/vector-icons';
-import { Image as ExpoImage } from 'expo-image';
 import { useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
@@ -14,25 +13,23 @@ import { Layout } from '../../../constants/theme';
 import { useNotesStore } from '../../../hooks/useNotes';
 import { useTheme } from '../../../hooks/useTheme';
 import type { Note } from '../../../services/database';
-import StampStickerArtwork from '../../notes/StampStickerArtwork';
-import {
-  getStickerOutlineOffsets,
-  getStickerOutlineSize,
-} from '../../notes/stickerCanvasMetrics';
+import StickerLibraryPreview from '../../notes/StickerLibraryPreview';
 import { getStampFrameMetrics } from '../../notes/stampFrameMetrics';
 import SittingCatIcon from '../../ui/SittingCatIcon';
 import {
   buildCreatedStickerLibrary,
-  groupCreatedStickerLibrary,
+  groupCollectibleStickerLibrary,
+  type CollectibleStickerLibrarySectionKey,
   type CreatedStickerLibraryItem,
-  type CreatedStickerLibrarySectionKey,
 } from './stickerLibrary';
+
+const STICKER_LIBRARY_COLUMN_COUNT = 3;
 
 type StickerLibraryListItem =
   | {
       id: string;
       kind: 'section-header';
-      sectionKey: CreatedStickerLibrarySectionKey;
+      sectionKey: CollectibleStickerLibrarySectionKey;
       title: string;
     }
   | {
@@ -82,17 +79,17 @@ function getCollectionPose(item: CreatedStickerLibraryItem, itemIndex: number): 
   const poses: CollectionPose[] =
     item.renderMode === 'stamp'
       ? [
-          { align: 'flex-start', badgeAlign: 'center', scale: 0.92, translateY: 5 },
-          { align: 'center', badgeAlign: 'flex-start', scale: 1.04, translateY: -2 },
-          { align: 'flex-end', badgeAlign: 'flex-end', scale: 0.96, translateY: 7 },
-          { align: 'center', badgeAlign: 'flex-end', scale: 1.08, translateY: 1 },
+          { align: 'flex-start', badgeAlign: 'center', scale: 0.78, translateY: 3 },
+          { align: 'center', badgeAlign: 'flex-start', scale: 0.88, translateY: -1 },
+          { align: 'flex-end', badgeAlign: 'flex-end', scale: 0.82, translateY: 4 },
+          { align: 'center', badgeAlign: 'flex-end', scale: 0.9, translateY: 1 },
         ]
       : [
-          { align: 'flex-start', badgeAlign: 'flex-start', scale: 1.06, translateY: 6 },
-          { align: 'center', badgeAlign: 'flex-end', scale: 0.9, translateY: -3 },
-          { align: 'flex-end', badgeAlign: 'center', scale: 1, translateY: 8 },
-          { align: 'center', badgeAlign: 'flex-start', scale: 0.96, translateY: 2 },
-          { align: 'flex-start', badgeAlign: 'flex-end', scale: 1.1, translateY: 4 },
+          { align: 'flex-start', badgeAlign: 'flex-start', scale: 0.86, translateY: 3 },
+          { align: 'center', badgeAlign: 'flex-end', scale: 0.78, translateY: -2 },
+          { align: 'flex-end', badgeAlign: 'center', scale: 0.84, translateY: 4 },
+          { align: 'center', badgeAlign: 'flex-start', scale: 0.8, translateY: 1 },
+          { align: 'flex-start', badgeAlign: 'flex-end', scale: 0.88, translateY: 2 },
         ];
 
   return poses[seed % poses.length] ?? poses[0];
@@ -140,48 +137,12 @@ function StickerPreview({
     return <Ionicons name="image-outline" size={28} color={fallbackColor} />;
   }
 
-  if (item.renderMode === 'stamp') {
-    return (
-      <StampStickerArtwork
-        localUri={item.asset.localUri}
-        width={previewWidth}
-        height={previewHeight}
-        style={item.stampStyle ?? 'classic'}
-        shadowEnabled={false}
-      />
-    );
-  }
-
-  const outlineSize = getStickerOutlineSize(previewWidth, previewHeight);
-  const outlineOffsets = getStickerOutlineOffsets(outlineSize);
-
   return (
-    <View style={[styles.stickerPreviewCanvas, { width: previewWidth, height: previewHeight }]}>
-      {outlineOffsets.map((offset, index) => (
-        <ExpoImage
-          key={`${item.id}-outline-${index}`}
-          source={{ uri: item.asset.localUri }}
-          style={[
-            styles.stickerPreviewImage,
-            styles.stickerPreviewOutline,
-            {
-              transform: [
-                { translateX: offset.x * outlineSize },
-                { translateY: offset.y * outlineSize },
-              ],
-            },
-          ]}
-          contentFit="contain"
-          transition={0}
-        />
-      ))}
-      <ExpoImage
-        source={{ uri: item.asset.localUri }}
-        style={styles.stickerPreviewImage}
-        contentFit="contain"
-        transition={120}
-      />
-    </View>
+    <StickerLibraryPreview
+      item={item}
+      previewWidth={previewWidth}
+      previewHeight={previewHeight}
+    />
   );
 }
 
@@ -198,11 +159,11 @@ export function NotesStickerLibraryContent({
   const insets = useSafeAreaInsets();
   const resolvedBottomInset = bottomInset ?? insets.bottom;
   const items = useMemo(() => buildCreatedStickerLibrary(notes), [notes]);
-  const sections = useMemo(() => groupCreatedStickerLibrary(items), [items]);
+  const sections = useMemo(() => groupCollectibleStickerLibrary(items), [items]);
   const gridGap = 12;
   const cardWidth = Math.max(
     96,
-    Math.floor((width - Layout.screenPadding * 2 - gridGap * 2) / 3)
+    Math.floor((width - Layout.screenPadding * 2 - gridGap * 2) / STICKER_LIBRARY_COLUMN_COUNT)
   );
   const listData = useMemo<StickerLibraryListItem[]>(
     () =>
@@ -211,10 +172,10 @@ export function NotesStickerLibraryContent({
           id: `section-${section.key}`,
           kind: 'section-header' as const,
           sectionKey: section.key,
-          title: t(`notes.stickerLibrary.section.${section.key}`, section.key),
+          title: t(`notes.stickerLibrary.section.${section.key}`, getStickerSectionTitle(section.key)),
         },
         ...section.items.map((item, itemIndex) => ({
-          id: item.id,
+          id: `${section.key}-${item.id}`,
           kind: 'sticker' as const,
           item,
           itemIndex,
@@ -227,7 +188,7 @@ export function NotesStickerLibraryContent({
     []
   );
   const overrideItemLayout = useCallback((layout: { span?: number }, item: StickerLibraryListItem) => {
-    layout.span = item.kind === 'section-header' ? 3 : 1;
+    layout.span = item.kind === 'section-header' ? STICKER_LIBRARY_COLUMN_COUNT : 1;
   }, []);
   const renderItem = useCallback(
     ({ item }: { item: StickerLibraryListItem }) => {
@@ -250,7 +211,14 @@ export function NotesStickerLibraryContent({
 
       return (
         <View style={[styles.cardCell, { paddingHorizontal: gridGap / 2, marginBottom: gridGap + 8 }]}>
-          <View style={styles.card}>
+          <View
+            style={[
+              styles.card,
+              {
+                borderColor: colors.border,
+              },
+            ]}
+          >
             <View
               style={[
                 styles.previewWrap,
@@ -284,17 +252,23 @@ export function NotesStickerLibraryContent({
                 />
               </View>
             </View>
-            <View
-              style={[
-                styles.usageChip,
-                {
-                  backgroundColor: colors.surface,
-                  borderColor: colors.border,
-                  alignSelf: pose.badgeAlign,
-                },
-              ]}
-            >
-              <Text style={[styles.usageChipText, { color: colors.text }]}>
+            <View style={styles.cardFooter}>
+              <View
+                style={[
+                  styles.typeBadge,
+                  {
+                    backgroundColor: colors.surface,
+                    borderColor: colors.border,
+                  },
+                ]}
+              >
+                <Ionicons
+                  name={item.item.renderMode === 'stamp' ? 'pricetag-outline' : 'sparkles-outline'}
+                  size={12}
+                  color={colors.secondaryText}
+                />
+              </View>
+              <Text style={[styles.usageText, { color: colors.secondaryText }]}>
                 {item.item.usageCount}x
               </Text>
             </View>
@@ -302,7 +276,14 @@ export function NotesStickerLibraryContent({
         </View>
       );
     },
-    [cardWidth, colors.border, colors.secondaryText, colors.surface, colors.text, gridGap]
+    [
+      cardWidth,
+      colors.border,
+      colors.secondaryText,
+      colors.surface,
+      colors.text,
+      gridGap,
+    ]
   );
 
   return items.length > 0 ? (
@@ -313,7 +294,7 @@ export function NotesStickerLibraryContent({
       renderItem={renderItem}
       getItemType={getItemType}
       overrideItemLayout={overrideItemLayout as any}
-      numColumns={3}
+      numColumns={STICKER_LIBRARY_COLUMN_COUNT}
       style={[styles.container, { backgroundColor: colors.background }]}
       contentContainerStyle={{
         paddingHorizontal: Layout.screenPadding,
@@ -356,6 +337,20 @@ export function NotesStickerLibraryContent({
   );
 }
 
+function getStickerSectionTitle(sectionKey: CollectibleStickerLibrarySectionKey) {
+  switch (sectionKey) {
+    case 'mostUsed':
+      return 'Used most';
+    case 'stickers':
+      return 'Stickers';
+    case 'stamps':
+      return 'Stamps';
+    case 'recent':
+    default:
+      return 'Recent';
+  }
+}
+
 export default function NotesStickerLibraryScreen() {
   const { notes } = useNotesStore();
   return <NotesStickerLibraryContent notes={notes} />;
@@ -386,6 +381,10 @@ const styles = StyleSheet.create({
   card: {
     position: 'relative',
     width: '100%',
+    borderWidth: 1,
+    borderRadius: 18,
+    padding: 10,
+    gap: 8,
   },
   previewWrap: {
     alignItems: 'center',
@@ -397,33 +396,22 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     overflow: 'visible',
   },
-  stickerPreviewCanvas: {
+  cardFooter: {
+    minHeight: 24,
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    position: 'relative',
+    justifyContent: 'space-between',
+    gap: 8,
   },
-  stickerPreviewImage: {
-    position: 'absolute',
-    width: '100%',
-    height: '100%',
-  },
-  stickerPreviewOutline: {
-    tintColor: '#FFFFFF',
-    opacity: 0.98,
-  },
-  usageChip: {
-    position: 'absolute',
-    left: 8,
-    bottom: 8,
-    minWidth: 34,
+  typeBadge: {
+    width: 24,
     height: 24,
-    paddingHorizontal: 8,
     borderRadius: 12,
     borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  usageChipText: {
+  usageText: {
     fontFamily: 'Noto Sans',
     fontSize: 12,
     fontWeight: '700',

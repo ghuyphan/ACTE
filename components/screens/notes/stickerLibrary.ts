@@ -18,8 +18,19 @@ export interface CreatedStickerLibraryItem {
 
 export type CreatedStickerLibrarySectionKey = 'today' | 'yesterday' | 'earlier';
 
+export type CollectibleStickerLibrarySectionKey =
+  | 'recent'
+  | 'mostUsed'
+  | 'stickers'
+  | 'stamps';
+
 export interface CreatedStickerLibrarySection {
   key: CreatedStickerLibrarySectionKey;
+  items: CreatedStickerLibraryItem[];
+}
+
+export interface CollectibleStickerLibrarySection {
+  key: CollectibleStickerLibrarySectionKey;
   items: CreatedStickerLibraryItem[];
 }
 
@@ -200,4 +211,34 @@ export function groupCreatedStickerLibrary(
   }
 
   return grouped.filter((section) => section.items.length > 0);
+}
+
+export function groupCollectibleStickerLibrary(
+  items: readonly CreatedStickerLibraryItem[],
+  limitPerHighlightSection = 12
+): CollectibleStickerLibrarySection[] {
+  const recent = items.slice(0, limitPerHighlightSection);
+  const mostUsed = items
+    .filter((item) => item.usageCount > 1)
+    .slice()
+    .sort((left, right) => {
+      const usageDelta = right.usageCount - left.usageCount;
+      if (usageDelta !== 0) {
+        return usageDelta;
+      }
+
+      return getTimestampMs(right.lastUsedAt) - getTimestampMs(left.lastUsedAt);
+    })
+    .slice(0, limitPerHighlightSection);
+  const stickers = items.filter((item) => item.renderMode !== 'stamp');
+  const stamps = items.filter((item) => item.renderMode === 'stamp');
+
+  const sections: CollectibleStickerLibrarySection[] = [
+    { key: 'recent', items: recent },
+    { key: 'mostUsed', items: mostUsed },
+    { key: 'stickers', items: stickers },
+    { key: 'stamps', items: stamps },
+  ];
+
+  return sections.filter((section) => section.items.length > 0);
 }

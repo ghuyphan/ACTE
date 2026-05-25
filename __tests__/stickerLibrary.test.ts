@@ -1,5 +1,6 @@
 import {
   buildCreatedStickerLibrary,
+  groupCollectibleStickerLibrary,
   groupCreatedStickerLibrary,
 } from '../components/screens/notes/stickerLibrary';
 import type { Note } from '../services/database';
@@ -177,5 +178,41 @@ describe('buildCreatedStickerLibrary', () => {
     expect(sections[0]?.items[0]?.assetId).toBe('today-asset');
     expect(sections[1]?.items[0]?.assetId).toBe('yesterday-asset');
     expect(sections[2]?.items[0]?.assetId).toBe('earlier-asset');
+  });
+
+  it('groups items into reusable collection shelves', () => {
+    const items = buildCreatedStickerLibrary([
+      createNote({
+        id: 'older-note',
+        createdAt: '2026-04-01T00:00:00.000Z',
+        stickerPlacementsJson: JSON.stringify([
+          createPlacement({ placementId: 'placement-1', assetId: 'sticker-1' }),
+          createPlacement({ placementId: 'placement-2', assetId: 'stamp-1', renderMode: 'stamp' }),
+        ]),
+      }),
+      createNote({
+        id: 'newer-note',
+        createdAt: '2026-04-03T00:00:00.000Z',
+        stickerPlacementsJson: JSON.stringify([
+          createPlacement({ placementId: 'placement-3', assetId: 'sticker-1' }),
+        ]),
+      }),
+    ]);
+
+    const sections = groupCollectibleStickerLibrary(items);
+
+    expect(sections.map((section) => section.key)).toEqual([
+      'recent',
+      'mostUsed',
+      'stickers',
+      'stamps',
+    ]);
+    expect(sections.find((section) => section.key === 'mostUsed')?.items).toEqual([
+      expect.objectContaining({ assetId: 'sticker-1', usageCount: 2 }),
+    ]);
+    expect(sections.find((section) => section.key === 'stickers')?.items.map((item) => item.assetId))
+      .toEqual(['sticker-1']);
+    expect(sections.find((section) => section.key === 'stamps')?.items.map((item) => item.assetId))
+      .toEqual(['stamp-1']);
   });
 });

@@ -228,6 +228,12 @@
         "stickerOptionsHint": "Choose the extra sticker controls here.",
         "stampMore": "More stamp options",
         "stickerMore": "More sticker options",
+        "savedStickersLabel": "Use from library",
+        "savedStickersDescription": "Reuse a sticker or stamp you already made",
+        "stickerLibraryPickerTitle": "Sticker library",
+        "stickerLibraryPickerHint": "Pick a sticker or stamp you already made.",
+        "useSavedStickerA11y": "Use saved sticker",
+        "useSavedStampA11y": "Use saved stamp",
         "createStickerLabel": "Create sticker",
         "createStickerDescription": "Lift the main subject from any photo",
         "cutStampLabel": "Cut stamp",
@@ -412,7 +418,11 @@
             "section": {
                 "today": "Today",
                 "yesterday": "Yesterday",
-                "earlier": "Earlier"
+                "earlier": "Earlier",
+                "recent": "Recent",
+                "mostUsed": "Used most",
+                "stickers": "Stickers",
+                "stamps": "Stamps"
             }
         },
         "recap": {

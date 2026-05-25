@@ -15,11 +15,13 @@ interface UseStickerSourceSheetFlowOptions {
   dismissPastePrompt: () => void;
   enablePhotoStickers: boolean;
   handlePasteStickerFromClipboard: () => Promise<void>;
+  onOpenStickerLibrary?: () => void;
   handlePrepareStickerCutoutPreview: () => Promise<void>;
   handlePrepareStampCutout: () => Promise<void>;
   handlePrepareStampPreview: () => Promise<void>;
   importingSticker: boolean;
   refreshStickerSourceClipboardAvailability: () => void;
+  stickerLibraryItemCount?: number;
   stickerSourceCanPasteFromClipboard: boolean;
   t: TFunction;
 }
@@ -29,16 +31,19 @@ export function useStickerSourceSheetFlow({
   dismissPastePrompt,
   enablePhotoStickers,
   handlePasteStickerFromClipboard,
+  onOpenStickerLibrary,
   handlePrepareStickerCutoutPreview,
   handlePrepareStampCutout,
   handlePrepareStampPreview,
   importingSticker,
   refreshStickerSourceClipboardAvailability,
+  stickerLibraryItemCount = 0,
   stickerSourceCanPasteFromClipboard,
   t,
 }: UseStickerSourceSheetFlowOptions) {
   const [showStickerSourceSheet, setShowStickerSourceSheet] = useState(false);
   const [pendingStickerSourceAction, setPendingStickerSourceAction] = useState<StickerSourceIntent | null>(null);
+  const [pendingStickerLibraryOpen, setPendingStickerLibraryOpen] = useState(false);
 
   useEffect(() => {
     if (showStickerSourceSheet || !pendingStickerSourceAction) {
@@ -70,6 +75,19 @@ export function useStickerSourceSheetFlow({
     showStickerSourceSheet,
   ]);
 
+  useEffect(() => {
+    if (showStickerSourceSheet || !pendingStickerLibraryOpen) {
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      setPendingStickerLibraryOpen(false);
+      onOpenStickerLibrary?.();
+    }, STICKER_SOURCE_SHEET_DISMISS_DELAY_MS);
+
+    return () => clearTimeout(timer);
+  }, [onOpenStickerLibrary, pendingStickerLibraryOpen, showStickerSourceSheet]);
+
   const handleCloseStickerSourceSheet = useCallback(() => {
     setShowStickerSourceSheet(false);
   }, []);
@@ -96,6 +114,16 @@ export function useStickerSourceSheetFlow({
     void handlePasteStickerFromClipboard();
   }, [handlePasteStickerFromClipboard]);
 
+  const handleSelectStickerSourceLibrary = useCallback(() => {
+    if (!onOpenStickerLibrary || stickerLibraryItemCount <= 0) {
+      return;
+    }
+
+    setPendingStickerLibraryOpen(true);
+    setShowStickerSourceSheet(false);
+    dismissOverlay();
+  }, [dismissOverlay, onOpenStickerLibrary, stickerLibraryItemCount]);
+
   const handleSelectStickerSourceIntent = useCallback((intent: StickerSourceIntent) => {
     setPendingStickerSourceAction(intent);
     setShowStickerSourceSheet(false);
@@ -104,7 +132,23 @@ export function useStickerSourceSheetFlow({
 
   const stickerSourceActions = useMemo<StickerSourceAction[]>(
     () => {
-      const actions: StickerSourceAction[] = [
+      const actions: StickerSourceAction[] = [];
+
+      if (onOpenStickerLibrary && stickerLibraryItemCount > 0) {
+        actions.push({
+          key: 'saved-stickers',
+          iconName: 'albums-outline',
+          label: t('capture.savedStickersLabel', 'Use from library'),
+          description: t(
+            'capture.savedStickersDescription',
+            'Reuse a sticker or stamp you already made'
+          ),
+          onPress: handleSelectStickerSourceLibrary,
+          testID: 'sticker-source-option-library',
+        });
+      }
+
+      actions.push(
         {
           key: 'create-sticker',
           iconName: 'images-outline',
@@ -131,7 +175,7 @@ export function useStickerSourceSheetFlow({
           onPress: () => handleSelectStickerSourceIntent('stamp'),
           testID: 'sticker-source-option-create-stamp',
         },
-      ];
+      );
 
       if (stickerSourceCanPasteFromClipboard) {
         actions.push({
@@ -149,6 +193,9 @@ export function useStickerSourceSheetFlow({
     [
       handleSelectStickerSourceClipboard,
       handleSelectStickerSourceIntent,
+      handleSelectStickerSourceLibrary,
+      onOpenStickerLibrary,
+      stickerLibraryItemCount,
       stickerSourceCanPasteFromClipboard,
       t,
     ]
@@ -161,6 +208,7 @@ export function useStickerSourceSheetFlow({
   const clearStickerSourceSheetFlow = useCallback(() => {
     setShowStickerSourceSheet(false);
     setPendingStickerSourceAction(null);
+    setPendingStickerLibraryOpen(false);
   }, []);
 
   return {
