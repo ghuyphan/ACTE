@@ -14,6 +14,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useHologramMotion } from '../../hooks/useHologramMotion';
 import { useReducedMotion } from '../../hooks/useReducedMotion';
+import { PremiumNoteFinishChrome } from '../../constants/theme';
 import { getNoteColorFinish } from '../../services/noteAppearance';
 
 interface PremiumNoteFinishOverlayProps {
@@ -469,15 +470,7 @@ function PremiumNoteFinishOverlay({
         ))}
         <Animated.View style={[styles.holoRainbowSweepWrap, rainbowSweepAnimatedStyle]}>
           <LinearGradient
-            colors={[
-              'rgba(255,255,255,0.0)',
-              'rgba(255,226,112,0.28)',
-              'rgba(255,137,204,0.24)',
-              'rgba(140,116,255,0.2)',
-              'rgba(81,233,255,0.24)',
-              'rgba(188,255,151,0.18)',
-              'rgba(255,255,255,0.0)',
-            ]}
+            colors={PremiumNoteFinishChrome.holoRainbowSweepColors}
             locations={[0, 0.12, 0.28, 0.46, 0.66, 0.84, 1]}
             start={{ x: 0, y: 0.08 }}
             end={{ x: 1, y: 0.92 }}
@@ -486,17 +479,7 @@ function PremiumNoteFinishOverlay({
         </Animated.View>
         <Animated.View style={[styles.holoSpectrumWrap, spectrumAnimatedStyle]}>
           <LinearGradient
-            colors={[
-              'rgba(255,0,0,0)',
-              'rgba(255,112,112,0.18)',
-              'rgba(255,188,94,0.24)',
-              'rgba(255,244,125,0.26)',
-              'rgba(156,255,160,0.22)',
-              'rgba(90,223,255,0.24)',
-              'rgba(148,129,255,0.26)',
-              'rgba(255,118,216,0.22)',
-              'rgba(255,255,255,0)',
-            ]}
+            colors={PremiumNoteFinishChrome.holoSpectrumColors}
             locations={[0, 0.1, 0.25, 0.4, 0.55, 0.7, 0.85, 0.95, 1]}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 0 }}
@@ -505,14 +488,7 @@ function PremiumNoteFinishOverlay({
         </Animated.View>
         <Animated.View style={[styles.holoPrismRibbonWrap, prismRibbonAnimatedStyle]}>
           <LinearGradient
-            colors={[
-              'rgba(255,255,255,0.0)',
-              'rgba(255,255,255,0.12)',
-              'rgba(255,239,112,0.34)',
-              'rgba(120,243,255,0.38)',
-              'rgba(255,145,226,0.3)',
-              'rgba(255,255,255,0.0)',
-            ]}
+            colors={PremiumNoteFinishChrome.holoPrismRibbonColors}
             locations={[0, 0.16, 0.34, 0.52, 0.74, 1]}
             start={{ x: 0, y: 0.5 }}
             end={{ x: 1, y: 0.5 }}
@@ -521,13 +497,7 @@ function PremiumNoteFinishOverlay({
         </Animated.View>
         <Animated.View style={[styles.holoSpectrumWrap, spectrum2AnimatedStyle]}>
           <LinearGradient
-            colors={[
-              'rgba(255,255,255,0)',
-              'rgba(118,245,255,0.24)',
-              'rgba(255,160,228,0.24)',
-              'rgba(255,243,128,0.22)',
-              'rgba(255,255,255,0)',
-            ]}
+            colors={PremiumNoteFinishChrome.holoSpectrumAccentColors}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 0 }}
             style={styles.holoSpectrum}
@@ -535,16 +505,7 @@ function PremiumNoteFinishOverlay({
         </Animated.View>
         <Animated.View style={[styles.holoSheenWrap, holoSheenAnimatedStyle]}>
           <LinearGradient
-            colors={[
-              'rgba(255,255,255,0.0)',
-              'rgba(255,255,255,0.02)',
-              'rgba(255,255,255,0.22)',
-              'rgba(255,255,255,0.55)',
-              'rgba(255,255,255,0.68)',
-              'rgba(255,255,255,0.55)',
-              'rgba(255,255,255,0.22)',
-              'rgba(255,255,255,0.0)',
-            ]}
+            colors={PremiumNoteFinishChrome.holoSheenColors}
             locations={[0, 0.38, 0.46, 0.5, 0.53, 0.58, 0.72, 1]}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 0 }}
@@ -578,13 +539,13 @@ function PremiumNoteFinishOverlay({
         </Animated.View>
         <View style={styles.holoNoiseVeil} />
         <LinearGradient
-          colors={['rgba(255,184,228,0.34)', 'rgba(121,232,255,0.14)', 'rgba(255,255,255,0.0)']}
+          colors={PremiumNoteFinishChrome.holoLeftRailColors}
           start={{ x: 0, y: 0 }}
           end={{ x: 0, y: 1 }}
           style={styles.holoLeftRail}
         />
         <LinearGradient
-          colors={['rgba(255,255,255,0.0)', 'rgba(255,228,125,0.2)', 'rgba(103,225,255,0.34)']}
+          colors={PremiumNoteFinishChrome.holoRightRailColors}
           start={{ x: 0, y: 0 }}
           end={{ x: 0, y: 1 }}
           style={styles.holoRightRail}
@@ -644,7 +605,7 @@ const styles = StyleSheet.create({
   edgeGlow: {
     ...StyleSheet.absoluteFill,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.22)',
+    borderColor: PremiumNoteFinishChrome.edgeBorder,
     opacity: 0.95,
   },
   rgbWash: {
@@ -657,17 +618,17 @@ const styles = StyleSheet.create({
     opacity: 0.84,
   },
   rgbEdge: {
-    shadowColor: '#A36BFF',
+    shadowColor: PremiumNoteFinishChrome.rgbEdgeShadow,
     shadowOpacity: 0.28,
     shadowRadius: 16,
   },
   holoEdge: {
-    shadowColor: '#8AF6FF',
+    shadowColor: PremiumNoteFinishChrome.holoEdgeShadow,
     shadowOpacity: 0.24,
     shadowRadius: 14,
   },
   chromeEdge: {
-    shadowColor: '#D2B8FF',
+    shadowColor: PremiumNoteFinishChrome.chromeEdgeShadow,
     shadowOpacity: 0.2,
     shadowRadius: 12,
   },
@@ -727,8 +688,8 @@ const styles = StyleSheet.create({
   },
   holoSparkle: {
     position: 'absolute',
-    backgroundColor: 'rgba(255,255,255,0.92)',
-    shadowColor: '#FFFFFF',
+    backgroundColor: PremiumNoteFinishChrome.sparkleBackground,
+    shadowColor: PremiumNoteFinishChrome.sparkleShadow,
     shadowOpacity: 0.8,
     shadowRadius: 6,
   },
@@ -738,12 +699,12 @@ const styles = StyleSheet.create({
   holoInterferenceLine: {
     position: 'absolute',
     height: StyleSheet.hairlineWidth,
-    backgroundColor: 'rgba(255,255,255,0.85)',
+    backgroundColor: PremiumNoteFinishChrome.interferenceLineBackground,
   },
   holoNoiseVeil: {
     ...StyleSheet.absoluteFill,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.22)',
+    borderColor: PremiumNoteFinishChrome.edgeBorder,
     opacity: 0.78,
   },
   holoLeftRail: {
@@ -768,16 +729,16 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFill,
     margin: 2,
     borderWidth: 1,
-    borderColor: 'rgba(255,250,236,0.52)',
-    shadowColor: '#FFF6C8',
+    borderColor: PremiumNoteFinishChrome.frameBloomBorder,
+    shadowColor: PremiumNoteFinishChrome.frameBloomShadow,
     shadowOpacity: 0.2,
     shadowRadius: 20,
   },
   holoEdgeGlow: {
     ...StyleSheet.absoluteFill,
     borderWidth: 1.2,
-    borderColor: 'rgba(232,248,255,0.68)',
-    shadowColor: '#BDEEFF',
+    borderColor: PremiumNoteFinishChrome.edgeGlowBorder,
+    shadowColor: PremiumNoteFinishChrome.edgeGlowShadow,
     shadowOpacity: 0.52,
     shadowRadius: 22,
   },
@@ -785,6 +746,6 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFill,
     borderWidth: 1,
     margin: 5,
-    borderColor: 'rgba(255,255,255,0.3)',
+    borderColor: PremiumNoteFinishChrome.innerGlowBorder,
   },
 });

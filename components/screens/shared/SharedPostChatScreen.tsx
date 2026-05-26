@@ -12,7 +12,6 @@ import {
   PanResponder,
   Platform,
   Pressable,
-  StatusBar,
   StyleSheet,
   Text,
   TextInput,
@@ -117,14 +116,6 @@ function scheduleKeyboardLayout(event: KeyboardEvent) {
   if (Platform.OS === 'ios') {
     Keyboard.scheduleLayoutAnimation(event);
   }
-}
-
-function getHeaderTopInset(topInset: number) {
-  if (topInset > 0) {
-    return topInset;
-  }
-
-  return Platform.OS === 'ios' ? 44 : StatusBar.currentHeight ?? 24;
 }
 
 function ResponseSkeletonRows({
@@ -489,7 +480,6 @@ export default function SharedPostChatScreen({
   const { t } = useTranslation();
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
-  const headerTopInset = getHeaderTopInset(insets.top);
   const { height: screenHeight, width: screenWidth } = useWindowDimensions();
   const { user } = useAuth();
   const { isOnline } = useConnectivity();
@@ -787,7 +777,7 @@ export default function SharedPostChatScreen({
       duration: 170,
       useNativeDriver: true,
     }).start();
-  }, [replyPreviewTextProgress, replyTarget?.id]);
+  }, [replyPreviewTextProgress, replyTarget]);
 
   useEffect(() => {
     if (shouldShowJumpToLatest) {
@@ -1668,6 +1658,29 @@ export default function SharedPostChatScreen({
     ),
     [colors.border, colors.primarySoft, colors.surface]
   );
+  const activeReactionOverlayResponse = reactionOverlay
+    ? responseById.get(reactionOverlay.response.id) ?? reactionOverlay.response
+    : null;
+  const selectedReactionEmoji =
+    activeReactionOverlayResponse?.reactions?.find(
+      (reaction) => reaction.authorUid === user?.uid
+    )?.emoji ?? null;
+  const reactionDetailsLabel = activeReactionOverlayResponse?.reactions?.length
+    ? activeReactionOverlayResponse.reactions
+        .map((reaction) => {
+          const identity = getAuthorIdentity(
+            reaction.authorUid,
+            reaction.authorDisplayName,
+            reaction.authorPhotoURLSnapshot
+          );
+          return `${reaction.emoji} ${identity.label}`;
+        })
+        .join('  ·  ')
+    : null;
+  const reactionTrayWidth = Math.min(
+    reactionDetailsLabel ? REACTION_TRAY_WITH_DETAILS_WIDTH : COMPACT_REACTION_TRAY_WIDTH,
+    screenWidth - 24
+  );
   const renderResponseItem = useCallback(
     ({ item }: { item: ChatListItem }) => {
       if (item.type === 'day') {
@@ -2060,40 +2073,24 @@ export default function SharedPostChatScreen({
     },
     [
       colors,
+      copyResponseText,
       getAuthorIdentity,
       getResponseReplyPreview,
       highlightedResponseId,
       isDirectChat,
       reactionOverlay?.response.id,
+      reactionDetailsLabel,
+      reactionOverlayProgress,
+      reactionTrayWidth,
       removeFailedResponse,
       retryFailedResponse,
       scrollToResponse,
+      responseById,
+      selectedReactionEmoji,
+      sendReaction,
       t,
       user?.uid,
     ]
-  );
-  const activeReactionOverlayResponse = reactionOverlay
-    ? responseById.get(reactionOverlay.response.id) ?? reactionOverlay.response
-    : null;
-  const selectedReactionEmoji =
-    activeReactionOverlayResponse?.reactions?.find(
-      (reaction) => reaction.authorUid === user?.uid
-    )?.emoji ?? null;
-  const reactionDetailsLabel = activeReactionOverlayResponse?.reactions?.length
-    ? activeReactionOverlayResponse.reactions
-        .map((reaction) => {
-          const identity = getAuthorIdentity(
-            reaction.authorUid,
-            reaction.authorDisplayName,
-            reaction.authorPhotoURLSnapshot
-          );
-          return `${reaction.emoji} ${identity.label}`;
-        })
-        .join('  ·  ')
-    : null;
-  const reactionTrayWidth = Math.min(
-    reactionDetailsLabel ? REACTION_TRAY_WITH_DETAILS_WIDTH : COMPACT_REACTION_TRAY_WIDTH,
-    screenWidth - 24
   );
   const visibleTypingUsers = typingUsers.filter((typingUser) => typingUser.userId !== user?.uid);
   const typingIndicatorLabel =

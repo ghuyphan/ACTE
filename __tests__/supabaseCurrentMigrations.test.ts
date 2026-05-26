@@ -14,6 +14,10 @@ describe('current Supabase migrations', () => {
     resolve(__dirname, '../supabase/migrations/20260426150000_add_note_local_revision.sql'),
     'utf8'
   );
+  const sharedChatIntegrityMigration = readFileSync(
+    resolve(__dirname, '../supabase/migrations/20260526120000_harden_shared_chat_integrity.sql'),
+    'utf8'
+  );
 
   it('hardens note and shared-post media paths without reintroducing room schema', () => {
     expect(mediaPathOwnershipMigration).toContain('public.is_valid_user_storage_path');
@@ -60,5 +64,26 @@ describe('current Supabase migrations', () => {
   it('keeps the remote note revision column available for sync conflict checks', () => {
     expect(noteLocalRevisionMigration).toContain('add column if not exists local_revision bigint not null default 0');
     expect(noteLocalRevisionMigration).toContain('notes_user_local_revision_idx');
+  });
+
+  it('keeps shared chat response and direct-chat integrity checks in current migrations', () => {
+    expect(sharedChatIntegrityMigration).toContain(
+      'foreign key (post_id, response_id)'
+    );
+    expect(sharedChatIntegrityMigration).toContain(
+      'response.post_id = shared_post_response_reactions.post_id'
+    );
+    expect(sharedChatIntegrityMigration).toContain(
+      'foreign key (post_id, reply_to_response_id)'
+    );
+    expect(sharedChatIntegrityMigration).toContain(
+      'create or replace function public.enforce_direct_shared_chat_integrity()'
+    );
+    expect(sharedChatIntegrityMigration).toContain(
+      'Direct chats require an existing friendship.'
+    );
+    expect(sharedChatIntegrityMigration).toContain(
+      'direct_chat_key = least(audience_user_ids[1]::text, audience_user_ids[2]::text)'
+    );
   });
 });

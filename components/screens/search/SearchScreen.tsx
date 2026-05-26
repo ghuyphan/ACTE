@@ -16,7 +16,7 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Layout, Shadows } from '../../../constants/theme';
+import { CaptureChrome, Layout, Shadows } from '../../../constants/theme';
 import { useAndroidBottomTabOverlayInset } from '../../../hooks/useAndroidBottomTabOverlayInset';
 import {
   clearAndroidTabSearch,
@@ -35,6 +35,7 @@ import {
 } from '../../../services/noteSearchFilters';
 import { getNotePreviewText } from '../../../services/noteTextPresentation';
 import { formatDate } from '../../../utils/dateUtils';
+import { withAlpha } from '../../../utils/colors';
 import NotoLoader from '../../ui/NotoLoader';
 
 function getPreviewText(note: Note, photoLabel: string, emptyLabel: string) {
@@ -144,6 +145,12 @@ export default function SearchScreen() {
   const hasQuery = trimmedActiveQuery.length > 0;
   const hasActiveFilters = activeFilters.length > 0;
   const hasDeferredQuery = trimmedDeferredQuery.length > 0;
+  const photoPreviewBackground = withAlpha(
+    isDark ? CaptureChrome.shutterContent : CaptureChrome.shadowDark,
+    0.06
+  );
+  const favoriteBadgeBackground = withAlpha(CaptureChrome.shutterContent, 0.92);
+  const previewTextShadowColor = withAlpha(CaptureChrome.shadowDark, 0.25);
 
   useFocusEffect(
     useCallback(() => {
@@ -308,14 +315,12 @@ export default function SearchScreen() {
             <View style={styles.resultTopRow}>
               <View style={styles.previewFrame}>
                 {item.type === 'photo' ? (
-                  <Image
-                    source={{ uri: getNotePhotoUri(item) }}
-                    style={[
-                      styles.previewFrame,
-                      {
-                        backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)',
-                      },
-                    ]}
+	                  <Image
+	                    source={{ uri: getNotePhotoUri(item) }}
+	                    style={[
+	                      styles.previewFrame,
+	                      { backgroundColor: photoPreviewBackground },
+	                    ]}
                     contentFit="cover"
                     transition={140}
                   />
@@ -326,14 +331,28 @@ export default function SearchScreen() {
                     end={{ x: 1, y: 1 }}
                     style={styles.previewFrame}
                   >
-                    <Text style={styles.previewText} numberOfLines={3}>
-                      {previewText}
-                    </Text>
+	                    <Text
+	                      style={[
+	                        styles.previewText,
+	                        {
+	                          color: CaptureChrome.shutterContent,
+	                          textShadowColor: previewTextShadowColor,
+	                        },
+	                      ]}
+	                      numberOfLines={3}
+	                    >
+	                      {previewText}
+	                    </Text>
                   </LinearGradient>
                 )}
 
                 {item.isFavorite ? (
-                  <View style={styles.favoriteBadge}>
+	                  <View
+	                    style={[
+	                      styles.favoriteBadge,
+	                      { backgroundColor: favoriteBadgeBackground },
+	                    ]}
+	                  >
                     <Ionicons name="heart" size={13} color={colors.danger} />
                   </View>
                 ) : null}
@@ -373,8 +392,10 @@ export default function SearchScreen() {
       colors.secondaryText,
       colors.surface,
       colors.text,
-      isDark,
+      favoriteBadgeBackground,
       openNote,
+      photoPreviewBackground,
+      previewTextShadowColor,
       t,
     ]
   );
@@ -436,13 +457,13 @@ export default function SearchScreen() {
                 <Ionicons
                   name={option.icon as keyof typeof Ionicons.glyphMap}
                   size={14}
-                  color={selected ? '#FFFFFF' : colors.secondaryText}
+	                  color={selected ? colors.onPrimary : colors.secondaryText}
                 />
                 <Text
                   numberOfLines={1}
                   style={[
                     styles.filterChipText,
-                    { color: selected ? '#FFFFFF' : colors.text },
+	                    { color: selected ? colors.onPrimary : colors.text },
                   ]}
                 >
                   {t(option.labelKey, option.fallbackLabel)}
@@ -668,14 +689,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   previewText: {
-    color: '#FFFFFF',
     fontSize: 12,
     fontWeight: '700',
     lineHeight: 16,
     paddingHorizontal: 8,
     textAlign: 'center',
     fontFamily: 'Noto Sans',
-    textShadowColor: 'rgba(0,0,0,0.25)',
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 3,
   },
@@ -718,7 +737,6 @@ const styles = StyleSheet.create({
     width: 22,
     height: 22,
     borderRadius: 11,
-    backgroundColor: 'rgba(255,255,255,0.92)',
     justifyContent: 'center',
     alignItems: 'center',
   },

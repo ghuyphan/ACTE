@@ -22,6 +22,7 @@ module.exports = {
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/$1',
     '^supercluster$': '<rootDir>/node_modules/supercluster/dist/supercluster.js',
+    '^uuid$': '<rootDir>/node_modules/uuid/dist/cjs/index.js',
   },
   moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json'],
 };

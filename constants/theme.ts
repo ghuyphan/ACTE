@@ -95,6 +95,76 @@ export const CaptureChrome = {
   },
 } as const;
 
+export const PremiumNoteFinishChrome = {
+  holoRainbowSweepColors: [
+    'rgba(255,255,255,0.0)',
+    'rgba(255,226,112,0.28)',
+    'rgba(255,137,204,0.24)',
+    'rgba(140,116,255,0.2)',
+    'rgba(81,233,255,0.24)',
+    'rgba(188,255,151,0.18)',
+    'rgba(255,255,255,0.0)',
+  ],
+  holoSpectrumColors: [
+    'rgba(255,0,0,0)',
+    'rgba(255,112,112,0.18)',
+    'rgba(255,188,94,0.24)',
+    'rgba(255,244,125,0.26)',
+    'rgba(156,255,160,0.22)',
+    'rgba(90,223,255,0.24)',
+    'rgba(148,129,255,0.26)',
+    'rgba(255,118,216,0.22)',
+    'rgba(255,255,255,0)',
+  ],
+  holoPrismRibbonColors: [
+    'rgba(255,255,255,0.0)',
+    'rgba(255,255,255,0.12)',
+    'rgba(255,239,112,0.34)',
+    'rgba(120,243,255,0.38)',
+    'rgba(255,145,226,0.3)',
+    'rgba(255,255,255,0.0)',
+  ],
+  holoSpectrumAccentColors: [
+    'rgba(255,255,255,0)',
+    'rgba(118,245,255,0.24)',
+    'rgba(255,160,228,0.24)',
+    'rgba(255,243,128,0.22)',
+    'rgba(255,255,255,0)',
+  ],
+  holoSheenColors: [
+    'rgba(255,255,255,0.0)',
+    'rgba(255,255,255,0.02)',
+    'rgba(255,255,255,0.22)',
+    'rgba(255,255,255,0.55)',
+    'rgba(255,255,255,0.68)',
+    'rgba(255,255,255,0.55)',
+    'rgba(255,255,255,0.22)',
+    'rgba(255,255,255,0.0)',
+  ],
+  holoLeftRailColors: [
+    'rgba(255,184,228,0.34)',
+    'rgba(121,232,255,0.14)',
+    'rgba(255,255,255,0.0)',
+  ],
+  holoRightRailColors: [
+    'rgba(255,255,255,0.0)',
+    'rgba(255,228,125,0.2)',
+    'rgba(103,225,255,0.34)',
+  ],
+  edgeBorder: 'rgba(255,255,255,0.22)',
+  rgbEdgeShadow: '#A36BFF',
+  holoEdgeShadow: '#8AF6FF',
+  chromeEdgeShadow: '#D2B8FF',
+  sparkleBackground: 'rgba(255,255,255,0.92)',
+  sparkleShadow: '#FFFFFF',
+  interferenceLineBackground: 'rgba(255,255,255,0.85)',
+  frameBloomBorder: 'rgba(255,250,236,0.52)',
+  frameBloomShadow: '#FFF6C8',
+  edgeGlowBorder: 'rgba(232,248,255,0.68)',
+  edgeGlowShadow: '#BDEEFF',
+  innerGlowBorder: 'rgba(255,255,255,0.3)',
+} as const;
+
 export const Sheet = {
   maxHeight: 680,
   ios: {

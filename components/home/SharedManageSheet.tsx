@@ -151,10 +151,10 @@ function InviteActionsCard({
   onShareInvite: () => void;
   onRevokeInvite: () => void;
 }) {
-  const { colors, isDark } = useTheme();
+  const { colors } = useTheme();
   const { t } = useTranslation();
-  const softFill = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)';
-  const outlineColor = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)';
+  const softFill = colors.primarySoft;
+  const outlineColor = colors.border;
   const inviteState = activeInvite ? 'ready' : creatingInvite ? 'creating' : 'empty';
   const invitePrimaryAction = inviteState === 'ready' ? onShareInvite : onCreateInvite;
   const invitePrimaryIcon =
@@ -218,7 +218,10 @@ function InviteActionsCard({
             },
           ]}
         >
-          <Text numberOfLines={1} style={styles.compactInviteActionText}>
+          <Text
+            numberOfLines={1}
+            style={[styles.compactInviteActionText, { color: colors.onPrimary }]}
+          >
             {inviteState === 'ready'
               ? t('shared.shareInviteButtonShort', 'Share')
               : inviteState === 'creating'
@@ -278,8 +281,11 @@ function InviteActionsCard({
             },
           ]}
         >
-          <Ionicons name={invitePrimaryIcon} size={16} color="#1C1C1E" />
-          <Text numberOfLines={1} style={styles.primaryInviteActionText}>
+          <Ionicons name={invitePrimaryIcon} size={16} color={colors.onPrimary} />
+          <Text
+            numberOfLines={1}
+            style={[styles.primaryInviteActionText, { color: colors.onPrimary }]}
+          >
             {invitePrimaryLabel}
           </Text>
         </Pressable>
@@ -325,8 +331,8 @@ function CollapsibleSectionHeader({
   topStyle?: StyleProp<ViewStyle>;
   trailing?: ReactNode;
 }) {
-  const { colors, isDark } = useTheme();
-  const softFill = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)';
+  const { colors } = useTheme();
+  const softFill = colors.primarySoft;
   const chevronAnimatedStyle = useAnimatedStyle(() => ({
     transform: [
       {
@@ -382,9 +388,9 @@ function GroupsSectionHeader({
   onToggle: () => void;
   onCreateGroup: () => void;
 }) {
-  const { colors, isDark } = useTheme();
+  const { colors } = useTheme();
   const { t } = useTranslation();
-  const softFill = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)';
+  const softFill = colors.primarySoft;
 
   return (
     <CollapsibleSectionHeader
@@ -422,9 +428,9 @@ function FriendsSectionHeader({
   onCreateGroup?: () => void;
   compactTop?: boolean;
 }) {
-  const { colors, isDark } = useTheme();
+  const { colors } = useTheme();
   const { t } = useTranslation();
-  const softFill = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)';
+  const softFill = colors.primarySoft;
 
   return (
     <CollapsibleSectionHeader
@@ -461,8 +467,8 @@ function GroupRow({
   memberCount: number;
   onPress: (group: FriendGroup) => void;
 }) {
-  const { colors, isDark } = useTheme();
-  const softFill = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)';
+  const { colors } = useTheme();
+  const softFill = colors.primarySoft;
   const { t } = useTranslation();
 
   return (
@@ -499,9 +505,9 @@ function EmptyFriendsState({
   emptyLoadingBody: string;
   emptyBody: string;
 }) {
-  const { colors, isDark } = useTheme();
-  const softFill = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)';
-  const outlineColor = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)';
+  const { colors } = useTheme();
+  const softFill = colors.primarySoft;
+  const outlineColor = colors.border;
 
   return (
     <View
@@ -1586,7 +1592,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 16,
     fontWeight: '800',
-    color: '#1C1C1E',
   },
   compactRevokeAction: {
     width: 34,
@@ -1616,7 +1621,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 17,
     fontWeight: '700',
-    color: '#1C1C1E',
     flexShrink: 1,
   },
   secondaryInviteAction: {

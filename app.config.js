@@ -30,7 +30,7 @@ const buildProfile = process.env.EAS_BUILD_PROFILE?.trim() ?? '';
 const isProductionBuild = buildProfile === 'production';
 const targetPlatform = process.env.EAS_BUILD_PLATFORM?.trim().toLowerCase() ?? '';
 const shouldRequireIosBillingConfig = targetPlatform !== 'android';
-const enablePlaceReminders = process.env.EXPO_PUBLIC_ENABLE_PLACE_REMINDERS?.trim() !== 'false';
+const enablePlaceReminders = process.env.EXPO_PUBLIC_ENABLE_PLACE_REMINDERS?.trim() === 'true';
 const rootGoogleServicesFile = './google-services.json';
 const nativeAndroidGoogleServicesFile = './android/app/google-services.json';
 const rootGoogleServiceInfoPlist = './GoogleService-Info.plist';

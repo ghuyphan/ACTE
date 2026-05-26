@@ -9,7 +9,7 @@
 - In EAS, set those RevenueCat values in the `production` environment used by the `production` build profile.
 - Set `EXPO_PUBLIC_PRIVACY_POLICY_URL` and either `EXPO_PUBLIC_SUPPORT_URL` or `EXPO_PUBLIC_SUPPORT_EMAIL`.
 - Set either `EXPO_PUBLIC_ACCOUNT_DELETION_URL` or `EXPO_PUBLIC_SUPPORT_EMAIL`.
-- Set `EXPO_PUBLIC_ENABLE_PLACE_REMINDERS=false` if you want a Play-bound build without background geofence reminders.
+- Set `EXPO_PUBLIC_ENABLE_PLACE_REMINDERS=true` only for builds that intentionally ship background geofence reminders.
 - Provide Firebase config through a repo-root `google-services.json` or the `GOOGLE_SERVICES_JSON` file-path env used by [`app.config.js`](../app.config.js).
 
 ## Signing
@@ -28,7 +28,7 @@ Local smoke tests can still opt into the debug keystore with `ACTE_ALLOW_DEBUG_S
 ## Play Console Prep
 
 - Package ID: `com.acte.app`
-- Confirm camera, photo-library, notifications, foreground location, and background location disclosures.
+- Confirm camera, photo-library, notifications, foreground location, and, when reminders are enabled, background location disclosures.
 - If place reminders stay enabled for Android production, complete Play Console `Sensitive app permissions > Location permissions`.
 - Record a short Android demo video that shows:
   - the saved-note reminder disclosure
