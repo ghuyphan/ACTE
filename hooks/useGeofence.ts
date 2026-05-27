@@ -222,21 +222,39 @@ export function useGeofence() {
     }, [clearLocation, commitHasLocationPermission, commitRemindersEnabled]);
 
     const resolveCurrentPosition = useCallback(async (): Promise<Location.LocationObject | null> => {
-        const timeoutToken = Symbol('foreground-location-timeout');
-        const currentLocation = await Promise.race<Location.LocationObject | typeof timeoutToken>([
+        return new Promise<Location.LocationObject | null>((resolve, reject) => {
+            let settled = false;
+            const timeoutId = setTimeout(() => {
+                if (settled) {
+                    return;
+                }
+
+                settled = true;
+                resolve(null);
+            }, LOCATION_FIX_TIMEOUT_MS);
+
             Location.getCurrentPositionAsync({
                 accuracy: Location.LocationAccuracy.Balanced,
-            }),
-            new Promise<typeof timeoutToken>((resolve) => {
-                setTimeout(() => resolve(timeoutToken), LOCATION_FIX_TIMEOUT_MS);
-            }),
-        ]);
+            })
+                .then((currentLocation) => {
+                    if (settled) {
+                        return;
+                    }
 
-        if (currentLocation === timeoutToken) {
-            return null;
-        }
+                    settled = true;
+                    clearTimeout(timeoutId);
+                    resolve(currentLocation);
+                })
+                .catch((error) => {
+                    if (settled) {
+                        return;
+                    }
 
-        return currentLocation;
+                    settled = true;
+                    clearTimeout(timeoutId);
+                    reject(error);
+                });
+        });
     }, []);
 
     const refreshLocation = useCallback(async (

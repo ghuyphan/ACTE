@@ -1,4 +1,6 @@
-import { createClient } from 'jsr:@supabase/supabase-js@2';
+import { createClient } from 'npm:@supabase/supabase-js@2.106.2';
+
+type SupabaseAdminClient = ReturnType<typeof createClient<any, 'public', any>>;
 
 type DeleteAccountResponse =
   | { success: true }
@@ -92,7 +94,7 @@ function throwIfMutationFailed(error: { message?: string | null } | null, contex
 }
 
 async function removeStorageObjects(
-  adminClient: ReturnType<typeof createClient>,
+  adminClient: SupabaseAdminClient,
   bucket: string,
   paths: Iterable<string>
 ) {
@@ -111,7 +113,7 @@ async function removeStorageObjects(
 }
 
 async function cleanupOwnedMedia(
-  adminClient: ReturnType<typeof createClient>,
+  adminClient: SupabaseAdminClient,
   userId: string
 ) {
   const notePaths = new Set<string>();
@@ -231,7 +233,7 @@ Deno.serve(async (request) => {
     const authorization = request.headers.get('Authorization') ?? '';
 
     if (!supabaseUrl || !anonKey || !serviceRoleKey) {
-      return Response.json<DeleteAccountResponse>(
+      return Response.json(
         {
           success: false,
           error: 'Delete account function is not configured on the server.',
@@ -255,7 +257,7 @@ Deno.serve(async (request) => {
     } = await userClient.auth.getUser();
 
     if (userError || !user) {
-      return Response.json<DeleteAccountResponse>(
+      return Response.json(
         {
           success: false,
           error: 'Authentication required.',
@@ -265,7 +267,7 @@ Deno.serve(async (request) => {
     }
 
     if (!hasRecentSignIn(user.last_sign_in_at)) {
-      return Response.json<DeleteAccountResponse>(
+      return Response.json(
         {
           success: false,
           error: 'Recent sign-in required. Sign in again before deleting your account.',
@@ -287,7 +289,7 @@ Deno.serve(async (request) => {
     const { error: deleteError } = await adminClient.auth.admin.deleteUser(user.id);
     if (deleteError) {
       console.error('delete-account auth deletion failed:', deleteError);
-      return Response.json<DeleteAccountResponse>(
+      return Response.json(
         {
           success: false,
           error: 'Could not delete this account right now.',
@@ -296,10 +298,10 @@ Deno.serve(async (request) => {
       );
     }
 
-    return Response.json<DeleteAccountResponse>({ success: true }, { headers: corsHeaders });
+    return Response.json({ success: true } satisfies DeleteAccountResponse, { headers: corsHeaders });
   } catch (error) {
     console.error('delete-account failed:', error);
-    return Response.json<DeleteAccountResponse>(
+    return Response.json(
       {
         success: false,
         error: 'Could not delete this account right now.',

@@ -1,4 +1,6 @@
-import { createClient } from 'jsr:@supabase/supabase-js@2';
+import { createClient } from 'npm:@supabase/supabase-js@2.106.2';
+
+type SupabaseAdminClient = ReturnType<typeof createClient<any, 'public', any>>;
 
 type SocialNotificationRequest =
   | {
@@ -194,7 +196,7 @@ async function getAuthenticatedUser(request: Request, supabaseUrl: string, anonK
 }
 
 async function loadFriendAcceptedPayload(
-  adminClient: ReturnType<typeof createClient>,
+  adminClient: SupabaseAdminClient,
   actorUserId: string,
   friendUserId: string
 ) {
@@ -247,7 +249,7 @@ async function loadFriendAcceptedPayload(
 }
 
 async function loadSharedPostPayload(
-  adminClient: ReturnType<typeof createClient>,
+  adminClient: SupabaseAdminClient,
   actorUserId: string,
   postId: string
 ) {
@@ -316,7 +318,7 @@ async function loadSharedPostPayload(
 }
 
 async function loadSharedPostResponsePayload(
-  adminClient: ReturnType<typeof createClient>,
+  adminClient: SupabaseAdminClient,
   actorUserId: string,
   responseId: string
 ) {
@@ -389,7 +391,7 @@ async function loadSharedPostResponsePayload(
 }
 
 async function loadPushTargets(
-  adminClient: ReturnType<typeof createClient>,
+  adminClient: SupabaseAdminClient,
   userIds: string[]
 ) {
   if (userIds.length === 0) {
@@ -426,7 +428,7 @@ async function loadPushTargets(
 }
 
 async function reserveNotificationRecipients(
-  adminClient: ReturnType<typeof createClient>,
+  adminClient: SupabaseAdminClient,
   options: {
     type: SocialNotificationRequest['type'];
     actorUserId: string;
@@ -466,7 +468,7 @@ async function reserveNotificationRecipients(
 }
 
 async function prunePushTokens(
-  adminClient: ReturnType<typeof createClient>,
+  adminClient: SupabaseAdminClient,
   pushTokens: string[]
 ) {
   if (pushTokens.length === 0) {
@@ -484,7 +486,7 @@ async function prunePushTokens(
 }
 
 async function claimNotificationEvent(
-  adminClient: ReturnType<typeof createClient>,
+  adminClient: SupabaseAdminClient,
   options:
     | {
         type: 'friend_accepted';
@@ -546,7 +548,7 @@ async function claimNotificationEvent(
 }
 
 async function releaseNotificationEvent(
-  adminClient: ReturnType<typeof createClient>,
+  adminClient: SupabaseAdminClient,
   type: SocialNotificationRequest['type'],
   actorUserId: string,
   resourceId: string
@@ -563,7 +565,7 @@ async function releaseNotificationEvent(
 }
 
 async function markNotificationEventDelivered(
-  adminClient: ReturnType<typeof createClient>,
+  adminClient: SupabaseAdminClient,
   type: SocialNotificationRequest['type'],
   actorUserId: string,
   resourceId: string

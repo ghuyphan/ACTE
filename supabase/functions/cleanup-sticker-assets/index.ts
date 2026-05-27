@@ -1,4 +1,6 @@
-import { createClient } from 'jsr:@supabase/supabase-js@2';
+import { createClient } from 'npm:@supabase/supabase-js@2.106.2';
+
+type SupabaseAdminClient = ReturnType<typeof createClient<any, 'public', any>>;
 
 type CleanupStickerAssetsRequest = {
   dryRun?: boolean;
@@ -42,7 +44,7 @@ const MAX_LIMIT = 1000;
 const STORAGE_DELETE_BATCH_SIZE = 100;
 
 function jsonResponse(body: CleanupStickerAssetsResponse, status = 200) {
-  return Response.json<CleanupStickerAssetsResponse>(body, {
+  return Response.json(body, {
     status,
     headers: corsHeaders,
   });
@@ -72,7 +74,7 @@ function getCutoffIso(maxAgeDays: number) {
 }
 
 async function removeStorageObjects(
-  adminClient: ReturnType<typeof createClient>,
+  adminClient: SupabaseAdminClient,
   bucket: string,
   paths: string[]
 ) {

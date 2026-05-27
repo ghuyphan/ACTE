@@ -26,7 +26,7 @@ function loadSendSocialNotificationsHandler(options: {
     exports: {},
     module: { exports: {} },
     require: (specifier: string) => {
-      if (specifier === 'jsr:@supabase/supabase-js@2') {
+      if (specifier === 'npm:@supabase/supabase-js@2.106.2') {
         return { createClient: options.createClient };
       }
 
