@@ -514,5 +514,3 @@ export function useStickerCreationFlow({
     ]
   );
 }
-
-export default useStickerCreationFlow;

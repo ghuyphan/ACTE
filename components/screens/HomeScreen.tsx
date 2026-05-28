@@ -36,6 +36,7 @@ import { useHomeFeedViewModel } from '../../hooks/app/useHomeFeedViewModel';
 import { useHomeRefresh } from '../../hooks/app/useHomeRefresh';
 import { useHomeSharedActions } from '../../hooks/app/useHomeSharedActions';
 import { useStableHomeSharedFeedSnapshot } from '../../hooks/app/useStableHomeSharedFeedSnapshot';
+import { useLivePhotoCameraHint } from '../../hooks/app/useLivePhotoCameraHint';
 import { useAppSheetAlert } from '../../hooks/useAppSheetAlert';
 import { useActiveFeedTarget } from '../../hooks/useActiveFeedTarget';
 import { useAuth } from '../../hooks/useAuth';
@@ -106,7 +107,6 @@ import {
 } from '../../services/sharedFeedService';
 import type { NotesRouteTransitionRect } from '../../utils/notesRouteTransition';
 import { setPendingNotesRouteTransition } from '../../utils/notesRouteTransition';
-import { scheduleOnIdle } from '../../utils/scheduleOnIdle';
 import { getPersistentItem, removePersistentItem, setPersistentItem } from '../../utils/appStorage';
 import { setAndroidSoftInputMode } from '../../utils/androidSoftInputMode';
 import { isIOS26OrNewer } from '../../utils/platform';
@@ -119,7 +119,6 @@ import {
 } from './home/captureDraftPersistence';
 import { useUnreadSharedChatCount } from './home/useUnreadSharedChatCount';
 
-const LIVE_PHOTO_CAMERA_HINT_SEEN_KEY = 'noto.capture.live-photo-hint-seen.v1';
 const REMINDER_RECOVERY_PROMPT_KEY_PREFIX = 'noto.home.reminder-recovery-prompt.v1.';
 type SaveButtonState = 'idle' | 'saving' | 'success';
 
@@ -281,8 +280,6 @@ export default function HomeScreen() {
     [tier]
   );
   const [pendingSavedNoteScrollTargetId, setPendingSavedNoteScrollTargetId] = useState<string | null>(null);
-  const [hasSeenLivePhotoCameraHint, setHasSeenLivePhotoCameraHint] = useState<boolean | null>(null);
-  const [showLivePhotoCameraHint, setShowLivePhotoCameraHint] = useState(false);
   const [pendingMapSaveCoordinate, setPendingMapSaveCoordinate] = useState<MapSaveCoordinate | null>(null);
 
   const searchAnim = useSharedValue(0);
@@ -308,22 +305,6 @@ export default function HomeScreen() {
   const [dualCaptureComposeRequest, setDualCaptureComposeRequest] =
     useState<DualCaptureComposeRequest | null>(null);
   useScrollToTop(flatListRef);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    void getPersistentItem(LIVE_PHOTO_CAMERA_HINT_SEEN_KEY).then((value) => {
-      if (cancelled) {
-        return;
-      }
-
-      setHasSeenLivePhotoCameraHint(Boolean(value));
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   useEffect(() => {
     if (Platform.OS !== 'ios') {
@@ -523,23 +504,6 @@ export default function HomeScreen() {
     [setBackCameraLens]
   );
 
-  const cameraInstructionText = useMemo(() => {
-    if (captureMode !== 'camera') {
-      return null;
-    }
-
-    if (cameraSubmode === 'single' && showLivePhotoCameraHint) {
-      return t('capture.livePhotoCaptureHint', 'Tap for a photo. Hold for a live photo.');
-    }
-
-    return null;
-  }, [
-    cameraSubmode,
-    captureMode,
-    showLivePhotoCameraHint,
-    t,
-  ]);
-
   const liveSnapHeight = windowHeight;
   const shouldLockCaptureInteractions =
     isCaptureTextEntryFocused || isCaptureDecorateModeActive || isCaptureGestureActive;
@@ -563,56 +527,28 @@ export default function HomeScreen() {
     () => (isPhotoNoteQuotaReady ? getRemainingPhotoSlots(tier, photoNoteCount) : null),
     [isPhotoNoteQuotaReady, photoNoteCount, tier]
   );
-  useEffect(() => {
-    const isCameraHintEligible =
-      captureMode === 'camera' &&
-      isCameraPreviewActive &&
-      !isModeSwitchAnimating &&
-      !capturedPhoto &&
-      !(tier !== 'plus' && remainingPhotoSlots === 0);
-
-    if (hasSeenLivePhotoCameraHint !== false || !isCameraHintEligible) {
-      setShowLivePhotoCameraHint((current) => (current ? false : current));
-      return;
-    }
-
-    let cancelled = false;
-    let revealTimeout: ReturnType<typeof setTimeout> | null = null;
-    const idleHandle = scheduleOnIdle(() => {
-      revealTimeout = setTimeout(() => {
-        if (!cancelled) {
-          setShowLivePhotoCameraHint(true);
-        }
-      }, 140);
-    });
-
-    return () => {
-      cancelled = true;
-      idleHandle.cancel();
-      if (revealTimeout) {
-        clearTimeout(revealTimeout);
-      }
-    };
-  }, [
-    captureMode,
+  const showLivePhotoCameraHint = useLivePhotoCameraHint({
     capturedPhoto,
-    hasSeenLivePhotoCameraHint,
+    captureMode,
     isCameraPreviewActive,
     isModeSwitchAnimating,
-    remainingPhotoSlots,
-    tier,
-  ]);
-
-  useEffect(() => {
-    if (hasSeenLivePhotoCameraHint !== false || !capturedPhoto) {
-      return;
+    isQuotaExhausted: tier !== 'plus' && remainingPhotoSlots === 0,
+  });
+  const cameraInstructionText = useMemo(() => {
+    if (captureMode !== 'camera') {
+      return null;
     }
 
-    setHasSeenLivePhotoCameraHint(true);
-    void setPersistentItem(LIVE_PHOTO_CAMERA_HINT_SEEN_KEY, '1');
+    if (cameraSubmode === 'single' && showLivePhotoCameraHint) {
+      return t('capture.livePhotoCaptureHint', 'Tap for a photo. Hold for a live photo.');
+    }
+
+    return null;
   }, [
-    capturedPhoto,
-    hasSeenLivePhotoCameraHint,
+    cameraSubmode,
+    captureMode,
+    showLivePhotoCameraHint,
+    t,
   ]);
   const cameraPermissionRequiresSettings =
     captureMode === 'camera' &&

@@ -383,11 +383,6 @@ jest.mock('../services/noteStickers', () => {
   };
 });
 
-jest.mock('../services/inviteTokenStorage', () => ({
-  setStoredInviteToken: jest.fn(async () => undefined),
-  clearStoredInviteToken: jest.fn(async () => undefined),
-}));
-
 jest.mock('../utils/supabase', () => ({
   getCurrentSupabaseSession: async () => ({
     user: {

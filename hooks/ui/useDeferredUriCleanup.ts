@@ -93,5 +93,3 @@ export function useDeferredUriCleanup({
     schedule,
   };
 }
-
-export default useDeferredUriCleanup;

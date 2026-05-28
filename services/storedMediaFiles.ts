@@ -15,7 +15,15 @@ export function extractStoredFilename(fileUri: string | null | undefined): strin
   const segments = withoutQuery.split('/').filter(Boolean);
   const filename = segments[segments.length - 1];
 
-  return filename ? decodeURIComponent(filename) : null;
+  if (!filename) {
+    return null;
+  }
+
+  try {
+    return decodeURIComponent(filename);
+  } catch {
+    return filename;
+  }
 }
 
 export function resolveStoredMediaUri(

@@ -194,5 +194,3 @@ export function useStickerEntryAnimation({
     entryAnimationActive,
   };
 }
-
-export default useStickerEntryAnimation;

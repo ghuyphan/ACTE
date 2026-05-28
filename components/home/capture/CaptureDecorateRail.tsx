@@ -42,6 +42,28 @@ interface CaptureDecorateRailTheme {
   railBorderColor: string;
 }
 
+function getCaptureDecorateRailTheme(
+  colors: CaptureCardColors,
+  glassPalette: ReturnType<typeof getGlassSurfacePalette>
+): CaptureDecorateRailTheme {
+  return {
+    activeBackgroundColor: glassPalette.activeControlBackgroundColor,
+    activeBorderColor: glassPalette.controlBorderColor,
+    activeIconColor: colors.captureGlassText,
+    detailBackgroundColor: glassPalette.subtleControlBackgroundColor,
+    detailBorderColor: glassPalette.subtleControlBorderColor,
+    detailIconColor: colors.captureGlassText,
+    inactiveBackgroundColor: 'transparent',
+    inactiveBorderColor: 'transparent',
+    inactiveIconColor: colors.captureGlassText,
+    paletteButtonBackgroundColor: glassPalette.subtleControlBackgroundColor,
+    paletteButtonBorderColor: glassPalette.subtleControlBorderColor,
+    paletteSelectedBorderColor: glassPalette.controlBorderColor,
+    paletteSwatchBorderColor: 'rgba(43,38,33,0.16)',
+    railBorderColor: glassPalette.controlBorderColor,
+  };
+}
+
 interface CaptureTextColorButtonProps {
   colors: CaptureCardColors;
   noteColor?: string | null;
@@ -368,22 +390,7 @@ export function TextCaptureBottomBar({
         importingSticker={importingSticker}
         stickerModeEnabled={stickerModeEnabled}
         t={t}
-        theme={{
-          activeBackgroundColor: glassPalette.activeControlBackgroundColor,
-          activeBorderColor: glassPalette.controlBorderColor,
-          activeIconColor: colors.captureGlassText,
-          detailBackgroundColor: glassPalette.subtleControlBackgroundColor,
-          detailBorderColor: glassPalette.subtleControlBorderColor,
-          detailIconColor: colors.captureGlassText,
-          inactiveBackgroundColor: 'transparent',
-          inactiveBorderColor: 'transparent',
-          inactiveIconColor: colors.captureGlassText,
-          paletteButtonBackgroundColor: glassPalette.subtleControlBackgroundColor,
-          paletteButtonBorderColor: glassPalette.subtleControlBorderColor,
-          paletteSelectedBorderColor: glassPalette.controlBorderColor,
-          paletteSwatchBorderColor: 'rgba(43,38,33,0.16)',
-          railBorderColor: glassPalette.controlBorderColor,
-        }}
+        theme={getCaptureDecorateRailTheme(colors, glassPalette)}
         defaultActions={
           <>
             <CaptureTextColorButton
@@ -533,22 +540,7 @@ export function PhotoCaptureBottomBar({
         importingSticker={importingSticker}
         stickerModeEnabled={stickerModeEnabled}
         t={t}
-        theme={{
-          activeBackgroundColor: glassPalette.activeControlBackgroundColor,
-          activeBorderColor: glassPalette.controlBorderColor,
-          activeIconColor: colors.captureGlassText,
-          detailBackgroundColor: glassPalette.subtleControlBackgroundColor,
-          detailBorderColor: glassPalette.subtleControlBorderColor,
-          detailIconColor: colors.captureGlassText,
-          inactiveBackgroundColor: 'transparent',
-          inactiveBorderColor: 'transparent',
-          inactiveIconColor: colors.captureGlassText,
-          paletteButtonBackgroundColor: glassPalette.subtleControlBackgroundColor,
-          paletteButtonBorderColor: glassPalette.subtleControlBorderColor,
-          paletteSelectedBorderColor: glassPalette.controlBorderColor,
-          paletteSwatchBorderColor: 'rgba(43,38,33,0.16)',
-          railBorderColor: glassPalette.controlBorderColor,
-        }}
+        theme={getCaptureDecorateRailTheme(colors, glassPalette)}
         afterToggles={
           <CaptureAnimatedPressable
             testID="capture-live-photo-toggle"

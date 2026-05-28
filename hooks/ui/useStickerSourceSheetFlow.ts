@@ -220,5 +220,3 @@ export function useStickerSourceSheetFlow({
     stickerSourceActions,
   };
 }
-
-export default useStickerSourceSheetFlow;

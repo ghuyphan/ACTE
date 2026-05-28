@@ -157,14 +157,6 @@ jest.mock('../components/notes/detail/PolaroidExportAnimation', () => {
   };
 });
 
-jest.mock('../components/ui/InfoPill', () => {
-  return function MockInfoPill({ children, style }: any) {
-    const React = require('react');
-    const { View } = require('react-native');
-    return <View style={style}>{children}</View>;
-  };
-});
-
 const colors = {
   primary: '#FFC107',
   text: '#1C1C1E',

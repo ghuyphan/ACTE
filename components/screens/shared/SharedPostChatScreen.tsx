@@ -45,6 +45,7 @@ import { useTheme } from '../../../hooks/useTheme';
 import type {
   SharedPost,
   SharedPostResponse,
+  SharedPostResponseReaction,
 } from '../../../services/sharedFeedService';
 import {
   getRememberedSharedChatThreadPost,
@@ -68,6 +69,7 @@ type SharedPostChatScreenProps = {
 };
 
 type ChatThreadResponse = SharedPostChatThreadResponse;
+type ChatReaction = SharedPostResponseReaction;
 
 type ReplyPreview = {
   authorLabel: string;
@@ -91,6 +93,21 @@ type ChatRenderContext = {
   shouldRenderPendingThread: boolean;
   shouldShowIdentityHeader: boolean;
 };
+
+function updateResponseReactions(
+  responses: ChatThreadResponse[],
+  responseId: string,
+  updater: (reactions: ChatReaction[]) => ChatReaction[]
+) {
+  return responses.map((response) =>
+    response.id === responseId
+      ? {
+          ...response,
+          reactions: updater(response.reactions ?? []),
+        }
+      : response
+  );
+}
 
 const RESPONSE_SKELETON_ROWS = [
   { key: 'incoming-short', isSelf: false, width: '44%', minHeight: 40 },
@@ -531,6 +548,7 @@ export default function SharedPostChatScreen({
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const listRef = useRef<FlashListRef<ChatListItem> | null>(null);
   const composerFocusedRef = useRef(false);
+  const animationFrameRefs = useRef<Set<ReturnType<typeof requestAnimationFrame>>>(new Set());
   const highlightResetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const infoMessageTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastMarkedReadSignatureRef = useRef<string | null>(null);
@@ -700,6 +718,21 @@ export default function SharedPostChatScreen({
     }
   }, []);
 
+  const scheduleAnimationFrame = useCallback((callback: () => void) => {
+    const frame = requestAnimationFrame(() => {
+      animationFrameRefs.current.delete(frame);
+      callback();
+    });
+    animationFrameRefs.current.add(frame);
+  }, []);
+
+  const clearAnimationFrames = useCallback(() => {
+    animationFrameRefs.current.forEach((frame) => {
+      cancelAnimationFrame(frame);
+    });
+    animationFrameRefs.current.clear();
+  }, []);
+
   const showInfoMessage = useCallback(
     (message: string) => {
       clearInfoMessageTimer();
@@ -754,6 +787,7 @@ export default function SharedPostChatScreen({
 
   useEffect(() => clearHighlightResetTimer, [clearHighlightResetTimer]);
   useEffect(() => clearInfoMessageTimer, [clearInfoMessageTimer]);
+  useEffect(() => clearAnimationFrames, [clearAnimationFrames]);
 
   useEffect(() => {
     Animated.spring(reactionOverlayProgress, {
@@ -1357,15 +1391,8 @@ export default function SharedPostChatScreen({
       if (isRemovingReaction) {
         setReactionOverlay(null);
         updateResponses((current) =>
-          current.map((response) =>
-            response.id === targetResponse.id
-              ? {
-                  ...response,
-                  reactions: (response.reactions ?? []).filter(
-                    (reaction) => reaction.authorUid !== user.uid
-                  ),
-                }
-              : response
+          updateResponseReactions(current, targetResponse.id, (reactions) =>
+            reactions.filter((reaction) => reaction.authorUid !== user.uid)
           )
         );
 
@@ -1374,18 +1401,13 @@ export default function SharedPostChatScreen({
         } catch (error) {
           if (previousReaction) {
             updateResponses((current) =>
-              current.map((response) =>
-                response.id === targetResponse.id
-                  ? {
-                      ...response,
-                      reactions: [
-                        ...(response.reactions ?? []).filter(
-                          (reaction) => reaction.authorUid !== previousReaction.authorUid
-                        ),
-                        previousReaction,
-                      ],
-                    }
-                  : response
+              updateResponseReactions(current, targetResponse.id, (reactions) =>
+                [
+                  ...reactions.filter(
+                    (reaction) => reaction.authorUid !== previousReaction.authorUid
+                  ),
+                  previousReaction,
+                ]
               )
             );
           }
@@ -1410,51 +1432,32 @@ export default function SharedPostChatScreen({
       };
       setReactionOverlay(null);
       updateResponses((current) =>
-        current.map((response) =>
-          response.id === targetResponse.id
-            ? {
-                ...response,
-                reactions: [
-                  ...(response.reactions ?? []).filter(
-                    (reaction) => reaction.authorUid !== user.uid
-                  ),
-                  optimisticReaction,
-                ],
-              }
-            : response
+        updateResponseReactions(current, targetResponse.id, (reactions) =>
+          [
+            ...reactions.filter((reaction) => reaction.authorUid !== user.uid),
+            optimisticReaction,
+          ]
         )
       );
 
       try {
         const reaction = await createSharedPostResponseReaction(post.id, targetResponse.id, emoji);
         updateResponses((current) =>
-          current.map((response) =>
-            response.id === targetResponse.id
-              ? {
-                  ...response,
-                  reactions: [
-                    ...(response.reactions ?? []).filter(
-                      (item) =>
-                        item.authorUid !== reaction.authorUid &&
-                        item.id !== optimisticReaction.id
-                    ),
-                    reaction,
-                  ],
-                }
-              : response
+          updateResponseReactions(current, targetResponse.id, (reactions) =>
+            [
+              ...reactions.filter(
+                (item) =>
+                  item.authorUid !== reaction.authorUid &&
+                  item.id !== optimisticReaction.id
+              ),
+              reaction,
+            ]
           )
         );
       } catch (error) {
         updateResponses((current) =>
-          current.map((response) =>
-            response.id === targetResponse.id
-              ? {
-                  ...response,
-                  reactions: (response.reactions ?? []).filter(
-                    (reaction) => reaction.id !== optimisticReaction.id
-                  ),
-                }
-              : response
+          updateResponseReactions(current, targetResponse.id, (reactions) =>
+            reactions.filter((reaction) => reaction.id !== optimisticReaction.id)
           )
         );
         setErrorMessage(
@@ -1514,7 +1517,7 @@ export default function SharedPostChatScreen({
 
     if (responseById.has(targetResponseId)) {
       pendingInitialResponseIdRef.current = null;
-      requestAnimationFrame(() => scrollToResponse(targetResponseId));
+      scheduleAnimationFrame(() => scrollToResponse(targetResponseId));
       return;
     }
 
@@ -1529,16 +1532,17 @@ export default function SharedPostChatScreen({
     isLoadingResponses,
     loadOlderResponses,
     responseById,
+    scheduleAnimationFrame,
     scrollToResponse,
   ]);
 
   const scrollToThreadEnd = useCallback((animated = true) => {
     clearNewMessageCount();
     setThreadEndVisible(true);
-    requestAnimationFrame(() => {
+    scheduleAnimationFrame(() => {
       listRef.current?.scrollToEnd({ animated });
     });
-  }, [clearNewMessageCount, setThreadEndVisible]);
+  }, [clearNewMessageCount, scheduleAnimationFrame, setThreadEndVisible]);
 
   const settleThreadEndIfVisible = useCallback(() => {
     if (!isThreadEndVisibleRef.current) {
@@ -1555,7 +1559,7 @@ export default function SharedPostChatScreen({
         scheduleKeyboardLayout(event);
         setKeyboardHeight(Math.max(0, screenHeight - event.endCoordinates.screenY));
         if (composerFocusedRef.current) {
-          requestAnimationFrame(settleThreadEndIfVisible);
+          scheduleAnimationFrame(settleThreadEndIfVisible);
         }
       }
     );
@@ -1571,7 +1575,7 @@ export default function SharedPostChatScreen({
       showSubscription.remove();
       hideSubscription.remove();
     };
-  }, [screenHeight, settleThreadEndIfVisible]);
+  }, [scheduleAnimationFrame, screenHeight, settleThreadEndIfVisible]);
 
   const handleComposerLayout = useCallback(
     (event: LayoutChangeEvent) => {
@@ -1605,10 +1609,10 @@ export default function SharedPostChatScreen({
   );
 
   useEffect(() => {
-    requestAnimationFrame(() => {
-      requestAnimationFrame(settleThreadEndIfVisible);
+    scheduleAnimationFrame(() => {
+      scheduleAnimationFrame(settleThreadEndIfVisible);
     });
-  }, [contentBottomPadding, replyTarget, settleThreadEndIfVisible]);
+  }, [contentBottomPadding, replyTarget, scheduleAnimationFrame, settleThreadEndIfVisible]);
 
   const isThreadHydrating = isLoadingResponses && responses.length === 0;
   const shouldPrepareThreadFirstPaint = !hasHydratedResponses && !isThreadFirstPaintReady;
@@ -1626,13 +1630,13 @@ export default function SharedPostChatScreen({
       return;
     }
 
-    requestAnimationFrame(() => {
+    scheduleAnimationFrame(() => {
       listRef.current?.scrollToEnd({ animated: false });
-      requestAnimationFrame(() => {
+      scheduleAnimationFrame(() => {
         setIsThreadFirstPaintReady(true);
       });
     });
-  }, [isThreadFirstPaintReady, isThreadHydrating, responseGroups.length]);
+  }, [isThreadFirstPaintReady, isThreadHydrating, responseGroups.length, scheduleAnimationFrame]);
 
   const renderEmptyThread = useCallback(
     () =>

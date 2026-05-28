@@ -176,5 +176,3 @@ export function useSelectedStickerActionsFlow({
     showStickerActionsSheet,
   };
 }
-
-export default useSelectedStickerActionsFlow;

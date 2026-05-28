@@ -377,5 +377,3 @@ export function useClipboardStickerFlow({
     ]
   );
 }
-
-export default useClipboardStickerFlow;

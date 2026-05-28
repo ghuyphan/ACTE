@@ -40,7 +40,7 @@ This makes the boot path powerful, but also fragile. Small changes to auth, star
 Suggested fix: separate bootstrapping concerns from route declaration, and group providers by lifecycle or feature domain so the composition is easier to scan.
 
 ### P2 - Risky mutation and cleanup helpers are under-tested
-I did not find direct unit tests for several helpers that sit on destructive or brittle paths: `services/accountCleanup.ts:42-118`, `services/noteMutationHelpers.ts:13-96`, `services/feedTargetLookup.ts:9-29`, `services/noteDoodles.ts:14-80`, and `services/mediaTypeUtils.ts:3-49`. Some of these are exercised indirectly through broader tests, but the exact edge cases are not covered at the module level.
+I did not find direct unit tests for several helpers that sit on destructive or brittle paths: `services/accountCleanup.ts:42-118`, `services/noteMutationHelpers.ts:13-96`, and `services/noteDoodles.ts:14-80`. Some of these are exercised indirectly through broader tests, but the exact edge cases are not covered at the module level.
 
 That leaves gaps around note-patch merge invariants, account purge ordering, deep-link target resolution, JSON parse failure handling, and MIME inference. Those are precisely the places where subtle regressions become user-visible or destructive.
 

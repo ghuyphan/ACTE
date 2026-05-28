@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import {
   StyleSheet,
   View,
@@ -18,9 +18,7 @@ import type {
   StickerCreationAnimatedStyle,
 } from './StickerCreationOverlay';
 import {
-  areWindowRectsEqual,
-  measureWindowRect,
-  type MeasurableView,
+  usePreviewMeasurement,
 } from './previewMeasurement';
 import type { WindowRect } from './stickerCreationTypes';
 
@@ -64,8 +62,6 @@ function StampPreviewEditor({
 }: StampPreviewEditorProps) {
   const { isDark } = useTheme();
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
-  const previewRef = useRef<View | null>(null);
-  const [previewWindowRect, setPreviewWindowRect] = useState<WindowRect | null>(null);
   const [stampStyle, setStampStyle] = useState<StickerStampStyle>('classic');
   const previewUri = draft?.source.uri ?? null;
   const sourceSize = useMemo(
@@ -103,35 +99,8 @@ function StampPreviewEditor({
     width: previewSize.width,
     height: previewSize.height,
   }), [previewSize.height, previewSize.width, windowHeight, windowWidth]);
-
-  const measurePreviewInWindow = useCallback(async () => {
-    const nextRect = await measureWindowRect(previewRef.current as MeasurableView | null);
-    if (!nextRect) {
-      return null;
-    }
-
-    setPreviewWindowRect((current) => {
-      if (areWindowRectsEqual(current, nextRect)) {
-        return current;
-      }
-
-      return nextRect;
-    });
-    return nextRect;
-  }, []);
-
-  const schedulePreviewMeasurement = useCallback(() => {
-    if (typeof requestAnimationFrame === 'function') {
-      requestAnimationFrame(() => {
-        void measurePreviewInWindow();
-      });
-      return;
-    }
-
-    setTimeout(() => {
-      void measurePreviewInWindow();
-    }, 0);
-  }, [measurePreviewInWindow]);
+  const { getPreviewSourceRect, previewRef, schedulePreviewMeasurement } =
+    usePreviewMeasurement(resolvePreviewFallbackRect);
 
   const handleConfirmCreation = useCallback(async () => {
     const placement = await onConfirm({ stampStyle });
@@ -139,12 +108,11 @@ function StampPreviewEditor({
       return null;
     }
 
-    const latestRect = await measurePreviewInWindow();
     return {
       placement,
-      sourceRect: latestRect ?? previewWindowRect ?? resolvePreviewFallbackRect(),
+      sourceRect: await getPreviewSourceRect(),
     };
-  }, [measurePreviewInWindow, onConfirm, previewWindowRect, resolvePreviewFallbackRect, stampStyle]);
+  }, [getPreviewSourceRect, onConfirm, stampStyle]);
 
   useEffect(() => {
     if (!visible) {

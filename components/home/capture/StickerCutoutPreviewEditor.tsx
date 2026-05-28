@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Image as ExpoImage } from 'expo-image';
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Pressable,
   StyleSheet,
@@ -18,9 +18,7 @@ import type {
   StickerCreationAnimatedStyle,
 } from './StickerCreationOverlay';
 import {
-  areWindowRectsEqual,
-  measureWindowRect,
-  type MeasurableView,
+  usePreviewMeasurement,
 } from './previewMeasurement';
 import type { WindowRect } from './stickerCreationTypes';
 
@@ -75,8 +73,6 @@ function StickerCutoutPreviewEditor({
 }: StickerCutoutPreviewEditorProps) {
   const { colors, isDark } = useTheme();
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
-  const previewRef = useRef<View | null>(null);
-  const [previewWindowRect, setPreviewWindowRect] = useState<WindowRect | null>(null);
   const [outlineEnabled, setOutlineEnabled] = useState(true);
   const sourceUri = draft?.source.uri ?? null;
   const cutoutUri = draft?.cutoutSource.uri ?? null;
@@ -144,35 +140,8 @@ function StickerCutoutPreviewEditor({
     width: previewSize.width,
     height: previewSize.height,
   }), [previewSize.height, previewSize.width, windowHeight, windowWidth]);
-
-  const measurePreviewInWindow = useCallback(async () => {
-    const nextRect = await measureWindowRect(previewRef.current as MeasurableView | null);
-    if (!nextRect) {
-      return null;
-    }
-
-    setPreviewWindowRect((current) => {
-      if (areWindowRectsEqual(current, nextRect)) {
-        return current;
-      }
-
-      return nextRect;
-    });
-    return nextRect;
-  }, []);
-
-  const schedulePreviewMeasurement = useCallback(() => {
-    if (typeof requestAnimationFrame === 'function') {
-      requestAnimationFrame(() => {
-        void measurePreviewInWindow();
-      });
-      return;
-    }
-
-    setTimeout(() => {
-      void measurePreviewInWindow();
-    }, 0);
-  }, [measurePreviewInWindow]);
+  const { getPreviewSourceRect, previewRef, schedulePreviewMeasurement } =
+    usePreviewMeasurement(resolvePreviewFallbackRect);
 
   const handleConfirmCreation = useCallback(async () => {
     const placement = await onConfirm({ outlineEnabled });
@@ -180,18 +149,11 @@ function StickerCutoutPreviewEditor({
       return null;
     }
 
-    const latestRect = await measurePreviewInWindow();
     return {
       placement,
-      sourceRect: latestRect ?? previewWindowRect ?? resolvePreviewFallbackRect(),
+      sourceRect: await getPreviewSourceRect(),
     };
-  }, [
-    measurePreviewInWindow,
-    onConfirm,
-    outlineEnabled,
-    previewWindowRect,
-    resolvePreviewFallbackRect,
-  ]);
+  }, [getPreviewSourceRect, onConfirm, outlineEnabled]);
 
   useEffect(() => {
     if (!visible) {
