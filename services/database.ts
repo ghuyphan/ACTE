@@ -847,6 +847,14 @@ export async function getDB(): Promise<SQLite.SQLiteDatabase> {
       );
       CREATE INDEX IF NOT EXISTS idx_shared_post_response_reactions_cache_user_post
         ON shared_post_response_reactions_cache(user_uid, post_id, response_id);
+      CREATE TABLE IF NOT EXISTS hidden_shared_chat_threads_cache (
+        user_uid TEXT NOT NULL,
+        post_id TEXT NOT NULL,
+        hidden_at TEXT NOT NULL,
+        PRIMARY KEY (user_uid, post_id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_hidden_shared_chat_threads_cache_user
+        ON hidden_shared_chat_threads_cache(user_uid, hidden_at DESC);
       CREATE TABLE IF NOT EXISTS shared_thread_summaries_cache (
         user_uid TEXT NOT NULL,
         post_id TEXT NOT NULL,
@@ -1370,6 +1378,18 @@ export async function getDB(): Promise<SQLite.SQLiteDatabase> {
             await database.execAsync(
                 `CREATE INDEX IF NOT EXISTS idx_shared_post_response_reactions_cache_user_post
                  ON shared_post_response_reactions_cache(user_uid, post_id, response_id)`
+            );
+            await database.execAsync(
+                `CREATE TABLE IF NOT EXISTS hidden_shared_chat_threads_cache (
+                    user_uid TEXT NOT NULL,
+                    post_id TEXT NOT NULL,
+                    hidden_at TEXT NOT NULL,
+                    PRIMARY KEY (user_uid, post_id)
+                )`
+            );
+            await database.execAsync(
+                `CREATE INDEX IF NOT EXISTS idx_hidden_shared_chat_threads_cache_user
+                 ON hidden_shared_chat_threads_cache(user_uid, hidden_at DESC)`
             );
             await database.execAsync(
                 `CREATE TABLE IF NOT EXISTS shared_thread_summaries_cache (

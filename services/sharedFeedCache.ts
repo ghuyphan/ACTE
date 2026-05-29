@@ -97,6 +97,16 @@ export interface SharedThreadReadState {
   lastReadAt: string;
 }
 
+export interface HiddenSharedChatThread {
+  postId: string;
+  hiddenAt: string;
+}
+
+interface HiddenSharedChatThreadRow {
+  post_id: string;
+  hidden_at: string;
+}
+
 interface SharedThreadReadStateRow {
   post_id: string;
   user_uid: string;
@@ -1166,6 +1176,67 @@ export async function deleteCachedSharedPostResponse(
   emitSharedChatThreadChange({ userUid, postId: normalizedPostId });
 }
 
+export async function getHiddenCachedSharedChatThreads(
+  userUid: string
+): Promise<HiddenSharedChatThread[]> {
+  const db = await getDB();
+  const rows = await db.getAllAsync<HiddenSharedChatThreadRow>(
+    `SELECT post_id, hidden_at
+     FROM hidden_shared_chat_threads_cache
+     WHERE user_uid = ?`,
+    userUid
+  );
+
+  return rows.map((row) => ({
+    postId: row.post_id,
+    hiddenAt: row.hidden_at,
+  }));
+}
+
+export async function hideCachedSharedChatThread(
+  userUid: string,
+  postId: string,
+  hiddenAt = new Date().toISOString()
+): Promise<HiddenSharedChatThread | null> {
+  const normalizedPostId = postId.trim();
+  if (!normalizedPostId) {
+    return null;
+  }
+
+  const db = await getDB();
+  await db.runAsync(
+    `INSERT INTO hidden_shared_chat_threads_cache (user_uid, post_id, hidden_at)
+     VALUES (?, ?, ?)
+     ON CONFLICT(user_uid, post_id) DO UPDATE SET
+       hidden_at = excluded.hidden_at`,
+    userUid,
+    normalizedPostId,
+    hiddenAt
+  );
+  emitSharedChatThreadChange({ userUid, postId: normalizedPostId });
+  return { postId: normalizedPostId, hiddenAt };
+}
+
+export async function unhideCachedSharedChatThread(
+  userUid: string,
+  postId: string
+): Promise<void> {
+  const normalizedPostId = postId.trim();
+  if (!normalizedPostId) {
+    return;
+  }
+
+  const db = await getDB();
+  await db.runAsync(
+    `DELETE FROM hidden_shared_chat_threads_cache
+     WHERE user_uid = ?
+       AND post_id = ?`,
+    userUid,
+    normalizedPostId
+  );
+  emitSharedChatThreadChange({ userUid, postId: normalizedPostId });
+}
+
 export async function upsertCachedSharedPostResponseReaction(
   userUid: string,
   reaction: SharedPostResponseReaction
@@ -1353,6 +1424,7 @@ export async function clearSharedFeedCache(userUid?: string | null): Promise<voi
       await tx.runAsync('DELETE FROM shared_posts_cache');
       await tx.runAsync('DELETE FROM shared_post_responses_cache');
       await tx.runAsync('DELETE FROM shared_post_response_reactions_cache');
+      await tx.runAsync('DELETE FROM hidden_shared_chat_threads_cache');
       await tx.runAsync('DELETE FROM shared_thread_summaries_cache');
       await tx.runAsync('DELETE FROM shared_thread_read_state');
       await tx.runAsync('DELETE FROM shared_invites_cache');
@@ -1367,6 +1439,7 @@ export async function clearSharedFeedCache(userUid?: string | null): Promise<voi
     await tx.runAsync('DELETE FROM shared_posts_cache WHERE user_uid = ?', userUid);
     await tx.runAsync('DELETE FROM shared_post_responses_cache WHERE user_uid = ?', userUid);
     await tx.runAsync('DELETE FROM shared_post_response_reactions_cache WHERE user_uid = ?', userUid);
+    await tx.runAsync('DELETE FROM hidden_shared_chat_threads_cache WHERE user_uid = ?', userUid);
     await tx.runAsync('DELETE FROM shared_thread_summaries_cache WHERE user_uid = ?', userUid);
     await tx.runAsync('DELETE FROM shared_thread_read_state WHERE user_uid = ?', userUid);
     await tx.runAsync('DELETE FROM shared_invites_cache WHERE user_uid = ?', userUid);

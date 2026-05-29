@@ -76,6 +76,22 @@ describe('shared chat presentation helpers', () => {
     ).toBe('Photo memory from Cafe');
     expect(formatSharedResponseBody({ emoji: '💛', text: 'love this' })).toBe('💛 love this');
     expect(
+      formatSharedResponseBody({
+        emoji: null,
+        text: '',
+        sticker: {
+          assetId: 'sticker-1',
+          localUri: 'file:///sticker-1.png',
+          remotePath: null,
+          mimeType: 'image/png',
+          width: 120,
+          height: 120,
+          renderMode: 'default',
+          stampStyle: null,
+        },
+      })
+    ).toBe('Sticker');
+    expect(
       getSharedThreadSummaryBody({
         postId: 'post-1',
         latestResponseId: 'response-1',
@@ -90,6 +106,21 @@ describe('shared chat presentation helpers', () => {
         updatedAt: '2026-05-08T01:00:00.000Z',
       })
     ).toBe('✨');
+    expect(
+      getSharedThreadSummaryBody({
+        postId: 'post-1',
+        latestResponseId: 'response-2',
+        latestResponseCreatedAt: '2026-05-08T01:01:00.000Z',
+        latestActivityAt: '2026-05-08T01:01:00.000Z',
+        latestActivityAuthorUid: 'friend-1',
+        latestActivityAuthorDisplayName: 'Friend',
+        latestActivityAuthorPhotoURLSnapshot: null,
+        latestActivityText: null,
+        latestActivityEmoji: null,
+        latestActivityKind: 'response',
+        updatedAt: '2026-05-08T01:01:00.000Z',
+      })
+    ).toBe('Sticker');
   });
 
   it('does not mark your own latest activity as unread', () => {
@@ -119,4 +150,3 @@ describe('shared chat presentation helpers', () => {
     ).toBe(false);
   });
 });
-

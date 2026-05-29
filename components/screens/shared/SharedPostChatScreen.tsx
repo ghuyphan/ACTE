@@ -4,7 +4,7 @@ import { FlashList, type FlashListRef } from '@shopify/flash-list';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Stack } from 'expo-router';
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   Animated,
@@ -66,6 +66,7 @@ import {
 } from '../../../utils/sharedChatPresentation';
 import { setActiveSharedChatPostId } from '../../../utils/socialNotificationPresentation';
 import { withAlpha } from '../../../utils/colors';
+import { showAppAlert } from '../../../utils/alert';
 import StickerLibraryPreview from '../../notes/StickerLibraryPreview';
 import {
   buildCreatedStickerLibrary,
@@ -131,8 +132,7 @@ const QUICK_RESPONSES = ['💛', '🥹', '✨', '😂'] as const;
 const RESPONSE_PAGE_SIZE = 24;
 const INFO_MESSAGE_VISIBLE_MS = 1800;
 const COMPOSER_KEYBOARD_GAP = 4;
-const COMPACT_REACTION_TRAY_WIDTH = 260;
-const REACTION_TRAY_WITH_DETAILS_WIDTH = 316;
+const COMPACT_REACTION_TRAY_WIDTH = 196;
 const TYPING_IDLE_HIDE_MS = 1500;
 const TYPING_REFRESH_MS = 900;
 const THREAD_SCROLL_POSITION_CONFIG = {
@@ -284,18 +284,48 @@ function getStickerPreviewSize(sticker: SharedPostResponseSticker) {
   };
 }
 
-function ChatStickerPreview({
+const ChatStickerPreview = memo(function ChatStickerPreview({
   sticker,
   fallbackColor,
 }: {
   fallbackColor: string;
   sticker: SharedPostResponseSticker;
 }) {
-  const preview = getStickerPreviewSize(sticker);
+  const preview = useMemo(() => getStickerPreviewSize(sticker), [sticker]);
+  const previewItem = useMemo(
+    () => ({
+      id: sticker.assetId,
+      asset: {
+        id: sticker.assetId,
+        ownerUid: '',
+        localUri: sticker.localUri ?? '',
+        remotePath: sticker.remotePath,
+        mimeType: sticker.mimeType,
+        width: sticker.width,
+        height: sticker.height,
+        createdAt: '',
+        updatedAt: null,
+        source: 'import' as const,
+      },
+      renderMode: sticker.renderMode,
+      stampStyle: sticker.stampStyle ?? undefined,
+    }),
+    [
+      sticker.assetId,
+      sticker.height,
+      sticker.localUri,
+      sticker.mimeType,
+      sticker.remotePath,
+      sticker.renderMode,
+      sticker.stampStyle,
+      sticker.width,
+    ]
+  );
 
   if (!sticker.localUri) {
     return (
       <View
+        collapsable={false}
         style={[
           styles.chatStickerFallback,
           {
@@ -311,29 +341,78 @@ function ChatStickerPreview({
 
   return (
     <StickerLibraryPreview
-      item={{
-        id: sticker.assetId,
-        asset: {
-          id: sticker.assetId,
-          ownerUid: '',
-          localUri: sticker.localUri,
-          remotePath: sticker.remotePath,
-          mimeType: sticker.mimeType,
-          width: sticker.width,
-          height: sticker.height,
-          createdAt: '',
-          updatedAt: null,
-          source: 'import',
-        },
-        renderMode: sticker.renderMode,
-        stampStyle: sticker.stampStyle ?? undefined,
-      }}
+      item={previewItem}
       previewWidth={preview.width}
       previewHeight={preview.height}
+      imageTransition={0}
       stampShadowEnabled
     />
   );
-}
+}, (previous, next) =>
+  previous.fallbackColor === next.fallbackColor &&
+  previous.sticker.assetId === next.sticker.assetId &&
+  previous.sticker.height === next.sticker.height &&
+  previous.sticker.localUri === next.sticker.localUri &&
+  previous.sticker.mimeType === next.sticker.mimeType &&
+  previous.sticker.remotePath === next.sticker.remotePath &&
+  previous.sticker.renderMode === next.sticker.renderMode &&
+  previous.sticker.stampStyle === next.sticker.stampStyle &&
+  previous.sticker.width === next.sticker.width
+);
+
+const ChatReactionChip = memo(function ChatReactionChip({
+  borderColor,
+  isSelf,
+  reactions,
+  surfaceColor,
+}: {
+  borderColor: string;
+  isSelf: boolean;
+  reactions: ChatReaction[];
+  surfaceColor: string;
+}) {
+  const label = useMemo(
+    () => reactions.map((reaction) => reaction.emoji).join(' '),
+    [reactions]
+  );
+  const isVisible = label.length > 0;
+
+  return (
+    <View
+      pointerEvents="none"
+      style={[
+        styles.reactionChip,
+        isSelf ? styles.selfReactionChip : styles.friendReactionChip,
+        !isVisible ? styles.reactionChipHidden : null,
+        {
+          backgroundColor: surfaceColor,
+          borderColor,
+        },
+      ]}
+    >
+      <Text style={styles.reactionChipText}>{isVisible ? label : ' '}</Text>
+    </View>
+  );
+}, (previous, next) => {
+  if (
+    previous.borderColor !== next.borderColor ||
+    previous.isSelf !== next.isSelf ||
+    previous.surfaceColor !== next.surfaceColor ||
+    previous.reactions.length !== next.reactions.length
+  ) {
+    return false;
+  }
+
+  return previous.reactions.every((reaction, index) => {
+    const nextReaction = next.reactions[index];
+    return (
+      reaction.id === nextReaction?.id &&
+      reaction.authorUid === nextReaction.authorUid &&
+      reaction.emoji === nextReaction.emoji &&
+      reaction.createdAt === nextReaction.createdAt
+    );
+  });
+});
 
 function getLibraryStickerPreviewSize(item: CreatedStickerLibraryItem, cardSize: number) {
   const maxWidth = item.renderMode === 'stamp' ? cardSize * 0.68 : cardSize * 0.72;
@@ -660,6 +739,7 @@ export default function SharedPostChatScreen({
       throw new Error(t('shared.responseSendFailed', 'Could not send response.'));
     },
     deleteSharedPostResponseReaction = async () => undefined,
+    deleteSharedPostResponse = async () => undefined,
     markSharedThreadRead = async () => null,
     createSharedPostResponse = async () => {
       throw new Error(t('shared.responseSendFailed', 'Could not send response.'));
@@ -682,6 +762,7 @@ export default function SharedPostChatScreen({
   const [chatPostErrorMessage, setChatPostErrorMessage] = useState<string | null>(null);
   const [highlightedResponseId, setHighlightedResponseId] = useState<string | null>(null);
   const [isThreadFirstPaintReady, setIsThreadFirstPaintReady] = useState(false);
+  const [hasUserScrolledAwayFromThreadEnd, setHasUserScrolledAwayFromThreadEnd] = useState(false);
   const [isJumpToLatestMounted, setIsJumpToLatestMounted] = useState(false);
   const [isStickerTrayMounted, setIsStickerTrayMounted] = useState(false);
   const [composerHeight, setComposerHeight] = useState(96);
@@ -693,6 +774,7 @@ export default function SharedPostChatScreen({
   const infoMessageTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastMarkedReadSignatureRef = useRef<string | null>(null);
   const optimisticSequenceRef = useRef(0);
+  const reactionOverlayAnimationRunRef = useRef(0);
   const reactionOverlayProgress = useRef(new Animated.Value(0)).current;
   const replyPreviewTextProgress = useRef(new Animated.Value(1)).current;
   const jumpToLatestProgress = useRef(new Animated.Value(0)).current;
@@ -701,6 +783,39 @@ export default function SharedPostChatScreen({
   const pendingInitialResponseIdRef = useRef<string | null>(null);
   const canLoadOlderResponsesRef = useRef(false);
   const lastThreadScrollYRef = useRef<number | null>(null);
+
+  const openReactionOverlay = useCallback(
+    (response: SharedPostResponse) => {
+      setIsStickerTrayVisible(false);
+      reactionOverlayAnimationRunRef.current += 1;
+      reactionOverlayProgress.stopAnimation();
+      reactionOverlayProgress.setValue(0);
+      setReactionOverlay({ response });
+    },
+    [reactionOverlayProgress]
+  );
+
+  const closeReactionOverlay = useCallback((options?: { immediate?: boolean }) => {
+    const animationRun = reactionOverlayAnimationRunRef.current + 1;
+    reactionOverlayAnimationRunRef.current = animationRun;
+    reactionOverlayProgress.stopAnimation();
+
+    if (options?.immediate) {
+      reactionOverlayProgress.setValue(0);
+      setReactionOverlay(null);
+      return;
+    }
+
+    Animated.timing(reactionOverlayProgress, {
+      toValue: 0,
+      duration: 130,
+      useNativeDriver: true,
+    }).start(({ finished }) => {
+      if (finished && reactionOverlayAnimationRunRef.current === animationRun) {
+        setReactionOverlay(null);
+      }
+    });
+  }, [reactionOverlayProgress]);
 
   const normalizedDirectFriendUid = Array.isArray(directFriendUid)
     ? directFriendUid[0]?.trim() || null
@@ -740,11 +855,13 @@ export default function SharedPostChatScreen({
     Math.floor((screenWidth - Layout.screenPadding * 2 - 28) / (stickerTrayCardSize + 12))
   );
   const stickerTrayRows = Math.max(1, Math.ceil(stickerTrayItems.length / stickerTrayColumns));
+  const stickerTrayKeyboardMin = Math.max(286, Math.min(324, Math.floor(screenHeight * 0.36)));
+  const stickerTrayKeyboardCap = Math.max(320, Math.min(392, Math.floor(screenHeight * 0.44)));
   const stickerTrayContentHeight =
-    14 + stickerTrayRows * stickerTrayCardSize + Math.max(0, stickerTrayRows - 1) * 12 + 18;
-  const stickerTrayHeight = Math.max(
-    stickerTrayCardSize + 32,
-    Math.min(Math.max(216, Math.min(286, Math.floor(screenHeight * 0.32))), stickerTrayContentHeight)
+    22 + stickerTrayRows * stickerTrayCardSize + Math.max(0, stickerTrayRows - 1) * 12 + 26;
+  const stickerTrayHeight = Math.min(
+    stickerTrayKeyboardCap,
+    Math.max(stickerTrayKeyboardMin, stickerTrayContentHeight)
   );
   const activePostId = post?.id ?? postId;
   const pendingDirectFriend = normalizedDirectFriendUid
@@ -805,7 +922,11 @@ export default function SharedPostChatScreen({
     responses,
     chatThreadLabels
   );
-  const shouldShowJumpToLatest = !isThreadEndVisible && responses.length > 0;
+  const shouldShowJumpToLatest =
+    isThreadFirstPaintReady &&
+    !isThreadEndVisible &&
+    responses.length > 0 &&
+    (newMessageCount > 0 || hasUserScrolledAwayFromThreadEnd);
   const friendById = useMemo(() => {
     const next = new Map<string, (typeof friends)[number]>();
     for (const friend of friends) {
@@ -941,6 +1062,7 @@ export default function SharedPostChatScreen({
     canLoadOlderResponsesRef.current = false;
     lastThreadScrollYRef.current = null;
     setReplyTarget(null);
+    setHasUserScrolledAwayFromThreadEnd(false);
     setIsThreadFirstPaintReady(false);
   }, [activePostId]);
 
@@ -949,8 +1071,12 @@ export default function SharedPostChatScreen({
   useEffect(() => clearAnimationFrames, [clearAnimationFrames]);
 
   useEffect(() => {
+    if (!reactionOverlay) {
+      return;
+    }
+
     Animated.spring(reactionOverlayProgress, {
-      toValue: reactionOverlay ? 1 : 0,
+      toValue: 1,
       useNativeDriver: true,
       damping: 16,
       stiffness: 260,
@@ -1279,12 +1405,27 @@ export default function SharedPostChatScreen({
         contentSize.height - (contentOffset.y + layoutMeasurement.height);
       const isNearEnd = distanceFromEnd < 96;
       setThreadEndVisible(isNearEnd);
+      if (isNearEnd) {
+        setHasUserScrolledAwayFromThreadEnd(false);
+      } else if (
+        isThreadFirstPaintReady &&
+        previousScrollY !== null &&
+        contentOffset.y < previousScrollY - 12
+      ) {
+        setHasUserScrolledAwayFromThreadEnd(true);
+      }
       if (isNearEnd && !isLoadingResponses) {
         clearNewMessageCount();
         markThreadReadThroughLatest();
       }
     },
-    [clearNewMessageCount, isLoadingResponses, markThreadReadThroughLatest, setThreadEndVisible]
+    [
+      clearNewMessageCount,
+      isLoadingResponses,
+      isThreadFirstPaintReady,
+      markThreadReadThroughLatest,
+      setThreadEndVisible,
+    ]
   );
   const handleLoadOlderResponses = useCallback(() => {
     if (!canLoadOlderResponsesRef.current) {
@@ -1517,7 +1658,7 @@ export default function SharedPostChatScreen({
       }
 
       setIsSending(true);
-      setReactionOverlay(null);
+      closeReactionOverlay();
       setErrorMessage(null);
       try {
         const response = await createSharedPostResponse(post.id, {
@@ -1559,6 +1700,7 @@ export default function SharedPostChatScreen({
     },
     [
       clearTypingIdleTimer,
+      closeReactionOverlay,
       createSharedPostResponse,
       draft,
       getOrCreateDirectChatPost,
@@ -1585,9 +1727,30 @@ export default function SharedPostChatScreen({
     }
 
     Keyboard.dismiss();
-    setReactionOverlay(null);
-    setIsStickerTrayVisible((visible) => !visible);
-  }, [setErrorMessage, stickerLibraryItems.length, t]);
+    closeReactionOverlay({ immediate: true });
+    setIsStickerTrayVisible((visible) => {
+      const nextVisible = !visible;
+      if (nextVisible) {
+        clearNewMessageCount();
+        setThreadEndVisible(true);
+        scheduleAnimationFrame(() => {
+          scheduleAnimationFrame(() => {
+            listRef.current?.scrollToEnd({ animated: false });
+          });
+        });
+      }
+
+      return nextVisible;
+    });
+  }, [
+    clearNewMessageCount,
+    closeReactionOverlay,
+    scheduleAnimationFrame,
+    setErrorMessage,
+    setThreadEndVisible,
+    stickerLibraryItems.length,
+    t,
+  ]);
 
   const handleSelectStickerLibraryItem = useCallback(
     (item: CreatedStickerLibraryItem) => {
@@ -1624,7 +1787,7 @@ export default function SharedPostChatScreen({
 
       try {
         await Clipboard.setStringAsync(body);
-        setReactionOverlay(null);
+        closeReactionOverlay();
         showInfoMessage(t('shared.chatCopiedMessage', 'Copied message'));
       } catch (error) {
         setErrorMessage(
@@ -1634,7 +1797,51 @@ export default function SharedPostChatScreen({
         );
       }
     },
-    [setErrorMessage, showInfoMessage, t]
+    [closeReactionOverlay, setErrorMessage, showInfoMessage, t]
+  );
+
+  const confirmDeleteResponseForEveryone = useCallback(
+    (response: SharedPostResponse) => {
+      if (!post || response.authorUid !== user?.uid) {
+        return;
+      }
+
+      showAppAlert(
+        t('shared.chatDeleteMessageTitle', 'Delete message?'),
+        t('shared.chatDeleteMessageBody', 'This removes it for everyone in this chat.'),
+        [
+          {
+            text: t('common.cancel', 'Cancel'),
+            style: 'cancel',
+          },
+          {
+            text: t('shared.chatDeleteMessageConfirm', 'Delete for everyone'),
+            style: 'destructive',
+            onPress: () => {
+              closeReactionOverlay({ immediate: true });
+              updateResponses((current) => current.filter((item) => item.id !== response.id));
+              void deleteSharedPostResponse(post.id, response.id).catch((error) => {
+                updateResponses((current) => mergeChatResponses(current, [response]));
+                setErrorMessage(
+                  error instanceof Error
+                    ? error.message
+                    : t('shared.chatDeleteMessageFailed', 'Could not delete message.')
+                );
+              });
+            },
+          },
+        ]
+      );
+    },
+    [
+      closeReactionOverlay,
+      deleteSharedPostResponse,
+      post,
+      setErrorMessage,
+      t,
+      updateResponses,
+      user?.uid,
+    ]
   );
 
   const sendReaction = useCallback(
@@ -1649,7 +1856,7 @@ export default function SharedPostChatScreen({
         null;
       const isRemovingReaction = previousReaction?.emoji === emoji;
       if (isRemovingReaction) {
-        setReactionOverlay(null);
+        closeReactionOverlay();
         updateResponses((current) =>
           updateResponseReactions(current, targetResponse.id, (reactions) =>
             reactions.filter((reaction) => reaction.authorUid !== user.uid)
@@ -1690,7 +1897,7 @@ export default function SharedPostChatScreen({
         emoji,
         createdAt: new Date().toISOString(),
       };
-      setReactionOverlay(null);
+      closeReactionOverlay();
       updateResponses((current) =>
         updateResponseReactions(current, targetResponse.id, (reactions) =>
           [
@@ -1730,6 +1937,7 @@ export default function SharedPostChatScreen({
     [
       createSharedPostResponseReaction,
       deleteSharedPostResponseReaction,
+      closeReactionOverlay,
       post,
       responseById,
       setErrorMessage,
@@ -1798,6 +2006,7 @@ export default function SharedPostChatScreen({
 
   const scrollToThreadEnd = useCallback((animated = true) => {
     clearNewMessageCount();
+    setHasUserScrolledAwayFromThreadEnd(false);
     setThreadEndVisible(true);
     scheduleAnimationFrame(() => {
       listRef.current?.scrollToEnd({ animated });
@@ -1929,20 +2138,8 @@ export default function SharedPostChatScreen({
     activeReactionOverlayResponse?.reactions?.find(
       (reaction) => reaction.authorUid === user?.uid
     )?.emoji ?? null;
-  const reactionDetailsLabel = activeReactionOverlayResponse?.reactions?.length
-    ? activeReactionOverlayResponse.reactions
-        .map((reaction) => {
-          const identity = getAuthorIdentity(
-            reaction.authorUid,
-            reaction.authorDisplayName,
-            reaction.authorPhotoURLSnapshot
-          );
-          return `${reaction.emoji} ${identity.label}`;
-        })
-        .join('  ·  ')
-    : null;
   const reactionTrayWidth = Math.min(
-    reactionDetailsLabel ? REACTION_TRAY_WITH_DETAILS_WIDTH : COMPACT_REACTION_TRAY_WIDTH,
+    COMPACT_REACTION_TRAY_WIDTH,
     screenWidth - 24
   );
   const renderResponseItem = useCallback(
@@ -2037,6 +2234,7 @@ export default function SharedPostChatScreen({
                 const reactions = response.reactions ?? [];
                 const isHighlighted = highlightedResponseId === response.id;
                 const isReactionOverlayTarget = reactionOverlay?.response.id === response.id;
+                const reactionActionTrayWidth = isSelf ? 116 : 78;
                 const deliveryStatus = getResponseDeliveryStatus(response);
                 const isFailedDelivery =
                   deliveryStatus === 'failed' || deliveryStatus === 'offline';
@@ -2045,6 +2243,7 @@ export default function SharedPostChatScreen({
                     key={response.id}
                     style={[
                       styles.messageInteractionWrap,
+                      hasSticker ? styles.stickerMessageInteractionWrap : null,
                       hasReplyPreview ? styles.messageInteractionWrapWithReply : null,
                       isReactionOverlayTarget ? styles.activeReactionMessageWrap : null,
                     ]}
@@ -2098,13 +2297,11 @@ export default function SharedPostChatScreen({
                       iconColor={colors.secondaryText}
                       onReply={() => {
                         setReplyTarget(response);
-                        setReactionOverlay(null);
+                        closeReactionOverlay();
                       }}
                       onLongPress={() => {
                         void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                        setReactionOverlay({
-                          response,
-                        });
+                        openReactionOverlay(response);
                       }}
                       style={[
                         styles.messageBubble,
@@ -2122,12 +2319,16 @@ export default function SharedPostChatScreen({
                           : null,
                         {
                           backgroundColor:
-                            isReactionOverlayTarget && !isSelf
+                            hasSticker
+                              ? 'transparent'
+                              : isReactionOverlayTarget && !isSelf
                               ? colors.primarySoft
                               : isSelf
                                 ? colors.primary
                                 : colors.surface,
-                          borderColor: isHighlighted || isReactionOverlayTarget
+                          borderColor: hasSticker
+                            ? 'transparent'
+                            : isHighlighted || isReactionOverlayTarget
                             ? colors.primary
                             : isSelf
                               ? 'transparent'
@@ -2138,7 +2339,7 @@ export default function SharedPostChatScreen({
                       {response.sticker ? (
                         <ChatStickerPreview
                           sticker={response.sticker}
-                          fallbackColor={isSelf ? colors.onPrimary : colors.primary}
+                          fallbackColor={colors.primary}
                         />
                       ) : (
                         <Text
@@ -2155,126 +2356,155 @@ export default function SharedPostChatScreen({
                       )}
                     </ReplyableBubble>
                     {isReactionOverlayTarget ? (
-                      <Animated.View
-                        style={[
-                          styles.reactionTray,
-                          isSelf ? styles.selfInlineReactionTray : styles.friendInlineReactionTray,
-                          {
-                            width: reactionTrayWidth,
-                            backgroundColor: colors.surface,
-                            borderColor: colors.border,
-                            opacity: reactionOverlayProgress,
-                            transform: [
-                              {
-                                scale: reactionOverlayProgress.interpolate({
-                                  inputRange: [0, 1],
-                                  outputRange: [0.96, 1],
-                                }),
-                              },
-                            ],
-                          },
-                        ]}
-                      >
-                        <View
-                          pointerEvents="none"
+                      <>
+                        <Animated.View
                           style={[
-                            styles.reactionTrayNub,
-                            styles.reactionTrayNubTop,
+                            styles.reactionTray,
+                            styles.reactionEmojiTray,
+                            styles.reactionTrayAboveBubble,
                             isSelf ? styles.selfInlineReactionTrayNub : styles.friendInlineReactionTrayNub,
+                            isSelf
+                              ? styles.selfInlineReactionTrayAboveBubble
+                              : styles.friendInlineReactionTrayAboveBubble,
                             {
+                              width: reactionTrayWidth,
                               backgroundColor: colors.surface,
                               borderColor: colors.border,
+                              opacity: reactionOverlayProgress,
+                              transform: [
+                                {
+                                  scale: reactionOverlayProgress.interpolate({
+                                    inputRange: [0, 1],
+                                    outputRange: [0.96, 1],
+                                  }),
+                                },
+                              ],
                             },
                           ]}
-                        />
-                        <View style={styles.reactionTrayReactionRow}>
-                          {QUICK_RESPONSES.map((reactionEmoji, index) => (
-                            <ReactionTrayButton
-                              key={`${response.id}:${reactionEmoji}`}
-                              emoji={reactionEmoji}
-                              index={index}
-                              selected={selectedReactionEmoji === reactionEmoji}
-                              colors={{
-                                primary: colors.primary,
-                                primarySoft: colors.primarySoft,
-                              }}
-                              label={
-                                selectedReactionEmoji === reactionEmoji
-                                  ? t('shared.chatRemoveReaction', 'Remove {{emoji}} reaction', {
-                                      emoji: reactionEmoji,
-                                    })
-                                  : t('shared.chatReactWith', 'React with {{emoji}}', {
-                                      emoji: reactionEmoji,
-                                    })
-                              }
+                        >
+                          <View
+                            pointerEvents="none"
+                            style={[
+                              styles.reactionTrayNub,
+                              styles.reactionTrayNubBottom,
+                              isSelf ? styles.selfInlineReactionTrayNub : styles.friendInlineReactionTrayNub,
+                              {
+                                backgroundColor: colors.surface,
+                                borderColor: colors.border,
+                              },
+                            ]}
+                          />
+                          <View style={styles.reactionTrayReactionRow}>
+                            {QUICK_RESPONSES.map((reactionEmoji, index) => (
+                              <ReactionTrayButton
+                                key={`${response.id}:${reactionEmoji}`}
+                                emoji={reactionEmoji}
+                                index={index}
+                                selected={selectedReactionEmoji === reactionEmoji}
+                                colors={{
+                                  primary: colors.primary,
+                                  primarySoft: colors.primarySoft,
+                                }}
+                                label={
+                                  selectedReactionEmoji === reactionEmoji
+                                    ? t('shared.chatRemoveReaction', 'Remove {{emoji}} reaction', {
+                                        emoji: reactionEmoji,
+                                      })
+                                    : t('shared.chatReactWith', 'React with {{emoji}}', {
+                                        emoji: reactionEmoji,
+                                      })
+                                }
+                                onPress={() => {
+                                  void Haptics.selectionAsync();
+                                  void sendReaction(response, reactionEmoji);
+                                }}
+                              />
+                            ))}
+                          </View>
+                        </Animated.View>
+                        <Animated.View
+                          style={[
+                            styles.reactionTray,
+                            styles.reactionActionTray,
+                            styles.reactionTrayAboveBubble,
+                            isSelf ? styles.selfReactionActionTray : styles.friendReactionActionTray,
+                            {
+                              width: reactionActionTrayWidth,
+                              backgroundColor: colors.surface,
+                              borderColor: colors.border,
+                              opacity: reactionOverlayProgress,
+                              transform: [
+                                {
+                                  scale: reactionOverlayProgress.interpolate({
+                                    inputRange: [0, 1],
+                                    outputRange: [0.96, 1],
+                                  }),
+                                },
+                              ],
+                            },
+                          ]}
+                        >
+                          <Pressable
+                            accessibilityRole="button"
+                            accessibilityLabel={t('shared.chatReplyToMessage', 'Reply to message')}
+                            onPress={() => {
+                              const target = responseById.get(response.id) ?? response;
+                              void Haptics.selectionAsync();
+                              setReplyTarget(target);
+                              closeReactionOverlay();
+                            }}
+                            style={({ pressed }) => [
+                              styles.reactionTrayIconAction,
+                              {
+                                backgroundColor: pressed ? colors.primarySoft : 'transparent',
+                              },
+                            ]}
+                          >
+                            <Ionicons name="return-up-back" size={18} color={colors.primary} />
+                          </Pressable>
+                          <Pressable
+                            accessibilityRole="button"
+                            accessibilityLabel={t('shared.chatCopyMessage', 'Copy message')}
+                            onPress={() => {
+                              void Haptics.selectionAsync();
+                              void copyResponseText(responseById.get(response.id) ?? response);
+                            }}
+                            style={({ pressed }) => [
+                              styles.reactionTrayIconAction,
+                              {
+                                backgroundColor: pressed ? colors.primarySoft : 'transparent',
+                              },
+                            ]}
+                          >
+                            <Ionicons name="copy-outline" size={18} color={colors.primary} />
+                          </Pressable>
+                          {isSelf ? (
+                            <Pressable
+                              accessibilityRole="button"
+                              accessibilityLabel={t('shared.chatDeleteMessage', 'Delete message')}
                               onPress={() => {
                                 void Haptics.selectionAsync();
-                                void sendReaction(response, reactionEmoji);
+                                confirmDeleteResponseForEveryone(responseById.get(response.id) ?? response);
                               }}
-                            />
-                          ))}
-                        </View>
-                        <View style={[styles.reactionTrayVerticalDivider, { backgroundColor: colors.border }]} />
-                        <Pressable
-                          accessibilityRole="button"
-                          accessibilityLabel={t('shared.chatReplyToMessage', 'Reply to message')}
-                          onPress={() => {
-                            const target = responseById.get(response.id) ?? response;
-                            void Haptics.selectionAsync();
-                            setReplyTarget(target);
-                            setReactionOverlay(null);
-                          }}
-                          style={({ pressed }) => [
-                            styles.reactionTrayIconAction,
-                            {
-                              backgroundColor: pressed ? colors.primarySoft : 'transparent',
-                            },
-                          ]}
-                        >
-                          <Ionicons name="return-up-back" size={18} color={colors.primary} />
-                        </Pressable>
-                        <Pressable
-                          accessibilityRole="button"
-                          accessibilityLabel={t('shared.chatCopyMessage', 'Copy message')}
-                          onPress={() => {
-                            void Haptics.selectionAsync();
-                            void copyResponseText(responseById.get(response.id) ?? response);
-                          }}
-                          style={({ pressed }) => [
-                            styles.reactionTrayIconAction,
-                            {
-                              backgroundColor: pressed ? colors.primarySoft : 'transparent',
-                            },
-                          ]}
-                        >
-                          <Ionicons name="copy-outline" size={18} color={colors.primary} />
-                        </Pressable>
-                        {reactionDetailsLabel ? (
-                          <Text
-                            numberOfLines={2}
-                            style={[styles.reactionDetailsText, { color: colors.secondaryText }]}
-                          >
-                            {reactionDetailsLabel}
-                          </Text>
-                        ) : null}
-                      </Animated.View>
+                              style={({ pressed }) => [
+                                styles.reactionTrayIconAction,
+                                {
+                                  backgroundColor: pressed ? colors.primarySoft : 'transparent',
+                                },
+                              ]}
+                            >
+                              <Ionicons name="trash-outline" size={18} color={colors.danger} />
+                            </Pressable>
+                          ) : null}
+                        </Animated.View>
+                      </>
                     ) : null}
-                    {reactions.length > 0 ? (
-                      <View
-                        style={[
-                          styles.reactionChip,
-                          isSelf ? styles.selfReactionChip : styles.friendReactionChip,
-                          {
-                            backgroundColor: colors.surface,
-                            borderColor: colors.border,
-                          },
-                        ]}
-                      >
-                        <Text style={styles.reactionChipText}>
-                          {reactions.map((reaction) => reaction.emoji).join(' ')}
-                        </Text>
-                      </View>
-                    ) : null}
+                    <ChatReactionChip
+                      borderColor={colors.border}
+                      isSelf={isSelf}
+                      reactions={reactions}
+                      surfaceColor={colors.surface}
+                    />
                     {isSelf && isFailedDelivery ? (
                       <View style={styles.failedMessageActions}>
                         <Text numberOfLines={1} style={[styles.failedMessageText, { color: colors.danger }]}>
@@ -2346,13 +2576,15 @@ export default function SharedPostChatScreen({
     },
     [
       colors,
+      closeReactionOverlay,
+      confirmDeleteResponseForEveryone,
       copyResponseText,
       getAuthorIdentity,
       getResponseReplyPreview,
       highlightedResponseId,
       isDirectChat,
+      openReactionOverlay,
       reactionOverlay?.response.id,
-      reactionDetailsLabel,
       reactionOverlayProgress,
       reactionTrayWidth,
       removeFailedResponse,
@@ -2586,7 +2818,7 @@ export default function SharedPostChatScreen({
           ) : (
             <Pressable
               disabled={!reactionOverlay}
-              onPress={() => setReactionOverlay(null)}
+              onPress={() => closeReactionOverlay()}
               style={styles.threadList}
             >
               <FlashList
@@ -3228,6 +3460,9 @@ const styles = StyleSheet.create({
     gap: 5,
     position: 'relative',
   },
+  stickerMessageInteractionWrap: {
+    marginVertical: 8,
+  },
   activeReactionMessageRow: {
     zIndex: 40,
     elevation: 40,
@@ -3309,8 +3544,8 @@ const styles = StyleSheet.create({
   },
   stickerMessageBubble: {
     minHeight: 72,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingHorizontal: 0,
+    paddingVertical: 0,
   },
   chatStickerFallback: {
     alignItems: 'center',
@@ -3378,8 +3613,11 @@ const styles = StyleSheet.create({
     zIndex: 3,
     elevation: 0,
   },
+  reactionChipHidden: {
+    opacity: 0,
+  },
   selfReactionChip: {
-    right: -8,
+    left: -8,
   },
   friendReactionChip: {
     right: -8,
@@ -3427,11 +3665,23 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 3,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 10,
-    elevation: 6,
+    shadowColor: 'transparent',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0,
+    shadowRadius: 0,
+    elevation: 0,
+  },
+  reactionTrayAboveBubble: {
+    top: undefined,
+    bottom: '100%',
+  },
+  reactionEmojiTray: {
+    paddingHorizontal: 7,
+  },
+  reactionActionTray: {
+    minHeight: 42,
+    paddingHorizontal: 4,
+    paddingVertical: 2,
   },
   friendInlineReactionTray: {
     left: -4,
@@ -3440,6 +3690,22 @@ const styles = StyleSheet.create({
   selfInlineReactionTray: {
     right: -4,
     marginTop: 7,
+  },
+  friendInlineReactionTrayAboveBubble: {
+    marginTop: 0,
+    marginBottom: 8,
+  },
+  selfInlineReactionTrayAboveBubble: {
+    marginTop: 0,
+    marginBottom: 8,
+  },
+  friendReactionActionTray: {
+    right: -88,
+    marginBottom: 62,
+  },
+  selfReactionActionTray: {
+    left: -126,
+    marginBottom: 62,
   },
   reactionTrayNub: {
     position: 'absolute',
@@ -3452,6 +3718,12 @@ const styles = StyleSheet.create({
     borderLeftWidth: StyleSheet.hairlineWidth,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopLeftRadius: 3,
+  },
+  reactionTrayNubBottom: {
+    bottom: -5,
+    borderRightWidth: StyleSheet.hairlineWidth,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomRightRadius: 3,
   },
   friendInlineReactionTrayNub: {
     left: 48,
@@ -3484,15 +3756,6 @@ const styles = StyleSheet.create({
     borderRadius: 18.5,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  reactionDetailsText: {
-    maxWidth: 92,
-    paddingHorizontal: 4,
-    fontSize: 11,
-    lineHeight: 15,
-    fontWeight: '700',
-    textAlign: 'center',
-    fontFamily: 'Noto Sans',
   },
   reactionTrayText: {
     fontSize: 23,
@@ -3750,17 +4013,20 @@ const styles = StyleSheet.create({
   },
   stickerTray: {
     marginHorizontal: -Layout.screenPadding,
+    marginTop: 4,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
     borderTopWidth: StyleSheet.hairlineWidth,
-    paddingTop: 14,
-    paddingBottom: 16,
+    paddingTop: 22,
+    paddingBottom: 22,
     overflow: 'hidden',
   },
   stickerTrayContent: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 12,
-    paddingHorizontal: Layout.screenPadding + 14,
-    paddingBottom: 4,
+    paddingHorizontal: Layout.screenPadding + 18,
+    paddingBottom: 8,
   },
   stickerTrayItem: {
     borderRadius: 20,

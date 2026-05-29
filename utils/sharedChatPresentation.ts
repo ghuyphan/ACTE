@@ -110,7 +110,16 @@ export function formatSharedResponseBody(
 }
 
 export function getSharedThreadSummaryBody(summary: SharedThreadSummary) {
-  return [summary.latestActivityEmoji, summary.latestActivityText].filter(Boolean).join(' ').trim();
+  const body = [summary.latestActivityEmoji, summary.latestActivityText].filter(Boolean).join(' ').trim();
+  if (body) {
+    return body;
+  }
+
+  if (summary.latestActivityKind === 'response' && summary.latestActivityAt) {
+    return 'Sticker';
+  }
+
+  return '';
 }
 
 export function isSharedThreadUnread(

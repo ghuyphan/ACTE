@@ -131,6 +131,7 @@ jest.mock('../services/sharedFeedService', () => ({
     error instanceof Error ? error.message : typeof error === 'string' ? error : 'unknown error',
   getSharedPostResponsesPage: jest.fn(async () => []),
   getSharedPostThreadSummaries: jest.fn(async () => []),
+  hydrateSharedPostResponseStickers: jest.fn(async (responses) => responses),
   invalidateSharedFeedRefresh: jest.fn(),
   refreshSharedFeed: (...args: unknown[]) => mockRefreshSharedFeed(...args),
   removeFriend: (...args: unknown[]) => mockRemoveFriend(...args),

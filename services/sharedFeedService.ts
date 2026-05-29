@@ -1,5 +1,6 @@
 import * as Crypto from 'expo-crypto';
 import * as Linking from 'expo-linking';
+import * as FileSystem from '../utils/fileSystem';
 import { AppUser, getUserSocialName } from '../utils/appUser';
 import { buildPublicSiteUrl } from './legalLinks';
 import {
@@ -822,13 +823,21 @@ function mapSharedPostResponse(row: SharedPostResponseRow): SharedPostResponse {
   };
 }
 
-async function hydrateSharedPostResponseStickers(
+export async function hydrateSharedPostResponseStickers(
   responses: SharedPostResponse[]
 ): Promise<SharedPostResponse[]> {
   return Promise.all(
     responses.map(async (response) => {
       const sticker = response.sticker;
-      if (!sticker?.remotePath || sticker.localUri) {
+      if (!sticker?.remotePath) {
+        return response;
+      }
+
+      const localInfo = sticker.localUri
+        ? await FileSystem.getInfoAsync(sticker.localUri).catch(() => null)
+        : null;
+
+      if (localInfo?.exists && !localInfo.isDirectory) {
         return response;
       }
 
@@ -3263,6 +3272,56 @@ export async function deleteSharedPostResponseReaction(
   if (error) {
     throw error;
   }
+}
+
+export async function deleteSharedPostResponse(
+  user: AppUser,
+  postId: string,
+  responseId: string
+): Promise<void> {
+  await ensureSupabaseSessionMatchesUser(user.id);
+
+  const normalizedPostId = postId.trim();
+  const normalizedResponseId = responseId.trim();
+  if (!normalizedPostId || !normalizedResponseId) {
+    throw new Error('Message required.');
+  }
+
+  const supabase = requireSupabase();
+  const { data: existing, error: fetchError } = await supabase
+    .from('shared_post_responses')
+    .select('id, sticker_remote_path')
+    .eq('post_id', normalizedPostId)
+    .eq('id', normalizedResponseId)
+    .eq('author_user_id', user.id)
+    .maybeSingle();
+
+  if (fetchError) {
+    throw fetchError;
+  }
+
+  if (!existing) {
+    throw new Error('Message not found.');
+  }
+
+  const { error } = await supabase
+    .from('shared_post_responses')
+    .delete()
+    .eq('post_id', normalizedPostId)
+    .eq('id', normalizedResponseId)
+    .eq('author_user_id', user.id);
+
+  if (error) {
+    throw error;
+  }
+
+  const stickerRemotePath =
+    (existing as { sticker_remote_path?: string | null }).sticker_remote_path?.trim() || null;
+  await cleanupRemoteArtifactsBestEffort(
+    `shared response ${normalizedResponseId}`,
+    SHARED_POST_MEDIA_BUCKET,
+    { stickerPaths: stickerRemotePath ? [stickerRemotePath] : [] }
+  );
 }
 
 export async function updateSharedPost(

@@ -31,6 +31,7 @@ import {
   isDirectChatPost,
   isSharedThreadUnread,
 } from '../../../utils/sharedChatPresentation';
+import { showAppAlert } from '../../../utils/alert';
 
 const CHAT_LIST_SKELETON_ROWS = [
   { key: 'first', titleWidth: '46%', previewWidth: '68%' },
@@ -164,6 +165,8 @@ export default function SharedChatsScreen() {
     getSharedPostResponsesPage = async () => [],
     getSharedPostThreadSummaries = async () => [],
     getSharedThreadReadStates = async () => [],
+    getHiddenSharedChatThreads = async () => [],
+    hideSharedChatThreadForMe = async () => null,
     subscribeToSharedPostTyping = () => ({
       setTyping: () => undefined,
       unsubscribe: () => undefined,
@@ -175,6 +178,7 @@ export default function SharedChatsScreen() {
   const [readStateByPostId, setReadStateByPostId] = useState<
     Record<string, SharedThreadReadState>
   >(() => (user?.uid ? cachedReadStateByUserUid.get(user.uid) ?? {} : {}));
+  const [hiddenThreadByPostId, setHiddenThreadByPostId] = useState<Record<string, string>>({});
   const [hasHydratedReadStates, setHasHydratedReadStates] = useState(false);
   const [typingUsersByPostId, setTypingUsersByPostId] = useState<
     Record<string, SharedPostTypingUser[]>
@@ -189,10 +193,11 @@ export default function SharedChatsScreen() {
       return;
     }
 
-    const [cachedThreads, summaries, readStates] = await Promise.all([
+    const [cachedThreads, summaries, readStates, hiddenThreads] = await Promise.all([
       getCachedSharedChatThreadPosts(user.uid).catch(() => []),
       getCachedSharedThreadSummaries(user.uid).catch(() => []),
       getCachedSharedThreadReadStates(user.uid).catch(() => []),
+      getHiddenSharedChatThreads().catch(() => []),
     ]);
     if (cachedThreads.length > 0) {
       cachedActivityThreadPostsByUserUid.set(user.uid, cachedThreads);
@@ -211,8 +216,9 @@ export default function SharedChatsScreen() {
       ...nextSummaryByPostId,
     }));
     setReadStateByPostId(nextReadStateByPostId);
+    setHiddenThreadByPostId(Object.fromEntries(hiddenThreads.map((thread) => [thread.postId, thread.hiddenAt])));
     setHasHydratedReadStates(true);
-  }, [authReady, user?.uid]);
+  }, [authReady, getHiddenSharedChatThreads, user?.uid]);
   const listContentStyle = useMemo(
     () => ({
       paddingTop: 8,
@@ -277,10 +283,20 @@ export default function SharedChatsScreen() {
         setActivityThreadPosts([]);
         setLoadingActivityThreads(false);
         setHasHydratedReadStates(false);
+        setHiddenThreadByPostId({});
         return undefined;
       }
 
       let cancelled = false;
+      void getHiddenSharedChatThreads()
+        .then((hiddenThreads) => {
+          if (!cancelled) {
+            setHiddenThreadByPostId(
+              Object.fromEntries(hiddenThreads.map((thread) => [thread.postId, thread.hiddenAt]))
+            );
+          }
+        })
+        .catch(() => undefined);
       const cachedActivityThreadPosts = cachedActivityThreadPostsByUserUid.get(user.uid) ?? [];
       let hasLoadedRemoteThreads = false;
       if (cachedActivityThreadPosts.length > 0) {
@@ -334,7 +350,14 @@ export default function SharedChatsScreen() {
       return () => {
         cancelled = true;
       };
-    }, [authReady, friends.length, getSharedChatThreadPosts, threadPostIdsKey, user?.uid])
+    }, [
+      authReady,
+      friends.length,
+      getHiddenSharedChatThreads,
+      getSharedChatThreadPosts,
+      threadPostIdsKey,
+      user?.uid,
+    ])
   );
   useFocusEffect(
     useCallback(() => {
@@ -404,14 +427,23 @@ export default function SharedChatsScreen() {
 
   const threads = useMemo(
     () =>
-      [...mergedThreadPosts].sort((left, right) => {
+      [...mergedThreadPosts].filter((post) => {
+        const hiddenAt = hiddenThreadByPostId[post.id];
+        if (!hiddenAt) {
+          return true;
+        }
+
+        const summary = threadSummaryByPostId[post.id] ?? null;
+        const latestActivityAt = summary?.latestActivityAt ?? post.createdAt;
+        return new Date(latestActivityAt).getTime() > new Date(hiddenAt).getTime();
+      }).sort((left, right) => {
         const leftSummary = threadSummaryByPostId[left.id];
         const rightSummary = threadSummaryByPostId[right.id];
         const leftTime = new Date(leftSummary?.latestActivityAt ?? left.createdAt).getTime();
         const rightTime = new Date(rightSummary?.latestActivityAt ?? right.createdAt).getTime();
         return rightTime - leftTime;
       }),
-    [mergedThreadPosts, threadSummaryByPostId]
+    [hiddenThreadByPostId, mergedThreadPosts, threadSummaryByPostId]
   );
   const getDirectChatParticipantUid = useCallback(
     (post: SharedPost) =>
@@ -579,6 +611,52 @@ export default function SharedChatsScreen() {
     },
     [friendById, getDirectChatParticipantUid, t, user?.uid]
   );
+  const hideDirectChatForMe = useCallback(
+    (post: SharedPost) => {
+      showAppAlert(
+        t('shared.chatHideThreadTitle', 'Hide chat?'),
+        t('shared.chatHideThreadBody', 'This removes the chat from your list. New messages can bring it back.'),
+        [
+          {
+            text: t('common.cancel', 'Cancel'),
+            style: 'cancel',
+          },
+          {
+            text: t('shared.chatHideThreadConfirm', 'Hide for me'),
+            style: 'destructive',
+            onPress: () => {
+              void hideSharedChatThreadForMe(post.id)
+                .then((hiddenThread) => {
+                  const hiddenAt = hiddenThread?.hiddenAt ?? new Date().toISOString();
+                  setHiddenThreadByPostId((current) => ({
+                    ...current,
+                    [post.id]: hiddenAt,
+                  }));
+                  setActivityThreadPosts((current) => current.filter((item) => item.id !== post.id));
+                  if (user?.uid) {
+                    cachedActivityThreadPostsByUserUid.set(
+                      user.uid,
+                      (cachedActivityThreadPostsByUserUid.get(user.uid) ?? []).filter(
+                        (item) => item.id !== post.id
+                      )
+                    );
+                  }
+                })
+                .catch((error) => {
+                  showAppAlert(
+                    t('shared.chatHideThreadFailedTitle', 'Could not hide chat'),
+                    error instanceof Error
+                      ? error.message
+                      : t('shared.genericError', 'Something went wrong.')
+                  );
+                });
+            },
+          },
+        ]
+      );
+    },
+    [hideSharedChatThreadForMe, t, user?.uid]
+  );
   const renderThreadItem = useCallback(
     (post: SharedPost) => {
       const participantUid = getDirectChatParticipantUid(post);
@@ -649,6 +727,9 @@ export default function SharedChatsScreen() {
             );
           }}
           onPressIn={() => prewarmThreadResponses(post.id)}
+          onLongPress={
+            isDirectChat ? () => hideDirectChatForMe(post) : undefined
+          }
           style={({ pressed }) => [
             styles.threadRow,
             {
@@ -760,6 +841,7 @@ export default function SharedChatsScreen() {
       getDirectChatParticipantUid,
       getThreadParticipant,
       hasHydratedReadStates,
+      hideDirectChatForMe,
       prewarmThreadResponses,
       readStateByPostId,
       router,

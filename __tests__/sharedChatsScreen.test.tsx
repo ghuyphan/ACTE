@@ -6,6 +6,7 @@ const mockPush = jest.fn();
 const mockGetSharedChatThreadPosts = jest.fn();
 const mockGetSharedPostThreadSummaries = jest.fn();
 const mockGetSharedThreadReadStates = jest.fn();
+const mockGetHiddenSharedChatThreads = jest.fn();
 const mockGetCachedSharedThreadSummaries = jest.fn();
 const mockGetCachedSharedChatThreadPosts = jest.fn();
 const mockGetCachedSharedThreadReadStates = jest.fn();
@@ -68,17 +69,18 @@ const mockSharedFeedState = {
   getSharedChatThreadPosts: mockGetSharedChatThreadPosts,
   getSharedPostThreadSummaries: mockGetSharedPostThreadSummaries,
   getSharedThreadReadStates: mockGetSharedThreadReadStates,
+  getHiddenSharedChatThreads: mockGetHiddenSharedChatThreads,
   subscribeToSharedPostTyping: mockSubscribeToSharedPostTyping,
 };
 
-function threadSummary(text: string, createdAt: string) {
+function threadSummary(text: string | null, createdAt: string, authorUid = 'friend-1') {
   return {
     postId: mockDirectPost.id,
-    latestResponseId: `response-${text}`,
+    latestResponseId: `response-${text ?? 'sticker'}-${authorUid}`,
     latestResponseCreatedAt: createdAt,
     latestActivityAt: createdAt,
-    latestActivityAuthorUid: 'friend-1',
-    latestActivityAuthorDisplayName: 'Lan',
+    latestActivityAuthorUid: authorUid,
+    latestActivityAuthorDisplayName: authorUid === 'me' ? 'Me' : 'Lan',
     latestActivityAuthorPhotoURLSnapshot: null,
     latestActivityText: text,
     latestActivityEmoji: null,
@@ -234,6 +236,7 @@ describe('SharedChatsScreen', () => {
       threadSummary('Old message', '2026-05-20T01:01:00.000Z'),
     ]);
     mockGetSharedThreadReadStates.mockResolvedValue([]);
+    mockGetHiddenSharedChatThreads.mockResolvedValue([]);
     mockGetCachedSharedChatThreadPosts.mockResolvedValue([]);
     mockGetCachedSharedThreadReadStates.mockResolvedValue([]);
     mockGetCachedSharedThreadSummaries.mockResolvedValue([
@@ -279,6 +282,40 @@ describe('SharedChatsScreen', () => {
       expect(getByText('@mai')).toBeTruthy();
     });
     expect(getAllByText('Message')).toHaveLength(1);
+  });
+
+  it('labels sticker-only latest messages from a friend or the current user', async () => {
+    mockGetCachedSharedThreadSummaries.mockResolvedValue([
+      threadSummary(null, '2026-05-20T01:02:00.000Z'),
+    ]);
+    mockGetSharedPostThreadSummaries.mockResolvedValue([
+      threadSummary(null, '2026-05-20T01:02:00.000Z'),
+    ]);
+
+    const { getByText, rerender } = render(<SharedChatsScreen />);
+
+    await waitFor(() => {
+      expect(getByText('@lan: Sticker')).toBeTruthy();
+    });
+
+    mockGetCachedSharedThreadSummaries.mockResolvedValue([
+      threadSummary(null, '2026-05-20T01:03:00.000Z', 'me'),
+    ]);
+    mockGetSharedPostThreadSummaries.mockResolvedValue([
+      threadSummary(null, '2026-05-20T01:03:00.000Z', 'me'),
+    ]);
+
+    await act(async () => {
+      for (const callback of [...mockFocusCallbacks]) {
+        callback();
+      }
+      await Promise.resolve();
+    });
+    rerender(<SharedChatsScreen />);
+
+    await waitFor(() => {
+      expect(getByText('You: Sticker')).toBeTruthy();
+    });
   });
 
   it('renders empty direct chat anchors like starter rows without badge or timestamp', async () => {

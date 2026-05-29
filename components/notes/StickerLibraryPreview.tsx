@@ -26,6 +26,7 @@ export default function StickerLibraryPreview({
   outlineTintColor = CaptureChrome.shutterContent,
   outlineScale = 1,
   stampShadowEnabled = false,
+  imageTransition = 120,
 }: {
   item: StickerLibraryPreviewItem;
   previewWidth: number;
@@ -33,6 +34,7 @@ export default function StickerLibraryPreview({
   outlineTintColor?: string;
   outlineScale?: number;
   stampShadowEnabled?: boolean;
+  imageTransition?: number;
 }) {
   if (item.renderMode === 'stamp') {
     return (
@@ -74,7 +76,7 @@ export default function StickerLibraryPreview({
         source={{ uri: item.asset.localUri }}
         style={styles.stickerPreviewImage}
         contentFit="contain"
-        transition={120}
+        transition={imageTransition}
       />
     </View>
   );

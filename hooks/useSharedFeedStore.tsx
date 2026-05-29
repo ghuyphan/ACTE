@@ -10,6 +10,7 @@ import {
   createSharedPost as createPost,
   createSharedPostResponse as createPostResponse,
   createSharedPostResponseReaction as createPostResponseReaction,
+  deleteSharedPostResponse as deletePostResponse,
   deleteSharedPostResponseReaction as deletePostResponseReaction,
   deleteFriendGroup as removeGroup,
   deleteOwnedSharedPostsForNotes,
@@ -28,6 +29,7 @@ import {
   getSharedPostResponsesPage as fetchPostResponsesPage,
   getSharedPostThreadSummaries as fetchPostThreadSummaries,
   getSharedFeedErrorMessage,
+  hydrateSharedPostResponseStickers,
   invalidateSharedFeedRefresh,
   refreshSharedFeed as fetchSharedFeed,
   removeFriend as deleteFriend,
@@ -59,6 +61,8 @@ import {
   getCachedSharedFeedSnapshot,
   getCachedSharedThreadReadStates,
   getCachedSharedThreadSummaries,
+  getHiddenCachedSharedChatThreads,
+  hideCachedSharedChatThread,
   deleteCachedSharedPostResponse,
   deleteCachedSharedPostResponseReactionById,
   deleteCachedSharedPostResponseReaction,
@@ -169,6 +173,12 @@ interface SharedFeedStoreValue {
     postId: string,
     responseId: string
   ) => Promise<void>;
+  deleteSharedPostResponse: (
+    postId: string,
+    responseId: string
+  ) => Promise<void>;
+  getHiddenSharedChatThreads: () => Promise<{ postId: string; hiddenAt: string }[]>;
+  hideSharedChatThreadForMe: (postId: string) => Promise<{ postId: string; hiddenAt: string } | null>;
   getSharedThreadReadStates: () => Promise<SharedThreadReadState[]>;
   markSharedThreadRead: (
     postId: string,
@@ -1800,8 +1810,9 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
         const activeUser = requireUser();
         if (!isOnline) {
           const cachedResponses = await getCachedSharedPostResponses(activeUser.uid, postId);
-          rememberSharedPostResponses(postId, cachedResponses);
-          return cachedResponses;
+          const hydratedResponses = await hydrateSharedPostResponseStickers(cachedResponses);
+          rememberSharedPostResponses(postId, hydratedResponses);
+          return hydratedResponses;
         }
 
         const responses = await fetchSharedPostResponsesPageOnce(activeUser, postId);
@@ -1822,10 +1833,11 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
             postId,
             options
           );
+          const hydratedResponses = await hydrateSharedPostResponseStickers(cachedResponses);
           if (!options?.beforeCreatedAt) {
-            rememberSharedPostResponses(postId, cachedResponses);
+            rememberSharedPostResponses(postId, hydratedResponses);
           }
-          return cachedResponses;
+          return hydratedResponses;
         }
 
         const responses = await fetchSharedPostResponsesPageOnce(activeUser, postId, options);
@@ -1882,10 +1894,11 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
         void getCachedSharedPostResponsesPage(activeUser.uid, postId, {
           limit: options.initialPageSize,
         })
-          .then((cachedResponses) => {
-            if (!disposed && (cachedResponses.length > 0 || !isOnline)) {
-              rememberSharedPostResponses(postId, cachedResponses);
-              void options.onResponses(cachedResponses);
+          .then(async (cachedResponses) => {
+            const hydratedResponses = await hydrateSharedPostResponseStickers(cachedResponses);
+            if (!disposed && (hydratedResponses.length > 0 || !isOnline)) {
+              rememberSharedPostResponses(postId, hydratedResponses);
+              void options.onResponses(hydratedResponses);
             }
           })
           .catch(() => undefined);
@@ -1921,11 +1934,11 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
             if (options.onResponse) {
               await options.onResponse(response);
             } else {
-              await options.onResponses(
-                await getCachedSharedPostResponsesPage(activeUser.uid, postId, {
-                  limit: options.initialPageSize,
-                })
-              );
+              const cached = await getCachedSharedPostResponsesPage(activeUser.uid, postId, {
+                limit: options.initialPageSize,
+              });
+              const hydrated = await hydrateSharedPostResponseStickers(cached);
+              await options.onResponses(hydrated);
             }
           },
           onResponseDeleted: async (responseId) => {
@@ -1941,11 +1954,11 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
             if (options.onResponseDeleted) {
               await options.onResponseDeleted(responseId);
             } else {
-              await options.onResponses(
-                await getCachedSharedPostResponsesPage(activeUser.uid, postId, {
-                  limit: options.initialPageSize,
-                })
-              );
+              const cached = await getCachedSharedPostResponsesPage(activeUser.uid, postId, {
+                limit: options.initialPageSize,
+              });
+              const hydrated = await hydrateSharedPostResponseStickers(cached);
+              await options.onResponses(hydrated);
             }
           },
           onReaction: async (reaction) => {
@@ -1959,11 +1972,11 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
             if (options.onReaction) {
               await options.onReaction(reaction);
             } else {
-              await options.onResponses(
-                await getCachedSharedPostResponsesPage(activeUser.uid, postId, {
-                  limit: options.initialPageSize,
-                })
-              );
+              const cached = await getCachedSharedPostResponsesPage(activeUser.uid, postId, {
+                limit: options.initialPageSize,
+              });
+              const hydrated = await hydrateSharedPostResponseStickers(cached);
+              await options.onResponses(hydrated);
             }
           },
           onReactionDeleted: async (reaction) => {
@@ -1990,11 +2003,11 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
             if (options.onReactionDeleted) {
               await options.onReactionDeleted(reaction);
             } else {
-              await options.onResponses(
-                await getCachedSharedPostResponsesPage(activeUser.uid, postId, {
-                  limit: options.initialPageSize,
-                })
-              );
+              const cached = await getCachedSharedPostResponsesPage(activeUser.uid, postId, {
+                limit: options.initialPageSize,
+              });
+              const hydrated = await hydrateSharedPostResponseStickers(cached);
+              await options.onResponses(hydrated);
             }
           },
         });
@@ -2063,6 +2076,22 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
         }).catch((error) => {
           console.warn('Failed to remove shared response reaction cache:', error);
         });
+      },
+      deleteSharedPostResponse: async (postId: string, responseId: string) => {
+        requireOnline();
+        const activeUser = requireUser();
+        await deletePostResponse(activeUser, postId, responseId);
+        void deleteCachedSharedPostResponse(activeUser.uid, { postId, responseId }).catch((error) => {
+          console.warn('Failed to remove shared response cache:', error);
+        });
+      },
+      getHiddenSharedChatThreads: async () => {
+        const activeUser = requireUser();
+        return getHiddenCachedSharedChatThreads(activeUser.uid);
+      },
+      hideSharedChatThreadForMe: async (postId: string) => {
+        const activeUser = requireUser();
+        return hideCachedSharedChatThread(activeUser.uid, postId);
       },
       getSharedThreadReadStates: async () => {
         const activeUser = requireUser();
