@@ -826,6 +826,7 @@ export async function getDB(): Promise<SQLite.SQLiteDatabase> {
         author_photo_url_snapshot TEXT,
         emoji TEXT,
         text TEXT NOT NULL DEFAULT '',
+        sticker_json TEXT,
         reply_to_response_id TEXT,
         created_at TEXT NOT NULL,
         PRIMARY KEY (user_uid, post_id, id)
@@ -1332,6 +1333,7 @@ export async function getDB(): Promise<SQLite.SQLiteDatabase> {
                     author_photo_url_snapshot TEXT,
                     emoji TEXT,
                     text TEXT NOT NULL DEFAULT '',
+                    sticker_json TEXT,
                     reply_to_response_id TEXT,
                     created_at TEXT NOT NULL,
                     PRIMARY KEY (user_uid, post_id, id)
@@ -1343,6 +1345,9 @@ export async function getDB(): Promise<SQLite.SQLiteDatabase> {
             const sharedResponseCacheColumns = sharedResponseCacheInfo.map((col) => col.name);
             if (!sharedResponseCacheColumns.includes('reply_to_response_id')) {
                 await database.execAsync(`ALTER TABLE shared_post_responses_cache ADD COLUMN reply_to_response_id TEXT`);
+            }
+            if (!sharedResponseCacheColumns.includes('sticker_json')) {
+                await database.execAsync(`ALTER TABLE shared_post_responses_cache ADD COLUMN sticker_json TEXT`);
             }
             await database.execAsync(
                 `CREATE INDEX IF NOT EXISTS idx_shared_post_responses_cache_user_post_created

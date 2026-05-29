@@ -112,6 +112,12 @@ jest.mock('expo-clipboard', () => ({
 }));
 
 jest.mock('../components/sheets/TextFieldEditSheet', () => () => null);
+jest.mock('../components/ui/StickerIcon', () => () => null);
+jest.mock('../components/notes/StickerLibraryPreview', () => () => null);
+
+jest.mock('../hooks/useNotes', () => ({
+  useNotes: () => ({ notes: [] }),
+}));
 
 jest.mock('react-i18next', () => ({
   useTranslation: () => ({

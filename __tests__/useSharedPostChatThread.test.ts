@@ -87,6 +87,38 @@ describe('useSharedPostChatThread helpers', () => {
     expect(areChatResponseListsEqual([failed], mergeChatResponses([], [failed]))).toBe(true);
   });
 
+  it('preserves a local sticker uri when a confirmed response only has the remote path', () => {
+    const localStickerResponse = response({
+      id: 'shared-response-1',
+      text: '',
+      sticker: {
+        assetId: 'sticker-1',
+        localUri: 'file:///local/sticker.webp',
+        remotePath: 'user-1/stickers/sticker-1.webp',
+        mimeType: 'image/webp',
+        width: 200,
+        height: 180,
+        renderMode: 'default',
+      },
+    });
+    const remoteStickerResponse = response({
+      id: 'shared-response-1',
+      text: '',
+      sticker: {
+        assetId: 'sticker-1',
+        localUri: null,
+        remotePath: 'user-1/stickers/sticker-1.webp',
+        mimeType: 'image/webp',
+        width: 200,
+        height: 180,
+        renderMode: 'default',
+      },
+    });
+
+    expect(mergeChatResponses([localStickerResponse], [remoteStickerResponse])[0].sticker?.localUri)
+      .toBe('file:///local/sticker.webp');
+  });
+
   it('replaces optimistic reactions with confirmed reactions from the same author', () => {
     const merged = mergeResponseReactions(
       [

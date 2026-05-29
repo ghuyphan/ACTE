@@ -30,10 +30,15 @@ import {
 import {
   getNoteStickers,
   clearRemoteStickerAssetRefs,
+  downloadStickerAssetFromStorage,
   hasStoredStickerPayload,
   parseNoteStickerPlacements,
   reconcileRemoteStickerAssetRefs,
   serializeStickerPlacementsForStorage,
+  uploadStickerAssetToStorage,
+  type StickerAsset,
+  type StickerRenderMode,
+  type StickerStampStyle,
 } from './noteStickers';
 import { formatNoteTextWithEmoji } from './noteTextPresentation';
 import {
@@ -148,9 +153,27 @@ export interface SharedPostResponse {
   authorPhotoURLSnapshot: string | null;
   emoji: string | null;
   text: string;
+  sticker?: SharedPostResponseSticker | null;
   replyToResponseId?: string | null;
   reactions?: SharedPostResponseReaction[];
   createdAt: string;
+}
+
+export interface SharedPostResponseSticker {
+  assetId: string;
+  localUri: string | null;
+  remotePath: string | null;
+  mimeType: string;
+  width: number;
+  height: number;
+  renderMode: StickerRenderMode;
+  stampStyle?: StickerStampStyle | null;
+}
+
+export interface SharedPostResponseStickerInput {
+  asset: StickerAsset;
+  renderMode?: StickerRenderMode;
+  stampStyle?: StickerStampStyle | null;
 }
 
 export interface SharedPostResponseReaction {
@@ -321,6 +344,13 @@ interface SharedPostResponseRow {
   author_photo_url_snapshot: string | null;
   emoji: string | null;
   text: string | null;
+  sticker_asset_id?: string | null;
+  sticker_remote_path?: string | null;
+  sticker_mime_type?: string | null;
+  sticker_width?: number | null;
+  sticker_height?: number | null;
+  sticker_render_mode?: StickerRenderMode | null;
+  sticker_stamp_style?: StickerStampStyle | null;
   reply_to_response_id?: string | null;
   created_at: string;
 }
@@ -753,6 +783,30 @@ function mapFriendGroup(row: FriendGroupRow, memberUserIds: string[]): FriendGro
 }
 
 function mapSharedPostResponse(row: SharedPostResponseRow): SharedPostResponse {
+  const stickerRemotePath = row.sticker_remote_path?.trim() || null;
+  const stickerAssetId = row.sticker_asset_id?.trim() || null;
+  const stickerMimeType = row.sticker_mime_type?.trim() || null;
+  const stickerWidth = Math.max(1, Number(row.sticker_width ?? 0));
+  const stickerHeight = Math.max(1, Number(row.sticker_height ?? 0));
+  const sticker: SharedPostResponseSticker | null =
+    stickerRemotePath && stickerAssetId && stickerMimeType
+      ? {
+          assetId: stickerAssetId,
+          localUri: null,
+          remotePath: stickerRemotePath,
+          mimeType: stickerMimeType,
+          width: stickerWidth,
+          height: stickerHeight,
+          renderMode: row.sticker_render_mode === 'stamp' ? 'stamp' : 'default',
+          stampStyle:
+            row.sticker_render_mode === 'stamp'
+              ? row.sticker_stamp_style === 'circle'
+                ? 'circle'
+                : 'classic'
+              : null,
+        }
+      : null;
+
   return {
     id: row.id,
     postId: row.post_id,
@@ -761,10 +815,44 @@ function mapSharedPostResponse(row: SharedPostResponseRow): SharedPostResponse {
     authorPhotoURLSnapshot: row.author_photo_url_snapshot ?? null,
     emoji: row.emoji?.trim() || null,
     text: row.text?.trim() ?? '',
+    sticker,
     replyToResponseId: row.reply_to_response_id?.trim() || null,
     reactions: [],
     createdAt: row.created_at,
   };
+}
+
+async function hydrateSharedPostResponseStickers(
+  responses: SharedPostResponse[]
+): Promise<SharedPostResponse[]> {
+  return Promise.all(
+    responses.map(async (response) => {
+      const sticker = response.sticker;
+      if (!sticker?.remotePath || sticker.localUri) {
+        return response;
+      }
+
+      const localUri = await downloadStickerAssetFromStorage(
+        SHARED_POST_MEDIA_BUCKET,
+        sticker.remotePath,
+        sticker.assetId,
+        sticker.mimeType,
+        { sharedCache: true }
+      ).catch(() => null);
+
+      if (!localUri) {
+        return response;
+      }
+
+      return {
+        ...response,
+        sticker: {
+          ...sticker,
+          localUri,
+        },
+      };
+    })
+  );
 }
 
 function mapSharedPostResponseReaction(
@@ -832,7 +920,7 @@ function getLatestActivityFromResponses(
       authorUid: response.authorUid,
       authorDisplayName: response.authorDisplayName,
       authorPhotoURLSnapshot: response.authorPhotoURLSnapshot,
-      text: response.text || null,
+      text: response.text || (response.sticker ? 'Sticker' : null),
       emoji: response.emoji,
       kind: 'response' as const,
       createdAt: response.createdAt,
@@ -2438,7 +2526,7 @@ export async function getSharedPostResponsesPage(
   const beforeCreatedAt = options.beforeCreatedAt?.trim() || null;
   const query = requireSupabase()
     .from('shared_post_responses')
-    .select('id, post_id, author_user_id, author_display_name, author_photo_url_snapshot, emoji, text, reply_to_response_id, created_at')
+    .select('id, post_id, author_user_id, author_display_name, author_photo_url_snapshot, emoji, text, sticker_asset_id, sticker_remote_path, sticker_mime_type, sticker_width, sticker_height, sticker_render_mode, sticker_stamp_style, reply_to_response_id, created_at')
     .eq('post_id', normalizedPostId)
     .order('created_at', { ascending: false })
     .limit(limit);
@@ -2453,9 +2541,9 @@ export async function getSharedPostResponsesPage(
     throw error;
   }
 
-  const responses = ((data ?? []) as SharedPostResponseRow[])
+  const responses = await hydrateSharedPostResponseStickers(((data ?? []) as SharedPostResponseRow[])
     .map(mapSharedPostResponse)
-    .reverse();
+    .reverse());
   const responseIds = responses.map((response) => response.id);
   if (responseIds.length === 0) {
     return responses;
@@ -2751,17 +2839,10 @@ export function subscribeToSharedPostTyping(
   let disposed = false;
   let subscribed = false;
   let pendingTypingState: boolean | null = null;
-
-  const channel = supabase.channel(`shared-post-typing:${normalizedPostId}`, {
-    config: {
-      presence: {
-        key: ownUserId,
-      },
-    },
-  });
+  let channel: ReturnType<typeof supabase.channel> | null = null;
 
   const emitTypingUsers = () => {
-    if (disposed) {
+    if (disposed || !channel) {
       return;
     }
 
@@ -2780,7 +2861,14 @@ export function subscribeToSharedPostTyping(
       return;
     }
 
-    void channel
+    const activeChannel = channel;
+    if (!activeChannel) {
+      pendingTypingState = isTyping;
+      subscribed = false;
+      return;
+    }
+
+    void activeChannel
       .track({
         user_id: ownUserId,
         display_name: getDisplayName(user),
@@ -2796,27 +2884,56 @@ export function subscribeToSharedPostTyping(
       });
   };
 
-  channel
-    .on('presence', { event: 'sync' }, emitTypingUsers)
-    .on('presence', { event: 'join' }, emitTypingUsers)
-    .on('presence', { event: 'leave' }, emitTypingUsers)
-    .subscribe((status) => {
-      if (disposed || status !== 'SUBSCRIBED') {
-        return;
-      }
+  const setupChannel = async () => {
+    const topic = `realtime:shared-post-typing:${normalizedPostId}`;
+    const existingChannel = supabase.getChannels().find((candidate) => candidate.topic === topic);
+    if (existingChannel) {
+      await supabase.removeChannel(existingChannel);
+    }
 
-      subscribed = true;
-      trackTyping(pendingTypingState ?? false);
-      pendingTypingState = null;
+    if (disposed) {
+      return;
+    }
+
+    const nextChannel = supabase.channel(`shared-post-typing:${normalizedPostId}`, {
+      config: {
+        presence: {
+          key: ownUserId,
+        },
+      },
     });
+    channel = nextChannel;
+
+    nextChannel
+      .on('presence', { event: 'sync' }, emitTypingUsers)
+      .on('presence', { event: 'join' }, emitTypingUsers)
+      .on('presence', { event: 'leave' }, emitTypingUsers)
+      .subscribe((status) => {
+        if (disposed || status !== 'SUBSCRIBED') {
+          return;
+        }
+
+        subscribed = true;
+        trackTyping(pendingTypingState ?? false);
+        pendingTypingState = null;
+      });
+  };
+
+  void setupChannel().catch((error) => {
+    if (!disposed) {
+      options.onError?.(error);
+    }
+  });
 
   return {
     setTyping: trackTyping,
     unsubscribe: () => {
       disposed = true;
       options.onTypingUsers([]);
-      void channel.untrack();
-      void supabase.removeChannel(channel);
+      if (channel) {
+        void channel.untrack();
+        void supabase.removeChannel(channel);
+      }
     },
   };
 }
@@ -2914,7 +3031,14 @@ export function subscribeToSharedPostResponses(
 
         const nextResponse = getRealtimeRecord<SharedPostResponseRow>(payload, 'new');
         if (nextResponse?.id && options.onResponse) {
-          safelyApplyDelta(() => options.onResponse?.(mapSharedPostResponse(nextResponse)));
+          safelyApplyDelta(async () => {
+            const [hydratedResponse] = await hydrateSharedPostResponseStickers([
+              mapSharedPostResponse(nextResponse),
+            ]);
+            if (hydratedResponse) {
+              await options.onResponse?.(hydratedResponse);
+            }
+          });
           return;
         }
 
@@ -2984,7 +3108,12 @@ export function subscribeToSharedPostResponses(
 export async function createSharedPostResponse(
   user: AppUser,
   postId: string,
-  input: { emoji?: string | null; text?: string | null; replyToResponseId?: string | null }
+  input: {
+    emoji?: string | null;
+    text?: string | null;
+    replyToResponseId?: string | null;
+    sticker?: SharedPostResponseStickerInput | null;
+  }
 ): Promise<SharedPostResponse> {
   await ensureSupabaseSessionMatchesUser(user.id);
 
@@ -2995,8 +3124,37 @@ export async function createSharedPostResponse(
 
   const emoji = input.emoji?.trim() || null;
   const text = input.text?.trim() || '';
+  const stickerInput = input.sticker ?? null;
   const replyToResponseId = input.replyToResponseId?.trim() || null;
-  if (!emoji && !text) {
+  let sticker: SharedPostResponseSticker | null = null;
+  if (stickerInput) {
+    const uploadedSticker = await uploadStickerAssetToStorage(
+      SHARED_POST_MEDIA_BUCKET,
+      user.id,
+      stickerInput.asset
+    );
+    if (!uploadedSticker.remotePath) {
+      throw new Error('Could not upload sticker.');
+    }
+    const renderMode = stickerInput.renderMode === 'stamp' ? 'stamp' : 'default';
+    sticker = {
+      assetId: uploadedSticker.id,
+      localUri: uploadedSticker.localUri,
+      remotePath: uploadedSticker.remotePath,
+      mimeType: uploadedSticker.mimeType,
+      width: uploadedSticker.width,
+      height: uploadedSticker.height,
+      renderMode,
+      stampStyle:
+        renderMode === 'stamp'
+          ? stickerInput.stampStyle === 'circle'
+            ? 'circle'
+            : 'classic'
+          : null,
+    };
+  }
+
+  if (!emoji && !text && !sticker) {
     throw new Error('Add a reaction or a short reply.');
   }
 
@@ -3013,6 +3171,13 @@ export async function createSharedPostResponse(
     author_photo_url_snapshot: user.photoURL ?? null,
     emoji,
     text,
+    sticker_asset_id: sticker?.assetId ?? null,
+    sticker_remote_path: sticker?.remotePath ?? null,
+    sticker_mime_type: sticker?.mimeType ?? null,
+    sticker_width: sticker?.width ?? null,
+    sticker_height: sticker?.height ?? null,
+    sticker_render_mode: sticker?.renderMode ?? null,
+    sticker_stamp_style: sticker?.stampStyle ?? null,
     reply_to_response_id: replyToResponseId,
     created_at: getNowIso(),
   };
@@ -3029,7 +3194,10 @@ export async function createSharedPostResponse(
     console.warn('[shared-feed] Failed to send shared response notification:', notificationError);
   });
 
-  return mapSharedPostResponse(record);
+  return {
+    ...mapSharedPostResponse(record),
+    sticker,
+  };
 }
 
 export async function createSharedPostResponseReaction(

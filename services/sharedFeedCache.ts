@@ -74,6 +74,7 @@ interface SharedPostResponseCacheRow {
   author_photo_url_snapshot: string | null;
   emoji: string | null;
   text: string;
+  sticker_json: string | null;
   reply_to_response_id: string | null;
   created_at: string;
 }
@@ -329,10 +330,48 @@ function rowToSharedPostResponse(row: SharedPostResponseCacheRow): SharedPostRes
     authorPhotoURLSnapshot: row.author_photo_url_snapshot,
     emoji: row.emoji,
     text: row.text,
+    sticker: parseSharedPostResponseSticker(row.sticker_json),
     replyToResponseId: row.reply_to_response_id,
     reactions: [],
     createdAt: row.created_at,
   };
+}
+
+function parseSharedPostResponseSticker(
+  rawValue: string | null | undefined
+): SharedPostResponse['sticker'] {
+  if (!rawValue) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(rawValue);
+    if (!parsed || typeof parsed !== 'object') {
+      return null;
+    }
+    const sticker = parsed as SharedPostResponse['sticker'];
+    if (!sticker?.assetId || !sticker.mimeType || (!sticker.localUri && !sticker.remotePath)) {
+      return null;
+    }
+    return {
+      ...sticker,
+      width: Math.max(1, Number(sticker.width ?? 1)),
+      height: Math.max(1, Number(sticker.height ?? 1)),
+      renderMode: sticker.renderMode === 'stamp' ? 'stamp' : 'default',
+      stampStyle:
+        sticker.renderMode === 'stamp'
+          ? sticker.stampStyle === 'circle'
+            ? 'circle'
+            : 'classic'
+          : null,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function serializeSharedPostResponseSticker(response: SharedPostResponse) {
+  return response.sticker ? JSON.stringify(response.sticker) : null;
 }
 
 function rowToSharedPostResponseReaction(
@@ -394,7 +433,7 @@ function deriveSharedThreadSummaryFromResponses(
       authorUid: response.authorUid,
       authorDisplayName: response.authorDisplayName,
       authorPhotoURLSnapshot: response.authorPhotoURLSnapshot,
-      text: response.text || null,
+      text: response.text || (response.sticker ? 'Sticker' : null),
       emoji: response.emoji,
       kind: 'response' as const,
       createdAt: response.createdAt,
@@ -450,16 +489,18 @@ async function insertCachedSharedPostResponse(
       author_photo_url_snapshot,
       emoji,
       text,
+      sticker_json,
       reply_to_response_id,
       created_at
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(user_uid, post_id, id) DO UPDATE SET
       author_uid = excluded.author_uid,
       author_display_name = excluded.author_display_name,
       author_photo_url_snapshot = excluded.author_photo_url_snapshot,
       emoji = excluded.emoji,
       text = excluded.text,
+      sticker_json = excluded.sticker_json,
       reply_to_response_id = excluded.reply_to_response_id,
       created_at = excluded.created_at`,
     userUid,
@@ -470,6 +511,7 @@ async function insertCachedSharedPostResponse(
     response.authorPhotoURLSnapshot,
     response.emoji,
     response.text,
+    serializeSharedPostResponseSticker(response),
     response.replyToResponseId ?? null,
     response.createdAt
   );
@@ -534,6 +576,7 @@ async function selectCachedSharedPostResponses(
                 author_photo_url_snapshot,
                 emoji,
                 text,
+                sticker_json,
                 reply_to_response_id,
                 created_at
          FROM shared_post_responses_cache
@@ -555,6 +598,7 @@ async function selectCachedSharedPostResponses(
                 author_photo_url_snapshot,
                 emoji,
                 text,
+                sticker_json,
                 reply_to_response_id,
                 created_at
          FROM shared_post_responses_cache

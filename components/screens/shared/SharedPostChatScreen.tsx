@@ -12,6 +12,7 @@ import {
   PanResponder,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -29,6 +30,7 @@ import { Layout } from '../../../constants/theme';
 import { useAuth } from '../../../hooks/useAuth';
 import { useConnectivity } from '../../../hooks/useConnectivity';
 import * as Haptics from '../../../hooks/useHaptics';
+import { useNotes } from '../../../hooks/useNotes';
 import { useSharedFeedStore } from '../../../hooks/useSharedFeed';
 import { useSharedPostChatResponses } from '../../../hooks/shared/useSharedPostChatResponses';
 import { useSharedPostTypingPresence } from '../../../hooks/shared/useSharedPostTypingPresence';
@@ -43,9 +45,13 @@ import {
 } from '../../../hooks/shared/useSharedPostChatThread';
 import { useTheme } from '../../../hooks/useTheme';
 import type {
+  Note,
+} from '../../../services/database';
+import type {
   SharedPost,
   SharedPostResponse,
   SharedPostResponseReaction,
+  SharedPostResponseSticker,
 } from '../../../services/sharedFeedService';
 import {
   getRememberedSharedChatThreadPost,
@@ -60,7 +66,13 @@ import {
 } from '../../../utils/sharedChatPresentation';
 import { setActiveSharedChatPostId } from '../../../utils/socialNotificationPresentation';
 import { withAlpha } from '../../../utils/colors';
+import StickerLibraryPreview from '../../notes/StickerLibraryPreview';
+import {
+  buildCreatedStickerLibrary,
+  type CreatedStickerLibraryItem,
+} from '../notes/stickerLibrary';
 import TextFieldEditSheet from '../../sheets/TextFieldEditSheet';
+import StickerIcon from '../../ui/StickerIcon';
 
 type SharedPostChatScreenProps = {
   directFriendUid?: string | string[] | null;
@@ -256,6 +268,131 @@ function ReplyableBubble({
         {children}
       </Pressable>
     </Animated.View>
+  );
+}
+
+function getStickerPreviewSize(sticker: SharedPostResponseSticker) {
+  const maxWidth = sticker.renderMode === 'stamp' ? 132 : 124;
+  const maxHeight = sticker.renderMode === 'stamp' ? 140 : 124;
+  const width = Math.max(1, sticker.width);
+  const height = Math.max(1, sticker.height);
+  const scale = Math.min(maxWidth / width, maxHeight / height, 1);
+
+  return {
+    width: Math.max(46, width * scale),
+    height: Math.max(46, height * scale),
+  };
+}
+
+function ChatStickerPreview({
+  sticker,
+  fallbackColor,
+}: {
+  fallbackColor: string;
+  sticker: SharedPostResponseSticker;
+}) {
+  const preview = getStickerPreviewSize(sticker);
+
+  if (!sticker.localUri) {
+    return (
+      <View
+        style={[
+          styles.chatStickerFallback,
+          {
+            width: preview.width,
+            height: preview.height,
+          },
+        ]}
+      >
+        <StickerIcon color={fallbackColor} size={34} />
+      </View>
+    );
+  }
+
+  return (
+    <StickerLibraryPreview
+      item={{
+        id: sticker.assetId,
+        asset: {
+          id: sticker.assetId,
+          ownerUid: '',
+          localUri: sticker.localUri,
+          remotePath: sticker.remotePath,
+          mimeType: sticker.mimeType,
+          width: sticker.width,
+          height: sticker.height,
+          createdAt: '',
+          updatedAt: null,
+          source: 'import',
+        },
+        renderMode: sticker.renderMode,
+        stampStyle: sticker.stampStyle ?? undefined,
+      }}
+      previewWidth={preview.width}
+      previewHeight={preview.height}
+      stampShadowEnabled
+    />
+  );
+}
+
+function getLibraryStickerPreviewSize(item: CreatedStickerLibraryItem, cardSize: number) {
+  const maxWidth = item.renderMode === 'stamp' ? cardSize * 0.68 : cardSize * 0.72;
+  const maxHeight = item.renderMode === 'stamp' ? cardSize * 0.72 : cardSize * 0.72;
+  const width = Math.max(1, item.asset.width);
+  const height = Math.max(1, item.asset.height);
+  const scale = Math.min(maxWidth / width, maxHeight / height);
+
+  return {
+    width: width * scale,
+    height: height * scale,
+  };
+}
+
+function ChatStickerTrayItem({
+  item,
+  onPress,
+  size,
+}: {
+  item: CreatedStickerLibraryItem;
+  onPress: () => void;
+  size: number;
+}) {
+  const { t } = useTranslation();
+  const { colors } = useTheme();
+  const preview = getLibraryStickerPreviewSize(item, size);
+
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={
+        item.renderMode === 'stamp'
+          ? t('capture.useSavedStampA11y', 'Use saved stamp')
+          : t('capture.useSavedStickerA11y', 'Use saved sticker')
+      }
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.stickerTrayItem,
+        {
+          width: size,
+          height: size,
+          backgroundColor: pressed ? colors.primarySoft : 'transparent',
+          opacity: pressed ? 0.78 : 1,
+        },
+      ]}
+      testID={`chat-sticker-tray-item-${item.id}`}
+    >
+      {item.asset.localUri ? (
+        <StickerLibraryPreview
+          item={item}
+          previewWidth={preview.width}
+          previewHeight={preview.height}
+          outlineScale={1.35}
+          stampShadowEnabled
+        />
+      ) : (
+        <StickerIcon color={colors.secondaryText} size={28} />
+      )}
+    </Pressable>
   );
 }
 
@@ -500,6 +637,7 @@ export default function SharedPostChatScreen({
   const { height: screenHeight, width: screenWidth } = useWindowDimensions();
   const { user } = useAuth();
   const { isOnline } = useConnectivity();
+  const notesStore = useNotes();
   const {
     friends = [],
     friendPresence = {},
@@ -533,6 +671,7 @@ export default function SharedPostChatScreen({
   const [nicknameDraft, setNicknameDraft] = useState('');
   const [nicknameErrorMessage, setNicknameErrorMessage] = useState<string | null>(null);
   const [isSavingNickname, setIsSavingNickname] = useState(false);
+  const [isStickerTrayVisible, setIsStickerTrayVisible] = useState(false);
   const [replyTarget, setReplyTarget] = useState<SharedPostResponse | null>(null);
   const [reactionOverlay, setReactionOverlay] = useState<ReactionOverlay>(null);
   const [infoMessage, setInfoMessage] = useState<string | null>(null);
@@ -544,6 +683,7 @@ export default function SharedPostChatScreen({
   const [highlightedResponseId, setHighlightedResponseId] = useState<string | null>(null);
   const [isThreadFirstPaintReady, setIsThreadFirstPaintReady] = useState(false);
   const [isJumpToLatestMounted, setIsJumpToLatestMounted] = useState(false);
+  const [isStickerTrayMounted, setIsStickerTrayMounted] = useState(false);
   const [composerHeight, setComposerHeight] = useState(96);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const listRef = useRef<FlashListRef<ChatListItem> | null>(null);
@@ -557,6 +697,7 @@ export default function SharedPostChatScreen({
   const replyPreviewTextProgress = useRef(new Animated.Value(1)).current;
   const jumpToLatestProgress = useRef(new Animated.Value(0)).current;
   const sendButtonPulse = useRef(new Animated.Value(0)).current;
+  const stickerTrayProgress = useRef(new Animated.Value(0)).current;
   const pendingInitialResponseIdRef = useRef<string | null>(null);
   const canLoadOlderResponsesRef = useRef(false);
   const lastThreadScrollYRef = useRef<number | null>(null);
@@ -586,6 +727,24 @@ export default function SharedPostChatScreen({
   const isDirectChat = Boolean(
     normalizedDirectFriendUid ||
       (post ? isDirectChatPost(post) : postId.startsWith('direct-chat-'))
+  );
+  const noteStoreNotes = (notesStore as { notes?: unknown[] }).notes;
+  const stickerLibraryItems = useMemo(
+    () => buildCreatedStickerLibrary(Array.isArray(noteStoreNotes) ? (noteStoreNotes as Note[]) : []),
+    [noteStoreNotes]
+  );
+  const stickerTrayCardSize = Math.max(82, Math.min(104, Math.floor(screenWidth * 0.22)));
+  const stickerTrayItems = useMemo(() => stickerLibraryItems.slice(0, 48), [stickerLibraryItems]);
+  const stickerTrayColumns = Math.max(
+    3,
+    Math.floor((screenWidth - Layout.screenPadding * 2 - 28) / (stickerTrayCardSize + 12))
+  );
+  const stickerTrayRows = Math.max(1, Math.ceil(stickerTrayItems.length / stickerTrayColumns));
+  const stickerTrayContentHeight =
+    14 + stickerTrayRows * stickerTrayCardSize + Math.max(0, stickerTrayRows - 1) * 12 + 18;
+  const stickerTrayHeight = Math.max(
+    stickerTrayCardSize + 32,
+    Math.min(Math.max(216, Math.min(286, Math.floor(screenHeight * 0.32))), stickerTrayContentHeight)
   );
   const activePostId = post?.id ?? postId;
   const pendingDirectFriend = normalizedDirectFriendUid
@@ -836,6 +995,39 @@ export default function SharedPostChatScreen({
       }
     });
   }, [jumpToLatestProgress, shouldShowJumpToLatest]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (isStickerTrayVisible) {
+      setIsStickerTrayMounted(true);
+      Animated.spring(stickerTrayProgress, {
+        toValue: 1,
+        useNativeDriver: false,
+        damping: 20,
+        stiffness: 260,
+        mass: 0.8,
+      }).start();
+      return () => {
+        cancelled = true;
+        stickerTrayProgress.stopAnimation();
+      };
+    }
+
+    Animated.timing(stickerTrayProgress, {
+      toValue: 0,
+      duration: 150,
+      useNativeDriver: false,
+    }).start(({ finished }) => {
+      if (finished && !cancelled) {
+        setIsStickerTrayMounted(false);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+      stickerTrayProgress.stopAnimation();
+    };
+  }, [isStickerTrayVisible, stickerTrayProgress]);
 
   const postAuthorLabel = post
     ? getAuthorLabel(post.authorUid, post.authorDisplayName)
@@ -1178,7 +1370,8 @@ export default function SharedPostChatScreen({
     async (
       emoji?: string,
       explicitReplyToResponseId?: string | null,
-      retryResponse?: ChatThreadResponse
+      retryResponse?: ChatThreadResponse,
+      stickerItem?: CreatedStickerLibraryItem | null
     ) => {
       if (isSending) {
         return;
@@ -1186,7 +1379,51 @@ export default function SharedPostChatScreen({
 
       const text = retryResponse ? retryResponse.text.trim() : draft.trim();
       const responseEmoji = retryResponse ? retryResponse.emoji ?? undefined : emoji;
-      if (!responseEmoji && !text) {
+      const responseSticker =
+        retryResponse?.sticker ??
+        (stickerItem
+          ? {
+              assetId: stickerItem.asset.id,
+              localUri: stickerItem.asset.localUri,
+              remotePath: stickerItem.asset.remotePath,
+              mimeType: stickerItem.asset.mimeType,
+              width: stickerItem.asset.width,
+              height: stickerItem.asset.height,
+              renderMode: stickerItem.renderMode,
+              stampStyle: stickerItem.stampStyle ?? null,
+            }
+          : null);
+      const stickerInput =
+        stickerItem && !retryResponse
+          ? {
+              asset: stickerItem.asset,
+              renderMode: stickerItem.renderMode,
+              stampStyle: stickerItem.stampStyle ?? null,
+            }
+          : retryResponse?.sticker
+            ? {
+                asset: {
+                  id: retryResponse.sticker.assetId,
+                  ownerUid: user?.uid ?? '',
+                  localUri: retryResponse.sticker.localUri ?? '',
+                  remotePath: retryResponse.sticker.remotePath,
+                  mimeType: retryResponse.sticker.mimeType,
+                  width: retryResponse.sticker.width,
+                  height: retryResponse.sticker.height,
+                  createdAt: retryResponse.createdAt,
+                  updatedAt: null,
+                  source: 'import' as const,
+                },
+                renderMode: retryResponse.sticker.renderMode,
+                stampStyle: retryResponse.sticker.stampStyle ?? null,
+              }
+            : null;
+      if (!responseEmoji && !text && !responseSticker) {
+        return;
+      }
+
+      if (responseSticker && !isOnline) {
+        setErrorMessage(t('shared.chatStickerOfflineMessage', 'Go online to send stickers.'));
         return;
       }
 
@@ -1203,7 +1440,8 @@ export default function SharedPostChatScreen({
           const nextPost = await getOrCreateDirectChatPost(normalizedDirectFriendUid);
           const response = await createSharedPostResponse(nextPost.id, {
             emoji: responseEmoji ?? null,
-            text: responseEmoji ? null : text,
+            text: responseEmoji || responseSticker ? null : text,
+            sticker: stickerInput,
             replyToResponseId: replyTarget?.id ?? null,
           });
           rememberSharedPostResponses(nextPost.id, [response]);
@@ -1246,7 +1484,8 @@ export default function SharedPostChatScreen({
         authorDisplayName: user ? getUserSocialName(user) : t('shared.chatYou', 'You'),
         authorPhotoURLSnapshot: user?.photoURL ?? null,
         emoji: responseEmoji ?? null,
-        text: responseEmoji ? '' : text,
+        text: responseEmoji || responseSticker ? '' : text,
+        sticker: responseSticker,
         replyToResponseId,
         createdAt: new Date().toISOString(),
         deliveryStatus: isOnline ? 'sending' : 'offline',
@@ -1283,7 +1522,8 @@ export default function SharedPostChatScreen({
       try {
         const response = await createSharedPostResponse(post.id, {
           emoji: responseEmoji ?? null,
-          text: responseEmoji ? null : text,
+          text: responseEmoji || responseSticker ? null : text,
+          sticker: stickerInput,
           replyToResponseId,
         });
         pendingResponsesRef.current.delete(optimisticId);
@@ -1336,6 +1576,26 @@ export default function SharedPostChatScreen({
       updateResponses,
       user,
     ]
+  );
+
+  const handleOpenStickerLibrary = useCallback(() => {
+    if (stickerLibraryItems.length <= 0) {
+      setErrorMessage(t('shared.chatStickerLibraryEmpty', 'Create a sticker first, then send it here.'));
+      return;
+    }
+
+    Keyboard.dismiss();
+    setReactionOverlay(null);
+    setIsStickerTrayVisible((visible) => !visible);
+  }, [setErrorMessage, stickerLibraryItems.length, t]);
+
+  const handleSelectStickerLibraryItem = useCallback(
+    (item: CreatedStickerLibraryItem) => {
+      setIsStickerTrayVisible(false);
+      void Haptics.selectionAsync();
+      void sendResponse(undefined, undefined, undefined, item);
+    },
+    [sendResponse]
   );
 
   const retryFailedResponse = useCallback(
@@ -1773,6 +2033,7 @@ export default function SharedPostChatScreen({
                 const isReactionOnly = isReactionOnlyResponse(response);
                 const replyPreview = getResponseReplyPreview(response);
                 const hasReplyPreview = Boolean(replyPreview);
+                const hasSticker = Boolean(response.sticker);
                 const reactions = response.reactions ?? [];
                 const isHighlighted = highlightedResponseId === response.id;
                 const isReactionOverlayTarget = reactionOverlay?.response.id === response.id;
@@ -1849,6 +2110,7 @@ export default function SharedPostChatScreen({
                         styles.messageBubble,
                         isSelf ? styles.selfBubble : styles.friendBubble,
                         isReactionOnly ? styles.reactionBubble : null,
+                        hasSticker ? styles.stickerMessageBubble : null,
                         isSelf && !isFirstInGroup ? styles.selfBubbleGroupedTop : null,
                         isSelf && !isLastInGroup ? styles.selfBubbleGroupedBottom : null,
                         !isSelf && !isFirstInGroup ? styles.friendBubbleGroupedTop : null,
@@ -1873,17 +2135,24 @@ export default function SharedPostChatScreen({
                         },
                       ]}
                     >
-                      <Text
-                        android_hyphenationFrequency="normal"
-                        lineBreakStrategyIOS="standard"
-                        style={[
-                          styles.messageText,
-                          isReactionOnly ? styles.reactionMessageText : null,
-                          { color: isSelf ? colors.onPrimary : colors.text },
-                        ]}
-                      >
-                        {formatSharedResponseBody(response)}
-                      </Text>
+                      {response.sticker ? (
+                        <ChatStickerPreview
+                          sticker={response.sticker}
+                          fallbackColor={isSelf ? colors.onPrimary : colors.primary}
+                        />
+                      ) : (
+                        <Text
+                          android_hyphenationFrequency="normal"
+                          lineBreakStrategyIOS="standard"
+                          style={[
+                            styles.messageText,
+                            isReactionOnly ? styles.reactionMessageText : null,
+                            { color: isSelf ? colors.onPrimary : colors.text },
+                          ]}
+                        >
+                          {formatSharedResponseBody(response)}
+                        </Text>
+                      )}
                     </ReplyableBubble>
                     {isReactionOverlayTarget ? (
                       <Animated.View
@@ -2583,6 +2852,21 @@ export default function SharedPostChatScreen({
                 },
               ]}
             >
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={t('shared.chatOpenStickerLibrary', 'Open sticker library')}
+                onPress={handleOpenStickerLibrary}
+                style={({ pressed }) => [
+                  styles.composerIconButton,
+                  {
+                    backgroundColor: isStickerTrayVisible || pressed ? colors.primarySoft : 'transparent',
+                    opacity: isSending ? 0.52 : 1,
+                  },
+                ]}
+                disabled={isSending}
+              >
+                <StickerIcon color={colors.primary} size={20} />
+              </Pressable>
               <TextInput
                 value={draft}
                 onChangeText={handleDraftChange}
@@ -2599,6 +2883,7 @@ export default function SharedPostChatScreen({
                 style={[styles.composerInput, { color: colors.text }]}
                 onFocus={() => {
                   composerFocusedRef.current = true;
+                  setIsStickerTrayVisible(false);
                   if (draft.trim()) {
                     publishTypingState(true, { force: true });
                   }
@@ -2657,6 +2942,37 @@ export default function SharedPostChatScreen({
                 </Animated.View>
               </Pressable>
             </View>
+            {isStickerTrayMounted ? (
+              <Animated.View
+                style={[
+                  styles.stickerTray,
+                  {
+                    height: stickerTrayProgress.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [0, stickerTrayHeight],
+                    }),
+                    backgroundColor: colors.surface,
+                    borderColor: colors.border,
+                    opacity: stickerTrayProgress,
+                  },
+                ]}
+              >
+                <ScrollView
+                  keyboardShouldPersistTaps="handled"
+                  showsVerticalScrollIndicator={false}
+                  contentContainerStyle={styles.stickerTrayContent}
+                >
+                  {stickerTrayItems.map((item) => (
+                    <ChatStickerTrayItem
+                      key={item.id}
+                      item={item}
+                      size={stickerTrayCardSize}
+                      onPress={() => handleSelectStickerLibraryItem(item)}
+                    />
+                  ))}
+                </ScrollView>
+              </Animated.View>
+            ) : null}
           </View>
         </>
       )}
@@ -2988,6 +3304,15 @@ const styles = StyleSheet.create({
     minHeight: 44,
     paddingHorizontal: 12,
     paddingVertical: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stickerMessageBubble: {
+    minHeight: 72,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  chatStickerFallback: {
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -3423,17 +3748,44 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  stickerTray: {
+    marginHorizontal: -Layout.screenPadding,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    paddingTop: 14,
+    paddingBottom: 16,
+    overflow: 'hidden',
+  },
+  stickerTrayContent: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+    paddingHorizontal: Layout.screenPadding + 14,
+    paddingBottom: 4,
+  },
+  stickerTrayItem: {
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
   composer: {
     minHeight: 44,
     maxHeight: 108,
     borderRadius: 22,
     borderWidth: StyleSheet.hairlineWidth,
-    paddingLeft: 14,
+    paddingLeft: 4,
     paddingRight: 4,
     paddingVertical: 3,
     flexDirection: 'row',
     alignItems: 'flex-end',
-    gap: 8,
+    gap: 6,
+  },
+  composerIconButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   composerInput: {
     flex: 1,

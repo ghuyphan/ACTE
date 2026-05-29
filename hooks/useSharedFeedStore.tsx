@@ -35,6 +35,7 @@ import {
   SharedPost,
   SharedPostResponse,
   SharedPostResponseReaction,
+  SharedPostResponseStickerInput,
   SharedPostResponsesSubscriptionOptions,
   SharedPostTypingUser,
   SharedThreadSummary,
@@ -152,7 +153,12 @@ interface SharedFeedStoreValue {
   };
   createSharedPostResponse: (
     postId: string,
-    input: { emoji?: string | null; text?: string | null; replyToResponseId?: string | null }
+    input: {
+      emoji?: string | null;
+      text?: string | null;
+      replyToResponseId?: string | null;
+      sticker?: SharedPostResponseStickerInput | null;
+    }
   ) => Promise<SharedPostResponse>;
   createSharedPostResponseReaction: (
     postId: string,
@@ -2018,7 +2024,12 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
       },
       createSharedPostResponse: async (
         postId: string,
-        input: { emoji?: string | null; text?: string | null; replyToResponseId?: string | null }
+        input: {
+          emoji?: string | null;
+          text?: string | null;
+          replyToResponseId?: string | null;
+          sticker?: SharedPostResponseStickerInput | null;
+        }
       ) => {
         requireOnline();
         const activeUser = requireUser();

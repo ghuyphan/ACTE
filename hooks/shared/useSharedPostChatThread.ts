@@ -244,8 +244,19 @@ export function mergeChatResponses(
 }
 
 function mergeChatResponse(existing: ChatThreadResponse, incoming: ChatThreadResponse) {
+  const incomingSticker = incoming.sticker ?? null;
+  const existingSticker = existing.sticker ?? null;
+  const sticker =
+    incomingSticker && existingSticker?.assetId === incomingSticker.assetId
+      ? {
+          ...incomingSticker,
+          localUri: incomingSticker.localUri ?? existingSticker.localUri ?? null,
+        }
+      : incomingSticker ?? existingSticker ?? null;
+
   return {
     ...incoming,
+    sticker,
     reactions: mergeResponseReactions(existing.reactions, incoming.reactions),
     deliveryStatus: incoming.deliveryStatus ?? existing.deliveryStatus,
     failureMessage: incoming.failureMessage ?? existing.failureMessage,
@@ -268,6 +279,12 @@ export function areChatResponseListsEqual(
     const rightReactionSignature = (rightResponse?.reactions ?? [])
       .map((reaction) => `${reaction.id}:${reaction.authorUid}:${reaction.emoji}:${reaction.createdAt}`)
       .join('|');
+    const leftStickerSignature = leftResponse.sticker
+      ? `${leftResponse.sticker.assetId}:${leftResponse.sticker.localUri ?? ''}:${leftResponse.sticker.remotePath ?? ''}`
+      : '';
+    const rightStickerSignature = rightResponse?.sticker
+      ? `${rightResponse.sticker.assetId}:${rightResponse.sticker.localUri ?? ''}:${rightResponse.sticker.remotePath ?? ''}`
+      : '';
     return (
       rightResponse &&
       leftResponse.id === rightResponse.id &&
@@ -277,6 +294,7 @@ export function areChatResponseListsEqual(
       leftResponse.replyToResponseId === rightResponse.replyToResponseId &&
       leftResponse.deliveryStatus === rightResponse.deliveryStatus &&
       leftResponse.failureMessage === rightResponse.failureMessage &&
+      leftStickerSignature === rightStickerSignature &&
       leftReactionSignature === rightReactionSignature &&
       leftResponse.createdAt === rightResponse.createdAt
     );

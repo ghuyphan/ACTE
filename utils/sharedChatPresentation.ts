@@ -98,8 +98,15 @@ export function getSharedChatThreadIconName(post: SharedPost) {
   return post.type === 'photo' ? 'image-outline' : 'document-text-outline';
 }
 
-export function formatSharedResponseBody(response: Pick<SharedPostResponse, 'emoji' | 'text'>) {
-  return [response.emoji, response.text].filter(Boolean).join(' ').trim();
+export function formatSharedResponseBody(
+  response: Pick<SharedPostResponse, 'emoji' | 'text'> & {
+    sticker?: SharedPostResponse['sticker'];
+  }
+) {
+  return [response.emoji, response.text, response.sticker ? 'Sticker' : null]
+    .filter(Boolean)
+    .join(' ')
+    .trim();
 }
 
 export function getSharedThreadSummaryBody(summary: SharedThreadSummary) {
