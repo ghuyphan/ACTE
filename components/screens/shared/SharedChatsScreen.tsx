@@ -38,15 +38,13 @@ const CHAT_LIST_SKELETON_ROWS = [
   { key: 'second', titleWidth: '38%', previewWidth: '54%' },
   { key: 'third', titleWidth: '52%', previewWidth: '62%' },
 ] as const;
-const CHAT_PREWARM_RESPONSE_LIMIT = 30;
-const MAX_PREWARM_THREADS = 8;
-const MAX_CACHED_THREAD_SUMMARIES = 80;
+const CHAT_PREWARM_RESPONSE_LIMIT = 24;
+const MAX_PREWARM_THREADS = 2;
 const MAX_TYPING_PREVIEW_THREADS = 12;
 const CHAT_THREAD_VIEWABILITY_CONFIG = {
   itemVisiblePercentThreshold: 40,
 } as const;
 const cachedActivityThreadPostsByUserUid = new Map<string, SharedPost[]>();
-const cachedThreadSummaryByPostId = new Map<string, SharedThreadSummary>();
 const cachedReadStateByUserUid = new Map<string, Record<string, SharedThreadReadState>>();
 const prewarmedResponsePageKeys = new Set<string>();
 
@@ -55,30 +53,25 @@ type ChatListItem =
   | { key: string; type: 'thread'; post: SharedPost }
   | { key: string; type: 'friend'; friend: FriendListItem };
 
-function getCachedThreadSummaries(postIds: readonly string[]) {
-  return Object.fromEntries(
-    postIds.flatMap((postId) => {
-      const summary = cachedThreadSummaryByPostId.get(postId);
-      return summary ? [[postId, summary] as const] : [];
-    })
-  );
-}
+function mergeThreadSummaryRecord(
+  current: Record<string, SharedThreadSummary>,
+  summaries: readonly SharedThreadSummary[],
+  options: { postIds?: readonly string[]; replaceScoped?: boolean } = {}
+) {
+  const next = options.replaceScoped && options.postIds
+    ? Object.fromEntries(
+        Object.entries(current).filter(([postId]) => !options.postIds?.includes(postId))
+      )
+    : { ...current };
 
-function rememberThreadSummaries(summaries: readonly SharedThreadSummary[]) {
   for (const summary of summaries) {
-    cachedThreadSummaryByPostId.delete(summary.postId);
-    cachedThreadSummaryByPostId.set(summary.postId, summary);
+    next[summary.postId] = summary;
   }
-  while (cachedThreadSummaryByPostId.size > MAX_CACHED_THREAD_SUMMARIES) {
-    const oldestPostId = cachedThreadSummaryByPostId.keys().next().value;
-    if (!oldestPostId) {
-      break;
-    }
-    cachedThreadSummaryByPostId.delete(oldestPostId);
-  }
+
+  return next;
 }
 
-function UnreadIndicator({ color, count }: { color: string; count: number }) {
+function UnreadIndicator({ color }: { color: string }) {
   const pulse = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -99,29 +92,6 @@ function UnreadIndicator({ color, count }: { color: string; count: number }) {
     animation.start();
     return () => animation.stop();
   }, [pulse]);
-
-  if (count > 1) {
-    return (
-      <Animated.View
-        style={[
-          styles.unreadCountPill,
-          {
-            backgroundColor: color,
-            transform: [
-              {
-                scale: pulse.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: [1, 1.05],
-                }),
-              },
-            ],
-          },
-        ]}
-      >
-        <Text style={styles.unreadCount}>{count > 9 ? '9+' : count}</Text>
-      </Animated.View>
-    );
-  }
 
   return (
     <View style={styles.unreadDotHost}>
@@ -150,6 +120,24 @@ function UnreadIndicator({ color, count }: { color: string; count: number }) {
   );
 }
 
+function areTypingUsersEqual(
+  left: readonly SharedPostTypingUser[] | undefined,
+  right: readonly SharedPostTypingUser[]
+) {
+  if (!left || left.length !== right.length) {
+    return false;
+  }
+
+  return left.every((leftUser, index) => {
+    const rightUser = right[index];
+    return (
+      leftUser.userId === rightUser?.userId &&
+      leftUser.displayName === rightUser.displayName &&
+      leftUser.photoURL === rightUser.photoURL
+    );
+  });
+}
+
 export default function SharedChatsScreen() {
   const { t } = useTranslation();
   const { colors } = useTheme();
@@ -174,7 +162,7 @@ export default function SharedChatsScreen() {
   } = useSharedFeedStore();
   const [threadSummaryByPostId, setThreadSummaryByPostId] = useState<
     Record<string, SharedThreadSummary>
-  >(() => getCachedThreadSummaries(sharedPosts.map((post) => post.id)));
+  >({});
   const [readStateByPostId, setReadStateByPostId] = useState<
     Record<string, SharedThreadReadState>
   >(() => (user?.uid ? cachedReadStateByUserUid.get(user.uid) ?? {} : {}));
@@ -203,18 +191,11 @@ export default function SharedChatsScreen() {
       cachedActivityThreadPostsByUserUid.set(user.uid, cachedThreads);
       setActivityThreadPosts(cachedThreads);
     }
-    rememberThreadSummaries(summaries);
-    const nextSummaryByPostId = Object.fromEntries(
-      summaries.map((summary) => [summary.postId, summary])
-    );
     const nextReadStateByPostId = Object.fromEntries(
       readStates.map((readState) => [readState.postId, readState])
     );
     cachedReadStateByUserUid.set(user.uid, nextReadStateByPostId);
-    setThreadSummaryByPostId((current) => ({
-      ...current,
-      ...nextSummaryByPostId,
-    }));
+    setThreadSummaryByPostId((current) => mergeThreadSummaryRecord(current, summaries));
     setReadStateByPostId(nextReadStateByPostId);
     setHiddenThreadByPostId(Object.fromEntries(hiddenThreads.map((thread) => [thread.postId, thread.hiddenAt])));
     setHasHydratedReadStates(true);
@@ -317,11 +298,7 @@ export default function SharedChatsScreen() {
           if (cachedThreads.length > 0) {
             cachedActivityThreadPostsByUserUid.set(user.uid, cachedThreads);
             setActivityThreadPosts(cachedThreads);
-            rememberThreadSummaries(summaries);
-            setThreadSummaryByPostId((current) => ({
-              ...Object.fromEntries(summaries.map((summary) => [summary.postId, summary])),
-              ...current,
-            }));
+            setThreadSummaryByPostId((current) => mergeThreadSummaryRecord(current, summaries));
           }
         });
       }
@@ -371,10 +348,6 @@ export default function SharedChatsScreen() {
         return undefined;
       }
 
-      setThreadSummaryByPostId((current) => ({
-        ...getCachedThreadSummaries(postIds),
-        ...current,
-      }));
       setReadStateByPostId(cachedReadStateByUserUid.get(user.uid) ?? {});
       setHasHydratedReadStates(false);
 
@@ -385,13 +358,7 @@ export default function SharedChatsScreen() {
             return;
           }
 
-          rememberThreadSummaries(cachedSummaries);
-          setThreadSummaryByPostId((current) => ({
-            ...current,
-            ...Object.fromEntries(
-              cachedSummaries.map((summary) => [summary.postId, summary])
-            ),
-          }));
+          setThreadSummaryByPostId((current) => mergeThreadSummaryRecord(current, cachedSummaries));
         })
         .catch(() => undefined);
 
@@ -403,12 +370,18 @@ export default function SharedChatsScreen() {
           return;
         }
 
-        rememberThreadSummaries(summaries);
         const nextReadStateByPostId = Object.fromEntries(
           readStates.map((readState) => [readState.postId, readState])
         );
         cachedReadStateByUserUid.set(user.uid, nextReadStateByPostId);
-        setThreadSummaryByPostId(Object.fromEntries(summaries.map((summary) => [summary.postId, summary])));
+        setThreadSummaryByPostId((current) =>
+          summaries.length > 0
+            ? mergeThreadSummaryRecord(current, summaries, {
+                postIds,
+                replaceScoped: summaries.length === postIds.length,
+              })
+            : current
+        );
         setReadStateByPostId(nextReadStateByPostId);
         setHasHydratedReadStates(true);
       });
@@ -506,6 +479,14 @@ export default function SharedChatsScreen() {
       return;
     }
 
+    const subscribedPostIds = new Set(postIds);
+    setTypingUsersByPostId((current) => {
+      const next = Object.fromEntries(
+        Object.entries(current).filter(([postId]) => subscribedPostIds.has(postId))
+      );
+      return Object.keys(next).length === Object.keys(current).length ? current : next;
+    });
+
     const subscriptions = postIds.map((postId) =>
       subscribeToSharedPostTyping(postId, {
         onTypingUsers: (typingUsers) => {
@@ -520,6 +501,9 @@ export default function SharedChatsScreen() {
               const next = { ...current };
               delete next[postId];
               return next;
+            }
+            if (areTypingUsersEqual(current[postId], visibleTypingUsers)) {
+              return current;
             }
             return {
               ...current,
@@ -570,18 +554,22 @@ export default function SharedChatsScreen() {
     }
 
     let cancelled = false;
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
     const warmNext = (index: number) => {
       if (cancelled || index >= postIds.length) {
         return;
       }
 
       prewarmThreadResponses(postIds[index]);
-      setTimeout(() => warmNext(index + 1), 120);
+      timeoutId = setTimeout(() => warmNext(index + 1), 120);
     };
 
     warmNext(0);
     return () => {
       cancelled = true;
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
     };
   }, [authReady, prewarmThreadPostIdsKey, prewarmThreadResponses, user?.uid]);
   const getThreadParticipant = useCallback(
@@ -666,7 +654,6 @@ export default function SharedChatsScreen() {
       const hasUnread =
         hasHydratedReadStates &&
         isSharedThreadUnread(summary, readStateByPostId[post.id], user?.uid);
-      const unreadCount = hasUnread ? 1 : 0;
       const latestAuthor =
         summary?.latestActivityAuthorUid && summary.latestActivityAuthorUid === user?.uid
           ? t('shared.chatYou', 'You')
@@ -826,7 +813,7 @@ export default function SharedChatsScreen() {
             ) : null}
             {hasUnread ? (
               <View style={styles.unreadWrap}>
-                <UnreadIndicator color={colors.primary} count={unreadCount} />
+                <UnreadIndicator color={colors.primary} />
               </View>
             ) : (
               <Ionicons name="chevron-forward" size={16} color={colors.secondaryText} />
@@ -1256,20 +1243,5 @@ const styles = StyleSheet.create({
     width: 9,
     height: 9,
     borderRadius: 4.5,
-  },
-  unreadCountPill: {
-    minWidth: 20,
-    height: 20,
-    borderRadius: 10,
-    paddingHorizontal: 5,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  unreadCount: {
-    fontSize: 10,
-    lineHeight: 12,
-    fontWeight: '900',
-    fontFamily: 'Noto Sans',
-    color: '#fff',
   },
 });

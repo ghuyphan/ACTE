@@ -85,9 +85,12 @@ export function useSharedPostChatResponses({
     (updater: (current: ChatThreadResponse[]) => ChatThreadResponse[]) => {
       setResponses((current) => {
         const next = updater(current);
-        rememberResponses(postId, next);
         setHasHydratedResponses(true);
-        return areChatResponseListsEqual(current, next) ? current : next;
+        if (areChatResponseListsEqual(current, next)) {
+          return current;
+        }
+        rememberResponses(postId, next);
+        return next;
       });
     },
     [postId]
@@ -104,12 +107,18 @@ export function useSharedPostChatResponses({
           [...current, ...nextResponses],
           Array.from(pendingResponsesRef.current.values())
         );
-        rememberResponses(postId, next);
         setHasHydratedResponses(true);
+        if (areChatResponseListsEqual(current, next)) {
+          if (!hasRememberedSharedPostResponses(postId)) {
+            rememberResponses(postId, next);
+          }
+          return current;
+        }
+        rememberResponses(postId, next);
         if (incomingNewCount > 0 && !isThreadEndVisibleRef.current) {
           setNewMessageCount((count) => Math.min(99, count + incomingNewCount));
         }
-        return areChatResponseListsEqual(current, next) ? current : next;
+        return next;
       });
     },
     [postId]
@@ -123,12 +132,15 @@ export function useSharedPostChatResponses({
           [...current, response],
           Array.from(pendingResponsesRef.current.values())
         );
-        rememberResponses(postId, next);
         setHasHydratedResponses(true);
+        if (areChatResponseListsEqual(current, next)) {
+          return current;
+        }
+        rememberResponses(postId, next);
         if (isIncomingNew && !isThreadEndVisibleRef.current) {
           setNewMessageCount((count) => Math.min(99, count + 1));
         }
-        return areChatResponseListsEqual(current, next) ? current : next;
+        return next;
       });
     },
     [postId]

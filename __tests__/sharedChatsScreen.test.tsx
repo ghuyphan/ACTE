@@ -5,6 +5,7 @@ import SharedChatsScreen from '../components/screens/shared/SharedChatsScreen';
 const mockPush = jest.fn();
 const mockGetSharedChatThreadPosts = jest.fn();
 const mockGetSharedPostThreadSummaries = jest.fn();
+const mockGetSharedPostResponsesPage = jest.fn();
 const mockGetSharedThreadReadStates = jest.fn();
 const mockGetHiddenSharedChatThreads = jest.fn();
 const mockGetCachedSharedThreadSummaries = jest.fn();
@@ -67,6 +68,7 @@ const mockSharedFeedState = {
   loading: false,
   sharedPosts: [mockDirectPost],
   getSharedChatThreadPosts: mockGetSharedChatThreadPosts,
+  getSharedPostResponsesPage: mockGetSharedPostResponsesPage,
   getSharedPostThreadSummaries: mockGetSharedPostThreadSummaries,
   getSharedThreadReadStates: mockGetSharedThreadReadStates,
   getHiddenSharedChatThreads: mockGetHiddenSharedChatThreads,
@@ -232,6 +234,7 @@ describe('SharedChatsScreen', () => {
     ];
     mockSharedFeedState.sharedPosts = [mockDirectPost];
     mockGetSharedChatThreadPosts.mockResolvedValue([mockDirectPost]);
+    mockGetSharedPostResponsesPage.mockResolvedValue([]);
     mockGetSharedPostThreadSummaries.mockResolvedValue([
       threadSummary('Old message', '2026-05-20T01:01:00.000Z'),
     ]);
@@ -272,6 +275,29 @@ describe('SharedChatsScreen', () => {
     await waitFor(() => {
       expect(getByText('@lan: New message')).toBeTruthy();
     });
+  });
+
+  it('keeps the previous preview when a remote summary refresh returns no rows', async () => {
+    const { getAllByText, getByText } = render(<SharedChatsScreen />);
+
+    await waitFor(() => {
+      expect(getByText('@lan: Old message')).toBeTruthy();
+    });
+
+    mockGetCachedSharedThreadSummaries.mockResolvedValue([]);
+    mockGetSharedPostThreadSummaries.mockResolvedValue([]);
+
+    await act(async () => {
+      for (const callback of [...mockFocusCallbacks]) {
+        callback();
+      }
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(getByText('@lan: Old message')).toBeTruthy();
+    });
+    expect(getAllByText('Message')).toHaveLength(1);
   });
 
   it('keeps starter chats visible for friends without existing threads', async () => {

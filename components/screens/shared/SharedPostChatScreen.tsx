@@ -761,7 +761,6 @@ export default function SharedPostChatScreen({
   const [isLoadingChatPost, setIsLoadingChatPost] = useState(false);
   const [chatPostErrorMessage, setChatPostErrorMessage] = useState<string | null>(null);
   const [highlightedResponseId, setHighlightedResponseId] = useState<string | null>(null);
-  const [isThreadFirstPaintReady, setIsThreadFirstPaintReady] = useState(false);
   const [hasUserScrolledAwayFromThreadEnd, setHasUserScrolledAwayFromThreadEnd] = useState(false);
   const [isJumpToLatestMounted, setIsJumpToLatestMounted] = useState(false);
   const [composerHeight, setComposerHeight] = useState(96);
@@ -782,6 +781,11 @@ export default function SharedPostChatScreen({
   const pendingInitialResponseIdRef = useRef<string | null>(null);
   const canLoadOlderResponsesRef = useRef(false);
   const lastThreadScrollYRef = useRef<number | null>(null);
+  const chatUnavailableMessageRef = useRef('');
+  chatUnavailableMessageRef.current = t(
+    'shared.chatNotFoundBody',
+    'This chat may no longer be available.'
+  );
 
   const openReactionOverlay = useCallback(
     (response: SharedPostResponse) => {
@@ -872,6 +876,12 @@ export default function SharedPostChatScreen({
   const isSyntheticDirectChatRoute = Boolean(
     normalizedDirectFriendUid && postId.trim() === `direct-${normalizedDirectFriendUid}`
   );
+  const shouldResolveChatPost = Boolean(
+    !post &&
+      !loading &&
+      (isSyntheticDirectChatRoute ? normalizedDirectFriendUid : postId.trim())
+  );
+  const isResolvingChatPost = Boolean(loading || isLoadingChatPost || shouldResolveChatPost);
   const {
     clearNewMessageCount,
     connectionStatus,
@@ -922,7 +932,6 @@ export default function SharedPostChatScreen({
     chatThreadLabels
   );
   const shouldShowJumpToLatest =
-    isThreadFirstPaintReady &&
     !isThreadEndVisible &&
     responses.length > 0 &&
     (newMessageCount > 0 || hasUserScrolledAwayFromThreadEnd);
@@ -1063,7 +1072,6 @@ export default function SharedPostChatScreen({
     lastThreadScrollYRef.current = null;
     setReplyTarget(null);
     setHasUserScrolledAwayFromThreadEnd(false);
-    setIsThreadFirstPaintReady(false);
   }, [activePostId]);
 
   useEffect(() => clearHighlightResetTimer, [clearHighlightResetTimer]);
@@ -1293,7 +1301,10 @@ export default function SharedPostChatScreen({
   }, [isDirectChat, loading, post, refreshSharedFeed]);
 
   useEffect(() => {
-    if (post || loading) {
+    if (!shouldResolveChatPost) {
+      if (post || loading) {
+        setIsLoadingChatPost(false);
+      }
       return;
     }
 
@@ -1314,6 +1325,9 @@ export default function SharedPostChatScreen({
       })
       .catch(() => {
         if (!cancelled) {
+          const message = chatUnavailableMessageRef.current;
+          setChatPostErrorMessage(message);
+          setErrorMessage(message);
           setLoadedChatPost(null);
         }
       })
@@ -1334,6 +1348,8 @@ export default function SharedPostChatScreen({
     normalizedDirectFriendUid,
     post,
     postId,
+    setErrorMessage,
+    shouldResolveChatPost,
   ]);
 
   const markThreadReadThroughLatest = useCallback(() => {
@@ -1374,11 +1390,7 @@ export default function SharedPostChatScreen({
       setThreadEndVisible(isNearEnd);
       if (isNearEnd) {
         setHasUserScrolledAwayFromThreadEnd(false);
-      } else if (
-        isThreadFirstPaintReady &&
-        previousScrollY !== null &&
-        contentOffset.y < previousScrollY - 12
-      ) {
+      } else if (previousScrollY !== null && contentOffset.y < previousScrollY - 12) {
         setHasUserScrolledAwayFromThreadEnd(true);
       }
       if (isNearEnd && !isLoadingResponses) {
@@ -1389,7 +1401,6 @@ export default function SharedPostChatScreen({
     [
       clearNewMessageCount,
       isLoadingResponses,
-      isThreadFirstPaintReady,
       markThreadReadThroughLatest,
       setThreadEndVisible,
     ]
@@ -1535,6 +1546,9 @@ export default function SharedPostChatScreen({
         return;
       }
 
+      const requestedReplyToResponseId =
+        explicitReplyToResponseId ?? retryResponse?.replyToResponseId ?? replyTarget?.id ?? null;
+
       if (!post && normalizedDirectFriendUid) {
         if (!isOnline) {
           setErrorMessage(t('shared.chatOfflineSendMessage', 'You are offline. Retry when connected.'));
@@ -1550,7 +1564,7 @@ export default function SharedPostChatScreen({
             emoji: responseEmoji ?? null,
             text: responseEmoji || responseSticker ? null : text,
             sticker: stickerInput,
-            replyToResponseId: replyTarget?.id ?? null,
+            replyToResponseId: requestedReplyToResponseId,
           });
           rememberSharedPostResponses(nextPost.id, [response]);
           rememberSharedChatThreadPost(nextPost);
@@ -1583,8 +1597,7 @@ export default function SharedPostChatScreen({
       optimisticSequenceRef.current += 1;
       const optimisticId =
         retryResponse?.id ?? `local-shared-response-${Date.now()}-${optimisticSequenceRef.current}`;
-      const replyToResponseId =
-        explicitReplyToResponseId ?? retryResponse?.replyToResponseId ?? replyTarget?.id ?? null;
+      const replyToResponseId = requestedReplyToResponseId;
       const optimisticResponse: ChatThreadResponse = {
         id: optimisticId,
         postId: post.id,
@@ -2069,25 +2082,7 @@ export default function SharedPostChatScreen({
   }, [contentBottomPadding, replyTarget, settleThreadEndIfVisible]);
 
   const isThreadHydrating = isLoadingResponses && responses.length === 0;
-  const shouldPrepareThreadFirstPaint = !hasHydratedResponses && !isThreadFirstPaintReady;
-  useEffect(() => {
-    if (isThreadHydrating || isThreadFirstPaintReady) {
-      return;
-    }
-
-    if (responseGroups.length === 0) {
-      setIsThreadFirstPaintReady(true);
-      return;
-    }
-
-    settleThreadEndIfVisible({ immediate: true });
-    setIsThreadFirstPaintReady(true);
-  }, [
-    isThreadFirstPaintReady,
-    isThreadHydrating,
-    responseGroups.length,
-    settleThreadEndIfVisible,
-  ]);
+  const isThreadLoading = isThreadHydrating || (!hasHydratedResponses && responseGroups.length === 0);
 
   const renderEmptyThread = useCallback(
     () =>
@@ -2579,38 +2574,49 @@ export default function SharedPostChatScreen({
       user?.uid,
     ]
   );
-  const visibleTypingUsers = typingUsers.filter((typingUser) => typingUser.userId !== user?.uid);
-  const typingIndicatorLabel =
-    visibleTypingUsers.length === 0
-      ? null
-      : visibleTypingUsers.length === 1
-        ? t('shared.chatTypingOne', '{{name}} is typing', {
-            name: getAuthorIdentity(
-              visibleTypingUsers[0].userId,
-              visibleTypingUsers[0].displayName,
-              visibleTypingUsers[0].photoURL
-            ).label,
-          })
-        : t('shared.chatTypingMany', '{{count}} people are typing', {
-            count: visibleTypingUsers.length,
-          });
-  const latestResponse = responses[responses.length - 1] ?? null;
-  const jumpToLatestPreviewLabel =
-    newMessageCount > 0 && latestResponse
-      ? t('shared.chatThreadLatestBy', '{{name}}: {{message}}', {
-          name: getAuthorLabel(latestResponse.authorUid, latestResponse.authorDisplayName),
-          message:
-            formatSharedResponseBody(latestResponse).trim() ||
-            t('shared.chatThreadActivity', 'New activity'),
-        })
-      : null;
+  const visibleTypingUsers = useMemo(
+    () => typingUsers.filter((typingUser) => typingUser.userId !== user?.uid),
+    [typingUsers, user?.uid]
+  );
+  const typingIndicatorLabel = useMemo(() => {
+    if (visibleTypingUsers.length === 0) {
+      return null;
+    }
+
+    if (visibleTypingUsers.length === 1) {
+      return t('shared.chatTypingOne', '{{name}} is typing', {
+        name: getAuthorIdentity(
+          visibleTypingUsers[0].userId,
+          visibleTypingUsers[0].displayName,
+          visibleTypingUsers[0].photoURL
+        ).label,
+      });
+    }
+
+    return t('shared.chatTypingMany', '{{count}} people are typing', {
+      count: visibleTypingUsers.length,
+    });
+  }, [getAuthorIdentity, t, visibleTypingUsers]);
+  const latestResponse = useMemo(() => responses[responses.length - 1] ?? null, [responses]);
+  const jumpToLatestPreviewLabel = useMemo(() => {
+    if (newMessageCount <= 0 || !latestResponse) {
+      return null;
+    }
+
+    return t('shared.chatThreadLatestBy', '{{name}}: {{message}}', {
+      name: getAuthorLabel(latestResponse.authorUid, latestResponse.authorDisplayName),
+      message:
+        formatSharedResponseBody(latestResponse).trim() ||
+        t('shared.chatThreadActivity', 'New activity'),
+    });
+  }, [getAuthorLabel, latestResponse, newMessageCount, t]);
   const chatContext: ChatRenderContext = useMemo(() => {
     const mode: ChatMode = isDirectChat ? 'direct' : 'memory';
     const canComposePendingDirectChat = Boolean(mode === 'direct' && normalizedDirectFriendUid);
     const isResolvingPendingDirectChat = Boolean(
-      !post && canComposePendingDirectChat && (loading || isLoadingChatPost)
+      !post && canComposePendingDirectChat && isResolvingChatPost
     );
-    const isResolvingInitialChat = !post && !canComposePendingDirectChat && (loading || isLoadingChatPost);
+    const isResolvingInitialChat = !post && !canComposePendingDirectChat && isResolvingChatPost;
     const shouldRenderPendingThread =
       mode === 'direct' && (isResolvingInitialChat || isResolvingPendingDirectChat);
     const hasPost = Boolean(post);
@@ -2637,9 +2643,8 @@ export default function SharedPostChatScreen({
     chatPostErrorMessage,
     draft,
     isDirectChat,
-    isLoadingChatPost,
+    isResolvingChatPost,
     isSending,
-    loading,
     normalizedDirectFriendUid,
     post,
     primaryParticipantUid,
@@ -2785,7 +2790,7 @@ export default function SharedPostChatScreen({
                 {renderResponseLoadingFooter()}
               </View>
             </View>
-          ) : isThreadHydrating ? (
+          ) : isThreadLoading ? (
             <View style={styles.threadList} pointerEvents="none">
               <View
                 style={[
@@ -2806,10 +2811,7 @@ export default function SharedPostChatScreen({
               <FlashList
                 key={activePostId}
                 ref={listRef}
-                style={[
-                  styles.threadList,
-                  shouldPrepareThreadFirstPaint ? styles.threadListPreparing : null,
-                ]}
+                style={styles.threadList}
                 data={responseGroups}
                 keyExtractor={(item) => item.id}
                 renderItem={renderResponseItem}
@@ -2832,19 +2834,6 @@ export default function SharedPostChatScreen({
                   threadVerticalPaddingStyle,
                 ]}
               />
-              {shouldPrepareThreadFirstPaint ? (
-                <View style={styles.threadPreparingOverlay} pointerEvents="none">
-                  <View
-                    style={[
-                      styles.threadContent,
-                      styles.threadSkeletonContent,
-                      threadVerticalPaddingStyle,
-                    ]}
-                  >
-                    {renderResponseLoadingFooter()}
-                  </View>
-                </View>
-              ) : null}
             </Pressable>
             )}
             {isJumpToLatestMounted ? (
@@ -3233,12 +3222,6 @@ const styles = StyleSheet.create({
   },
   threadList: {
     flex: 1,
-  },
-  threadListPreparing: {
-    opacity: 0,
-  },
-  threadPreparingOverlay: {
-    ...StyleSheet.absoluteFillObject,
   },
   threadSkeletonContent: {
     flex: 1,
