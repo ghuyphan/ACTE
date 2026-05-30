@@ -824,7 +824,8 @@ function mapSharedPostResponse(row: SharedPostResponseRow): SharedPostResponse {
 }
 
 export async function hydrateSharedPostResponseStickers(
-  responses: SharedPostResponse[]
+  responses: SharedPostResponse[],
+  options: { preferCachedOnly?: boolean } = {}
 ): Promise<SharedPostResponse[]> {
   return Promise.all(
     responses.map(async (response) => {
@@ -846,7 +847,7 @@ export async function hydrateSharedPostResponseStickers(
         sticker.remotePath,
         sticker.assetId,
         sticker.mimeType,
-        { sharedCache: true }
+        { preferCachedOnly: options.preferCachedOnly, sharedCache: true }
       ).catch(() => null);
 
       if (!localUri) {
@@ -862,6 +863,24 @@ export async function hydrateSharedPostResponseStickers(
       };
     })
   );
+}
+
+function haveSameResponseStickerLocalUris(
+  left: SharedPostResponse[],
+  right: SharedPostResponse[]
+) {
+  if (left.length !== right.length) {
+    return false;
+  }
+
+  return left.every((response, index) => {
+    const nextResponse = right[index];
+    return (
+      nextResponse &&
+      response.id === nextResponse.id &&
+      (response.sticker?.localUri ?? null) === (nextResponse.sticker?.localUri ?? null)
+    );
+  });
 }
 
 function mapSharedPostResponseReaction(
@@ -2522,7 +2541,11 @@ export async function getSharedChatThreadPosts(
 export async function getSharedPostResponsesPage(
   user: AppUser,
   postId: string,
-  options: { limit?: number; beforeCreatedAt?: string | null } = {}
+  options: {
+    limit?: number;
+    beforeCreatedAt?: string | null;
+    hydrateStickers?: boolean;
+  } = {}
 ): Promise<SharedPostResponse[]> {
   await ensureSupabaseSessionMatchesUser(user.id);
 
@@ -2550,9 +2573,13 @@ export async function getSharedPostResponsesPage(
     throw error;
   }
 
-  const responses = await hydrateSharedPostResponseStickers(((data ?? []) as SharedPostResponseRow[])
+  const mappedResponses = ((data ?? []) as SharedPostResponseRow[])
     .map(mapSharedPostResponse)
-    .reverse());
+    .reverse();
+  const responses =
+    options.hydrateStickers === false
+      ? mappedResponses
+      : await hydrateSharedPostResponseStickers(mappedResponses);
   const responseIds = responses.map((response) => response.id);
   if (responseIds.length === 0) {
     return responses;
@@ -2974,12 +3001,28 @@ export function subscribeToSharedPostResponses(
     }
 
     refreshInFlight = getSharedPostResponsesPage(user, normalizedPostId, {
+      hydrateStickers: false,
       limit: options.initialPageSize,
     })
       .then((responses) => {
         if (!disposed) {
           options.onResponses(responses);
         }
+        void hydrateSharedPostResponseStickers(responses)
+          .then((hydratedResponses) => {
+            if (
+              !disposed &&
+              !haveSameResponseStickerLocalUris(responses, hydratedResponses)
+            ) {
+              return options.onResponses(hydratedResponses);
+            }
+            return undefined;
+          })
+          .catch((error) => {
+            if (!disposed) {
+              options.onError?.(error);
+            }
+          });
       })
       .catch((error) => {
         if (!disposed) {

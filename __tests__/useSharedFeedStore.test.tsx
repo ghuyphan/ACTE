@@ -56,6 +56,9 @@ const mockRemoveFriend = jest.fn();
 const mockRevokeFriendInvite = jest.fn();
 const mockSubscribeToFriendPresence = jest.fn();
 const mockSubscribeToSharedFeed = jest.fn();
+const mockHydrateSharedPostResponseStickers = jest.fn(
+  async (responses: unknown[], _options?: unknown) => responses
+);
 const mockUpdateFriendNickname = jest.fn();
 const mockUpdateOwnPresenceLastSeen = jest.fn();
 const mockUpdateSharedPost = jest.fn();
@@ -131,7 +134,8 @@ jest.mock('../services/sharedFeedService', () => ({
     error instanceof Error ? error.message : typeof error === 'string' ? error : 'unknown error',
   getSharedPostResponsesPage: jest.fn(async () => []),
   getSharedPostThreadSummaries: jest.fn(async () => []),
-  hydrateSharedPostResponseStickers: jest.fn(async (responses) => responses),
+  hydrateSharedPostResponseStickers: (responses: unknown[], options?: unknown) =>
+    mockHydrateSharedPostResponseStickers(responses, options),
   invalidateSharedFeedRefresh: jest.fn(),
   refreshSharedFeed: (...args: unknown[]) => mockRefreshSharedFeed(...args),
   removeFriend: (...args: unknown[]) => mockRemoveFriend(...args),
@@ -260,6 +264,7 @@ describe('useSharedFeedStore', () => {
     mockGetCachedSharedPostResponses.mockResolvedValue([]);
     mockGetCachedSharedPostResponsesPage.mockResolvedValue([]);
     mockGetCachedSharedThreadSummaries.mockResolvedValue([]);
+    mockHydrateSharedPostResponseStickers.mockImplementation(async (responses) => responses);
     mockReplaceCachedSharedThreadSummaries.mockResolvedValue(undefined);
     mockRefreshSharedFeed.mockImplementation(async () => mockRefreshSnapshot);
     mockUpdateOwnPresenceLastSeen.mockResolvedValue(undefined);
@@ -590,6 +595,106 @@ describe('useSharedFeedStore', () => {
     });
 
     expect(result.current.ownedSharedNoteIds).toEqual(['note-1']);
+  });
+
+  it('hydrates cached shared chat stickers before returning an offline response page', async () => {
+    mockConnectivityState.isOnline = false;
+    const cachedResponse = {
+      id: 'response-1',
+      postId: 'post-1',
+      authorUid: 'friend-1',
+      authorDisplayName: 'Lan',
+      authorPhotoURLSnapshot: null,
+      emoji: null,
+      text: '',
+      sticker: {
+        assetId: 'sticker-1',
+        localUri: null,
+        remotePath: 'friend-1/stickers/sticker-1.webp',
+        mimeType: 'image/webp',
+        width: 120,
+        height: 96,
+        renderMode: 'default',
+        stampStyle: null,
+      },
+      replyToResponseId: null,
+      reactions: [],
+      createdAt: '2026-05-21T01:00:00.000Z',
+    };
+    const hydratedResponse = {
+      ...cachedResponse,
+      sticker: {
+        ...cachedResponse.sticker,
+        localUri: 'file:///cache/shared-stickers/sticker-1.webp',
+      },
+    };
+    mockGetCachedSharedPostResponsesPage.mockResolvedValue([cachedResponse]);
+    mockHydrateSharedPostResponseStickers.mockResolvedValue([hydratedResponse]);
+
+    const { result } = renderHook(() => useSharedFeedStore(), { wrapper });
+
+    await waitFor(() => expect(result.current.ready).toBe(true));
+
+    const responses = await result.current.getSharedPostResponsesPage('post-1', { limit: 24 });
+
+    expect(mockHydrateSharedPostResponseStickers).toHaveBeenCalledWith(
+      [cachedResponse],
+      { preferCachedOnly: true }
+    );
+    expect(responses).toEqual([hydratedResponse]);
+  });
+
+  it('hydrates cached shared chat stickers before emitting the initial subscription page', async () => {
+    mockConnectivityState.isOnline = false;
+    const cachedResponse = {
+      id: 'response-1',
+      postId: 'post-1',
+      authorUid: 'friend-1',
+      authorDisplayName: 'Lan',
+      authorPhotoURLSnapshot: null,
+      emoji: null,
+      text: '',
+      sticker: {
+        assetId: 'sticker-1',
+        localUri: null,
+        remotePath: 'friend-1/stickers/sticker-1.webp',
+        mimeType: 'image/webp',
+        width: 120,
+        height: 96,
+        renderMode: 'default',
+        stampStyle: null,
+      },
+      replyToResponseId: null,
+      reactions: [],
+      createdAt: '2026-05-21T01:00:00.000Z',
+    };
+    const hydratedResponse = {
+      ...cachedResponse,
+      sticker: {
+        ...cachedResponse.sticker,
+        localUri: 'file:///cache/shared-stickers/sticker-1.webp',
+      },
+    };
+    mockGetCachedSharedPostResponsesPage.mockResolvedValue([cachedResponse]);
+    mockHydrateSharedPostResponseStickers.mockResolvedValue([hydratedResponse]);
+
+    const { result } = renderHook(() => useSharedFeedStore(), { wrapper });
+
+    await waitFor(() => expect(result.current.ready).toBe(true));
+
+    const onResponses = jest.fn();
+    const unsubscribe = result.current.subscribeToSharedPostResponses('post-1', {
+      initialPageSize: 24,
+      onResponses,
+    });
+
+    await waitFor(() => expect(onResponses).toHaveBeenCalledWith([hydratedResponse]));
+    expect(mockHydrateSharedPostResponseStickers).toHaveBeenCalledWith(
+      [cachedResponse],
+      { preferCachedOnly: true }
+    );
+
+    unsubscribe();
   });
 
   it('hydrates cached shared photo media into local state and patches the cached media fields', async () => {

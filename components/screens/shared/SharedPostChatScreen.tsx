@@ -764,7 +764,6 @@ export default function SharedPostChatScreen({
   const [isThreadFirstPaintReady, setIsThreadFirstPaintReady] = useState(false);
   const [hasUserScrolledAwayFromThreadEnd, setHasUserScrolledAwayFromThreadEnd] = useState(false);
   const [isJumpToLatestMounted, setIsJumpToLatestMounted] = useState(false);
-  const [isStickerTrayMounted, setIsStickerTrayMounted] = useState(false);
   const [composerHeight, setComposerHeight] = useState(96);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const listRef = useRef<FlashListRef<ChatListItem> | null>(null);
@@ -774,12 +773,12 @@ export default function SharedPostChatScreen({
   const infoMessageTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastMarkedReadSignatureRef = useRef<string | null>(null);
   const optimisticSequenceRef = useRef(0);
+  const pendingThreadEndSettleRef = useRef(false);
   const reactionOverlayAnimationRunRef = useRef(0);
   const reactionOverlayProgress = useRef(new Animated.Value(0)).current;
   const replyPreviewTextProgress = useRef(new Animated.Value(1)).current;
   const jumpToLatestProgress = useRef(new Animated.Value(0)).current;
   const sendButtonPulse = useRef(new Animated.Value(0)).current;
-  const stickerTrayProgress = useRef(new Animated.Value(0)).current;
   const pendingInitialResponseIdRef = useRef<string | null>(null);
   const canLoadOlderResponsesRef = useRef(false);
   const lastThreadScrollYRef = useRef<number | null>(null);
@@ -1011,6 +1010,7 @@ export default function SharedPostChatScreen({
       cancelAnimationFrame(frame);
     });
     animationFrameRefs.current.clear();
+    pendingThreadEndSettleRef.current = false;
   }, []);
 
   const showInfoMessage = useCallback(
@@ -1121,39 +1121,6 @@ export default function SharedPostChatScreen({
       }
     });
   }, [jumpToLatestProgress, shouldShowJumpToLatest]);
-
-  useEffect(() => {
-    let cancelled = false;
-    if (isStickerTrayVisible) {
-      setIsStickerTrayMounted(true);
-      Animated.spring(stickerTrayProgress, {
-        toValue: 1,
-        useNativeDriver: false,
-        damping: 20,
-        stiffness: 260,
-        mass: 0.8,
-      }).start();
-      return () => {
-        cancelled = true;
-        stickerTrayProgress.stopAnimation();
-      };
-    }
-
-    Animated.timing(stickerTrayProgress, {
-      toValue: 0,
-      duration: 150,
-      useNativeDriver: false,
-    }).start(({ finished }) => {
-      if (finished && !cancelled) {
-        setIsStickerTrayMounted(false);
-      }
-    });
-
-    return () => {
-      cancelled = true;
-      stickerTrayProgress.stopAnimation();
-    };
-  }, [isStickerTrayVisible, stickerTrayProgress]);
 
   const postAuthorLabel = post
     ? getAuthorLabel(post.authorUid, post.authorDisplayName)
@@ -1734,9 +1701,7 @@ export default function SharedPostChatScreen({
         clearNewMessageCount();
         setThreadEndVisible(true);
         scheduleAnimationFrame(() => {
-          scheduleAnimationFrame(() => {
-            listRef.current?.scrollToEnd({ animated: false });
-          });
+          listRef.current?.scrollToEnd({ animated: false });
         });
       }
 
@@ -2013,22 +1978,44 @@ export default function SharedPostChatScreen({
     });
   }, [clearNewMessageCount, scheduleAnimationFrame, setThreadEndVisible]);
 
-  const settleThreadEndIfVisible = useCallback(() => {
-    if (!isThreadEndVisibleRef.current) {
+  const settleThreadEndIfVisible = useCallback((options?: { immediate?: boolean }) => {
+    if (!isThreadEndVisibleRef.current || pendingThreadEndSettleRef.current) {
       return;
     }
 
-    scrollToThreadEnd(false);
-  }, [isThreadEndVisibleRef, scrollToThreadEnd]);
+    pendingThreadEndSettleRef.current = true;
+    const settle = () => {
+      pendingThreadEndSettleRef.current = false;
+      if (isThreadEndVisibleRef.current) {
+        listRef.current?.scrollToEnd({ animated: false });
+      }
+    };
+
+    if (options?.immediate) {
+      scheduleAnimationFrame(settle);
+      return;
+    }
+
+    scheduleAnimationFrame(() => {
+      scheduleAnimationFrame(settle);
+    });
+  }, [isThreadEndVisibleRef, scheduleAnimationFrame]);
+  const handleThreadContentSizeChange = useCallback(() => {
+    settleThreadEndIfVisible();
+  }, [settleThreadEndIfVisible]);
 
   useEffect(() => {
     const showSubscription = Keyboard.addListener(
       Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
       (event) => {
         scheduleKeyboardLayout(event);
-        setKeyboardHeight(Math.max(0, screenHeight - event.endCoordinates.screenY));
-        if (composerFocusedRef.current) {
-          scheduleAnimationFrame(settleThreadEndIfVisible);
+        setKeyboardHeight(
+          Platform.OS === 'ios'
+            ? Math.max(0, screenHeight - event.endCoordinates.screenY)
+            : 0
+        );
+        if (Platform.OS === 'ios' && composerFocusedRef.current) {
+          settleThreadEndIfVisible();
         }
       }
     );
@@ -2063,7 +2050,7 @@ export default function SharedPostChatScreen({
   const isKeyboardVisible = keyboardHeight > 0;
   const composerKeyboardOffset = Math.max(
     0,
-    isKeyboardVisible ? keyboardHeight + COMPOSER_KEYBOARD_GAP : 0
+    Platform.OS === 'ios' && isKeyboardVisible ? keyboardHeight + COMPOSER_KEYBOARD_GAP : 0
   );
   const contentBottomPadding =
     composerHeight +
@@ -2078,17 +2065,11 @@ export default function SharedPostChatScreen({
   );
 
   useEffect(() => {
-    scheduleAnimationFrame(() => {
-      scheduleAnimationFrame(settleThreadEndIfVisible);
-    });
-  }, [contentBottomPadding, replyTarget, scheduleAnimationFrame, settleThreadEndIfVisible]);
+    settleThreadEndIfVisible();
+  }, [contentBottomPadding, replyTarget, settleThreadEndIfVisible]);
 
   const isThreadHydrating = isLoadingResponses && responses.length === 0;
   const shouldPrepareThreadFirstPaint = !hasHydratedResponses && !isThreadFirstPaintReady;
-  const initialThreadScrollIndex = responseGroups.length > 0 ? responseGroups.length - 1 : null;
-  const handleThreadListLoad = useCallback(() => {
-    scrollToThreadEnd(false);
-  }, [scrollToThreadEnd]);
   useEffect(() => {
     if (isThreadHydrating || isThreadFirstPaintReady) {
       return;
@@ -2099,13 +2080,14 @@ export default function SharedPostChatScreen({
       return;
     }
 
-    scheduleAnimationFrame(() => {
-      listRef.current?.scrollToEnd({ animated: false });
-      scheduleAnimationFrame(() => {
-        setIsThreadFirstPaintReady(true);
-      });
-    });
-  }, [isThreadFirstPaintReady, isThreadHydrating, responseGroups.length, scheduleAnimationFrame]);
+    settleThreadEndIfVisible({ immediate: true });
+    setIsThreadFirstPaintReady(true);
+  }, [
+    isThreadFirstPaintReady,
+    isThreadHydrating,
+    responseGroups.length,
+    settleThreadEndIfVisible,
+  ]);
 
   const renderEmptyThread = useCallback(
     () =>
@@ -2832,12 +2814,10 @@ export default function SharedPostChatScreen({
                 keyExtractor={(item) => item.id}
                 renderItem={renderResponseItem}
                 extraData={responses}
-                initialScrollIndex={initialThreadScrollIndex}
                 ItemSeparatorComponent={renderMessageSeparator}
                 ListEmptyComponent={renderEmptyThread}
                 maintainVisibleContentPosition={THREAD_SCROLL_POSITION_CONFIG}
-                onContentSizeChange={settleThreadEndIfVisible}
-                onLoad={handleThreadListLoad}
+                onContentSizeChange={handleThreadContentSizeChange}
                 onStartReached={handleLoadOlderResponses}
                 onStartReachedThreshold={0.2}
                 onScroll={handleThreadScroll}
@@ -3119,7 +3099,6 @@ export default function SharedPostChatScreen({
                   if (draft.trim()) {
                     publishTypingState(true, { force: true });
                   }
-                  settleThreadEndIfVisible();
                 }}
                 onBlur={() => {
                   composerFocusedRef.current = false;
@@ -3174,18 +3153,14 @@ export default function SharedPostChatScreen({
                 </Animated.View>
               </Pressable>
             </View>
-            {isStickerTrayMounted ? (
-              <Animated.View
+            {isStickerTrayVisible ? (
+              <View
                 style={[
                   styles.stickerTray,
                   {
-                    height: stickerTrayProgress.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: [0, stickerTrayHeight],
-                    }),
+                    height: stickerTrayHeight,
                     backgroundColor: colors.surface,
                     borderColor: colors.border,
-                    opacity: stickerTrayProgress,
                   },
                 ]}
               >
@@ -3203,7 +3178,7 @@ export default function SharedPostChatScreen({
                     />
                   ))}
                 </ScrollView>
-              </Animated.View>
+              </View>
             ) : null}
           </View>
         </>
@@ -3461,7 +3436,7 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   stickerMessageInteractionWrap: {
-    marginVertical: 8,
+    marginVertical: 2,
   },
   activeReactionMessageRow: {
     zIndex: 40,
@@ -3543,9 +3518,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   stickerMessageBubble: {
-    minHeight: 72,
+    minHeight: 0,
     paddingHorizontal: 0,
     paddingVertical: 0,
+    borderWidth: 0,
   },
   chatStickerFallback: {
     alignItems: 'center',

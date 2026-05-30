@@ -384,6 +384,45 @@ function serializeSharedPostResponseSticker(response: SharedPostResponse) {
   return response.sticker ? JSON.stringify(response.sticker) : null;
 }
 
+function mergeSharedPostResponseStickerLocalUri(
+  incoming: SharedPostResponse,
+  existing: SharedPostResponse | null | undefined
+): SharedPostResponse {
+  const incomingSticker = incoming.sticker;
+  const existingSticker = existing?.sticker;
+  if (
+    !incomingSticker ||
+    incomingSticker.localUri ||
+    !existingSticker?.localUri ||
+    existingSticker.assetId !== incomingSticker.assetId ||
+    existingSticker.remotePath !== incomingSticker.remotePath
+  ) {
+    return incoming;
+  }
+
+  return {
+    ...incoming,
+    sticker: {
+      ...incomingSticker,
+      localUri: existingSticker.localUri,
+    },
+  };
+}
+
+function mergeSharedPostResponseStickersWithExisting(
+  responses: SharedPostResponse[],
+  existingResponses: SharedPostResponse[]
+) {
+  if (responses.length === 0 || existingResponses.length === 0) {
+    return responses;
+  }
+
+  const existingById = new Map(existingResponses.map((response) => [response.id, response]));
+  return responses.map((response) =>
+    mergeSharedPostResponseStickerLocalUri(response, existingById.get(response.id))
+  );
+}
+
 function rowToSharedPostResponseReaction(
   row: SharedPostResponseReactionCacheRow
 ): SharedPostResponseReaction {
@@ -1006,6 +1045,11 @@ export async function replaceCachedSharedPostResponses(
   }
 
   await withDatabaseTransaction(async (tx) => {
+    const existingResponses = await selectCachedSharedPostResponses(tx, userUid, normalizedPostId);
+    const responsesForCache = mergeSharedPostResponseStickersWithExisting(
+      responses,
+      existingResponses
+    );
     await tx.runAsync(
       'DELETE FROM shared_post_responses_cache WHERE user_uid = ? AND post_id = ?',
       userUid,
@@ -1017,7 +1061,7 @@ export async function replaceCachedSharedPostResponses(
       normalizedPostId
     );
 
-    for (const response of responses) {
+    for (const response of responsesForCache) {
       await insertCachedSharedPostResponse(tx, userUid, response);
       for (const reaction of response.reactions ?? []) {
         await insertCachedSharedPostResponseReaction(tx, userUid, reaction);
@@ -1026,7 +1070,7 @@ export async function replaceCachedSharedPostResponses(
     await upsertCachedSharedThreadSummaryInTransaction(
       tx,
       userUid,
-      deriveSharedThreadSummaryFromResponses(normalizedPostId, responses)
+      deriveSharedThreadSummaryFromResponses(normalizedPostId, responsesForCache)
     );
   });
   emitSharedChatThreadChange({ userUid, postId: normalizedPostId });
@@ -1046,6 +1090,11 @@ export async function reconcileCachedSharedPostResponsesPage(
   const beforeCreatedAt = options.beforeCreatedAt?.trim() || null;
 
   await withDatabaseTransaction(async (tx) => {
+    const existingResponses = await selectCachedSharedPostResponses(tx, userUid, normalizedPostId);
+    const responsesForCache = mergeSharedPostResponseStickersWithExisting(
+      responses,
+      existingResponses
+    );
     if (responses.length === 0) {
       if (!beforeCreatedAt) {
         await tx.runAsync(
@@ -1067,7 +1116,7 @@ export async function reconcileCachedSharedPostResponsesPage(
       return;
     }
 
-    const oldestFetchedAt = responses[0]?.createdAt;
+    const oldestFetchedAt = responsesForCache[0]?.createdAt;
     if (oldestFetchedAt) {
       const rangeArgs = beforeCreatedAt
         ? [userUid, normalizedPostId, oldestFetchedAt, beforeCreatedAt]
@@ -1095,7 +1144,7 @@ export async function reconcileCachedSharedPostResponsesPage(
       );
     }
 
-    for (const response of responses) {
+    for (const response of responsesForCache) {
       await insertCachedSharedPostResponse(tx, userUid, response);
       for (const reaction of response.reactions ?? []) {
         await insertCachedSharedPostResponseReaction(tx, userUid, reaction);
@@ -1117,14 +1166,18 @@ export async function upsertCachedSharedPostResponse(
   response: SharedPostResponse
 ): Promise<void> {
   await withDatabaseTransaction(async (tx) => {
-    await insertCachedSharedPostResponse(tx, userUid, response);
-    for (const reaction of response.reactions ?? []) {
+    const currentResponses = await selectCachedSharedPostResponses(tx, userUid, response.postId);
+    const responseForCache = mergeSharedPostResponseStickerLocalUri(
+      response,
+      currentResponses.find((item) => item.id === response.id)
+    );
+    await insertCachedSharedPostResponse(tx, userUid, responseForCache);
+    for (const reaction of responseForCache.reactions ?? []) {
       await insertCachedSharedPostResponseReaction(tx, userUid, reaction);
     }
-    const currentResponses = await selectCachedSharedPostResponses(tx, userUid, response.postId);
-    const nextResponses = currentResponses.some((item) => item.id === response.id)
-      ? currentResponses.map((item) => (item.id === response.id ? response : item))
-      : [...currentResponses, response].sort(
+    const nextResponses = currentResponses.some((item) => item.id === responseForCache.id)
+      ? currentResponses.map((item) => (item.id === responseForCache.id ? responseForCache : item))
+      : [...currentResponses, responseForCache].sort(
           (left, right) =>
             new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime()
         );

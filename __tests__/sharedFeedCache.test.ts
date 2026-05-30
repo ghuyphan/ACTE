@@ -294,6 +294,67 @@ describe('shared feed cache persistence', () => {
     );
   });
 
+  it('preserves cached shared response sticker local uri when reconciling remote rows', async () => {
+    const { reconcileCachedSharedPostResponsesPage } =
+      require('../services/sharedFeedCache') as typeof import('../services/sharedFeedCache');
+    const existingSticker = {
+      assetId: 'sticker-1',
+      localUri: 'file:///cache/shared-stickers/sticker-1.webp',
+      remotePath: 'friend-1/stickers/sticker-1.webp',
+      mimeType: 'image/webp',
+      width: 120,
+      height: 96,
+      renderMode: 'default' as const,
+      stampStyle: null,
+    };
+    mockGetAllAsync.mockImplementation(async (sql: string) => {
+      if (sql.includes('FROM shared_post_responses_cache')) {
+        return [
+          {
+            id: 'response-1',
+            post_id: 'post-1',
+            author_uid: 'friend-1',
+            author_display_name: 'Friend',
+            author_photo_url_snapshot: null,
+            emoji: null,
+            text: '',
+            sticker_json: JSON.stringify(existingSticker),
+            reply_to_response_id: null,
+            created_at: '2026-05-21T01:00:00.000Z',
+          },
+        ];
+      }
+
+      return [];
+    });
+
+    await reconcileCachedSharedPostResponsesPage('owner-1', 'post-1', [
+      {
+        id: 'response-1',
+        postId: 'post-1',
+        authorUid: 'friend-1',
+        authorDisplayName: 'Friend',
+        authorPhotoURLSnapshot: null,
+        emoji: null,
+        text: '',
+        sticker: {
+          ...existingSticker,
+          localUri: null,
+        },
+        replyToResponseId: null,
+        reactions: [],
+        createdAt: '2026-05-21T01:00:00.000Z',
+      },
+    ]);
+
+    const responseInsertCall = mockRunAsync.mock.calls.find(([sql]) =>
+      sql.includes('INSERT INTO shared_post_responses_cache')
+    );
+    const stickerJson = JSON.parse(String(responseInsertCall?.[9] ?? '{}'));
+
+    expect(stickerJson.localUri).toBe('file:///cache/shared-stickers/sticker-1.webp');
+  });
+
   it('upserts local shared thread read state', async () => {
     const { markCachedSharedThreadRead } =
       require('../services/sharedFeedCache') as typeof import('../services/sharedFeedCache');

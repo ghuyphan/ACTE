@@ -194,6 +194,21 @@ const SharedFeedStoreContext = createContext<SharedFeedStoreValue | undefined>(u
 const INITIAL_SHARED_MEDIA_HYDRATION_LIMIT = 12;
 const SHARED_MEDIA_HYDRATION_CONCURRENCY = 3;
 
+function hasHydratedSharedResponseSticker(
+  cachedResponse: SharedPostResponse | undefined,
+  hydratedResponse: SharedPostResponse | undefined
+) {
+  const cachedSticker = cachedResponse?.sticker;
+  const hydratedSticker = hydratedResponse?.sticker;
+  return Boolean(
+    cachedSticker &&
+      hydratedSticker &&
+      cachedSticker.assetId === hydratedSticker.assetId &&
+      !cachedSticker.localUri &&
+      hydratedSticker.localUri
+  );
+}
+
 type SharedFeedSnapshotState = {
   friends: FriendConnection[];
   friendGroups?: FriendGroup[];
@@ -1810,7 +1825,21 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
         const activeUser = requireUser();
         if (!isOnline) {
           const cachedResponses = await getCachedSharedPostResponses(activeUser.uid, postId);
-          const hydratedResponses = await hydrateSharedPostResponseStickers(cachedResponses);
+          const hydratedResponses = await hydrateSharedPostResponseStickers(cachedResponses, {
+            preferCachedOnly: true,
+          });
+          const newlyHydratedResponses = hydratedResponses.filter((response, index) =>
+            hasHydratedSharedResponseSticker(cachedResponses[index], response)
+          );
+          if (newlyHydratedResponses.length > 0) {
+            void Promise.all(
+              newlyHydratedResponses.map((response) =>
+                upsertCachedSharedPostResponse(activeUser.uid, response)
+              )
+            ).catch((error) => {
+              console.warn('Failed to persist hydrated shared response stickers:', error);
+            });
+          }
           rememberSharedPostResponses(postId, hydratedResponses);
           return hydratedResponses;
         }
@@ -1833,7 +1862,21 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
             postId,
             options
           );
-          const hydratedResponses = await hydrateSharedPostResponseStickers(cachedResponses);
+          const hydratedResponses = await hydrateSharedPostResponseStickers(cachedResponses, {
+            preferCachedOnly: true,
+          });
+          const newlyHydratedResponses = hydratedResponses.filter((response, index) =>
+            hasHydratedSharedResponseSticker(cachedResponses[index], response)
+          );
+          if (newlyHydratedResponses.length > 0) {
+            void Promise.all(
+              newlyHydratedResponses.map((response) =>
+                upsertCachedSharedPostResponse(activeUser.uid, response)
+              )
+            ).catch((error) => {
+              console.warn('Failed to persist hydrated shared response stickers:', error);
+            });
+          }
           if (!options?.beforeCreatedAt) {
             rememberSharedPostResponses(postId, hydratedResponses);
           }
@@ -1894,12 +1937,34 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
         void getCachedSharedPostResponsesPage(activeUser.uid, postId, {
           limit: options.initialPageSize,
         })
-          .then(async (cachedResponses) => {
-            const hydratedResponses = await hydrateSharedPostResponseStickers(cachedResponses);
-            if (!disposed && (hydratedResponses.length > 0 || !isOnline)) {
-              rememberSharedPostResponses(postId, hydratedResponses);
-              void options.onResponses(hydratedResponses);
+          .then((cachedResponses) => {
+            if (!disposed && (cachedResponses.length > 0 || !isOnline)) {
+              rememberSharedPostResponses(postId, cachedResponses);
+              void options.onResponses(cachedResponses);
             }
+
+            void hydrateSharedPostResponseStickers(cachedResponses, {
+              preferCachedOnly: !isOnline,
+            })
+              .then((hydratedResponses) => {
+                const newlyHydratedResponses = hydratedResponses.filter((response, index) =>
+                  hasHydratedSharedResponseSticker(cachedResponses[index], response)
+                );
+                if (newlyHydratedResponses.length > 0) {
+                  void Promise.all(
+                    newlyHydratedResponses.map((response) =>
+                      upsertCachedSharedPostResponse(activeUser.uid, response)
+                    )
+                  ).catch((error) => {
+                    console.warn('Failed to persist hydrated shared response stickers:', error);
+                  });
+                }
+                if (!disposed && newlyHydratedResponses.length > 0) {
+                  rememberSharedPostResponses(postId, hydratedResponses);
+                  void options.onResponses(hydratedResponses);
+                }
+              })
+              .catch(() => undefined);
           })
           .catch(() => undefined);
 

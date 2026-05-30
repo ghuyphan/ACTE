@@ -1412,6 +1412,7 @@ export async function downloadStickerAssetFromStorage(
   mimeType: string,
   options: {
     preferCached?: boolean;
+    preferCachedOnly?: boolean;
     sharedCache?: boolean;
   } = {}
 ) {
@@ -1432,6 +1433,9 @@ export async function downloadStickerAssetFromStorage(
     if (cachedInfo?.exists && !cachedInfo.isDirectory) {
       return destinationPath;
     }
+  }
+  if (options.preferCachedOnly) {
+    return null;
   }
 
   const { data, error } = await requireSupabase().storage.from(bucket).createSignedUrl(normalizedPath, 60 * 5);
