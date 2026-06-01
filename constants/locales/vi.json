@@ -294,6 +294,7 @@
         "filterPhoto": "Ảnh",
         "filterRecap": "Tóm tắt",
         "filterFavorites": "Yêu thích",
+        "filterFavoritesShort": "Thích",
         "filterTitle": "Bộ lọc",
         "filteredLabel": "đã lọc",
         "nearbyTitle": "Gần bạn",
@@ -307,6 +308,7 @@
     "centerOnMapAction": "Xem trên bản đồ",
         "filteredEmptyTitle": "Không tìm thấy nhật ký nào",
         "filteredEmptySubtitle": "Hãy thử một bộ lọc khác hoặc tắt bộ lọc để xem lại mọi thứ.",
+        "filteredEmptyWithContextSubtitle": "Bộ lọc: {{filter}}",
         "areaEmptyTitle": "Chưa có nhật ký nào ở khu vực này",
         "areaEmptySubtitle": "Thử thu phóng bản đồ một chút, hoặc xem lại toàn bộ nhật ký bạn đã lưu.",
         "clearFilters": "Xóa bộ lọc",
@@ -327,6 +329,8 @@
         "emptySubtitle": "Những nơi bạn đi qua và lưu lại sẽ hóa thành các ghim nhỏ ở đây.",
         "friendsChip": "Bạn bè",
         "friendsChipCount": "Bạn bè {{count}}",
+        "friendsLayer": "Bạn bè",
+        "friendsLayerCount": "{{count}}",
         "friendFrom": "Từ {{name}}",
         "openShared": "Mở chia sẻ",
         "recenter": "Đưa bản đồ về vị trí của bạn",
@@ -1168,7 +1172,7 @@
         "new-place": "Bạn muốn phiên bản tương lai nhớ gì về nơi này?",
         "photo-frame": "Điều gì đang diễn ra ngoài khung hình?",
         "evening-check-in": "Điều gì làm hôm nay đáng giữ lại?",
-        "future-you": "Để lại một gợi ý nhỏ cho bạn của sau này."
+        "future-you": "Để lại một ghi chú cho bạn của sau này."
     },
     "updates": {
         "readyTitle": "Bản cập nhật đã sẵn sàng",

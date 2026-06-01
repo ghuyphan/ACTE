@@ -104,7 +104,7 @@ export function buildMemoryPromptSuggestion({
 
   return {
     id: 'future-you',
-    text: 'Leave a tiny clue for future you.',
+    text: 'Leave a note for your future self.',
     reason: 'fallback',
   };
 }

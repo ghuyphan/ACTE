@@ -78,7 +78,7 @@
         "textPlaceholder": "Note about this place...",
         "textPlaceholderVariants": [
             "Note about this place...",
-            "Leave a tiny clue for future you...",
+            "Leave a note for your future self...",
             "What should you remember here?",
             "Write one quick thing before it escapes...",
             "Anything here worth saving for later?",
@@ -294,6 +294,7 @@
         "filterPhoto": "Photos",
         "filterRecap": "Recap",
         "filterFavorites": "Favorites",
+        "filterFavoritesShort": "Favs",
         "filterTitle": "Filters",
         "filteredLabel": "Filtered",
         "nearbyTitle": "Nearby",
@@ -307,6 +308,7 @@
     "centerOnMapAction": "View on map",
         "filteredEmptyTitle": "No memories found",
         "filteredEmptySubtitle": "Try a different filter or clear them to see everything you saved.",
+        "filteredEmptyWithContextSubtitle": "Filter: {{filter}}",
         "areaEmptyTitle": "No memories around here yet",
         "areaEmptySubtitle": "Pan the map a little further, or show all your saved memories.",
         "clearFilters": "Clear filters",
@@ -327,6 +329,8 @@
         "emptySubtitle": "Places you save will appear here as little pins.",
         "friendsChip": "Friends",
         "friendsChipCount": "Friends {{count}}",
+        "friendsLayer": "Friends",
+        "friendsLayerCount": "{{count}}",
         "friendFrom": "From {{name}}",
         "openShared": "Open shared",
         "recenter": "Recenter map",
@@ -1168,7 +1172,7 @@
         "new-place": "What should future you remember about this spot?",
         "photo-frame": "What's happening outside the frame?",
         "evening-check-in": "What made today worth keeping?",
-        "future-you": "Leave a tiny clue for future you."
+        "future-you": "Leave a note for your future self."
     },
     "updates": {
         "readyTitle": "Update ready",

@@ -870,9 +870,10 @@ function MapCanvas({
                 : 'idle'
             }`
           : key;
+        const useLiteMarker = preferLiteMarkers && !node.isCluster && !isSelected && !pulseActive;
 
         return (
-          preferLiteMarkers && !node.isCluster ? (
+          useLiteMarker ? (
             <Marker
               key={markerRenderKey}
               testID={testID}
@@ -980,9 +981,10 @@ function MapCanvas({
         const friendMarkerKey = isAndroid
           ? `friend-${post.id}-${showSelectedFriendCallout ? 'callout' : isSelected ? 'selected' : 'idle'}`
           : `friend-${post.id}`;
+        const useLiteFriendMarker = preferLiteMarkers && !isSelected;
 
         return (
-          preferLiteMarkers ? (
+          useLiteFriendMarker ? (
             <Marker
               key={friendMarkerKey}
               testID={`friend-marker-${post.id}`}

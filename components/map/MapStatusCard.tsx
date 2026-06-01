@@ -1,6 +1,12 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import Reanimated, {
+  interpolate,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from 'react-native-reanimated';
 import { GlassView } from '../ui/GlassView';
 import { useTheme } from '../../hooks/useTheme';
 import { isOlderIOS } from '../../utils/platform';
@@ -33,6 +39,7 @@ interface MapStatusCardProps {
 
 const PREVIEW_HORIZONTAL_INSET = 14;
 const STATUS_CARD_MAX_WIDTH = 328;
+const STATUS_SIDE_ACTION_GAP = 8;
 
 export default function MapStatusCard({
   visible,
@@ -55,6 +62,7 @@ export default function MapStatusCard({
   const { colors, isDark } = useTheme();
   const { width: windowWidth } = useWindowDimensions();
   const [isMounted, setIsMounted] = useState(visible);
+  const isAndroid = Platform.OS === 'android';
 
   useEffect(() => {
     if (visible && !isMounted) {
@@ -65,8 +73,16 @@ export default function MapStatusCard({
   const isPassivePill = Boolean(title) && !subtitle && !actionLabel;
   const isActionOnly = !title && !subtitle && Boolean(actionLabel);
   const isPill = isActionOnly || isPassivePill;
+  const hasSideAction = Boolean(sideActionIcon && onSideAction);
   const fullSurfaceWidth = Math.max(0, windowWidth - PREVIEW_HORIZONTAL_INSET * 2);
-  const shellMaxWidth = Math.min(fullSurfaceWidth, STATUS_CARD_MAX_WIDTH);
+  const shellMaxWidth = Math.min(
+    hasSideAction
+      ? Math.max(0, fullSurfaceWidth - mapOverlayTokens.floatingButtonSize - STATUS_SIDE_ACTION_GAP)
+      : fullSurfaceWidth,
+    STATUS_CARD_MAX_WIDTH
+  );
+  const contentMotionProgress = useSharedValue(reduceMotionEnabled ? 1 : 0);
+  const contentSignature = `${title ?? ''}|${subtitle ?? ''}|${actionLabel ?? ''}|${icon}|${actionIcon}`;
 
   const shellStyle = useMemo(
     () => [
@@ -76,11 +92,30 @@ export default function MapStatusCard({
         maxWidth: shellMaxWidth,
         width: isPill ? undefined : shellMaxWidth,
         borderColor: getOverlayBorderColor(isDark, colors),
-        backgroundColor: getOverlayFallbackColor(isDark, colors),
+        backgroundColor: isAndroid
+          ? colors.androidTabShellBackground
+          : getOverlayFallbackColor(isDark, colors),
+        shadowColor: isAndroid ? colors.androidTabShellShadow : undefined,
       },
     ],
-    [colors, isDark, isPill, shellMaxWidth]
+    [colors, isAndroid, isDark, isPill, shellMaxWidth]
   );
+
+  useEffect(() => {
+    contentMotionProgress.value = reduceMotionEnabled ? 1 : 0;
+    if (!reduceMotionEnabled) {
+      contentMotionProgress.value = withTiming(1, { duration: 180 });
+    }
+  }, [contentMotionProgress, contentSignature, reduceMotionEnabled]);
+
+  const contentAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(contentMotionProgress.value, [0, 1], [0.72, 1]),
+    transform: [
+      {
+        translateY: interpolate(contentMotionProgress.value, [0, 1], [3, 0]),
+      },
+    ],
+  }));
 
   if ((!isMounted && !visible) || (!title && !actionLabel)) {
     return null;
@@ -131,76 +166,74 @@ export default function MapStatusCard({
               />
             ) : null}
 
-            {isPassivePill && title ? (
-              <View style={styles.pillContent}>
-                <View style={[styles.pillDot, { backgroundColor: colors.primary }]} />
-                <Text style={[styles.pillLabel, { color: colors.text }]} numberOfLines={1}>
-                  {title}
-                </Text>
-              </View>
-            ) : isActionOnly && actionLabel ? (
-              <Pressable
-                testID={actionTestID}
-                accessibilityRole="button"
-                onPress={() => {
-                  onInteraction?.();
-                  onAction?.();
-                }}
-                style={({ pressed }) => [
-                  styles.actionOnlyPill,
-                  {
-                    opacity: pressed ? 0.72 : 1,
-                  },
-                ]}
-              >
-                <Ionicons name={actionIcon} size={14} color={colors.primary} />
-                <Text style={[styles.pillLabel, { color: colors.primary }]} numberOfLines={1}>
-                  {actionLabel}
-                </Text>
-              </Pressable>
-            ) : (
-              <View style={styles.contentRow}>
-                <View style={[styles.iconWrap, { backgroundColor: `${colors.primary}18` }]}>
-                  <Ionicons name={icon} size={17} color={colors.primary} />
+            <Reanimated.View style={contentAnimatedStyle}>
+              {isPassivePill && title ? (
+                <View style={styles.pillContent}>
+                  <View style={[styles.pillDot, { backgroundColor: colors.primary }]} />
+                  <Text style={[styles.pillLabel, { color: colors.text }]} numberOfLines={1}>
+                    {title}
+                  </Text>
                 </View>
-                <View style={styles.copyWrap}>
-                  {title ? (
-                    <Text style={[styles.title, { color: colors.text }]} numberOfLines={1}>
-                      {title}
-                    </Text>
-                  ) : null}
-                  {subtitle ? (
-                    <Text style={[styles.subtitle, { color: colors.secondaryText }]} numberOfLines={1}>
-                      {subtitle}
-                    </Text>
-                  ) : null}
-                </View>
+              ) : isActionOnly && actionLabel ? (
+                <Pressable
+                  testID={actionTestID}
+                  accessibilityRole="button"
+                  onPress={() => {
+                    onInteraction?.();
+                    onAction?.();
+                  }}
+                  style={({ pressed }) => [
+                    styles.actionOnlyPill,
+                    {
+                      opacity: pressed ? 0.72 : 1,
+                    },
+                  ]}
+                >
+                  <Ionicons name={actionIcon} size={14} color={colors.primary} />
+                  <Text style={[styles.pillLabel, { color: colors.primary }]} numberOfLines={1}>
+                    {actionLabel}
+                  </Text>
+                </Pressable>
+              ) : (
+                <View style={styles.contentRow}>
+                  <View style={styles.iconWrap}>
+                    <Ionicons name={icon} size={17} color={colors.primary} />
+                  </View>
+                  <View style={styles.copyWrap}>
+                    {title ? (
+                      <Text style={[styles.title, { color: colors.text }]} numberOfLines={1}>
+                        {title}
+                      </Text>
+                    ) : null}
+                    {subtitle ? (
+                      <Text style={[styles.subtitle, { color: colors.secondaryText }]} numberOfLines={1}>
+                        {subtitle}
+                      </Text>
+                    ) : null}
+                  </View>
 
-                {actionLabel ? (
-                  <Pressable
-                    testID={actionTestID}
-                    accessibilityRole="button"
-                    onPress={() => {
-                      onInteraction?.();
-                      onAction?.();
-                    }}
-                    style={({ pressed }) => [
-                      styles.actionButton,
-                      {
-                        backgroundColor: `${colors.primary}14`,
-                        borderColor: `${colors.primary}2E`,
-                        opacity: pressed ? 0.72 : 1,
-                      },
-                    ]}
-                  >
-                    <Ionicons name={actionIcon} size={14} color={colors.primary} />
-                    <Text style={[styles.actionText, { color: colors.primary }]} numberOfLines={1}>
-                      {actionLabel}
-                    </Text>
-                  </Pressable>
-                ) : null}
-              </View>
-            )}
+                  {actionLabel ? (
+                    <Pressable
+                      testID={actionTestID}
+                      accessibilityLabel={actionLabel}
+                      accessibilityRole="button"
+                      onPress={() => {
+                        onInteraction?.();
+                        onAction?.();
+                      }}
+                      style={({ pressed }) => [
+                        styles.actionButton,
+                        {
+                          opacity: pressed ? 0.72 : 1,
+                        },
+                      ]}
+                    >
+                      <Ionicons name={actionIcon} size={14} color={colors.primary} />
+                    </Pressable>
+                  ) : null}
+                </View>
+              )}
+            </Reanimated.View>
           </View>
           {sideActionIcon && onSideAction ? (
             <Pressable
@@ -216,8 +249,11 @@ export default function MapStatusCard({
                 styles.sideActionButton,
                 {
                   borderColor: getOverlayBorderColor(isDark, colors),
-                  backgroundColor: getOverlayFallbackColor(isDark, colors),
+                  backgroundColor: isAndroid
+                    ? colors.androidTabShellBackground
+                    : getOverlayFallbackColor(isDark, colors),
                   opacity: pressed ? 0.72 : 1,
+                  shadowColor: isAndroid ? colors.androidTabShellShadow : undefined,
                 },
               ]}
             >
@@ -266,18 +302,20 @@ const styles = StyleSheet.create({
     width: '100%',
     alignItems: 'center',
     justifyContent: 'center',
+    flexDirection: 'row',
+    gap: STATUS_SIDE_ACTION_GAP,
   },
   surface: {
     borderWidth: 1,
     borderRadius: mapOverlayTokens.overlayRadius,
     overflow: 'hidden',
-    paddingHorizontal: 10,
-    paddingVertical: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
     shadowColor: 'transparent',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0,
-    shadowRadius: 0,
-    elevation: 0,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: Platform.OS === 'android' ? 0.16 : 0,
+    shadowRadius: 22,
+    elevation: Platform.OS === 'android' ? 8 : 0,
   },
   pillSurface: {
     borderRadius: mapOverlayTokens.overlayRadius,
@@ -286,8 +324,6 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
   },
   sideActionButton: {
-    position: 'absolute',
-    right: 0,
     width: mapOverlayTokens.floatingButtonSize,
     height: mapOverlayTokens.floatingButtonSize,
     borderRadius: mapOverlayTokens.overlayRadius,
@@ -297,23 +333,21 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderColor: 'transparent',
     shadowColor: 'transparent',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0,
-    shadowRadius: 0,
-    elevation: 0,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: Platform.OS === 'android' ? 0.16 : 0,
+    shadowRadius: 22,
+    elevation: Platform.OS === 'android' ? 8 : 0,
   },
   contentRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 9,
+    gap: 8,
   },
   iconWrap: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
+    width: 22,
+    height: 22,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 1,
   },
   copyWrap: {
     flex: 1,
@@ -332,13 +366,13 @@ const styles = StyleSheet.create({
     fontFamily: 'Noto Sans',
   },
   actionButton: {
-    minHeight: 30,
-    paddingHorizontal: 10,
+    width: 30,
+    height: 30,
     borderRadius: 15,
-    borderWidth: 1,
+    borderWidth: 0,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    justifyContent: 'center',
     flexShrink: 0,
   },
   actionOnlyPill: {
@@ -347,11 +381,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 7,
-  },
-  actionText: {
-    fontSize: 12,
-    fontWeight: '700',
-    fontFamily: 'Noto Sans',
   },
   pillContent: {
     minHeight: 24,

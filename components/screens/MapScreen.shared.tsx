@@ -11,6 +11,7 @@ import {
   View,
 } from 'react-native';
 import Reanimated, {
+  interpolate,
   useAnimatedStyle,
   useSharedValue,
   withSpring,
@@ -32,7 +33,8 @@ import {
 } from '../map/overlayTokens';
 import { useAuth } from '../../hooks/useAuth';
 import type { MapClusterNode } from '../../hooks/map/mapDomain';
-import { getNearbyNoteItems, getRegionCenter, regionToZoom } from '../../hooks/map/mapDomain';
+import { getCoordinateItemsInRegion, getNearbyNoteItems, getRegionCenter, regionToZoom } from '../../hooks/map/mapDomain';
+import { useMapCameraController } from '../../hooks/map/useMapCameraController';
 import { useMapPreviewState } from '../../hooks/map/useMapPreviewState';
 import { useMapScreenState } from '../../hooks/map/useMapScreenState';
 import { useGeofence } from '../../hooks/useGeofence';
@@ -53,8 +55,9 @@ const RECENTER_BUTTON_ZOOM_DELTA = 0.012;
 const MARKER_FIRST_TAP_DELTA = 0.025;
 const MARKER_SECOND_TAP_DELTA = 0.012;
 const PROGRAMMATIC_REGION_TOLERANCE = 0.0005;
-const PREVIEW_FOCUS_REGION_GUARD_MS = 900;
 const HEAVY_MAP_WARMUP_DATASET_SIZE = 24;
+const ANDROID_LITE_MARKER_THRESHOLD = 120;
+const IOS_LITE_MARKER_THRESHOLD = 180;
 const NOTE_PREVIEW_REST_HEIGHT = 168;
 const NOTE_PREVIEW_EXPANDED_HEIGHT = 344;
 const FRIEND_PREVIEW_REST_HEIGHT = 152;
@@ -62,29 +65,12 @@ const FRIEND_PREVIEW_EXPANDED_HEIGHT = 332;
 const LOCATE_FAB_PREVIEW_GAP = 12;
 const LOCATE_FAB_BOTTOM_DEFAULT = 132;
 
-type MapRegionChangeDetails = {
-  isGesture?: boolean;
-};
-
 type OverlayState = 'content' | 'no-filter-results' | 'no-notes' | 'area-empty';
 
 type MapSaveTarget = {
   latitude: number;
   longitude: number;
 };
-
-function areRegionsClose(left: Region | null, right: Region) {
-  if (!left) {
-    return false;
-  }
-
-  return (
-    Math.abs(left.latitude - right.latitude) < PROGRAMMATIC_REGION_TOLERANCE &&
-    Math.abs(left.longitude - right.longitude) < PROGRAMMATIC_REGION_TOLERANCE &&
-    Math.abs(left.latitudeDelta - right.latitudeDelta) < PROGRAMMATIC_REGION_TOLERANCE &&
-    Math.abs(left.longitudeDelta - right.longitudeDelta) < PROGRAMMATIC_REGION_TOLERANCE
-  );
-}
 
 function isCoordinateCenteredInRegion(region: Region | null, latitude: number, longitude: number) {
   if (!region) {
@@ -131,14 +117,12 @@ export default function MapScreenIOS() {
   const [markerPulseKey, setMarkerPulseKey] = useState(0);
   const [mapUiReady, setMapUiReady] = useState(!shouldDeferMapWarmup);
   const [saveTarget, setSaveTarget] = useState<MapSaveTarget | null>(null);
-  const [settledRegion, setSettledRegion] = useState<Region | null>(null);
+  const [showFriendLayer, setShowFriendLayer] = useState(true);
   const hasAppliedInitialViewportRef = useRef(false);
   const hasCenteredOnLocationRef = useRef(false);
   const startedWithoutLocationRef = useRef(location == null);
   const markerPulseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const openFriendsPreviewTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const pendingProgrammaticRegionRef = useRef<Region | null>(null);
-  const nearbyPreviewFocusGuardUntilRef = useRef(0);
 
   useEffect(() => {
     if (!shouldDeferMapWarmup || mapUiReady) {
@@ -158,6 +142,7 @@ export default function MapScreenIOS() {
   const {
     filterState,
     setFilterType,
+    toggleFavoritesOnly,
     clearFilters,
     initialRegion,
     visibleRegion,
@@ -183,6 +168,16 @@ export default function MapScreenIOS() {
     location,
     enableHeavyCalculations: mapUiReady,
   });
+  const {
+    animateToRegion,
+    clearPreviewFocusGuard,
+    handleRegionChangeComplete,
+    settledRegion,
+  } = useMapCameraController({
+    mapRef,
+    setVisibleRegion,
+    setProgrammaticVisibleRegion,
+  });
 
   const previewBottomOffset =
     Platform.OS === 'android'
@@ -196,7 +191,7 @@ export default function MapScreenIOS() {
         .sort((left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime()),
     [sharedPosts, user?.uid]
   );
-  const friendMarkerPosts = useMemo(
+  const allFriendMarkerPosts = useMemo(
     () =>
       mapUiReady
         ? friendPosts.filter(
@@ -208,6 +203,14 @@ export default function MapScreenIOS() {
           )
         : [],
     [friendPosts, mapUiReady]
+  );
+  const markerViewportRegion = visibleRegion ?? settledRegion ?? initialRegion;
+  const friendMarkerPosts = useMemo(
+    () =>
+      showFriendLayer
+        ? getCoordinateItemsInRegion(allFriendMarkerPosts, markerViewportRegion, 1.6)
+        : [],
+    [allFriendMarkerPosts, markerViewportRegion, showFriendLayer]
   );
   const validPreviewNoteIds = useMemo(
     () => new Set(filteredNotes.map((note) => note.id)),
@@ -233,6 +236,13 @@ export default function MapScreenIOS() {
     friendPosts,
     validNoteIds: validPreviewNoteIds,
   });
+  useEffect(() => {
+    if (showFriendLayer) {
+      return;
+    }
+
+    clearFriendsPreview();
+  }, [clearFriendsPreview, showFriendLayer]);
   const noteById = useMemo(() => new Map(notes.map((note) => [note.id, note] as const)), [notes]);
   const currentZoom = visibleRegion ? regionToZoom(visibleRegion) : regionToZoom(initialRegion);
   const nearbyItemById = useMemo(
@@ -277,7 +287,7 @@ export default function MapScreenIOS() {
       ),
     [activeFriendPost, initialRegion, settledRegion]
   );
-  const friendsPreviewVisible = showFriendsPreview && friendPosts.length > 0;
+  const friendsPreviewVisible = showFriendLayer && showFriendsPreview && friendPosts.length > 0;
   const hasOwnNotes = notes.length > 0;
   const hasNotesInVisibleRegion = notesInVisibleRegion.length > 0;
   const areaPulseCount = notesInVisibleRegion.length || nearbyPreviewItems.length;
@@ -318,6 +328,35 @@ export default function MapScreenIOS() {
         : shouldShowAreaEmptyState
           ? 'area-empty'
         : 'content';
+  const activeFilterLabel = useMemo(() => {
+    const labels: string[] = [];
+
+    if (filterState.type === 'recent') {
+      labels.push(t('map.filterRecent', 'Recent'));
+    } else if (filterState.type === 'photo') {
+      labels.push(t('map.filterPhoto', 'Photos'));
+    } else if (filterState.type === 'text') {
+      labels.push(t('map.filterText', 'Text'));
+    } else if (filterState.type === 'recap') {
+      labels.push(t('map.filterRecap', 'Recap'));
+    }
+
+    if (filterState.favoritesOnly) {
+      labels.push(t('map.filterFavorites', 'Favorites'));
+    }
+
+    return labels.join(' + ');
+  }, [filterState.favoritesOnly, filterState.type, t]);
+  const filteredEmptySubtitle = activeFilterLabel
+    ? t(
+        'map.filteredEmptyWithContextSubtitle',
+        'Filter: {{filter}}',
+        { filter: activeFilterLabel }
+      )
+    : t(
+        'map.filteredEmptySubtitle',
+        'Try another filter combination or reset to view all notes'
+      );
   const overlayShowsNotesPreview =
     mapUiReady &&
     hasPreviewItems &&
@@ -353,11 +392,13 @@ export default function MapScreenIOS() {
     bottomOverlayKind === 'no-notes' ||
     bottomOverlayKind === 'area-empty';
   const notesPreviewVisible = bottomOverlayKind === 'preview';
+  const preferLiteMarkers =
+    clusterNodes.length + friendMarkerPosts.length >
+    (isAndroid ? ANDROID_LITE_MARKER_THRESHOLD : IOS_LITE_MARKER_THRESHOLD);
   const locateButtonInStatusRow =
     mapUiReady &&
     isStatusOverlay &&
-    !friendsPreviewVisible &&
-    bottomOverlayKind !== 'filtered-empty';
+    !friendsPreviewVisible;
   const locateFabRestingOffset =
     notesPreviewVisible
       ? NOTE_PREVIEW_REST_HEIGHT + LOCATE_FAB_PREVIEW_GAP
@@ -373,6 +414,7 @@ export default function MapScreenIOS() {
   const previewExpansionProgress = useSharedValue(0);
   const locateRestingOffset = useSharedValue(locateFabRestingOffset);
   const locateExpansionRange = useSharedValue(locateFabExpansionRange);
+  const mapEntranceProgress = useSharedValue(reduceMotionEnabled ? 1 : 0);
 
   useEffect(() => {
     locateRestingOffset.value = reduceMotionEnabled
@@ -400,6 +442,50 @@ export default function MapScreenIOS() {
     previewExpansionProgress,
     reduceMotionEnabled,
   ]);
+
+  useEffect(() => {
+    if (loading) {
+      mapEntranceProgress.value = reduceMotionEnabled ? 1 : 0;
+      return;
+    }
+
+    mapEntranceProgress.value = reduceMotionEnabled
+      ? 1
+      : withTiming(1, { duration: 360 });
+  }, [loading, mapEntranceProgress, reduceMotionEnabled]);
+
+  const mapCanvasAnimatedStyle = useAnimatedStyle(() => {
+    return {
+      opacity: interpolate(mapEntranceProgress.value, [0, 1], [0.86, 1]),
+      transform: [
+        {
+          scale: interpolate(mapEntranceProgress.value, [0, 1], [1.012, 1]),
+        },
+      ],
+    };
+  });
+
+  const topChromeAnimatedStyle = useAnimatedStyle(() => {
+    return {
+      opacity: mapEntranceProgress.value,
+      transform: [
+        {
+          translateY: interpolate(mapEntranceProgress.value, [0, 1], [-8, 0]),
+        },
+      ],
+    };
+  });
+
+  const floatingChromeAnimatedStyle = useAnimatedStyle(() => {
+    return {
+      opacity: mapEntranceProgress.value,
+      transform: [
+        {
+          scale: interpolate(mapEntranceProgress.value, [0, 1], [0.96, 1]),
+        },
+      ],
+    };
+  });
 
   const recenterFabAnimatedStyle = useAnimatedStyle(() => {
     return {
@@ -431,45 +517,6 @@ export default function MapScreenIOS() {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   }, []);
 
-  const updateProgrammaticRegion = useCallback(
-    (region: Region, options?: { freezeNearbyPreviewSession?: boolean }) => {
-      pendingProgrammaticRegionRef.current = region;
-      if (options?.freezeNearbyPreviewSession) {
-        nearbyPreviewFocusGuardUntilRef.current = Date.now() + PREVIEW_FOCUS_REGION_GUARD_MS;
-      }
-      setProgrammaticVisibleRegion(region);
-    },
-    [setProgrammaticVisibleRegion]
-  );
-
-  const animateToRegion = useCallback(
-    (region: Region, duration: number, options?: { freezeNearbyPreviewSession?: boolean }) => {
-      updateProgrammaticRegion(region, options);
-      mapRef.current?.animateToRegion(region, duration);
-    },
-    [updateProgrammaticRegion]
-  );
-
-  const handleRegionChangeComplete = useCallback(
-    (region: Region, details?: MapRegionChangeDetails) => {
-      setSettledRegion(region);
-      const isGoogleMapsGesture = details?.isGesture;
-      const isInsidePreviewFocusGuard = Date.now() <= nearbyPreviewFocusGuardUntilRef.current;
-      const matchesPendingProgrammaticRegion = areRegionsClose(pendingProgrammaticRegionRef.current, region);
-
-      if (isGoogleMapsGesture === false || matchesPendingProgrammaticRegion || isInsidePreviewFocusGuard) {
-        pendingProgrammaticRegionRef.current = null;
-        setProgrammaticVisibleRegion(region);
-        return;
-      }
-
-      nearbyPreviewFocusGuardUntilRef.current = 0;
-      pendingProgrammaticRegionRef.current = null;
-      setVisibleRegion(region);
-    },
-    [setProgrammaticVisibleRegion, setVisibleRegion]
-  );
-
   const triggerMarkerPulse = useCallback(
     (nextMarkerId: string) => {
       if (markerPulseTimerRef.current) {
@@ -499,23 +546,23 @@ export default function MapScreenIOS() {
   );
 
   const handleMapCanvasPress = useCallback(() => {
-    nearbyPreviewFocusGuardUntilRef.current = 0;
+    clearPreviewFocusGuard();
     setSaveTarget(null);
     resetToNearbyPreview();
     clearFriendsPreview();
     handleMapPress();
-  }, [clearFriendsPreview, handleMapPress, resetToNearbyPreview]);
+  }, [clearFriendsPreview, clearPreviewFocusGuard, handleMapPress, resetToNearbyPreview]);
 
   const handleMapCanvasLongPress = useCallback(
     (coordinate: MapSaveTarget) => {
-      nearbyPreviewFocusGuardUntilRef.current = 0;
+      clearPreviewFocusGuard();
       setSaveTarget(coordinate);
       resetToNearbyPreview();
       clearFriendsPreview();
       clearSelection();
       emitLightHaptic();
     },
-    [clearFriendsPreview, clearSelection, emitLightHaptic, resetToNearbyPreview]
+    [clearFriendsPreview, clearPreviewFocusGuard, clearSelection, emitLightHaptic, resetToNearbyPreview]
   );
 
   const handleSaveAtTarget = useCallback(() => {
@@ -535,20 +582,33 @@ export default function MapScreenIOS() {
 
   const handleChangeFilterType = useCallback(
     (nextType: Parameters<typeof setFilterType>[0]) => {
-      nearbyPreviewFocusGuardUntilRef.current = 0;
+      clearPreviewFocusGuard();
       setSaveTarget(null);
       revealNotesPreview({ resetToNearby: true });
       setFilterType(nextType);
     },
-    [revealNotesPreview, setFilterType]
+    [clearPreviewFocusGuard, revealNotesPreview, setFilterType]
   );
 
   const handleClearActiveFilters = useCallback(() => {
-    nearbyPreviewFocusGuardUntilRef.current = 0;
+    clearPreviewFocusGuard();
     setSaveTarget(null);
     revealNotesPreview({ resetToNearby: true });
     clearFilters();
-  }, [clearFilters, revealNotesPreview]);
+  }, [clearFilters, clearPreviewFocusGuard, revealNotesPreview]);
+
+  const handleToggleFavorites = useCallback(() => {
+    clearPreviewFocusGuard();
+    setSaveTarget(null);
+    revealNotesPreview({ resetToNearby: true });
+    toggleFavoritesOnly();
+  }, [clearPreviewFocusGuard, revealNotesPreview, toggleFavoritesOnly]);
+
+  const handleToggleFriendLayer = useCallback(() => {
+    clearPreviewFocusGuard();
+    setSaveTarget(null);
+    setShowFriendLayer((current) => !current);
+  }, [clearPreviewFocusGuard]);
 
   const goToMyLocation = useCallback(async () => {
     setSaveTarget(null);
@@ -684,7 +744,7 @@ export default function MapScreenIOS() {
 
   const handleClusterPress = useCallback(
     (node: MapClusterNode) => {
-      nearbyPreviewFocusGuardUntilRef.current = 0;
+      clearPreviewFocusGuard();
       setSaveTarget(null);
       resetToNearbyPreview();
       revealNotesPreview();
@@ -713,6 +773,7 @@ export default function MapScreenIOS() {
     },
     [
       animateToRegion,
+      clearPreviewFocusGuard,
       emitLightHaptic,
       handleClusterMarkerPress,
       initialRegion,
@@ -762,7 +823,7 @@ export default function MapScreenIOS() {
 
   const handleLeafPress = useCallback(
     (groupId: string) => {
-      nearbyPreviewFocusGuardUntilRef.current = 0;
+      clearPreviewFocusGuard();
       setSaveTarget(null);
       resetToNearbyPreview();
       closeFriendsPreview();
@@ -782,6 +843,7 @@ export default function MapScreenIOS() {
     },
     [
       closeFriendsPreview,
+      clearPreviewFocusGuard,
       emitLightHaptic,
       handleLeafMarkerPress,
       notesPreviewVisibility,
@@ -796,7 +858,7 @@ export default function MapScreenIOS() {
 
   const handleSeparatedNotePress = useCallback(
     (noteId: string) => {
-      nearbyPreviewFocusGuardUntilRef.current = 0;
+      clearPreviewFocusGuard();
       setSaveTarget(null);
       resetToNearbyPreview();
       closeFriendsPreview();
@@ -816,6 +878,7 @@ export default function MapScreenIOS() {
     },
     [
       closeFriendsPreview,
+      clearPreviewFocusGuard,
       emitLightHaptic,
       noteById,
       notesPreviewVisibility,
@@ -901,12 +964,12 @@ export default function MapScreenIOS() {
   }, [activePreviewNoteId, handleActivatePreviewNote]);
 
   const handleDismissNotesPreview = useCallback(() => {
-    nearbyPreviewFocusGuardUntilRef.current = 0;
+    clearPreviewFocusGuard();
     emitLightHaptic();
     resetToNearbyPreview();
     clearSelection();
     collapseNotesPreview();
-  }, [clearSelection, collapseNotesPreview, emitLightHaptic, resetToNearbyPreview]);
+  }, [clearPreviewFocusGuard, clearSelection, collapseNotesPreview, emitLightHaptic, resetToNearbyPreview]);
 
   const handleDismissFriendsPreview = useCallback(() => {
     emitLightHaptic();
@@ -915,10 +978,10 @@ export default function MapScreenIOS() {
 
   const focusFriendPost = useCallback(
     (postId: string, options?: { animate?: boolean; openPreview?: boolean }) => {
-      nearbyPreviewFocusGuardUntilRef.current = 0;
+      clearPreviewFocusGuard();
       setSaveTarget(null);
       const targetPost =
-        friendMarkerPosts.find((post) => post.id === postId) ??
+        allFriendMarkerPosts.find((post) => post.id === postId) ??
         friendPosts.find((post) => post.id === postId);
       if (!targetPost) {
         return;
@@ -964,7 +1027,8 @@ export default function MapScreenIOS() {
     },
     [
       animateToRegion,
-      friendMarkerPosts,
+      allFriendMarkerPosts,
+      clearPreviewFocusGuard,
       friendPosts,
       initialRegion,
       openFriendsPreview,
@@ -1027,7 +1091,7 @@ export default function MapScreenIOS() {
         latitude: note.latitude,
         longitude: note.longitude,
       })),
-      ...friendMarkerPosts.map((post) => ({
+      ...(showFriendLayer ? allFriendMarkerPosts : []).map((post) => ({
         latitude: post.latitude,
         longitude: post.longitude,
       })),
@@ -1101,12 +1165,13 @@ export default function MapScreenIOS() {
     hasCenteredOnLocationRef.current = true;
   }, [
     animateToRegion,
-    friendMarkerPosts,
+    allFriendMarkerPosts,
     initialRegion,
     isMapReady,
     location,
     mapUiReady,
     notes,
+    showFriendLayer,
     settledRegion,
     visibleRegion,
   ]);
@@ -1123,47 +1188,56 @@ export default function MapScreenIOS() {
     <View style={styles.container}>
       {/* Prevent native tabs from auto-adjusting MapKit's internal scroll view on iOS. */}
       <View pointerEvents="none" style={styles.scrollInsetGuard} />
-      <MapCanvas
-        mapRef={mapRef}
-        initialRegion={initialRegion}
-        isDark={isDark}
-        currentZoom={currentZoom}
-        markerNodes={clusterNodes}
-        friendMarkers={friendMarkerPosts}
-        noteById={noteById}
-        selectedGroupId={selectedGroupId}
-        selectedNote={selectedNote}
-        selectedFriendPostId={activeFriendPostId}
-        markerPulseId={markerPulseId}
-        markerPulseKey={markerPulseKey}
-        saveTargetCoordinate={saveTarget}
-        trailCoordinates={recapTrailCoordinates}
-        reduceMotionEnabled={reduceMotionEnabled}
-        onMapPress={handleMapCanvasPress}
-        onMapLongPress={handleMapCanvasLongPress}
-        onMapReady={() => {
-          setIsMapReady(true);
-        }}
-        onRegionChangeComplete={handleRegionChangeComplete}
-        onLeafPress={handleLeafPress}
-        onNotePress={handleSeparatedNotePress}
-        onClusterPress={handleClusterPress}
-        onFriendPress={handleFriendMarkerPress}
-        colors={colors}
-      />
+      <Reanimated.View style={[StyleSheet.absoluteFill, mapCanvasAnimatedStyle]}>
+        <MapCanvas
+          mapRef={mapRef}
+          initialRegion={initialRegion}
+          isDark={isDark}
+          currentZoom={currentZoom}
+          markerNodes={clusterNodes}
+          friendMarkers={friendMarkerPosts}
+          noteById={noteById}
+          selectedGroupId={selectedGroupId}
+          selectedNote={selectedNote}
+          selectedFriendPostId={activeFriendPostId}
+          markerPulseId={markerPulseId}
+          markerPulseKey={markerPulseKey}
+          saveTargetCoordinate={saveTarget}
+          trailCoordinates={recapTrailCoordinates}
+          reduceMotionEnabled={reduceMotionEnabled}
+          onMapPress={handleMapCanvasPress}
+          onMapLongPress={handleMapCanvasLongPress}
+          onMapReady={() => {
+            setIsMapReady(true);
+          }}
+          onRegionChangeComplete={handleRegionChangeComplete}
+          onLeafPress={handleLeafPress}
+          onNotePress={handleSeparatedNotePress}
+          onClusterPress={handleClusterPress}
+          onFriendPress={handleFriendMarkerPress}
+          preferLiteMarkers={preferLiteMarkers}
+          colors={colors}
+        />
+      </Reanimated.View>
 
-      <View style={[styles.topHeader, { top: insets.top + 8 }]} pointerEvents="box-none">
+      <Reanimated.View
+        style={[styles.topHeader, { top: insets.top + 8 }, topChromeAnimatedStyle]}
+        pointerEvents="box-none"
+      >
         <MapFilterBar
           filterState={filterState}
           onChangeType={handleChangeFilterType}
+          onToggleFavorites={handleToggleFavorites}
+          friendLayerVisible={showFriendLayer}
+          onToggleFriendLayer={handleToggleFriendLayer}
           onInteraction={emitLightHaptic}
         />
-      </View>
+      </Reanimated.View>
 
       {!locateButtonInStatusRow ? (
         <Reanimated.View
           testID="map-recenter-wrapper"
-          style={[styles.fabContainer, recenterFabAnimatedStyle]}
+          style={[styles.fabContainer, recenterFabAnimatedStyle, floatingChromeAnimatedStyle]}
         >
           <Pressable
             accessibilityHint={t('map.recenterHint', 'Center the map on your current location')}
@@ -1255,17 +1329,16 @@ export default function MapScreenIOS() {
           }
           subtitle={
             bottomOverlayKind === 'filtered-empty'
-              ? t(
-                  'map.filteredEmptySubtitle',
-                  'Try another filter combination or reset to view all notes'
-                )
+              ? filteredEmptySubtitle
               : undefined
           }
           icon={
             bottomOverlayKind === 'no-notes'
-              ? 'pin-outline'
+              ? 'map-outline'
               : bottomOverlayKind === 'filtered-empty'
-                ? 'filter-outline'
+                ? filterState.favoritesOnly
+                  ? 'heart-outline'
+                  : 'search-outline'
                 : bottomOverlayKind === 'area-empty'
                   ? 'compass-outline'
                 : 'albums-outline'

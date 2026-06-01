@@ -99,15 +99,23 @@ jest.mock('react-native-safe-area-context', () => ({
 
 jest.mock('react-i18next', () => ({
   useTranslation: () => ({
-    t: (_key: string, fallbackOrOptions?: string | Record<string, unknown>) => {
+    t: (
+      _key: string,
+      fallbackOrOptions?: string | Record<string, unknown>,
+      interpolationOptions?: Record<string, unknown>
+    ) => {
       if (typeof fallbackOrOptions === 'string') {
-        return fallbackOrOptions;
+        return fallbackOrOptions
+          .replace(/\{\{count\}\}/g, String(interpolationOptions?.count ?? ''))
+          .replace(/\{\{filter\}\}/g, String(interpolationOptions?.filter ?? '{{filter}}'));
       }
 
       if (fallbackOrOptions && typeof fallbackOrOptions === 'object') {
         const defaultValue =
           typeof fallbackOrOptions.defaultValue === 'string' ? fallbackOrOptions.defaultValue : _key;
-        return defaultValue.replace(/\{\{count\}\}/g, String(fallbackOrOptions.count ?? ''));
+        return defaultValue
+          .replace(/\{\{count\}\}/g, String(fallbackOrOptions.count ?? ''))
+          .replace(/\{\{filter\}\}/g, String(fallbackOrOptions.filter ?? '{{filter}}'));
       }
 
       return _key;
@@ -347,7 +355,7 @@ describe('MapScreen', () => {
 
     await waitFor(() => {
       expect(getByText('No notes match these filters')).toBeTruthy();
-      expect(getByText('Try another filter combination or reset to view all notes')).toBeTruthy();
+      expect(getByText('Filter: Recent')).toBeTruthy();
       expect(getByTestId('map-top-header')).toBeTruthy();
       expect(getByTestId('map-overlay-host')).toBeTruthy();
     });
@@ -1056,6 +1064,23 @@ describe('MapScreen', () => {
     await waitFor(() => {
       expect(queryByTestId('map-preview-item-photo-1')).toBeNull();
       expect(getByTestId('map-clear-filters')).toBeTruthy();
+    });
+  });
+
+  it('filters markers and preview items with the favorites toggle', async () => {
+    const { getByTestId, queryByTestId } = render(<MapScreen />);
+
+    await waitFor(() => {
+      expect(getByTestId('map-preview-item-text-1')).toBeTruthy();
+      expect(getByTestId('map-preview-item-photo-1')).toBeTruthy();
+    });
+
+    fireEvent.press(getByTestId('map-filter-favorites'));
+
+    await waitFor(() => {
+      expect(getByTestId('map-preview-item-text-1')).toBeTruthy();
+      expect(queryByTestId('map-preview-item-photo-1')).toBeNull();
+      expect(queryByTestId('leaf-marker-10.80000:106.70000')).toBeNull();
     });
   });
 
@@ -1889,6 +1914,59 @@ describe('MapScreen', () => {
     await waitFor(() => {
       expect(getByTestId('map-friends-preview-shell')).toBeTruthy();
       expect(getByTestId('map-friends-preview-item-shared-friend-1')).toBeTruthy();
+    });
+  });
+
+  it('hides friend markers and closes friend preview when the friends layer is toggled off', async () => {
+    const { getAllByTestId, getByTestId, queryByTestId } = render(<MapScreen />);
+
+    fireEvent.press(getByTestId('friend-marker-shared-friend-1'));
+
+    await waitFor(() => {
+      expect(getByTestId('map-friends-preview-shell')).toBeTruthy();
+      expect(getByTestId('shared-post-callout-shared-friend-1')).toBeTruthy();
+    });
+
+    fireEvent.press(getByTestId('map-layer-friends'));
+
+    await waitFor(() => {
+      expect(queryByTestId('map-friends-preview-shell')).toBeNull();
+      expect(queryByTestId('shared-post-callout-shared-friend-1')).toBeNull();
+      expect(queryByTestId('friend-marker-shared-friend-1')).toBeNull();
+      expect(getAllByTestId(/leaf-marker-/).length).toBeGreaterThan(0);
+    });
+  });
+
+  it('uses lite friend markers on dense Android maps', async () => {
+    setPlatformOS('android');
+    replaceMockNotes([]);
+    mockSharedPosts.splice(
+      0,
+      mockSharedPosts.length,
+      ...Array.from({ length: 130 }, (_, index) => ({
+        id: `dense-friend-${index}`,
+        authorUid: `friend-${index}`,
+        authorDisplayName: `Friend ${index}`,
+        authorPhotoURLSnapshot: null,
+        audienceUserIds: ['me'],
+        type: 'text' as const,
+        text: `Dense shared memory ${index}`,
+        photoPath: null,
+        photoLocalUri: null,
+        doodleStrokesJson: null,
+        placeName: 'Dense District',
+        sourceNoteId: null,
+        latitude: 10.7605 + (index % 13) * 0.00025,
+        longitude: 106.6605 + Math.floor(index / 13) * 0.00025,
+        createdAt: '2026-03-12T00:00:00.000Z',
+        updatedAt: null,
+      }))
+    );
+
+    const { getByTestId } = render(<MapScreen />);
+
+    await waitFor(() => {
+      expect(getByTestId('friend-marker-dense-friend-0').props.pinColor).toBeTruthy();
     });
   });
 

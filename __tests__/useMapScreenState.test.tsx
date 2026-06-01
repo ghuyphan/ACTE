@@ -54,6 +54,42 @@ describe('useMapScreenState', () => {
     });
   });
 
+  it('filters to favorites and clears a selected note when favorites hide it', async () => {
+    const notes = [
+      makeNote({ id: 'favorite', isFavorite: true, latitude: 10.76, longitude: 106.66 }),
+      makeNote({ id: 'regular', isFavorite: false, latitude: 10.8, longitude: 106.7 }),
+    ];
+
+    const { result } = renderHook(() =>
+      useMapScreenState({
+        notes,
+        location: null,
+      })
+    );
+
+    const regularGroup = Array.from(result.current.pointGroupMap.values()).find((group) =>
+      group.notes.some((note) => note.id === 'regular')
+    );
+
+    expect(regularGroup).toBeTruthy();
+
+    act(() => {
+      result.current.handleLeafMarkerPress(regularGroup!.id);
+    });
+
+    expect(result.current.selectedNote?.id).toBe('regular');
+
+    act(() => {
+      result.current.toggleFavoritesOnly();
+    });
+
+    await waitFor(() => {
+      expect(result.current.filteredNotes.map((note) => note.id)).toEqual(['favorite']);
+      expect(result.current.selectedNote).toBeNull();
+      expect(result.current.selectedGroup).toBeNull();
+    });
+  });
+
   it('updates nearby rail candidates when viewport changes', async () => {
     const notes = [
       makeNote({ id: 'near', latitude: 10.7601, longitude: 106.6601 }),

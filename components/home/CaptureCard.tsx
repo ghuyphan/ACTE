@@ -108,7 +108,7 @@ import {
 
 const DEFAULT_CAPTURE_TEXT_PLACEHOLDERS = [
   'Note about this place...',
-  'Leave a tiny clue for future you...',
+  'Leave a note for your future self...',
   'What should you remember here?',
   'Write one quick thing before it escapes...',
   'Anything here worth saving for later?',

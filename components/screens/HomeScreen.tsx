@@ -1682,7 +1682,7 @@ export default function HomeScreen() {
     if (shouldShowMemoryPrompt) {
       return (
         <PlacePulseStrip
-          iconName="sparkles-outline"
+          iconName="create-outline"
           label={memoryPromptText}
           accessibilityLabel={t('capture.memoryPromptA11y', 'Suggested memory prompt: {{prompt}}', {
             prompt: memoryPromptText,

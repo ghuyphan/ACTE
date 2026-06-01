@@ -6,6 +6,7 @@ import {
   buildMapViewportState,
   buildClusterIndex,
   buildMapPointGroups,
+  getCoordinateItemsInRegion,
   getMapClusterNodes,
   getNearbyNoteItems,
   getPointGroupMap,
@@ -109,5 +110,21 @@ describe('mapDomain', () => {
     });
 
     expect(viewport.nearbyItems.map((item) => item.note.id)).toEqual(['in-view', 'also-in-view']);
+  });
+
+  it('filters coordinate items to the active region', () => {
+    const region: Region = {
+      latitude: 10.76,
+      longitude: 106.66,
+      latitudeDelta: 0.02,
+      longitudeDelta: 0.02,
+    };
+
+    const items = [
+      { id: 'visible', latitude: 10.761, longitude: 106.661 },
+      { id: 'outside', latitude: 10.9, longitude: 106.9 },
+    ];
+
+    expect(getCoordinateItemsInRegion(items, region).map((item) => item.id)).toEqual(['visible']);
   });
 });

@@ -383,6 +383,14 @@ export function getDistanceMeters(from: CoordinatePoint, to: CoordinatePoint): n
 }
 
 export function getNotesInRegion(notes: Note[], region: Region, scale = 1.35): Note[] {
+  return getCoordinateItemsInRegion(notes, region, scale);
+}
+
+export function getCoordinateItemsInRegion<T extends CoordinatePoint>(
+  items: T[],
+  region: Region,
+  scale = 1.35
+): T[] {
   const latPad = region.latitudeDelta * scale;
   const lonPad = region.longitudeDelta * scale;
   const minLat = region.latitude - latPad / 2;
@@ -390,11 +398,11 @@ export function getNotesInRegion(notes: Note[], region: Region, scale = 1.35): N
   const minLon = region.longitude - lonPad / 2;
   const maxLon = region.longitude + lonPad / 2;
 
-  return notes.filter((note) =>
-    note.latitude >= minLat &&
-    note.latitude <= maxLat &&
-    note.longitude >= minLon &&
-    note.longitude <= maxLon
+  return items.filter((item) =>
+    item.latitude >= minLat &&
+    item.latitude <= maxLat &&
+    item.longitude >= minLon &&
+    item.longitude <= maxLon
   );
 }
 
