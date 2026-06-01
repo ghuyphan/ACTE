@@ -199,6 +199,36 @@ describe('useGeofence', () => {
     });
   });
 
+  it('requests foreground location when place reminders are disabled', async () => {
+    const location = {
+      coords: { latitude: 10.7626, longitude: 106.6601 },
+      timestamp: Date.now(),
+    };
+    mockArePlaceRemindersEnabled.mockReturnValue(false);
+    mockGetForegroundPermissionsAsync.mockResolvedValue({ status: 'denied', canAskAgain: true });
+    mockRequestForegroundPermissionsAsync.mockResolvedValue({ status: 'granted', canAskAgain: true });
+    mockGetCurrentPositionAsync.mockResolvedValue(location);
+
+    const { result, unmount } = renderHook(() => useGeofence());
+
+    await act(async () => {
+      const response = await result.current.requestForegroundLocation();
+      expect(response).toEqual({
+        location,
+        requiresSettings: false,
+        reason: null,
+      });
+    });
+
+    expect(mockRequestForegroundPermissionsAsync).toHaveBeenCalledTimes(1);
+    expect(mockGetCurrentPositionAsync).toHaveBeenCalled();
+    await waitFor(() => {
+      expect(result.current.hasLocationPermission).toBe(true);
+    });
+    expect(result.current.remindersEnabled).toBe(false);
+    unmount();
+  });
+
   it('falls back to the last known position when a fresh GPS fix is unavailable', async () => {
     const location = {
       coords: { latitude: 10.7626, longitude: 106.6601 },
@@ -229,6 +259,10 @@ describe('useGeofence', () => {
       timestamp: Date.now(),
     };
     mockGetForegroundPermissionsAsync.mockResolvedValue({ status: 'granted', canAskAgain: true });
+    mockGetReminderPermissionState.mockResolvedValue({
+      foregroundGranted: true,
+      remindersEnabled: false,
+    });
     mockGetLastKnownPositionAsync.mockResolvedValue(staleLocation);
     mockGetCurrentPositionAsync.mockResolvedValue(currentLocation);
 

@@ -1,5 +1,6 @@
 import React from 'react';
 import { act, render, waitFor } from '@testing-library/react-native';
+import { Keyboard, Platform, StyleSheet } from 'react-native';
 import SharedPostChatScreen from '../components/screens/shared/SharedPostChatScreen';
 
 const mockGetSharedChatThreadPost = jest.fn();
@@ -367,5 +368,70 @@ describe('SharedPostChatScreen', () => {
       await Promise.resolve();
     });
     unmount();
+  });
+
+  it('lifts the composer above the Android keyboard', async () => {
+    const originalPlatform = Platform.OS;
+    Platform.OS = 'android';
+    const keyboardListeners = new Map<string, (event: any) => void>();
+    const addListenerSpy = jest
+      .spyOn(Keyboard, 'addListener')
+      .mockImplementation((eventName: any, listener: any) => {
+        keyboardListeners.set(eventName, listener);
+        return {
+          remove: jest.fn(() => {
+            keyboardListeners.delete(eventName);
+          }),
+        } as any;
+      });
+
+    try {
+      const { getByTestId, unmount } = render(
+        <SharedPostChatScreen
+          directFriendUid="friend-1"
+          postId="direct-chat-1"
+        />
+      );
+
+      await waitFor(() => {
+        expect(keyboardListeners.has('keyboardDidShow')).toBe(true);
+      });
+
+      await act(async () => {
+        keyboardListeners.get('keyboardDidShow')?.({
+          endCoordinates: {
+            height: 312,
+            screenY: 488,
+          },
+        });
+      });
+
+      expect(
+        StyleSheet.flatten(getByTestId('shared-chat-composer-shell').props.style)
+      ).toMatchObject({
+        bottom: 326,
+        paddingBottom: 6,
+      });
+
+      await act(async () => {
+        keyboardListeners.get('keyboardDidHide')?.({
+          endCoordinates: {
+            height: 0,
+            screenY: 800,
+          },
+        });
+      });
+
+      expect(
+        StyleSheet.flatten(getByTestId('shared-chat-composer-shell').props.style)
+      ).toMatchObject({
+        bottom: 0,
+      });
+
+      unmount();
+    } finally {
+      addListenerSpy.mockRestore();
+      Platform.OS = originalPlatform;
+    }
   });
 });

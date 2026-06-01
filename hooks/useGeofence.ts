@@ -203,11 +203,15 @@ export function useGeofence() {
 
     const refreshPermissions = useCallback(async () => {
         if (!arePlaceRemindersEnabled()) {
-            commitHasLocationPermission(false);
+            const foregroundStatus = await Location.getForegroundPermissionsAsync();
+            const foregroundGranted = foregroundStatus.status === 'granted';
+            commitHasLocationPermission(foregroundGranted);
             commitRemindersEnabled(false);
-            clearLocation();
+            if (!foregroundGranted) {
+                clearLocation();
+            }
             return {
-                foregroundGranted: false,
+                foregroundGranted,
                 remindersEnabled: false,
             };
         }
@@ -392,15 +396,6 @@ export function useGeofence() {
     }, [refreshLocation, refreshPermissions]);
 
     const requestForegroundPermission = useCallback(async (): Promise<ForegroundPermissionRequestResult> => {
-        if (!arePlaceRemindersEnabled()) {
-            commitHasLocationPermission(false);
-            commitRemindersEnabled(false);
-            return {
-                granted: false,
-                requiresSettings: false,
-            };
-        }
-
         let foregroundStatus = await Location.getForegroundPermissionsAsync();
         if (foregroundStatus.status !== 'granted' && foregroundStatus.canAskAgain !== false) {
             foregroundStatus = await Location.requestForegroundPermissionsAsync();

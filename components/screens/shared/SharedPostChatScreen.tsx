@@ -131,7 +131,7 @@ const RESPONSE_SKELETON_ROWS = [
 const QUICK_RESPONSES = ['💛', '🥹', '✨', '😂'] as const;
 const RESPONSE_PAGE_SIZE = 24;
 const INFO_MESSAGE_VISIBLE_MS = 1800;
-const COMPOSER_KEYBOARD_GAP = 4;
+const COMPOSER_KEYBOARD_GAP = 14;
 const COMPACT_REACTION_TRAY_WIDTH = 196;
 const TYPING_IDLE_HIDE_MS = 1500;
 const TYPING_REFRESH_MS = 900;
@@ -145,6 +145,17 @@ function scheduleKeyboardLayout(event: KeyboardEvent) {
   if (Platform.OS === 'ios') {
     Keyboard.scheduleLayoutAnimation(event);
   }
+}
+
+function getKeyboardHeightFromEvent(event: KeyboardEvent, screenHeight: number) {
+  if (Platform.OS === 'ios') {
+    return Math.max(0, screenHeight - event.endCoordinates.screenY);
+  }
+
+  return Math.max(
+    0,
+    event.endCoordinates.height ?? screenHeight - event.endCoordinates.screenY
+  );
 }
 
 function ResponseSkeletonRows({
@@ -2022,11 +2033,7 @@ export default function SharedPostChatScreen({
       Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
       (event) => {
         scheduleKeyboardLayout(event);
-        setKeyboardHeight(
-          Platform.OS === 'ios'
-            ? Math.max(0, screenHeight - event.endCoordinates.screenY)
-            : 0
-        );
+        setKeyboardHeight(getKeyboardHeightFromEvent(event, screenHeight));
         if (Platform.OS === 'ios' && composerFocusedRef.current) {
           settleThreadEndIfVisible();
         }
@@ -2063,7 +2070,7 @@ export default function SharedPostChatScreen({
   const isKeyboardVisible = keyboardHeight > 0;
   const composerKeyboardOffset = Math.max(
     0,
-    Platform.OS === 'ios' && isKeyboardVisible ? keyboardHeight + COMPOSER_KEYBOARD_GAP : 0
+    isKeyboardVisible ? keyboardHeight + COMPOSER_KEYBOARD_GAP : 0
   );
   const contentBottomPadding =
     composerHeight +
@@ -2920,6 +2927,7 @@ export default function SharedPostChatScreen({
             ) : null}
 
             <View
+              testID="shared-chat-composer-shell"
               onLayout={handleComposerLayout}
               style={[
                 styles.composerShell,
