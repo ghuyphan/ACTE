@@ -66,6 +66,7 @@ interface MapFriendsPreviewCardProps {
   onInteraction?: () => void;
   reduceMotionEnabled: boolean;
   externalExpansionProgress?: SharedValue<number>;
+  skipExitAnimation?: boolean;
 }
 
 export default function MapFriendsPreviewCard({
@@ -80,6 +81,7 @@ export default function MapFriendsPreviewCard({
   onInteraction,
   reduceMotionEnabled,
   externalExpansionProgress,
+  skipExitAnimation = false,
 }: MapFriendsPreviewCardProps) {
   const { t } = useTranslation();
   const { colors, isDark } = useTheme();
@@ -218,6 +220,7 @@ export default function MapFriendsPreviewCard({
       bottomOffset={bottomOffset}
       onDismiss={onDismiss}
       reduceMotionEnabled={reduceMotionEnabled}
+      skipExitAnimation={skipExitAnimation}
       allowHandlePress={false}
       allowDismiss
       allowDragDismiss

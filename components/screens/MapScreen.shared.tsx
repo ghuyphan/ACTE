@@ -1313,6 +1313,7 @@ export default function MapScreenIOS() {
           onInteraction={emitLightHaptic}
           reduceMotionEnabled={reduceMotionEnabled}
           externalExpansionProgress={previewExpansionProgress}
+          skipExitAnimation
         />
       ) : null}
 
@@ -1362,7 +1363,7 @@ export default function MapScreenIOS() {
               : bottomOverlayKind === 'area-empty'
                 ? 'scan-outline'
               : bottomOverlayKind === 'collapsed'
-                ? 'pulse-outline'
+                ? 'albums-outline'
                 : undefined
           }
           actionTestID={
@@ -1409,6 +1410,7 @@ export default function MapScreenIOS() {
           onSideAction={locateButtonInStatusRow ? goToMyLocation : undefined}
           onInteraction={emitLightHaptic}
           reduceMotionEnabled={reduceMotionEnabled}
+          skipExitAnimation
         />
       ) : null}
 
@@ -1425,6 +1427,7 @@ export default function MapScreenIOS() {
           onInteraction={emitLightHaptic}
           reduceMotionEnabled={reduceMotionEnabled}
           externalExpansionProgress={previewExpansionProgress}
+          skipExitAnimation
         />
       ) : null}
 

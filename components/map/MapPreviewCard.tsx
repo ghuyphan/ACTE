@@ -54,6 +54,7 @@ interface MapPreviewCardProps {
   onInteraction?: () => void;
   reduceMotionEnabled: boolean;
   externalExpansionProgress?: SharedValue<number>;
+  skipExitAnimation?: boolean;
 }
 
 interface PreviewRailItem {
@@ -90,6 +91,7 @@ export default function MapPreviewCard({
   onInteraction,
   reduceMotionEnabled,
   externalExpansionProgress,
+  skipExitAnimation = false,
 }: MapPreviewCardProps) {
   const { t } = useTranslation();
   const { colors, isDark } = useTheme();
@@ -306,6 +308,7 @@ export default function MapPreviewCard({
       bottomOffset={bottomOffset}
       onDismiss={onDismiss}
       reduceMotionEnabled={reduceMotionEnabled}
+      skipExitAnimation={skipExitAnimation}
       allowHandlePress={false}
       allowDismiss
       allowDragDismiss

@@ -26,6 +26,24 @@ const CONTROL_SIZE = 36;
 const PRIMARY_CONTROL_WIDTH = 72;
 const CONTROL_GAP = 2;
 const CONTENT_INSET = 5;
+const PRIMARY_FILTER_TYPES: MapFilterType[] = ['all', 'recent', 'photo'];
+const ACTIVE_CAPSULE_SPRING = {
+  damping: 20,
+  mass: 0.76,
+  overshootClamping: true,
+  stiffness: 240,
+} as const;
+const ACTIVE_CAPSULE_SETTLE_SPRING = {
+  damping: 16,
+  mass: 0.7,
+  overshootClamping: true,
+  stiffness: 260,
+} as const;
+
+function getPrimaryFilterIndex(type: MapFilterType) {
+  const index = PRIMARY_FILTER_TYPES.indexOf(type);
+  return index === -1 ? 0 : index;
+}
 
 interface MapFilterBarProps {
   filterState: MapFilterState;
@@ -178,8 +196,7 @@ export default function MapFilterBar({
       t,
     ]
   );
-  const activeChipIndex =
-    filterState.type === 'recent' ? 1 : filterState.type === 'photo' ? 2 : 0;
+  const activeChipIndex = getPrimaryFilterIndex(filterState.type);
   const activeCapsuleX = useSharedValue(activeChipIndex * (PRIMARY_CONTROL_WIDTH + CONTROL_GAP));
   const activeCapsuleScale = useSharedValue(1);
 
@@ -193,20 +210,10 @@ export default function MapFilterBar({
 
     activeCapsuleScale.value = withTiming(0.96, { duration: 70 }, (finished) => {
       if (finished) {
-        activeCapsuleScale.value = withSpring(1, {
-          damping: 16,
-          mass: 0.7,
-          overshootClamping: true,
-          stiffness: 260,
-        });
+        activeCapsuleScale.value = withSpring(1, ACTIVE_CAPSULE_SETTLE_SPRING);
       }
     });
-    activeCapsuleX.value = withSpring(nextOffset, {
-      damping: 20,
-      mass: 0.76,
-      overshootClamping: true,
-      stiffness: 240,
-    });
+    activeCapsuleX.value = withSpring(nextOffset, ACTIVE_CAPSULE_SPRING);
   }, [activeCapsuleScale, activeCapsuleX, activeChipIndex, reduceMotionEnabled]);
 
   const activeCapsuleStyle = useAnimatedStyle(() => ({

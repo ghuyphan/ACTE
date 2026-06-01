@@ -35,6 +35,7 @@ interface MapStatusCardProps {
   onSideAction?: () => void;
   onInteraction?: () => void;
   reduceMotionEnabled: boolean;
+  skipExitAnimation?: boolean;
 }
 
 const PREVIEW_HORIZONTAL_INSET = 14;
@@ -58,6 +59,7 @@ export default function MapStatusCard({
   onSideAction,
   onInteraction,
   reduceMotionEnabled,
+  skipExitAnimation = false,
 }: MapStatusCardProps) {
   const { colors, isDark } = useTheme();
   const { width: windowWidth } = useWindowDimensions();
@@ -130,6 +132,7 @@ export default function MapStatusCard({
       bottomOffset={bottomOffset}
       onDismiss={() => {}}
       reduceMotionEnabled={reduceMotionEnabled}
+      skipExitAnimation={skipExitAnimation}
       allowDismiss={false}
       allowDragDismiss={false}
       allowExpand={false}

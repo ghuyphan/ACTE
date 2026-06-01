@@ -17,6 +17,10 @@ import { useTheme } from '../../hooks/useTheme';
 const PREVIEW_HORIZONTAL_INSET = 14;
 const DISMISS_DISTANCE = 36;
 const DISMISS_TRAVEL = 108;
+const HIDDEN_TRANSLATE_Y = 156;
+const ENTER_DURATION_MS = 210;
+const EXIT_DURATION_MS = 180;
+const EXIT_FALLBACK_MS = 220;
 const MAX_DRAG_TRAVEL = 120;
 const DRAG_RESISTANCE_START = 54;
 const DRAG_RESISTANCE_FACTOR = 0.38;
@@ -48,6 +52,7 @@ interface MapPreviewSheetProps {
   dismissTestID: string;
   onDismiss: () => void;
   reduceMotionEnabled: boolean;
+  skipExitAnimation?: boolean;
   allowHandlePress?: boolean;
   allowDismiss?: boolean;
   allowDragDismiss?: boolean;
@@ -74,6 +79,7 @@ export default function MapPreviewSheet({
   dismissTestID,
   onDismiss,
   reduceMotionEnabled,
+  skipExitAnimation = false,
   allowHandlePress = true,
   allowDismiss = true,
   allowDragDismiss = true,
@@ -93,7 +99,7 @@ export default function MapPreviewSheet({
 }: MapPreviewSheetProps) {
   const { t } = useTranslation();
   const { isDark } = useTheme();
-  const translateY = useSharedValue(400);
+  const translateY = useSharedValue(HIDDEN_TRANSLATE_Y);
   const dismissing = useSharedValue(false);
   const handleVisibility = useSharedValue(handleVisible ? 1 : 0);
   const didHandleGestureEnd = useSharedValue(false);
@@ -166,26 +172,22 @@ export default function MapPreviewSheet({
       if (reduceMotionEnabled) {
         translateY.value = 0;
       } else {
-        translateY.value = withSpring(0, {
-          damping: 24,
-          stiffness: 280,
-          mass: 0.82,
+        translateY.value = withTiming(0, {
+          duration: ENTER_DURATION_MS,
         });
       }
     } else if (!dismissing.value) {
       dismissing.value = true;
-      if (reduceMotionEnabled) {
+      if (reduceMotionEnabled || skipExitAnimation) {
         scheduleOnRN(onFullyClosed);
       } else {
         closeSequenceRef.current += 1;
-        scheduleCloseFallback(onFullyClosed, 260);
+        scheduleCloseFallback(onFullyClosed, EXIT_FALLBACK_MS);
         const sequence = closeSequenceRef.current;
-        translateY.value = withSpring(
-          800,
+        translateY.value = withTiming(
+          HIDDEN_TRANSLATE_Y,
           {
-            damping: 20,
-            stiffness: 160,
-            mass: 0.8,
+            duration: EXIT_DURATION_MS,
           },
           (finished) => {
             if (finished && closeSequenceRef.current === sequence) {
@@ -204,6 +206,7 @@ export default function MapPreviewSheet({
     onFullyClosed,
     reduceMotionEnabled,
     scheduleCloseFallback,
+    skipExitAnimation,
     translateY,
   ]);
 
@@ -242,15 +245,12 @@ export default function MapPreviewSheet({
 
       onDismiss();
       closeSequenceRef.current += 1;
-      scheduleCloseFallback(onFullyClosed, 260);
+      scheduleCloseFallback(onFullyClosed, EXIT_FALLBACK_MS);
       const sequence = closeSequenceRef.current;
-      translateY.value = withSpring(
-        800,
+      translateY.value = withTiming(
+        HIDDEN_TRANSLATE_Y,
         {
-          damping: 20,
-          stiffness: 160,
-          mass: 0.8,
-          velocity,
+          duration: Math.max(140, Math.min(EXIT_FALLBACK_MS, 190 - Math.abs(velocity) * 0.01)),
         },
         (finished) => {
           if (finished && closeSequenceRef.current === sequence) {
@@ -591,9 +591,14 @@ export default function MapPreviewSheet({
     ]
   );
 
-  const animatedStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: translateY.value }],
-  }));
+  const animatedStyle = useAnimatedStyle(() => {
+    const hiddenProgress = Math.max(0, Math.min(translateY.value / HIDDEN_TRANSLATE_Y, 1));
+
+    return {
+      opacity: interpolate(hiddenProgress, [0, 1], [1, 0]),
+      transform: [{ translateY: translateY.value }],
+    };
+  });
 
   const handleAnimatedStyle = useAnimatedStyle(() => {
     const progress = Math.max(0, Math.min(translateY.value / DISMISS_TRAVEL, 1));
