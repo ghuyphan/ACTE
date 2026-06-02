@@ -3,7 +3,15 @@ import * as FileSystem from '../../utils/fileSystem';
 import * as Haptics from '../../hooks/useHaptics';
 import * as ImagePicker from 'expo-image-picker';
 import { Href, useLocalSearchParams, useRouter } from 'expo-router';
-import { type ComponentProps, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  type ComponentProps,
+  type RefObject,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   AppState,
@@ -12,12 +20,19 @@ import {
   StyleSheet,
   useWindowDimensions,
   View,
+  type View as ReactNativeView,
 } from 'react-native';
 import { PAYWALL_RESULT } from 'react-native-purchases-ui';
 import { useSharedValue } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import CaptureAudienceStrip from '../home/CaptureAudienceStrip';
 import CaptureCard, { type CaptureCardHandle } from '../home/CaptureCard';
+import CaptureModeMorphOverlay, {
+  type CaptureModeMorphRect,
+  type CaptureModeMorphTransition,
+} from '../home/capture/CaptureModeMorphOverlay';
+import { CARD_SIZE } from '../home/capture/captureCardStyles';
+import { getCaptureCardTopPadding } from '../home/capture/captureCardLayout';
 import type { DualCaptureComposeRequest } from '../home/capture/DualCaptureComposer';
 import type { DualCameraPreviewHandle } from '../home/capture/DualCameraPreview';
 import {
@@ -120,6 +135,8 @@ import {
 import { useUnreadSharedChatCount } from './home/useUnreadSharedChatCount';
 
 const REMINDER_RECOVERY_PROMPT_KEY_PREFIX = 'noto.home.reminder-recovery-prompt.v1.';
+const CAPTURE_MODE_MORPH_OPEN_SWITCH_DELAY_MS = 320;
+const CAPTURE_MODE_MORPH_CLOSE_SWITCH_DELAY_MS = 48;
 type SaveButtonState = 'idle' | 'saving' | 'success';
 
 type MapSaveCoordinate = {
@@ -134,7 +151,7 @@ export default function HomeScreen() {
     mapSaveLat?: string;
     mapSaveLon?: string;
   }>();
-  const { height: windowHeight } = useWindowDimensions();
+  const { height: windowHeight, width: windowWidth } = useWindowDimensions();
   const { t } = useTranslation();
   const { colors, isDark, appTheme } = useTheme();
   const reduceMotionEnabled = useReducedMotion();
@@ -285,6 +302,9 @@ export default function HomeScreen() {
   const searchAnim = useSharedValue(0);
   const flatListRef = useRef<any>(null);
   const captureCardRef = useRef<CaptureCardHandle | null>(null);
+  const captureCardMeasureRef = useRef<ReactNativeView | null>(null);
+  const modeMorphTransitionIdRef = useRef(0);
+  const modeMorphSwitchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingRestoredStickerPlacementsRef = useRef<NoteStickerPlacement[] | null>(null);
   const dualCameraPreviewRef = useRef<DualCameraPreviewHandle | null>(null);
   const dualCaptureComposeResolverRef = useRef<((uri: string | null) => void) | null>(null);
@@ -304,6 +324,9 @@ export default function HomeScreen() {
   const [dualCaptureSupported, setDualCaptureSupported] = useState(false);
   const [dualCaptureComposeRequest, setDualCaptureComposeRequest] =
     useState<DualCaptureComposeRequest | null>(null);
+  const [modeMorphTransition, setModeMorphTransition] =
+    useState<CaptureModeMorphTransition | null>(null);
+  const [modeMorphBlackoutActive, setModeMorphBlackoutActive] = useState(false);
   useScrollToTop(flatListRef);
 
   useEffect(() => {
@@ -2701,12 +2724,141 @@ export default function HomeScreen() {
     }
   }, [setCapturedPairedVideo, setSelectedPhotoFilterId, showDoneSheet, t]);
 
+  const measureViewInWindow = useCallback(
+    (viewRef: RefObject<ReactNativeView | null>) =>
+      new Promise<CaptureModeMorphRect | null>((resolve) => {
+        const view = viewRef.current;
+        if (!view?.measureInWindow) {
+          resolve(null);
+          return;
+        }
+
+        view.measureInWindow((x, y, width, height) => {
+          if (
+            !Number.isFinite(x) ||
+            !Number.isFinite(y) ||
+            !Number.isFinite(width) ||
+            !Number.isFinite(height) ||
+            width <= 2 ||
+            height <= 2
+          ) {
+            resolve(null);
+            return;
+          }
+
+          resolve({ x, y, width, height });
+        });
+      }),
+    []
+  );
+
+  const fallbackCaptureCardRect = useMemo<CaptureModeMorphRect>(
+    () => ({
+      x: Math.max(16, (windowWidth - CARD_SIZE) / 2),
+      y: getCaptureCardTopPadding(insets.top),
+      width: CARD_SIZE,
+      height: CARD_SIZE,
+    }),
+    [insets.top, windowWidth]
+  );
+
+  const topCenterIslandRect = useMemo<CaptureModeMorphRect>(
+    () => {
+      const width = 34;
+      const height = 34;
+      const cameraHoleTop = Platform.OS === 'ios'
+        ? Math.max(7, Math.round(insets.top * 0.22))
+        : Math.max(6, Math.round(insets.top * 0.32));
+
+      return {
+        x: (windowWidth - width) / 2,
+        y: cameraHoleTop,
+        width,
+        height,
+      };
+    },
+    [insets.top, windowWidth]
+  );
+
+  const normalizeCaptureCardMorphRect = useCallback(
+    (rect: CaptureModeMorphRect | null) => {
+      if (!rect) {
+        return fallbackCaptureCardRect;
+      }
+
+      return {
+        x: rect.x + Math.max(0, (rect.width - CARD_SIZE) / 2),
+        y: rect.y,
+        width: CARD_SIZE,
+        height: CARD_SIZE,
+      };
+    },
+    [fallbackCaptureCardRect]
+  );
+
+  const startCaptureModeMorph = useCallback(async () => {
+    if (modeMorphSwitchTimeoutRef.current) {
+      clearTimeout(modeMorphSwitchTimeoutRef.current);
+      modeMorphSwitchTimeoutRef.current = null;
+    }
+
+    const measuredCardRect = await measureViewInWindow(captureCardMeasureRef);
+    const cardRect = normalizeCaptureCardMorphRect(measuredCardRect);
+    const direction = captureMode === 'text' ? 'open' : 'close';
+    const nextId = modeMorphTransitionIdRef.current + 1;
+    modeMorphTransitionIdRef.current = nextId;
+
+    setModeMorphTransition({
+      id: nextId,
+      direction,
+      from: direction === 'open' ? topCenterIslandRect : cardRect,
+      to: direction === 'open' ? cardRect : topCenterIslandRect,
+    });
+
+    const switchDelay =
+      direction === 'open'
+        ? CAPTURE_MODE_MORPH_OPEN_SWITCH_DELAY_MS
+        : CAPTURE_MODE_MORPH_CLOSE_SWITCH_DELAY_MS;
+    modeMorphSwitchTimeoutRef.current = setTimeout(() => {
+      modeMorphSwitchTimeoutRef.current = null;
+      toggleCaptureMode({ animated: false, haptic: false });
+    }, reduceMotionEnabled ? 0 : switchDelay);
+  }, [
+    captureMode,
+    measureViewInWindow,
+    normalizeCaptureCardMorphRect,
+    reduceMotionEnabled,
+    topCenterIslandRect,
+    toggleCaptureMode,
+  ]);
+
+  const handleModeMorphFinished = useCallback((id: number) => {
+    setModeMorphTransition((current) => (current?.id === id ? null : current));
+    setModeMorphBlackoutActive(false);
+  }, []);
+
   const handleToggleCaptureMode = useCallback(() => {
+    if (modeMorphTransition) {
+      return;
+    }
+
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     captureCardRef.current?.closeDecorateControls();
+    setModeMorphBlackoutActive(true);
     flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
-    toggleCaptureMode();
-  }, [toggleCaptureMode]);
+    requestAnimationFrame(() => {
+      void startCaptureModeMorph();
+    });
+  }, [modeMorphTransition, startCaptureModeMorph]);
+
+  useEffect(
+    () => () => {
+      if (modeMorphSwitchTimeoutRef.current) {
+        clearTimeout(modeMorphSwitchTimeoutRef.current);
+      }
+    },
+    []
+  );
 
   const handleOpenNotes = useCallback((origin?: NotesRouteTransitionRect) => {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -2793,6 +2945,8 @@ export default function HomeScreen() {
           cameraSessionKey={cameraSessionKey}
           captureScale={captureScale}
           captureTranslateY={captureTranslateY}
+          captureCardMeasureRef={captureCardMeasureRef}
+          isModeMorphing={modeMorphBlackoutActive || Boolean(modeMorphTransition)}
           isModeSwitchAnimating={isModeSwitchAnimating}
           colors={colors}
           t={t}
@@ -2935,6 +3089,8 @@ export default function HomeScreen() {
       isModeSwitchAnimating,
       lockedPremiumNoteColorIds,
       lockedPremiumPhotoFilterIds,
+      modeMorphBlackoutActive,
+      modeMorphTransition,
       needsCameraPermission,
       notes,
       noteColor,
@@ -3115,6 +3271,15 @@ export default function HomeScreen() {
             : null
         }
         alertProps={alertProps}
+      />
+      <CaptureModeMorphOverlay
+        transition={modeMorphTransition}
+        reduceMotionEnabled={reduceMotionEnabled}
+        colors={{
+          background: '#000000',
+          border: colors.captureCameraOverlayBorder ?? colors.border,
+        }}
+        onFinished={handleModeMorphFinished}
       />
     </View>
   );

@@ -264,4 +264,27 @@ describe('useCaptureCardCameraController', () => {
     expect(result.current.cameraPreviewZoom).toBe(1);
     expect(result.current.showCameraZoomBadge).toBe(true);
   });
+
+  it('routes shutter taps to live photo capture when live mode is enabled', () => {
+    const onTakePicture = jest.fn();
+    const onStartLivePhotoCapture = jest.fn();
+    const { result } = renderHook(
+      (options: Parameters<typeof useCaptureCardCameraController>[0]) =>
+        useCaptureCardCameraController(options),
+      {
+        initialProps: createControllerOptions({
+          livePhotoCaptureEnabled: true,
+          onTakePicture,
+          onStartLivePhotoCapture,
+        }),
+      }
+    );
+
+    act(() => {
+      result.current.handleShutterPress();
+    });
+
+    expect(onStartLivePhotoCapture).toHaveBeenCalledTimes(1);
+    expect(onTakePicture).not.toHaveBeenCalled();
+  });
 });

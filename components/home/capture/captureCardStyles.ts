@@ -315,6 +315,16 @@ export const styles = StyleSheet.create({
     elevation: 4,
     zIndex: 10,
   },
+  cameraLivePhotoToggleButton: {
+    position: 'absolute',
+    top: CAMERA_TOP_CHROME_INSET,
+    right: CAMERA_CHROME_SIDE_INSET,
+    width: CAMERA_TOP_CHROME_HEIGHT,
+    height: CAMERA_TOP_CHROME_HEIGHT,
+    borderRadius: CAMERA_TOP_CHROME_RADIUS,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   cameraPreview: {
     ...StyleSheet.absoluteFill,
   },
@@ -351,6 +361,15 @@ export const styles = StyleSheet.create({
   cameraSurfaceTopLayer: {
     zIndex: 1,
   },
+  modeMorphBlackoutCard: {
+    position: 'absolute',
+    width: CARD_SIZE,
+    height: CARD_SIZE,
+    borderRadius: Layout.cardRadius,
+    borderCurve: 'continuous',
+    backgroundColor: '#000000',
+    zIndex: 80,
+  },
   captureTransitionCover: {
     ...StyleSheet.absoluteFill,
     backgroundColor: '#000000',
@@ -378,6 +397,10 @@ export const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: 'rgba(255,255,255,0.18)',
     zIndex: 10,
+  },
+  cameraZoomBadgeWithLivePhotoToggle: {
+    left: CAMERA_CHROME_SIDE_INSET,
+    right: undefined,
   },
   cameraLensSelector: {
     position: 'absolute',
@@ -525,17 +548,6 @@ export const styles = StyleSheet.create({
     fontWeight: '600',
     fontFamily: 'Noto Sans',
     zIndex: 1,
-  },
-  cameraLivePhotoGuidePill: {
-    minHeight: CAMERA_TOP_CHROME_HEIGHT,
-    borderRadius: CAMERA_TOP_CHROME_RADIUS,
-    borderWidth: StyleSheet.hairlineWidth,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
   },
   cameraZoomBadgeText: {
     fontSize: 12,

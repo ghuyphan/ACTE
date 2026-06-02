@@ -759,6 +759,13 @@ describe('CaptureCard doodle handle', () => {
       minHeight: CAMERA_TOP_CHROME_HEIGHT,
       borderRadius: CAMERA_TOP_CHROME_RADIUS,
     });
+    expect(StyleSheet.flatten(captureCardStyles.cameraLivePhotoToggleButton)).toMatchObject({
+      top: CAMERA_TOP_CHROME_INSET,
+      right: CAMERA_CHROME_SIDE_INSET,
+      width: CAMERA_TOP_CHROME_HEIGHT,
+      height: CAMERA_TOP_CHROME_HEIGHT,
+      borderRadius: CAMERA_TOP_CHROME_RADIUS,
+    });
     expect(StyleSheet.flatten(captureCardStyles.libraryBtn)).toMatchObject({
       top: CAMERA_TOP_CHROME_INSET,
       left: CAMERA_CHROME_SIDE_INSET,
@@ -769,10 +776,6 @@ describe('CaptureCard doodle handle', () => {
       top: CAMERA_TOP_CHROME_INSET,
       left: CAMERA_CHROME_SIDE_INSET,
       right: CAMERA_CHROME_SIDE_INSET,
-    });
-    expect(StyleSheet.flatten(captureCardStyles.cameraLivePhotoGuidePill)).toMatchObject({
-      minHeight: CAMERA_TOP_CHROME_HEIGHT,
-      borderRadius: CAMERA_TOP_CHROME_RADIUS,
     });
     expect(StyleSheet.flatten(captureCardStyles.dualCaptureStepIndicator)).toMatchObject({
       minWidth: DUAL_CAPTURE_STEP_MIN_WIDTH,
@@ -1558,11 +1561,28 @@ describe('CaptureCard doodle handle', () => {
     });
 
     expect(queryByLabelText('Tap for a photo. Hold for a live photo.')).toBeNull();
-    expect(getByTestId('capture-live-photo-guide')).toBeTruthy();
+    expect(getByTestId('capture-live-photo-mode-toggle')).toBeTruthy();
     expect(getByTestId('capture-library-button')).toBeTruthy();
     expect(getByTestId('capture-shutter-button')).toBeTruthy();
     expect(getByTestId('capture-share-target-toggle')).toBeTruthy();
     expect(queryByTestId('capture-radius-toggle')).toBeNull();
+  });
+
+  it('uses the live photo toggle to route shutter taps into live capture', () => {
+    const ref = React.createRef<CaptureCardHandle>();
+    const onTakePicture = jest.fn();
+    const onStartLivePhotoCapture = jest.fn();
+    const { getByTestId } = renderCaptureCard(ref, {
+      captureMode: 'camera',
+      onTakePicture,
+      onStartLivePhotoCapture,
+    });
+
+    fireEvent.press(getByTestId('capture-live-photo-mode-toggle'));
+    fireEvent.press(getByTestId('capture-shutter-button'));
+
+    expect(onStartLivePhotoCapture).toHaveBeenCalledTimes(1);
+    expect(onTakePicture).not.toHaveBeenCalled();
   });
 
   it('shows the remaining photo count as a two-line label inside the shutter', () => {

@@ -294,6 +294,57 @@ describe('NoteStickerCanvas', () => {
     expect(getByTestId('note-sticker-remove-placement-1')).toBeTruthy();
   });
 
+  it('keeps the selected sticker controls inside the card near the top-right corner', () => {
+    const view = render(
+      <NoteStickerCanvas
+        placements={[{ ...stickerPlacement, x: 0.96, y: 0.04 }]}
+        editable
+        selectedPlacementId="placement-1"
+        onToggleSelectedPlacementMotionLock={jest.fn()}
+        onToggleSelectedPlacementOutline={jest.fn()}
+        onRemoveSelectedPlacement={jest.fn()}
+      />
+    );
+    const layoutHost = view.UNSAFE_queryAllByType(View).find((node) => typeof node.props.onLayout === 'function');
+
+    fireEvent(layoutHost!, 'layout', {
+      nativeEvent: {
+        layout: {
+          width: 300,
+          height: 300,
+        },
+      },
+    });
+
+    expect(view.getByTestId('note-sticker-controls-placement-1').props.style).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          bottom: -14,
+          left: -14,
+        }),
+      ])
+    );
+  });
+
+  it('lets a selected sticker re-enable its outline after disabling it', () => {
+    const onToggleOutline = jest.fn();
+    const { getByTestId, queryByTestId } = render(
+      <NoteStickerCanvas
+        placements={[{ ...stickerPlacement, outlineEnabled: false }]}
+        editable
+        selectedPlacementId="placement-1"
+        onToggleSelectedPlacementOutline={onToggleOutline}
+        onRemoveSelectedPlacement={jest.fn()}
+      />
+    );
+
+    expect(queryByTestId('note-sticker-outline-placement-1')).toBeNull();
+
+    fireEvent.press(getByTestId('note-sticker-outline-toggle-placement-1'));
+
+    expect(onToggleOutline).toHaveBeenCalledWith('placement-1');
+  });
+
   it('keeps lock and delete controls for selected stamp stickers', () => {
     const { getByTestId, queryByTestId } = render(
       <NoteStickerCanvas

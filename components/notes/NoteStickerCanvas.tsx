@@ -65,6 +65,10 @@ interface NoteStickerCanvasProps {
 
 const STICKER_OUTLINE_COLOR = 'rgba(255,255,255,0.98)';
 const PREFER_CONTINUOUS_OUTLINE = Platform.OS === 'android';
+const SELECTION_CONTROL_SIZE = 28;
+const SELECTION_CONTROL_GAP = 8;
+const SELECTION_CONTROL_EDGE_OFFSET = -14;
+const SELECTION_CONTROL_CANVAS_MARGIN = 8;
 function clamp01(value: number) {
   return Math.min(1, Math.max(0, value));
 }
@@ -192,6 +196,7 @@ const StickerSelectionControls = memo(function StickerSelectionControls({
   motionLocked,
   outlineEnabled,
   showOutlineToggle,
+  style,
   onToggleSelectedPlacementMotionLock,
   onToggleSelectedPlacementOutline,
   onRemoveSelectedPlacement,
@@ -200,6 +205,7 @@ const StickerSelectionControls = memo(function StickerSelectionControls({
   motionLocked: boolean;
   outlineEnabled: boolean;
   showOutlineToggle: boolean;
+  style: StyleProp<ViewStyle>;
   onToggleSelectedPlacementMotionLock?: (placementId: string) => void;
   onToggleSelectedPlacementOutline?: (placementId: string) => void;
   onRemoveSelectedPlacement?: (placementId: string) => void;
@@ -207,7 +213,7 @@ const StickerSelectionControls = memo(function StickerSelectionControls({
   const { t } = useTranslation();
 
   return (
-    <View style={styles.selectionControls}>
+    <View testID={`note-sticker-controls-${placementId}`} style={[styles.selectionControls, style]}>
       <Pressable
         testID={`note-sticker-lock-toggle-${placementId}`}
         accessibilityRole="button"
@@ -341,6 +347,10 @@ function EditableSticker({
     activePlacement.renderMode !== 'stamp' &&
     activePlacement.outlineEnabled !== false;
   const showOutlineToggle = activePlacement.renderMode !== 'stamp' && Boolean(onToggleSelectedPlacementOutline);
+  const selectionControlCount = showOutlineToggle ? 3 : 2;
+  const selectionControlHeight =
+    SELECTION_CONTROL_SIZE * selectionControlCount +
+    SELECTION_CONTROL_GAP * Math.max(0, selectionControlCount - 1);
 
   useEffect(() => {
     livePlacementRef.current = placement;
@@ -519,6 +529,30 @@ function EditableSticker({
       layout.width,
     ]
   );
+  const selectionControlsStyle = useMemo(() => {
+    const shouldUseLeft =
+      stickerWrapStyle.left + frameWidth - SELECTION_CONTROL_EDGE_OFFSET + SELECTION_CONTROL_SIZE >
+      layout.width - SELECTION_CONTROL_CANVAS_MARGIN;
+    const shouldUseBottom =
+      stickerWrapStyle.top + SELECTION_CONTROL_EDGE_OFFSET <
+      SELECTION_CONTROL_CANVAS_MARGIN;
+
+    return {
+      ...(shouldUseLeft
+        ? { left: SELECTION_CONTROL_EDGE_OFFSET }
+        : { right: SELECTION_CONTROL_EDGE_OFFSET }),
+      ...(shouldUseBottom
+        ? { bottom: SELECTION_CONTROL_EDGE_OFFSET }
+        : { top: SELECTION_CONTROL_EDGE_OFFSET }),
+      height: selectionControlHeight,
+    } as const;
+  }, [
+    frameWidth,
+    layout.width,
+    selectionControlHeight,
+    stickerWrapStyle.left,
+    stickerWrapStyle.top,
+  ]);
   const stickerTransformStyle = useMemo(
     () => ({
       transform: [
@@ -655,6 +689,7 @@ function EditableSticker({
             motionLocked={activePlacement.motionLocked === true}
             outlineEnabled={activePlacement.outlineEnabled !== false}
             showOutlineToggle={showOutlineToggle}
+            style={selectionControlsStyle}
             onToggleSelectedPlacementMotionLock={onToggleSelectedPlacementMotionLock}
             onToggleSelectedPlacementOutline={onToggleSelectedPlacementOutline}
             onRemoveSelectedPlacement={onRemoveSelectedPlacement}
@@ -938,8 +973,6 @@ const styles = StyleSheet.create({
   },
   selectionControls: {
     position: 'absolute',
-    top: -14,
-    right: -14,
     gap: 8,
     zIndex: 2,
   },

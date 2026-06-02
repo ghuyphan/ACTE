@@ -4,7 +4,9 @@ import { View } from 'react-native';
 import Reanimated, {
   interpolateColor,
   useAnimatedStyle,
+  useDerivedValue,
   useSharedValue,
+  type SharedValue,
   withTiming,
 } from 'react-native-reanimated';
 import { useReducedMotion } from '../../../hooks/useReducedMotion';
@@ -23,8 +25,8 @@ type CaptureToggleIconButtonProps = Omit<CaptureAnimatedPressableProps, 'childre
   active: boolean;
   activeIconName: ComponentProps<typeof Ionicons>['name'];
   inactiveIconName: ComponentProps<typeof Ionicons>['name'];
-  renderActiveIcon?: (props: { color: string; size: number }) => ReactNode;
-  renderInactiveIcon?: (props: { color: string; size: number }) => ReactNode;
+  renderActiveIcon?: (props: { color: string; progress: SharedValue<number>; size: number }) => ReactNode;
+  renderInactiveIcon?: (props: { color: string; progress: SharedValue<number>; size: number }) => ReactNode;
   activeBackgroundColor: string;
   inactiveBackgroundColor: string;
   activeBorderColor: string;
@@ -58,6 +60,7 @@ export const CaptureToggleIconButton = memo(function CaptureToggleIconButton({
 }: CaptureToggleIconButtonProps) {
   const reduceMotionEnabled = useReducedMotion();
   const activeProgress = useSharedValue(active ? 1 : 0);
+  const inactiveProgress = useDerivedValue(() => 1 - activeProgress.value);
 
   useEffect(() => {
     const transition = reduceMotionEnabled
@@ -110,12 +113,20 @@ export const CaptureToggleIconButton = memo(function CaptureToggleIconButton({
       <View style={styles.captureToggleIconWrap}>
         <Reanimated.View style={[styles.captureToggleIconLayer, animatedInactiveIconStyle]}>
           {renderInactiveIcon
-            ? renderInactiveIcon({ color: inactiveIconColor, size: iconSize })
+            ? renderInactiveIcon({
+                color: inactiveIconColor,
+                progress: inactiveProgress,
+                size: iconSize,
+              })
             : <Ionicons name={inactiveIconName} size={iconSize} color={inactiveIconColor} />}
         </Reanimated.View>
         <Reanimated.View style={[styles.captureToggleIconLayer, animatedActiveIconStyle]}>
           {renderActiveIcon
-            ? renderActiveIcon({ color: activeIconColor, size: iconSize })
+            ? renderActiveIcon({
+                color: activeIconColor,
+                progress: activeProgress,
+                size: iconSize,
+              })
             : <Ionicons name={activeIconName} size={iconSize} color={activeIconColor} />}
         </Reanimated.View>
       </View>

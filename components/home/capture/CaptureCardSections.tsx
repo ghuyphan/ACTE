@@ -34,12 +34,17 @@ import PremiumNoteFinishOverlay from '../../ui/PremiumNoteFinishOverlay';
 import PrimaryButton from '../../ui/PrimaryButton';
 import StickerPastePopover from '../../ui/StickerPastePopover';
 import LivePhotoIcon from '../../ui/LivePhotoIcon';
+import LivePhotoOffIcon from '../../ui/LivePhotoOffIcon';
 import {
   DualCameraPreview,
   type DualCameraPreviewHandle,
 } from './DualCameraPreview';
 import { CaptureControlRail } from './CaptureControlRail';
-import { CaptureAnimatedPressable, FilteredPhotoCanvas } from './CaptureControls';
+import {
+  CaptureAnimatedPressable,
+  CaptureToggleIconButton,
+  FilteredPhotoCanvas,
+} from './CaptureControls';
 import { LiveCameraFilterOverlay } from './LiveCameraFilterOverlay';
 import { getCaptureChromePalette } from './captureControlVisuals';
 import {
@@ -511,7 +516,6 @@ interface LiveCameraSurfaceProps {
   availableBackCameraLenses: BackCameraLens[];
   backCameraLensZoomConfig?: BackCameraLensZoomConfig;
   cameraDevice?: CameraDevice;
-  cameraInstructionText?: string | null;
   cameraFocusPoint: { x: number; y: number } | null;
   cameraFocusRingAnimatedStyle: CaptureCardAnimatedStyle;
   cameraKey: number | string;
@@ -541,10 +545,13 @@ interface LiveCameraSurfaceProps {
   handleCameraStartupFailure: (message: string) => void;
   handleRequestCameraPermissionPress: () => void;
   isLivePhotoCaptureInProgress: boolean;
+  livePhotoCaptureEnabled: boolean;
+  livePhotoCaptureToggleDisabled: boolean;
   livePhotoProgressPath: ComponentProps<typeof SkiaPath>['path'];
   livePhotoRingProgress: number;
   needsCameraPermission: boolean;
   onChangeBackCameraLens: (nextLens: BackCameraLens) => void;
+  onToggleLivePhotoCapture: () => void;
   shouldRenderCameraPreview: boolean;
   showCaptureCover: boolean;
   showCameraUnavailableState: boolean;
@@ -558,7 +565,6 @@ export const LiveCameraSurface = memo(function LiveCameraSurface({
   availableBackCameraLenses,
   backCameraLensZoomConfig,
   cameraDevice,
-  cameraInstructionText = null,
   cameraFocusPoint,
   cameraFocusRingAnimatedStyle,
   cameraKey,
@@ -588,10 +594,13 @@ export const LiveCameraSurface = memo(function LiveCameraSurface({
   handleCameraStartupFailure,
   handleRequestCameraPermissionPress,
   isLivePhotoCaptureInProgress,
+  livePhotoCaptureEnabled,
+  livePhotoCaptureToggleDisabled,
   livePhotoProgressPath,
   livePhotoRingProgress,
   needsCameraPermission,
   onChangeBackCameraLens,
+  onToggleLivePhotoCapture,
   shouldRenderCameraPreview,
   showCaptureCover,
   showCameraUnavailableState,
@@ -652,13 +661,11 @@ export const LiveCameraSurface = memo(function LiveCameraSurface({
   );
   const activeBackCameraLensOption =
     backCameraLensOptions.find((option) => option.lens === backCameraLens) ?? backCameraLensOptions[0];
-  const showLivePhotoGuide =
-    Boolean(cameraInstructionText) &&
+  const showLivePhotoToggle =
     !dualModeEnabled &&
     !showDualCaptureFirstShotInset &&
     !needsCameraPermission &&
-    !showCameraUnavailableState &&
-    !isLivePhotoCaptureInProgress;
+    !showCameraUnavailableState;
   const showDualCaptureGuide =
     typeof dualCaptureStepText === 'string' &&
     dualCaptureStepText.length > 0 &&
@@ -750,7 +757,14 @@ export const LiveCameraSurface = memo(function LiveCameraSurface({
                 style={styles.cameraPreview}
               />
               {shouldShowZoomBadge ? (
-                <View testID="capture-camera-zoom-badge" pointerEvents="none" style={styles.cameraZoomBadge}>
+                <View
+                  testID="capture-camera-zoom-badge"
+                  pointerEvents="none"
+                  style={[
+                    styles.cameraZoomBadge,
+                    showLivePhotoToggle ? styles.cameraZoomBadgeWithLivePhotoToggle : null,
+                  ]}
+                >
                   <Text
                     style={[styles.cameraZoomBadgeText, { color: colors.captureCameraOverlayText }]}
                   >
@@ -829,6 +843,38 @@ export const LiveCameraSurface = memo(function LiveCameraSurface({
               </CaptureControlRail>
             </View>
           ) : null}
+          {showLivePhotoToggle ? (
+            <CaptureToggleIconButton
+              testID="capture-live-photo-mode-toggle"
+              accessibilityLabel={t('capture.livePhotoMotionToggle', 'Live photo motion')}
+              accessibilityRole="switch"
+              accessibilityState={{
+                checked: livePhotoCaptureEnabled,
+                disabled: livePhotoCaptureToggleDisabled,
+              }}
+              onPress={onToggleLivePhotoCapture}
+              disabled={livePhotoCaptureToggleDisabled}
+              disabledOpacity={0.65}
+              active={livePhotoCaptureEnabled}
+              activeIconName="radio-button-on"
+              inactiveIconName="radio-button-off-outline"
+              activeBackgroundColor={glassPalette.controlBackgroundColor}
+              inactiveBackgroundColor={glassPalette.controlBackgroundColor}
+              activeBorderColor={colors.primary}
+              inactiveBorderColor={glassPalette.controlBorderColor}
+              activeIconColor={colors.primary}
+              inactiveIconColor={colors.captureGlassText}
+              iconSize={19}
+              pressedScale={0.96}
+              renderActiveIcon={({ color, size }) => (
+                <LivePhotoIcon size={size} color={color} />
+              )}
+              renderInactiveIcon={({ color, progress, size }) => (
+                <LivePhotoOffIcon size={size} color={color} progress={progress} />
+              )}
+              style={[styles.cameraOverlayButton, styles.cameraLivePhotoToggleButton]}
+            />
+          ) : null}
         </>
       ) : null}
       {showDualCaptureGuide ? (
@@ -883,26 +929,6 @@ export const LiveCameraSurface = memo(function LiveCameraSurface({
                 </Text>
               </View>
             ) : null}
-          </View>
-        </View>
-      ) : showLivePhotoGuide ? (
-        <View pointerEvents="none" style={styles.cameraLivePhotoGuideOverlay}>
-          <View
-            testID="capture-live-photo-guide"
-            style={[
-              styles.cameraLivePhotoGuidePill,
-              {
-                backgroundColor: colors.captureGlassFill,
-                borderColor: colors.captureGlassBorder,
-              },
-            ]}
-          >
-            <LivePhotoIcon size={15} color={colors.captureGlassText} />
-            <Text
-              style={[styles.cameraActionHintText, { color: colors.captureGlassText }]}
-            >
-              {t('capture.livePhotoCoachLiveHint', 'Hold for live photo')}
-            </Text>
           </View>
         </View>
       ) : null}

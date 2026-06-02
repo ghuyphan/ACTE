@@ -19,6 +19,7 @@ import {
   Text,
   TextInput,
   View,
+  type View as ReactNativeView,
 } from 'react-native';
 import { Camera, type CameraDevice } from 'react-native-vision-camera';
 import Reanimated, {
@@ -153,6 +154,8 @@ interface CaptureCardProps {
   cameraSessionKey: number;
   captureScale: SharedValue<number>;
   captureTranslateY: SharedValue<number>;
+  captureCardMeasureRef?: RefObject<ReactNativeView | null>;
+  isModeMorphing?: boolean;
   isModeSwitchAnimating?: boolean;
   colors: CaptureCardColors;
   t: TFunction;
@@ -232,6 +235,8 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   cameraSessionKey,
   captureScale,
   captureTranslateY,
+  captureCardMeasureRef,
+  isModeMorphing = false,
   isModeSwitchAnimating = false,
   colors,
   t,
@@ -319,11 +324,15 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
   const autoEmojiPopTranslateY = useSharedValue(12);
   const autoEmojiPopScale = useSharedValue(0.86);
   const captureCoverOpacity = useSharedValue(0);
+  const modeMorphBlackoutOpacity = useSharedValue(isModeMorphing ? 1 : 0);
   const iosKeyboardLift = useSharedValue(0);
   const [isPhotoCaptionFocused, setIsPhotoCaptionFocused] = useState(false);
   const [pendingPhotoReveal, setPendingPhotoReveal] = useState(false);
   const [shouldRenderCaptureCover, setShouldRenderCaptureCover] = useState(false);
+  const [shouldRenderModeMorphBlackout, setShouldRenderModeMorphBlackout] =
+    useState(isModeMorphing);
   const [liveCameraFilterModeEnabled, setLiveCameraFilterModeEnabled] = useState(false);
+  const [livePhotoCaptureEnabled, setLivePhotoCaptureEnabled] = useState(false);
   const [stickerEntryAnimation, setStickerEntryAnimation] = useState<StickerEntryAnimation | null>(null);
   const previousCapturedPhotoRef = useRef(capturedPhoto);
   const previousTextDraftEmptyRef = useRef(noteText.length === 0);
@@ -349,6 +358,8 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
     cameraSubmode === 'dual' &&
     (dualCaptureSupported || dualCaptureUsesSequentialCapture);
   const dualNativePreviewEnabled = dualCaptureModeEnabled && !dualCaptureUsesSequentialCapture;
+  const livePhotoCaptureToggleEnabled =
+    captureMode === 'camera' && cameraSubmode === 'single' && !dualCaptureModeEnabled;
   const dualCaptureStatusText = useMemo(() => {
     if (!dualCaptureModeEnabled) {
       return null;
@@ -848,6 +859,7 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
     facing,
     cameraInstructionText,
     isLivePhotoCaptureInProgress,
+    livePhotoCaptureEnabled: livePhotoCaptureEnabled && livePhotoCaptureToggleEnabled,
     allowShutterLongPress: !dualCaptureModeEnabled,
     interactionsDisabled,
     reduceMotionEnabled,
@@ -867,6 +879,14 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
     onStartLivePhotoCapture,
   });
 
+  useEffect(() => {
+    if (livePhotoCaptureToggleEnabled) {
+      return;
+    }
+
+    setLivePhotoCaptureEnabled(false);
+  }, [livePhotoCaptureToggleEnabled]);
+
   const handleToggleDoodleMode = useCallback(() => {
     dismissPastePrompt();
     setLiveCameraFilterModeEnabled(false);
@@ -878,6 +898,14 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
     dismissCaptureInputs();
     closeDecorateControls();
     setLiveCameraFilterModeEnabled((current) => !current);
+  }, [closeDecorateControls, dismissCaptureInputs, dismissPastePrompt]);
+
+  const handleToggleLivePhotoCapture = useCallback(() => {
+    dismissPastePrompt();
+    dismissCaptureInputs();
+    closeDecorateControls();
+    setLiveCameraFilterModeEnabled(false);
+    setLivePhotoCaptureEnabled((current) => !current);
   }, [closeDecorateControls, dismissCaptureInputs, dismissPastePrompt]);
 
   const handleToggleStickerMode = useCallback(() => {
@@ -1180,6 +1208,12 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
     }),
     [captureCoverOpacity]
   );
+  const modeMorphBlackoutAnimatedStyle = useAnimatedStyle(
+    () => ({
+      opacity: modeMorphBlackoutOpacity.value,
+    }),
+    [modeMorphBlackoutOpacity]
+  );
   const savePressAnimatedStyle = useAnimatedStyle(
     () => ({
       transform: [{ scale: savePressScale.value }],
@@ -1259,6 +1293,30 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
     shouldRenderCaptureCover,
     shouldShowCaptureCover,
   ]);
+
+  useEffect(() => {
+    if (isModeMorphing) {
+      setShouldRenderModeMorphBlackout(true);
+      modeMorphBlackoutOpacity.value = withTiming(1, {
+        duration: scaleCaptureDuration(90, reduceMotionEnabled),
+        easing: Easing.out(Easing.cubic),
+      });
+      return;
+    }
+
+    modeMorphBlackoutOpacity.value = withTiming(
+      0,
+      {
+        duration: scaleCaptureDuration(180, reduceMotionEnabled),
+        easing: Easing.out(Easing.cubic),
+      },
+      (finished) => {
+        if (finished) {
+          runOnJS(setShouldRenderModeMorphBlackout)(false);
+        }
+      }
+    );
+  }, [isModeMorphing, modeMorphBlackoutOpacity, reduceMotionEnabled]);
 
   const noteColorSheetBody = onChangeNoteColor ? (
     <AppSheetScaffold
@@ -1340,16 +1398,17 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
           },
         ]}
       >
-        <Reanimated.View
-          testID="capture-card-area"
-          style={[
-            styles.captureArea,
-            disableAndroidCaptureTransforms ? null : captureAreaAnimatedStyle,
-          ]}
-          pointerEvents={
-            isSearching || interactionsDisabled || isCameraUiCapturing ? 'none' : 'auto'
-          }
-        >
+        <View ref={captureCardMeasureRef} collapsable={false}>
+          <Reanimated.View
+            testID="capture-card-area"
+            style={[
+              styles.captureArea,
+              disableAndroidCaptureTransforms ? null : captureAreaAnimatedStyle,
+            ]}
+            pointerEvents={
+              isSearching || interactionsDisabled || isCameraUiCapturing ? 'none' : 'auto'
+            }
+          >
           {cameraUiStage === 'text' ? (
             <TextCaptureSurface
               activeTextPlaceholder={activeTextPlaceholder}
@@ -1388,7 +1447,6 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                     availableBackCameraLenses={liveAvailableBackCameraLenses}
                     backCameraLensZoomConfig={backCameraLensZoomConfig}
                     cameraDevice={cameraDevice}
-                    cameraInstructionText={cameraInstructionText}
                     cameraFocusPoint={cameraFocusPoint}
                     cameraFocusRingAnimatedStyle={cameraFocusRingAnimatedStyle}
                     cameraKey={cameraKey}
@@ -1420,10 +1478,17 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
                     handleCameraStartupFailure={handleCameraStartupFailure}
                     handleRequestCameraPermissionPress={handleRequestCameraPermissionPress}
                     isLivePhotoCaptureInProgress={isLivePhotoCaptureInProgress}
+                    livePhotoCaptureEnabled={livePhotoCaptureEnabled && livePhotoCaptureToggleEnabled}
+                    livePhotoCaptureToggleDisabled={
+                      interactionsDisabled ||
+                      isLivePhotoCaptureInProgress ||
+                      !livePhotoCaptureToggleEnabled
+                    }
                     livePhotoProgressPath={livePhotoProgressPath}
                     livePhotoRingProgress={livePhotoRingProgress}
                     needsCameraPermission={needsCameraPermission}
                     onChangeBackCameraLens={handleBackCameraLensPress}
+                    onToggleLivePhotoCapture={handleToggleLivePhotoCapture}
                     selectedPhotoFilterId={selectedPhotoFilterId}
                     shouldRenderCameraPreview={shouldRenderCameraPreview}
                     showCaptureCover={
@@ -1476,7 +1541,14 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
               ) : null}
             </View>
           )}
-        </Reanimated.View>
+          {shouldRenderModeMorphBlackout ? (
+            <Reanimated.View
+              pointerEvents="none"
+              style={[styles.modeMorphBlackoutCard, modeMorphBlackoutAnimatedStyle]}
+            />
+          ) : null}
+          </Reanimated.View>
+        </View>
 
         <KeyboardAvoidingView
           enabled={shouldUseSimpleKeyboardAvoidance}

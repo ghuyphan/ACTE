@@ -399,13 +399,15 @@ export function useCaptureFlow() {
     });
   }, [captureScale, captureTranslateY, completeModeSwitch]);
 
-  const toggleCaptureMode = useCallback(() => {
+  const toggleCaptureMode = useCallback((options?: { animated?: boolean; haptic?: boolean }) => {
     if (isModeSwitchAnimating) {
       return;
     }
 
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    animateModeSwitch(() => {
+    if (options?.haptic !== false) {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+    const switchMode = () => {
       setCaptureMode((mode) => {
         const nextMode = mode === 'text' ? 'camera' : 'text';
         if (nextMode === 'camera') {
@@ -419,11 +421,19 @@ export function useCaptureFlow() {
       clearDualCaptureState();
       setIsStillPhotoCaptureInProgress(false);
       resetLivePhotoCaptureState();
-    });
+    };
+
+    if (options?.animated === false) {
+      completeModeSwitch(switchMode);
+      return;
+    }
+
+    animateModeSwitch(switchMode);
   }, [
     animateModeSwitch,
     cancelLivePhotoCapture,
     clearDualCaptureState,
+    completeModeSwitch,
     isModeSwitchAnimating,
     resetLivePhotoCaptureState,
   ]);

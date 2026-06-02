@@ -71,6 +71,7 @@ interface UseCaptureCardCameraControllerOptions {
   facing: 'back' | 'front';
   cameraInstructionText?: string | null;
   isLivePhotoCaptureInProgress: boolean;
+  livePhotoCaptureEnabled?: boolean;
   allowShutterLongPress?: boolean;
   interactionsDisabled: boolean;
   reduceMotionEnabled: boolean;
@@ -181,6 +182,7 @@ export function useCaptureCardCameraController({
   facing,
   cameraInstructionText = null,
   isLivePhotoCaptureInProgress,
+  livePhotoCaptureEnabled = false,
   allowShutterLongPress = true,
   interactionsDisabled,
   reduceMotionEnabled,
@@ -812,8 +814,13 @@ export function useCaptureCardCameraController({
       return;
     }
 
+    if (livePhotoCaptureEnabled) {
+      onStartLivePhotoCapture();
+      return;
+    }
+
     onTakePicture();
-  }, [onTakePicture]);
+  }, [livePhotoCaptureEnabled, onStartLivePhotoCapture, onTakePicture]);
 
   const handleShutterRelease = useCallback(() => {
     onShutterPressOut();
