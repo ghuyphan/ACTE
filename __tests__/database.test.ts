@@ -106,6 +106,48 @@ function createDeferred<T>() {
   return { promise, resolve, reject };
 }
 
+function createNoteRow(overrides: Record<string, unknown> = {}) {
+  return {
+    id: 'note-1',
+    type: 'text',
+    content: 'Note',
+    caption: null,
+    photo_local_uri: null,
+    photo_synced_local_uri: null,
+    photo_remote_base64: null,
+    is_live_photo: 0,
+    paired_video_local_uri: null,
+    paired_video_synced_local_uri: null,
+    paired_video_remote_path: null,
+    location_name: 'Cafe',
+    prompt_id: null,
+    prompt_text_snapshot: null,
+    prompt_answer: null,
+    mood_emoji: null,
+    note_color: null,
+    capture_variant: null,
+    dual_primary_photo_local_uri: null,
+    dual_secondary_photo_local_uri: null,
+    dual_primary_facing: null,
+    dual_secondary_facing: null,
+    dual_layout_preset: null,
+    dual_composed_photo_local_uri: null,
+    latitude: 10,
+    longitude: 106,
+    radius: 150,
+    is_favorite: 0,
+    created_at: '2026-03-10T10:00:00.000Z',
+    updated_at: null,
+    local_revision: 1,
+    search_text: 'note cafe',
+    has_doodle: 0,
+    doodle_strokes_json: null,
+    has_stickers: 0,
+    sticker_placements_json: null,
+    ...overrides,
+  };
+}
+
 describe('database migrations', () => {
   afterEach(() => {
     jest.resetModules();
@@ -783,6 +825,78 @@ describe('database migrations', () => {
     expect(mockGetAllAsync).toHaveBeenCalledWith(
       expect.stringContaining('WHERE owner_uid = ?'),
       'user-42'
+    );
+  });
+
+  it('keeps a preferred widget note in the bounded candidate set', async () => {
+    let getDB!: () => Promise<unknown>;
+    let getWidgetCandidateNotesForScope!: (
+      scope: string,
+      options: { limit: number; preferredNoteId?: string | null }
+    ) => Promise<Array<{ id: string }>>;
+
+    jest.isolateModules(() => {
+      ({ getDB, getWidgetCandidateNotesForScope } = require('../services/database'));
+    });
+
+    await getDB();
+    mockGetAllAsync.mockClear();
+    mockGetFirstAsync.mockClear();
+    mockGetAllAsync.mockResolvedValueOnce([
+      createNoteRow({ id: 'recent-note', content: 'Recent' }),
+    ]);
+    mockGetFirstAsync.mockResolvedValueOnce(
+      createNoteRow({
+        id: 'preferred-note',
+        content: 'Preferred',
+        created_at: '2026-02-01T10:00:00.000Z',
+      })
+    );
+
+    const notes = await getWidgetCandidateNotesForScope('user-42', {
+      limit: 2,
+      preferredNoteId: 'preferred-note',
+    });
+
+    expect(notes.map((note) => note.id)).toEqual(['preferred-note', 'recent-note']);
+    expect(mockGetAllAsync).toHaveBeenCalledWith(
+      expect.stringContaining('LIMIT ? OFFSET ?'),
+      'user-42',
+      2,
+      0
+    );
+    expect(mockGetFirstAsync).toHaveBeenCalledWith(
+      expect.stringContaining('WHERE id = ? AND owner_uid = ?'),
+      'preferred-note',
+      'user-42'
+    );
+  });
+
+  it('normalizes invalid note page bounds before querying SQLite', async () => {
+    let getDB!: () => Promise<unknown>;
+    let getNotesPageForScope!: (
+      scope: string,
+      options: { limit: number; offset?: number }
+    ) => Promise<Array<{ id: string }>>;
+
+    jest.isolateModules(() => {
+      ({ getDB, getNotesPageForScope } = require('../services/database'));
+    });
+
+    await getDB();
+    mockGetAllAsync.mockClear();
+    mockGetAllAsync.mockResolvedValueOnce([]);
+
+    await getNotesPageForScope('user-42', {
+      limit: -1,
+      offset: -20,
+    });
+
+    expect(mockGetAllAsync).toHaveBeenCalledWith(
+      expect.stringContaining('LIMIT ? OFFSET ?'),
+      'user-42',
+      1,
+      0
     );
   });
 

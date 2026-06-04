@@ -4,6 +4,7 @@ import Reanimated, {
   useAnimatedStyle,
   type SharedValue,
 } from 'react-native-reanimated';
+import { CaptureChrome } from '../../constants/theme';
 import LivePhotoIcon from './LivePhotoIcon';
 
 type LivePhotoOffIconProps = {
@@ -12,7 +13,7 @@ type LivePhotoOffIconProps = {
   progress?: SharedValue<number>;
 };
 
-function LivePhotoOffIcon({ size = 18, color = '#111111', progress }: LivePhotoOffIconProps) {
+function LivePhotoOffIcon({ size = 18, color = CaptureChrome.livePhotoOffDefault, progress }: LivePhotoOffIconProps) {
   const containerSize = Math.max(size, 1);
   const slashAnimatedStyle = useAnimatedStyle(() => {
     const value = progress?.value ?? 1;

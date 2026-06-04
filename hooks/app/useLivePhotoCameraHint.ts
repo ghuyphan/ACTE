@@ -45,7 +45,9 @@ export function useLivePhotoCameraHint({
       !isQuotaExhausted;
 
     if (hasSeenLivePhotoCameraHint !== false || !isCameraHintEligible) {
-      setShowLivePhotoCameraHint((current) => (current ? false : current));
+      if (showLivePhotoCameraHint) {
+        setShowLivePhotoCameraHint(false);
+      }
       return;
     }
 
@@ -73,6 +75,7 @@ export function useLivePhotoCameraHint({
     isCameraPreviewActive,
     isModeSwitchAnimating,
     isQuotaExhausted,
+    showLivePhotoCameraHint,
   ]);
 
   useEffect(() => {

@@ -72,6 +72,7 @@ export function useStableHomeSharedFeedSnapshot({
   const presentedSignatureRef = useRef(sharedPostsSignature);
   const latestSharedPostsRef = useRef(sharedPosts);
   const latestSignatureRef = useRef(sharedPostsSignature);
+  const pendingSharedPostsRef = useRef(pendingSharedPosts);
   const [promoteRequestId, setPromoteRequestId] = useState(0);
 
   useEffect(() => {
@@ -79,12 +80,23 @@ export function useStableHomeSharedFeedSnapshot({
     latestSignatureRef.current = sharedPostsSignature;
   }, [sharedPosts, sharedPostsSignature]);
 
+  useEffect(() => {
+    pendingSharedPostsRef.current = pendingSharedPosts;
+  }, [pendingSharedPosts]);
+
+  const clearPendingSharedPosts = useCallback(() => {
+    if (pendingSharedPostsRef.current) {
+      pendingSharedPostsRef.current = null;
+      setPendingSharedPosts(null);
+    }
+  }, []);
+
   const commitPresentedSnapshot = useCallback((nextSharedPosts: SharedPost[], nextSignature: string) => {
     presentedSignatureRef.current = nextSignature;
     frozenRef.current = true;
-    setPendingSharedPosts(null);
+    clearPendingSharedPosts();
     setPresentedSharedPosts(nextSharedPosts);
-  }, []);
+  }, [clearPendingSharedPosts]);
 
   useEffect(() => {
     const resetChanged = resetKeyRef.current !== resetKey;
@@ -92,14 +104,14 @@ export function useStableHomeSharedFeedSnapshot({
       resetKeyRef.current = resetKey;
       frozenRef.current = canFreezeInitialSnapshot;
       presentedSignatureRef.current = sharedPostsSignature;
-      setPendingSharedPosts(null);
+      clearPendingSharedPosts();
       setPresentedSharedPosts(sharedPosts);
       return;
     }
 
     if (!frozenRef.current) {
       presentedSignatureRef.current = sharedPostsSignature;
-      setPendingSharedPosts(null);
+      clearPendingSharedPosts();
       setPresentedSharedPosts(sharedPosts);
       if (canFreezeInitialSnapshot) {
         frozenRef.current = true;
@@ -108,7 +120,7 @@ export function useStableHomeSharedFeedSnapshot({
     }
 
     if (sharedPostsSignature === presentedSignatureRef.current) {
-      setPendingSharedPosts(null);
+      clearPendingSharedPosts();
       return;
     }
 
@@ -117,9 +129,11 @@ export function useStableHomeSharedFeedSnapshot({
       return;
     }
 
+    pendingSharedPostsRef.current = sharedPosts;
     setPendingSharedPosts(sharedPosts);
   }, [
     canFreezeInitialSnapshot,
+    clearPendingSharedPosts,
     commitPresentedSnapshot,
     presentedSharedPosts.length,
     resetKey,

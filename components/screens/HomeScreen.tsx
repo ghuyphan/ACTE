@@ -133,6 +133,7 @@ import {
   type PersistedCaptureDraft,
 } from './home/captureDraftPersistence';
 import { useUnreadSharedChatCount } from './home/useUnreadSharedChatCount';
+import { CaptureChrome } from '../../constants/theme';
 
 const REMINDER_RECOVERY_PROMPT_KEY_PREFIX = 'noto.home.reminder-recovery-prompt.v1.';
 const CAPTURE_MODE_MORPH_OPEN_SWITCH_DELAY_MS = 320;
@@ -3276,7 +3277,7 @@ export default function HomeScreen() {
         transition={modeMorphTransition}
         reduceMotionEnabled={reduceMotionEnabled}
         colors={{
-          background: '#000000',
+          background: CaptureChrome.cameraMorphBackground,
           border: colors.captureCameraOverlayBorder ?? colors.border,
         }}
         onFinished={handleModeMorphFinished}

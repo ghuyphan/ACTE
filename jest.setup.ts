@@ -378,3 +378,167 @@ jest.mock('expo-image-picker', () => ({
 }));
 
 require('./constants/i18n');
+
+const originalConsoleWarn = console.warn;
+type ConsoleMethod = 'warn' | 'error';
+
+const allowedConsolePatterns: Array<{ method: ConsoleMethod; pattern: RegExp }> = [
+  {
+    method: 'warn',
+    pattern: /^expo-notifications: Android Push notifications/,
+  },
+  {
+    method: 'warn',
+    pattern: /^\[auth\] Failed to /,
+  },
+  {
+    method: 'warn',
+    pattern: /^\[social-push\] /,
+  },
+  {
+    method: 'warn',
+    pattern: /^\[widgetService\] /,
+  },
+  {
+    method: 'warn',
+    pattern: /^Failed to claim social notification event;/,
+  },
+  {
+    method: 'warn',
+    pattern: /^Failed to reserve social notification recipients;/,
+  },
+  {
+    method: 'warn',
+    pattern: /^Expo social notification delivery failed;/,
+  },
+  {
+    method: 'warn',
+    pattern: /^Live photo capture failed:/,
+  },
+  {
+    method: 'warn',
+    pattern: /^Sticker paste failed:/,
+  },
+  {
+    method: 'warn',
+    pattern: /^\[notes\] Initial /,
+  },
+  {
+    method: 'warn',
+    pattern: /^Failed to sync geofence regions/,
+  },
+  {
+    method: 'warn',
+    pattern: /^Widget geofence refresh failed:/,
+  },
+  {
+    method: 'warn',
+    pattern: /^Geofencing is limited to /,
+  },
+  {
+    method: 'error',
+    pattern: /^Failed to load notes:/,
+  },
+  {
+    method: 'error',
+    pattern: /^delete-account failed:/,
+  },
+  {
+    method: 'error',
+    pattern: /^cleanup-sticker-assets failed:/,
+  },
+  {
+    method: 'error',
+    pattern: /^send-social-notifications failed:/,
+  },
+];
+
+type NotoConsoleGuardState = typeof globalThis & {
+  __notoAllowedConsolePatterns?: Array<{ method: ConsoleMethod; pattern: RegExp }>;
+  __notoUnexpectedConsoleMessages?: string[];
+  allowConsoleMessagesForTest?: (patterns: Array<{ method: ConsoleMethod; pattern: RegExp }>) => void;
+};
+
+(globalThis as NotoConsoleGuardState).allowConsoleMessagesForTest = (patterns) => {
+  const state = globalThis as NotoConsoleGuardState;
+  state.__notoAllowedConsolePatterns = [
+    ...(state.__notoAllowedConsolePatterns ?? []),
+    ...patterns,
+  ];
+};
+
+function formatConsoleArg(value: unknown) {
+  if (typeof value === 'string') {
+    return value;
+  }
+
+  if (value instanceof Error) {
+    return value.stack ?? value.message;
+  }
+
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
+}
+
+function isAllowedConsoleMessage(method: ConsoleMethod, args: unknown[]) {
+  const message = args.map(formatConsoleArg).join(' ');
+  const state = globalThis as NotoConsoleGuardState;
+  return [
+    ...allowedConsolePatterns,
+    ...(state.__notoAllowedConsolePatterns ?? []),
+  ].some(
+    (entry) => entry.method === method && entry.pattern.test(message)
+  );
+}
+
+beforeEach(() => {
+  const unexpectedMessages: string[] = [];
+  const previousWarn = console.warn;
+  const previousError = console.error;
+  const forwardAllowedWarn = jest.isMockFunction(previousWarn) ? previousWarn : null;
+  const forwardAllowedError = jest.isMockFunction(previousError) ? previousError : null;
+
+  jest.spyOn(console, 'warn').mockImplementation((...args: unknown[]) => {
+    if (isAllowedConsoleMessage('warn', args)) {
+      forwardAllowedWarn?.(...args);
+      return;
+    }
+
+    unexpectedMessages.push(`console.warn: ${args.map(formatConsoleArg).join(' ')}`);
+  });
+
+  jest.spyOn(console, 'error').mockImplementation((...args: unknown[]) => {
+    if (isAllowedConsoleMessage('error', args)) {
+      forwardAllowedError?.(...args);
+      return;
+    }
+
+    unexpectedMessages.push(`console.error: ${args.map(formatConsoleArg).join(' ')}`);
+  });
+
+  (globalThis as typeof globalThis & { __notoUnexpectedConsoleMessages?: string[] })
+    .__notoUnexpectedConsoleMessages = unexpectedMessages;
+});
+
+afterEach(() => {
+  const state = globalThis as NotoConsoleGuardState;
+  const unexpectedMessages = state.__notoUnexpectedConsoleMessages ?? [];
+  delete state.__notoUnexpectedConsoleMessages;
+  delete state.__notoAllowedConsolePatterns;
+  if (jest.isMockFunction(console.warn)) {
+    (console.warn as jest.Mock).mockRestore();
+  }
+  if (jest.isMockFunction(console.error)) {
+    (console.error as jest.Mock).mockRestore();
+  }
+
+  if (unexpectedMessages.length > 0) {
+    originalConsoleWarn(unexpectedMessages.join('\n\n'));
+    throw new Error(
+      `Unexpected console output in test. Add an explicit allowlist entry or fix the source:\n\n${unexpectedMessages.join('\n\n')}`
+    );
+  }
+});

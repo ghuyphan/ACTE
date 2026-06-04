@@ -68,6 +68,7 @@ import {
   getOwnedSharedNoteIdsFromPosts,
   normalizeOwnedSharedNoteIds,
 } from './sharedFeedOwnership';
+import { shouldRefreshForSharedPostChange } from './sharedFeed/realtimePolicy';
 
 export interface FriendConnection {
   userId: string;
@@ -1299,81 +1300,6 @@ export function normalizeFriendInviteInput(rawValue: string) {
   }
 
   return trimmed;
-}
-
-function getSharedPostChangeField(
-  payload: unknown,
-  field: 'author_user_id' | 'audience_user_ids'
-) {
-  if (typeof payload !== 'object' || !payload) {
-    return null;
-  }
-
-  const eventPayload = payload as {
-    new?: Record<string, unknown> | null;
-    old?: Record<string, unknown> | null;
-  };
-
-  if (eventPayload.new && field in eventPayload.new) {
-    return eventPayload.new[field] ?? null;
-  }
-
-  if (eventPayload.old && field in eventPayload.old) {
-    return eventPayload.old[field] ?? null;
-  }
-
-  return null;
-}
-
-function getSharedPostChangeFields(
-  payload: unknown,
-  field: 'author_user_id' | 'audience_user_ids'
-) {
-  if (typeof payload !== 'object' || !payload) {
-    return [];
-  }
-
-  const eventPayload = payload as {
-    new?: Record<string, unknown> | null;
-    old?: Record<string, unknown> | null;
-  };
-  const values: unknown[] = [];
-
-  if (eventPayload.new && field in eventPayload.new) {
-    values.push(eventPayload.new[field] ?? null);
-  }
-
-  if (eventPayload.old && field in eventPayload.old) {
-    values.push(eventPayload.old[field] ?? null);
-  }
-
-  if (values.length === 0) {
-    const fallbackValue = getSharedPostChangeField(payload, field);
-    if (fallbackValue !== null) {
-      values.push(fallbackValue);
-    }
-  }
-
-  return values;
-}
-
-function shouldRefreshForSharedPostChange(payload: unknown, userId: string) {
-  const authorUserIds = getSharedPostChangeFields(payload, 'author_user_id');
-  if (authorUserIds.some((value) => typeof value === 'string' && value.trim() === userId)) {
-    return true;
-  }
-
-  const audienceUserIdsValues = getSharedPostChangeFields(payload, 'audience_user_ids');
-  for (const audienceUserIds of audienceUserIdsValues) {
-    if (
-      Array.isArray(audienceUserIds) &&
-      audienceUserIds.some((value) => typeof value === 'string' && value.trim() === userId)
-    ) {
-      return true;
-    }
-  }
-
-  return false;
 }
 
 function mapSharedPost(record: SharedPostRow): SharedPost {

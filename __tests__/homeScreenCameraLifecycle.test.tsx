@@ -344,6 +344,14 @@ import HomeScreen from '../app/(tabs)/index';
 
 describe('HomeScreen camera lifecycle', () => {
   beforeEach(() => {
+    (globalThis as typeof globalThis & {
+      allowConsoleMessagesForTest?: (patterns: Array<{ method: 'error'; pattern: RegExp }>) => void;
+    }).allowConsoleMessagesForTest?.([
+      {
+        method: 'error',
+        pattern: /^An update to %s inside a test was not wrapped in act\(\.\.\.\)\.[\s\S]*HomeScreen/,
+      },
+    ]);
     (global as any).requestIdleCallback = jest.fn((callback: any) => {
       callback({ didTimeout: false, timeRemaining: () => 50 });
       return 1;

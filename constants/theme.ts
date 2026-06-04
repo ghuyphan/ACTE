@@ -65,6 +65,10 @@ export const Shadows = {
 } as const;
 
 export const CaptureChrome = {
+  cameraMorphBackground: '#000000',
+  livePhotoOffDefault: '#111111',
+  photoDoodleDefault: '#FFFFFF',
+  zoomBadgeBackground: 'rgba(28,28,30,0.52)',
   shadowDark: '#000000',
   shutterContent: '#FFFFFF',
   stickerPastePopoverBackground: 'rgba(255, 250, 242, 0.96)',

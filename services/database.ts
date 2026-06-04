@@ -2025,6 +2025,8 @@ export async function getNotesPageForScope(
     scope: string,
     options: { limit: number; offset?: number }
 ): Promise<Note[]> {
+    const limit = Math.max(1, Math.floor(options.limit));
+    const offset = Math.max(0, Math.floor(options.offset ?? 0));
     const database = await getDB();
     const rows = await database.getAllAsync<NoteRow>(
         `SELECT ${NOTES_SELECT_FIELDS}
@@ -2033,10 +2035,29 @@ export async function getNotesPageForScope(
          ORDER BY created_at DESC
          LIMIT ? OFFSET ?`,
         scope,
-        options.limit,
-        options.offset ?? 0
+        limit,
+        offset
     );
     return rows.map(rowToNote);
+}
+
+export async function getWidgetCandidateNotesForScope(
+    scope: string,
+    options: { limit: number; preferredNoteId?: string | null }
+): Promise<Note[]> {
+    const limit = Math.max(1, Math.floor(options.limit));
+    const notes = await getNotesPageForScope(scope, { limit });
+    const preferredNoteId = options.preferredNoteId?.trim() || null;
+    if (!preferredNoteId || notes.some((note) => note.id === preferredNoteId)) {
+        return notes;
+    }
+
+    const preferredNote = await getNoteByIdForScope(preferredNoteId, scope);
+    if (!preferredNote) {
+        return notes;
+    }
+
+    return [preferredNote, ...notes].slice(0, limit);
 }
 
 export async function getNotesForMonthRangeForScope(

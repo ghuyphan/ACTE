@@ -16,7 +16,9 @@ const mockSyncGeofenceRegions = jest.fn();
 const mockGetReminderPermissionState = jest.fn();
 const mockSyncSocialPushRegistration = jest.fn();
 const mockArePlaceRemindersEnabled = jest.fn();
+const mockScheduleOnIdle = jest.fn();
 let appStateListener: ((state: AppStateStatus) => void) | null = null;
+let scheduledIdleCallback: (() => void) | null = null;
 
 jest.mock('expo-location', () => ({
   LocationAccuracy: {
@@ -46,6 +48,10 @@ jest.mock('../services/socialPushService', () => ({
   syncSocialPushRegistration: (...args: unknown[]) => mockSyncSocialPushRegistration(...args),
 }));
 
+jest.mock('../utils/scheduleOnIdle', () => ({
+  scheduleOnIdle: (...args: unknown[]) => mockScheduleOnIdle(...args),
+}));
+
 jest.mock('../hooks/useAuth', () => ({
   useAuth: () => ({
     user: {
@@ -54,9 +60,35 @@ jest.mock('../hooks/useAuth', () => ({
   }),
 }));
 
+async function flushScheduledIdleCallback() {
+  const callback = scheduledIdleCallback;
+  scheduledIdleCallback = null;
+  if (!callback) {
+    return;
+  }
+
+  await act(async () => {
+    callback();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+}
+
 beforeEach(() => {
   jest.clearAllMocks();
   appStateListener = null;
+  scheduledIdleCallback = null;
+  mockScheduleOnIdle.mockImplementation((callback: (deadline: { didTimeout: boolean; timeRemaining: () => number }) => void) => {
+    scheduledIdleCallback = () => callback({
+      didTimeout: false,
+      timeRemaining: () => 0,
+    });
+    return {
+      cancel: jest.fn(() => {
+        scheduledIdleCallback = null;
+      }),
+    };
+  });
   jest.spyOn(AppState, 'addEventListener').mockImplementation((_type, listener) => {
     appStateListener = listener as (state: AppStateStatus) => void;
     return {
@@ -90,6 +122,8 @@ describe('useGeofence', () => {
   it('does not auto-request location permission on mount', async () => {
     renderHook(() => useGeofence());
 
+    await flushScheduledIdleCallback();
+
     await waitFor(() => {
       expect(mockGetReminderPermissionState).toHaveBeenCalled();
     });
@@ -110,6 +144,8 @@ describe('useGeofence', () => {
     });
 
     const { result } = renderHook(() => useGeofence());
+
+    await flushScheduledIdleCallback();
 
     await waitFor(() => {
       expect(result.current.location).toEqual(location);
@@ -159,6 +195,8 @@ describe('useGeofence', () => {
     });
 
     const { result } = renderHook(() => useGeofence());
+
+    await flushScheduledIdleCallback();
 
     await waitFor(() => {
       expect(result.current.location).toEqual(location);
@@ -210,6 +248,12 @@ describe('useGeofence', () => {
     mockGetCurrentPositionAsync.mockResolvedValue(location);
 
     const { result, unmount } = renderHook(() => useGeofence());
+
+    await flushScheduledIdleCallback();
+
+    await waitFor(() => {
+      expect(mockGetForegroundPermissionsAsync).toHaveBeenCalledTimes(1);
+    });
 
     await act(async () => {
       const response = await result.current.requestForegroundLocation();
@@ -517,9 +561,13 @@ describe('useGeofence', () => {
     await act(async () => {
       firstRequest = result.current.requestReminderPermissions();
       secondRequest = result.current.requestReminderPermissions();
-      await waitFor(() => {
-        expect(mockSyncGeofenceRegions).toHaveBeenCalledTimes(1);
-      });
+    });
+
+    await waitFor(() => {
+      expect(mockSyncGeofenceRegions).toHaveBeenCalledTimes(1);
+    });
+
+    await act(async () => {
       resolveSync?.(true);
       responses = await Promise.all([firstRequest!, secondRequest!]);
     });

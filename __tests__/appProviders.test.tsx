@@ -109,6 +109,14 @@ describe('AppProviders', () => {
   }
 
   beforeEach(() => {
+    (globalThis as typeof globalThis & {
+      allowConsoleMessagesForTest?: (patterns: Array<{ method: 'error'; pattern: RegExp }>) => void;
+    }).allowConsoleMessagesForTest?.([
+      {
+        method: 'error',
+        pattern: /^An update to %s inside a test was not wrapped in act\(\.\.\.\)\.[\s\S]*ThemeProvider/,
+      },
+    ]);
     mockRenderedProviders.length = 0;
   });
 

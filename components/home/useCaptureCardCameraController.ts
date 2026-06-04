@@ -581,6 +581,9 @@ export function useCaptureCardCameraController({
     cameraRetryNonce,
     cameraSessionKey,
     cameraTransitionMaskOpacity,
+    cameraIssueDetail,
+    cameraUnavailable,
+    isCameraReady,
     reduceMotionEnabled,
     shouldRenderCameraPreview,
   ]);

@@ -3,7 +3,8 @@ import { act, waitFor } from '@testing-library/react-native';
 
 const mockUpdateTimeline = jest.fn();
 const mockGetAllNotes = jest.fn();
-const mockGetAllNotesForScope = jest.fn();
+const mockGetWidgetCandidateNotesForScope = jest.fn();
+const mockGetNoteStatsForScope = jest.fn();
 const mockGetPersistedActiveNotesScope = jest.fn();
 const mockGetForegroundPermissionsAsync = jest.fn();
 const mockGetLastKnownPositionAsync = jest.fn();
@@ -117,7 +118,8 @@ jest.mock('../widgets/LocketWidget', () => ({
 
 jest.mock('../services/database', () => ({
   getAllNotes: (...args: unknown[]) => mockGetAllNotes(...args),
-  getAllNotesForScope: (...args: unknown[]) => mockGetAllNotesForScope(...args),
+  getNoteStatsForScope: (...args: unknown[]) => mockGetNoteStatsForScope(...args),
+  getWidgetCandidateNotesForScope: (...args: unknown[]) => mockGetWidgetCandidateNotesForScope(...args),
   getPersistedActiveNotesScope: (...args: unknown[]) => mockGetPersistedActiveNotesScope(...args),
   LOCAL_NOTES_SCOPE: '__local__',
 }));
@@ -276,7 +278,8 @@ beforeEach(async () => {
       createdAt: '2026-03-09T10:00:00.000Z',
     }),
   ]);
-  mockGetAllNotesForScope.mockImplementation(async () => mockGetAllNotes());
+  mockGetWidgetCandidateNotesForScope.mockImplementation(async () => mockGetAllNotes());
+  mockGetNoteStatsForScope.mockResolvedValue({ totalCount: 2, photoCount: 0 });
   mockGetPersistedActiveNotesScope.mockResolvedValue('user-1');
 });
 
@@ -609,7 +612,34 @@ describe('widgetService', () => {
     await updateWidgetData({ referenceDate: new Date('2026-03-10T00:00:00.000Z') });
 
     expect(mockGetPersistedActiveNotesScope).toHaveBeenCalledTimes(1);
-    expect(mockGetAllNotesForScope).toHaveBeenCalledWith('user-1');
+    expect(mockGetWidgetCandidateNotesForScope).toHaveBeenCalledWith('user-1', {
+      limit: 80,
+      preferredNoteId: null,
+    });
+    expect(mockGetNoteStatsForScope).toHaveBeenCalledWith('user-1');
+  });
+
+  it('uses the scoped note total when widget candidate loading is bounded', async () => {
+    mockGetWidgetCandidateNotesForScope.mockResolvedValueOnce(
+      Array.from({ length: 80 }, (_, index) =>
+        buildNote({
+          id: `bounded-note-${index + 1}`,
+          content: `Bounded note ${index + 1}`,
+          locationName: `Cafe ${index + 1}`,
+          createdAt: new Date(Date.UTC(2026, 2, 10, 12, 0, 0) - index * 1000).toISOString(),
+        })
+      )
+    );
+    mockGetNoteStatsForScope.mockResolvedValueOnce({ totalCount: 125, photoCount: 0 });
+
+    await updateWidgetData({ referenceDate: new Date('2026-03-10T00:00:00.000Z') });
+
+    expect(getLastTimelineEntries()[0]?.props.props).toEqual(
+      expect.objectContaining({
+        noteCount: 125,
+        savedCountText: '125 notes',
+      })
+    );
   });
 
   it('does not dedupe source-backed reloads without explicit notes', async () => {
@@ -698,7 +728,7 @@ describe('widgetService', () => {
       expect.objectContaining({
         isSharedContent: true,
         isIdleState: false,
-        noteCount: 0,
+        noteCount: 2,
         authorDisplayName: 'Bao',
         text: 'Shared hello',
       })
@@ -892,7 +922,10 @@ describe('widgetService', () => {
       expect(mockUpdateTimeline).toHaveBeenCalledTimes(1);
     });
 
-    expect(mockGetAllNotesForScope).toHaveBeenCalledWith('user-1');
+    expect(mockGetWidgetCandidateNotesForScope).toHaveBeenCalledWith('user-1', {
+      limit: 80,
+      preferredNoteId: null,
+    });
     expect(getLastTimelineEntries()[0]?.props.props).toEqual(
       expect.objectContaining({
         text: 'Fresh database note',

@@ -8,7 +8,6 @@ const mockStartGeofencingAsync = jest.fn();
 const mockStopGeofencingAsync = jest.fn();
 const mockNotificationsGetPermissionsAsync = jest.fn();
 const mockGetAllNotes = jest.fn();
-const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
 const mockExpoConfig = {
   extra: {
     enablePlaceReminders: true,
@@ -135,10 +134,6 @@ beforeEach(() => {
   ]);
 });
 
-afterAll(() => {
-  consoleWarnSpy.mockRestore();
-});
-
 describe('geofenceService', () => {
   it('surfaces the runtime feature flag', () => {
     expect(arePlaceRemindersEnabled()).toBe(true);
@@ -244,7 +239,9 @@ describe('geofenceService', () => {
 
     expect(result).toBe(true);
     expect(mockStartGeofencingAsync.mock.calls[0]?.[1]).toHaveLength(maxRegions);
-    expect(consoleWarnSpy).toHaveBeenCalled();
+    expect(console.warn).toHaveBeenCalledWith(
+      expect.stringContaining(`Geofencing is limited to ${maxRegions} places`)
+    );
   });
 
   it('does not warn when many notes collapse into a small number of places', async () => {
@@ -265,7 +262,9 @@ describe('geofenceService', () => {
     expect(summary.totalNotes).toBe(4);
     expect(summary.totalPlaces).toBe(1);
     expect(summary.overflowPlaces).toBe(0);
-    expect(consoleWarnSpy).not.toHaveBeenCalled();
+    expect(console.warn).not.toHaveBeenCalledWith(
+      expect.stringContaining('Geofencing is limited to')
+    );
   });
 
   it('registers one region per place using the best representative note', async () => {

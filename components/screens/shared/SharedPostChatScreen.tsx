@@ -72,6 +72,11 @@ import {
   buildCreatedStickerLibrary,
   type CreatedStickerLibraryItem,
 } from '../notes/stickerLibrary';
+import {
+  buildSharedChatRenderContext,
+  getSharedChatTypingIndicatorLabel,
+  getVisibleSharedChatTypingUsers,
+} from './chatPresentation';
 import TextFieldEditSheet from '../../sheets/TextFieldEditSheet';
 import StickerIcon from '../../ui/StickerIcon';
 
@@ -92,20 +97,6 @@ type ReplyPreview = {
 type ReactionOverlay = {
   response: SharedPostResponse;
 } | null;
-
-type ChatMode = 'direct' | 'memory';
-
-type ChatRenderContext = {
-  canSendMessage: boolean;
-  composerPlaceholder: string;
-  hasPost: boolean;
-  isResolvingInitialChat: boolean;
-  notFoundBody: string;
-  notFoundTitle: string;
-  shouldRenderChatShell: boolean;
-  shouldRenderPendingThread: boolean;
-  shouldShowIdentityHeader: boolean;
-};
 
 function updateResponseReactions(
   responses: ChatThreadResponse[],
@@ -2582,28 +2573,19 @@ export default function SharedPostChatScreen({
     ]
   );
   const visibleTypingUsers = useMemo(
-    () => typingUsers.filter((typingUser) => typingUser.userId !== user?.uid),
+    () => getVisibleSharedChatTypingUsers(typingUsers, user?.uid),
     [typingUsers, user?.uid]
   );
-  const typingIndicatorLabel = useMemo(() => {
-    if (visibleTypingUsers.length === 0) {
-      return null;
-    }
-
-    if (visibleTypingUsers.length === 1) {
-      return t('shared.chatTypingOne', '{{name}} is typing', {
-        name: getAuthorIdentity(
-          visibleTypingUsers[0].userId,
-          visibleTypingUsers[0].displayName,
-          visibleTypingUsers[0].photoURL
-        ).label,
-      });
-    }
-
-    return t('shared.chatTypingMany', '{{count}} people are typing', {
-      count: visibleTypingUsers.length,
-    });
-  }, [getAuthorIdentity, t, visibleTypingUsers]);
+  const typingIndicatorLabel = useMemo(
+    () =>
+      getSharedChatTypingIndicatorLabel({
+        getAuthorLabel: (userId, displayName, photoURL) =>
+          getAuthorIdentity(userId, displayName, photoURL).label,
+        t,
+        visibleTypingUsers,
+      }),
+    [getAuthorIdentity, t, visibleTypingUsers]
+  );
   const latestResponse = useMemo(() => responses[responses.length - 1] ?? null, [responses]);
   const jumpToLatestPreviewLabel = useMemo(() => {
     if (newMessageCount <= 0 || !latestResponse) {
@@ -2617,46 +2599,31 @@ export default function SharedPostChatScreen({
         t('shared.chatThreadActivity', 'New activity'),
     });
   }, [getAuthorLabel, latestResponse, newMessageCount, t]);
-  const chatContext: ChatRenderContext = useMemo(() => {
-    const mode: ChatMode = isDirectChat ? 'direct' : 'memory';
-    const canComposePendingDirectChat = Boolean(mode === 'direct' && normalizedDirectFriendUid);
-    const isResolvingPendingDirectChat = Boolean(
-      !post && canComposePendingDirectChat && isResolvingChatPost
-    );
-    const isResolvingInitialChat = !post && !canComposePendingDirectChat && isResolvingChatPost;
-    const shouldRenderPendingThread =
-      mode === 'direct' && (isResolvingInitialChat || isResolvingPendingDirectChat);
-    const hasPost = Boolean(post);
-    return {
-      canSendMessage: Boolean((post || canComposePendingDirectChat) && draft.trim() && !isSending),
-      composerPlaceholder:
-        mode === 'direct'
-          ? t('shared.directChatComposerPlaceholder', 'Message')
-          : t('shared.chatComposerPlaceholder', 'Reply to this memory'),
-      hasPost,
-      isResolvingInitialChat,
-      notFoundBody:
-        chatPostErrorMessage ??
-        t('shared.chatNotFoundBody', 'This chat may no longer be available.'),
-      notFoundTitle:
-        mode === 'direct'
-          ? t('shared.directChatStartFailed', 'Could not start chat.')
-          : t('shared.detailNotFound', 'Shared moment not found'),
-      shouldRenderChatShell: Boolean(post || shouldRenderPendingThread || canComposePendingDirectChat),
-      shouldRenderPendingThread,
-      shouldShowIdentityHeader: Boolean(post || primaryParticipantUid),
-    };
-  }, [
-    chatPostErrorMessage,
-    draft,
-    isDirectChat,
-    isResolvingChatPost,
-    isSending,
-    normalizedDirectFriendUid,
-    post,
-    primaryParticipantUid,
-    t,
-  ]);
+  const chatContext = useMemo(
+    () =>
+      buildSharedChatRenderContext({
+        chatPostErrorMessage,
+        draft,
+        isDirectChat,
+        isResolvingChatPost,
+        isSending,
+        normalizedDirectFriendUid,
+        hasPost: Boolean(post),
+        primaryParticipantUid,
+        t,
+      }),
+    [
+      chatPostErrorMessage,
+      draft,
+      isDirectChat,
+      isResolvingChatPost,
+      isSending,
+      normalizedDirectFriendUid,
+      post,
+      primaryParticipantUid,
+      t,
+    ]
+  );
   const shouldShowDirectEmptyNudge =
     chatContext.shouldRenderChatShell &&
     isDirectChat &&

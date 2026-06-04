@@ -1,152 +1,70 @@
 import {
-  formatSharedResponseBody,
-  getSharedChatIdentity,
-  getSharedChatMemoryPreview,
-  getSharedThreadSummaryBody,
-  isSharedThreadUnread,
-} from '../utils/sharedChatPresentation';
+  buildSharedChatRenderContext,
+  getSharedChatTypingIndicatorLabel,
+  getVisibleSharedChatTypingUsers,
+} from '../components/screens/shared/chatPresentation';
 
-const labels = {
-  friendFallback: 'Friend',
-  photoMemory: 'Photo memory',
-  photoMemoryAtPlace: (place: string) => `Photo memory from ${place}`,
-  sharedNote: 'Shared note',
-  someone: 'Someone',
-  you: 'You',
+const t = (_key: string, fallback: string, options?: Record<string, unknown>) => {
+  const values = options;
+  return fallback
+    .replace('{{name}}', String(values?.name ?? ''))
+    .replace('{{count}}', String(values?.count ?? ''));
 };
 
 describe('shared chat presentation helpers', () => {
-  it('prefers private nicknames while keeping public labels separate', () => {
+  it('filters the current user from typing indicators', () => {
     expect(
-      getSharedChatIdentity(
-        {
-          currentUserUid: 'user-1',
-          friend: {
-            userId: 'friend-1',
-            username: 'cafe-pal',
-            displayNameSnapshot: 'Cafe Pal',
-            nickname: 'Bestie',
-            photoURLSnapshot: 'https://example.com/avatar.jpg',
-          },
-          userId: 'friend-1',
-        },
-        labels
-      )
-    ).toEqual({
-      avatarInitial: 'B',
-      avatarUri: 'https://example.com/avatar.jpg',
-      label: 'Bestie',
-      publicLabel: '@cafe-pal',
-    });
+      getVisibleSharedChatTypingUsers(
+        [
+          { userId: 'me', displayName: 'Me' },
+          { userId: 'friend', displayName: 'Friend' },
+        ],
+        'me'
+      ).map((typingUser) => typingUser.userId)
+    ).toEqual(['friend']);
   });
 
-  it('labels the current user consistently', () => {
+  it('formats one and many typing labels', () => {
     expect(
-      getSharedChatIdentity(
-        {
-          currentUserUid: 'user-1',
-          displayNameSnapshot: 'Huy',
-          userId: 'user-1',
-        },
-        labels
-      ).label
-    ).toBe('You');
+      getSharedChatTypingIndicatorLabel({
+        getAuthorLabel: (_userId, displayName) => displayName ?? 'Friend',
+        t,
+        visibleTypingUsers: [{ userId: 'friend', displayName: 'Linh' }],
+      })
+    ).toBe('Linh is typing');
+
+    expect(
+      getSharedChatTypingIndicatorLabel({
+        getAuthorLabel: () => 'Friend',
+        t,
+        visibleTypingUsers: [
+          { userId: 'a', displayName: 'A' },
+          { userId: 'b', displayName: 'B' },
+        ],
+      })
+    ).toBe('2 people are typing');
   });
 
-  it('builds compact memory and response previews', () => {
+  it('builds pending direct chat context without an existing post', () => {
     expect(
-      getSharedChatMemoryPreview(
-        {
-          id: 'post-1',
-          authorUid: 'friend-1',
-          authorDisplayName: 'Friend',
-          authorPhotoURLSnapshot: null,
-          audienceUserIds: ['user-1'],
-          type: 'photo',
-          text: '',
-          photoPath: null,
-          photoLocalUri: null,
-          placeName: 'Cafe',
-          sourceNoteId: null,
-          createdAt: '2026-05-08T01:00:00.000Z',
-          updatedAt: null,
-        },
-        labels
-      )
-    ).toBe('Photo memory from Cafe');
-    expect(formatSharedResponseBody({ emoji: '💛', text: 'love this' })).toBe('💛 love this');
-    expect(
-      formatSharedResponseBody({
-        emoji: null,
-        text: '',
-        sticker: {
-          assetId: 'sticker-1',
-          localUri: 'file:///sticker-1.png',
-          remotePath: null,
-          mimeType: 'image/png',
-          width: 120,
-          height: 120,
-          renderMode: 'default',
-          stampStyle: null,
-        },
+      buildSharedChatRenderContext({
+        chatPostErrorMessage: null,
+        draft: 'hello',
+        isDirectChat: true,
+        isResolvingChatPost: false,
+        isSending: false,
+        normalizedDirectFriendUid: 'friend',
+        hasPost: false,
+        primaryParticipantUid: 'friend',
+        t,
       })
-    ).toBe('Sticker');
-    expect(
-      getSharedThreadSummaryBody({
-        postId: 'post-1',
-        latestResponseId: 'response-1',
-        latestResponseCreatedAt: '2026-05-08T01:00:00.000Z',
-        latestActivityAt: '2026-05-08T01:00:00.000Z',
-        latestActivityAuthorUid: 'friend-1',
-        latestActivityAuthorDisplayName: 'Friend',
-        latestActivityAuthorPhotoURLSnapshot: null,
-        latestActivityText: null,
-        latestActivityEmoji: '✨',
-        latestActivityKind: 'reaction',
-        updatedAt: '2026-05-08T01:00:00.000Z',
+    ).toEqual(
+      expect.objectContaining({
+        canSendMessage: true,
+        composerPlaceholder: 'Message',
+        shouldRenderChatShell: true,
+        shouldShowIdentityHeader: true,
       })
-    ).toBe('✨');
-    expect(
-      getSharedThreadSummaryBody({
-        postId: 'post-1',
-        latestResponseId: 'response-2',
-        latestResponseCreatedAt: '2026-05-08T01:01:00.000Z',
-        latestActivityAt: '2026-05-08T01:01:00.000Z',
-        latestActivityAuthorUid: 'friend-1',
-        latestActivityAuthorDisplayName: 'Friend',
-        latestActivityAuthorPhotoURLSnapshot: null,
-        latestActivityText: null,
-        latestActivityEmoji: null,
-        latestActivityKind: 'response',
-        updatedAt: '2026-05-08T01:01:00.000Z',
-      })
-    ).toBe('Sticker');
-  });
-
-  it('does not mark your own latest activity as unread', () => {
-    expect(
-      isSharedThreadUnread(
-        {
-          postId: 'post-1',
-          latestResponseId: 'response-1',
-          latestResponseCreatedAt: '2026-05-08T01:00:00.000Z',
-          latestActivityAt: '2026-05-08T01:00:00.000Z',
-          latestActivityAuthorUid: 'user-1',
-          latestActivityAuthorDisplayName: 'You',
-          latestActivityAuthorPhotoURLSnapshot: null,
-          latestActivityText: 'hello',
-          latestActivityEmoji: null,
-          latestActivityKind: 'response',
-          updatedAt: '2026-05-08T01:00:00.000Z',
-        },
-        {
-          postId: 'post-1',
-          userUid: 'user-1',
-          lastReadResponseId: null,
-          lastReadAt: '2026-05-07T01:00:00.000Z',
-        },
-        'user-1'
-      )
-    ).toBe(false);
+    );
   });
 });

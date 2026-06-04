@@ -13,8 +13,9 @@ import {
   resolveThemePreference,
 } from '../hooks/useTheme';
 import {
-  getAllNotesForScope,
   getPersistedActiveNotesScope,
+  getNoteStatsForScope,
+  getWidgetCandidateNotesForScope,
   LOCAL_NOTES_SCOPE,
   type Note,
 } from './database';
@@ -107,6 +108,7 @@ const WIDGET_LAST_DELIVERED_PROPS_STORAGE_KEY = 'widget.timeline.lastDeliveredPr
 const WIDGET_SHARED_REFRESH_TTL_MS = 2 * 60 * 1000;
 const WIDGET_LOCATION_CACHE_TTL_MS = 60 * 1000;
 const WIDGET_REQUEST_DEDUPE_WINDOW_MS = 3 * 1000;
+const WIDGET_NOTE_CANDIDATE_LIMIT = 80;
 const WIDGET_DEFAULT_REFRESH_DEBOUNCE_MS = 120;
 const WIDGET_THEME_STORAGE_KEY = 'settings.theme';
 const WIDGET_APP_THEME_STORAGE_KEY = 'settings.appTheme';
@@ -570,6 +572,7 @@ async function buildWidgetPropsFromSelection(
 
 async function buildWidgetTimeline(options: {
   notes: Note[];
+  noteCount?: number;
   sharedPosts?: SharedPost[];
   currentLocation?: LocationCoords | null;
   referenceDate: Date;
@@ -578,6 +581,7 @@ async function buildWidgetTimeline(options: {
 }) {
   const {
     notes,
+    noteCount = notes.length,
     sharedPosts = [],
     currentLocation = null,
     referenceDate,
@@ -635,7 +639,7 @@ async function buildWidgetTimeline(options: {
         }
 
         if (!selectedCandidate || selection.isIdleState) {
-          resolvedProps = buildIdleWidgetProps(notes.length, selection.selectionMode);
+          resolvedProps = buildIdleWidgetProps(noteCount, selection.selectionMode);
           break;
         }
 
@@ -654,7 +658,7 @@ async function buildWidgetTimeline(options: {
           }
 
           try {
-            const props = await buildWidgetPropsFromSelection(notes.length, selection, candidate);
+            const props = await buildWidgetPropsFromSelection(noteCount, selection, candidate);
             if (isRenderableWidgetProps(props)) {
               renderCache.set(cacheKey, props);
               resolvedProps = props;
@@ -688,7 +692,7 @@ async function buildWidgetTimeline(options: {
       resolvedProps ??
       entries.at(-1)?.props ??
       buildIdleWidgetProps(
-        notes.length,
+        noteCount,
         timelineSelections[0]?.selectionMode ?? 'latest_memory'
       );
 
@@ -731,7 +735,16 @@ async function runWidgetUpdate(options: UpdateWidgetDataOptions = {}): Promise<W
   try {
     const referenceDate = options.referenceDate ?? new Date();
     const noteScope = (await getPersistedActiveNotesScope()) ?? LOCAL_NOTES_SCOPE;
-    const notes = options.notes ?? (await getAllNotesForScope(noteScope));
+    const hasProvidedNotes = Boolean(options.notes);
+    const notes =
+      options.notes ??
+      (await getWidgetCandidateNotesForScope(noteScope, {
+        limit: WIDGET_NOTE_CANDIDATE_LIMIT,
+        preferredNoteId: options.preferredNoteId ?? null,
+      }));
+    const noteCount = hasProvidedNotes
+      ? notes.length
+      : (await getNoteStatsForScope(noteScope)).totalCount;
     const sharedFeedSnapshot = await getSharedWidgetFeedSnapshot(
       options.includeSharedRefresh === true,
       options.sharedPosts
@@ -743,12 +756,13 @@ async function runWidgetUpdate(options: UpdateWidgetDataOptions = {}): Promise<W
 
     const { entries, hasSourceContent, deliveredCandidateKeys } = await buildWidgetTimeline({
       notes,
+      noteCount,
       sharedPosts: sharedFeedSnapshot.sharedPosts,
       currentLocation,
       referenceDate,
       preferredNoteId: options.preferredNoteId ?? null,
     });
-    const nextProps = entries[0]?.props ?? buildIdleWidgetProps(notes.length);
+    const nextProps = entries[0]?.props ?? buildIdleWidgetProps(noteCount);
     const lastDeliveredProps = await loadLastDeliveredWidgetProps();
     let deliveredProps = nextProps;
     let deliveredEntries = entries;

@@ -1,6 +1,6 @@
 import { Dimensions, Platform, StyleSheet } from 'react-native';
 import { STICKER_ARTBOARD_FRAME } from '../../../constants/doodleLayout';
-import { Layout, Radii, Shadows, Sheet, Typography } from '../../../constants/theme';
+import { CaptureChrome, Layout, Radii, Shadows, Sheet, Typography } from '../../../constants/theme';
 import {
   DUAL_CAMERA_INSET_FRAME_COLOR,
   DUAL_CAMERA_INSET_FROST_COLOR,
@@ -53,7 +53,7 @@ export const SHUTTER_SIDE_ACTION_GAP = Math.max(
 );
 export const SHUTTER_SIDE_ACTION_OFFSET =
   SHUTTER_OUTER_SIZE / 2 + SHUTTER_SIDE_ACTION_GAP + SIDE_ACTION_SIZE;
-export const PHOTO_DOODLE_DEFAULT_COLOR = '#FFFFFF';
+export const PHOTO_DOODLE_DEFAULT_COLOR = CaptureChrome.photoDoodleDefault;
 export const PHOTO_CAPTION_MAX_LENGTH = 60;
 export const LIVE_PHOTO_RING_STROKE_WIDTH = 4;
 export const CAMERA_FOCUS_RING_SIZE = 64;
@@ -61,7 +61,7 @@ export const CAMERA_BOTTOM_CHROME_INSET = 12;
 export const CAMERA_BOTTOM_CHROME_HEIGHT = 42;
 export const CAMERA_BOTTOM_CHROME_RADIUS = CAMERA_BOTTOM_CHROME_HEIGHT / 2;
 export const DOCKED_HEADER_CONTENT_OVERLAP = 8;
-export const CAMERA_ZOOM_BADGE_BACKGROUND = 'rgba(28,28,30,0.52)';
+export const CAMERA_ZOOM_BADGE_BACKGROUND = CaptureChrome.zoomBadgeBackground;
 export const BELOW_CARD_SECTION_HEIGHT = 168;
 export const CAPTURE_FOOTER_CLUSTER_GAP = 16;
 export const CAPTURE_FOOTER_SLOT_HEIGHT = 66;
