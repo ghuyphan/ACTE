@@ -174,6 +174,9 @@ function AppContent() {
       stickerLibrary: createSolidBackScreenOptions(colors, {
         title: t('notes.stickerLibrary.title', 'Your stickers & stamps'),
       }),
+      stickerPacks: createSolidBackScreenOptions(colors, {
+        title: t('stickerPacks.title', 'Sticker Studio'),
+      }),
       sharedChats: createSolidBackScreenOptions(colors, {
         title: t('shared.chatsTitle', 'Chats'),
       }),

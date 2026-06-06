@@ -803,4 +803,86 @@ describe('importStickerAsset', () => {
     expect(asset.uploadFingerprint).toBe(transparentPngHash);
     expect(asset.contentHash).toBe(transparentPngHash);
   });
+
+  it('copies a sticker into the requested bucket when its current remote path belongs elsewhere', async () => {
+    const { uploadStickerAssetToStorage } = loadNoteStickersModule();
+
+    mockGetInfoAsync.mockResolvedValue({
+      exists: true,
+      isDirectory: false,
+      size: 80 * 1024,
+      modificationTime: 200,
+    });
+    mockReadAsBytesAsync.mockResolvedValue(transparentPngBytes);
+
+    const asset = await uploadStickerAssetToStorage(
+      'shared-post-media',
+      'owner-1',
+      {
+        id: 'pack-asset-1',
+        ownerUid: 'pack-creator',
+        localUri: 'file:///documents/sticker-packs/pack-asset-1.png',
+        remotePath: 'pack-creator/stickers/pack-asset-1.png',
+        remoteAssetId: 'pack-asset-1',
+        storageBucket: 'note-media',
+        uploadFingerprint: 'existing-fingerprint',
+        contentHash: transparentPngHash,
+        mimeType: 'image/png',
+        width: 320,
+        height: 240,
+        createdAt: '2026-03-10T00:00:00.000Z',
+        updatedAt: null,
+        source: 'import',
+      },
+      {
+        forceTargetPath: true,
+        persistAsset: false,
+      }
+    );
+
+    expect(mockStorageUpload).toHaveBeenCalledWith(
+      'owner-1/stickers/pack-asset-1.png',
+      expect.any(ArrayBuffer),
+      expect.objectContaining({
+        contentType: 'image/png',
+        upsert: true,
+      })
+    );
+    expect(asset.remotePath).toBe('owner-1/stickers/pack-asset-1.png');
+    expect(asset.storageBucket).toBe('shared-post-media');
+    expect(mockDb.runAsync).not.toHaveBeenCalled();
+  });
+
+  it('copies a sent sticker into the shared response cache', async () => {
+    const { cacheSharedStickerAsset } = loadNoteStickersModule();
+    mockGetInfoAsync.mockImplementation(async (uri: string) => ({
+      exists: uri === 'file:///documents/stickers/asset-1.png',
+      isDirectory: false,
+      size: 80 * 1024,
+      modificationTime: 200,
+    }));
+
+    const localUri = await cacheSharedStickerAsset({
+      id: 'asset-1',
+      ownerUid: 'owner-1',
+      localUri: 'file:///documents/stickers/asset-1.png',
+      remotePath: 'owner-1/stickers/asset-1.png',
+      mimeType: 'image/png',
+      width: 320,
+      height: 240,
+      createdAt: '2026-03-10T00:00:00.000Z',
+      updatedAt: null,
+      source: 'import',
+    });
+
+    expect(mockMakeDirectoryAsync).toHaveBeenCalledWith(
+      'file:///cache/shared-stickers/',
+      { intermediates: true }
+    );
+    expect(mockCopyAsync).toHaveBeenCalledWith({
+      from: 'file:///documents/stickers/asset-1.png',
+      to: 'file:///cache/shared-stickers/asset-1.png',
+    });
+    expect(localUri).toBe('file:///cache/shared-stickers/asset-1.png');
+  });
 });

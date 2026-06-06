@@ -29,6 +29,7 @@ import {
   uploadPairedVideoToStorage,
 } from './remoteMedia';
 import {
+  cacheSharedStickerAsset,
   getNoteStickers,
   clearRemoteStickerAssetRefs,
   downloadStickerAssetFromStorage,
@@ -824,10 +825,38 @@ function mapSharedPostResponse(row: SharedPostResponseRow): SharedPostResponse {
   };
 }
 
+async function hydrateSharedResponseStickerFromRegistry(
+  sticker: SharedPostResponseSticker,
+  options: { preferCachedOnly?: boolean }
+) {
+  const { data, error } = await requireSupabase()
+    .from('sticker_assets')
+    .select('storage_bucket, storage_path, mime_type')
+    .eq('id', sticker.assetId)
+    .maybeSingle();
+  if (error || !data?.storage_bucket || !data.storage_path) {
+    return null;
+  }
+
+  return downloadStickerAssetFromStorage(
+    data.storage_bucket,
+    data.storage_path,
+    sticker.assetId,
+    data.mime_type?.trim() || sticker.mimeType,
+    {
+      allowRemoteUriFallback: true,
+      preferCachedOnly: options.preferCachedOnly,
+      sharedCache: true,
+    }
+  );
+}
+
 export async function hydrateSharedPostResponseStickers(
   responses: SharedPostResponse[],
   options: { preferCachedOnly?: boolean } = {}
 ): Promise<SharedPostResponse[]> {
+  const retryDelays = options.preferCachedOnly ? [] : [250, 1000];
+
   return Promise.all(
     responses.map(async (response) => {
       const sticker = response.sticker;
@@ -843,13 +872,51 @@ export async function hydrateSharedPostResponseStickers(
         return response;
       }
 
-      const localUri = await downloadStickerAssetFromStorage(
-        SHARED_POST_MEDIA_BUCKET,
-        sticker.remotePath,
-        sticker.assetId,
-        sticker.mimeType,
-        { preferCachedOnly: options.preferCachedOnly, sharedCache: true }
-      ).catch(() => null);
+      let localUri: string | null = null;
+      let lastError: unknown = null;
+      for (let attempt = 0; attempt <= retryDelays.length; attempt += 1) {
+        try {
+          localUri = await downloadStickerAssetFromStorage(
+            SHARED_POST_MEDIA_BUCKET,
+            sticker.remotePath,
+            sticker.assetId,
+            sticker.mimeType,
+            {
+              allowRemoteUriFallback: true,
+              preferCachedOnly: options.preferCachedOnly,
+              sharedCache: true,
+            }
+          );
+          if (!localUri) {
+            localUri = await hydrateSharedResponseStickerFromRegistry(sticker, options);
+          }
+        } catch (error) {
+          lastError = error;
+          localUri = await hydrateSharedResponseStickerFromRegistry(sticker, options).catch(
+            () => null
+          );
+        }
+
+        if (localUri) {
+          break;
+        }
+
+        const retryDelay = retryDelays[attempt];
+        if (retryDelay) {
+          await new Promise<void>((resolve) => {
+            setTimeout(resolve, retryDelay);
+          });
+        }
+      }
+
+      if (!localUri && lastError) {
+        console.warn('[shared-feed] Failed to hydrate response sticker:', {
+          assetId: sticker.assetId,
+          error: getSupabaseErrorMessage(lastError),
+          remotePath: sticker.remotePath,
+          responseId: response.id,
+        });
+      }
 
       if (!localUri) {
         return response;
@@ -3109,15 +3176,23 @@ export async function createSharedPostResponse(
     const uploadedSticker = await uploadStickerAssetToStorage(
       SHARED_POST_MEDIA_BUCKET,
       user.id,
-      stickerInput.asset
+      stickerInput.asset,
+      {
+        forceTargetPath: true,
+        persistAsset: false,
+      }
     );
     if (!uploadedSticker.remotePath) {
       throw new Error('Could not upload sticker.');
     }
+    const cachedLocalUri = await cacheSharedStickerAsset(uploadedSticker).catch((error) => {
+      console.warn('[shared-feed] Failed to cache sent response sticker:', error);
+      return null;
+    });
     const renderMode = stickerInput.renderMode === 'stamp' ? 'stamp' : 'default';
     sticker = {
       assetId: uploadedSticker.id,
-      localUri: uploadedSticker.localUri,
+      localUri: cachedLocalUri ?? uploadedSticker.localUri,
       remotePath: uploadedSticker.remotePath,
       mimeType: uploadedSticker.mimeType,
       width: uploadedSticker.width,

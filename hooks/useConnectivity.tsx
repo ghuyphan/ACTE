@@ -131,3 +131,7 @@ export function useConnectivity() {
 
   return context;
 }
+
+export function useOptionalConnectivity() {
+  return useContext(ConnectivityContext);
+}

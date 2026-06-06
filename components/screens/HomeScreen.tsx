@@ -3246,8 +3246,13 @@ export default function HomeScreen() {
           showMessagesButton: false,
           showSharedButton: true,
           showNotesButton: true,
+          showStickerPacksButton: false,
           onOpenShared: handleOpenSharedManage,
           onOpenNotes: handleOpenNotes,
+          onOpenStickerPacks: () => {
+            void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            router.push('/sticker-packs' as Href);
+          },
           sharedButtonMode: settledSharedButtonMode,
           sharedButtonActive: settledSharedButtonMode === 'filter' && isFriendsFilterEnabled,
           sharedFilterValue: isFriendsFilterEnabled ? 'friends' : 'all',

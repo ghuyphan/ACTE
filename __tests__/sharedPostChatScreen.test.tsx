@@ -11,6 +11,7 @@ const mockMarkSharedThreadRead = jest.fn();
 const mockScrollToEnd = jest.fn();
 const mockScrollToIndex = jest.fn();
 let mockNotes: unknown[] = [];
+let mockLatestStickerPreviewItem: any = null;
 let mockLatestThreadOnStartReached: (() => void) | null = null;
 let mockLatestThreadOnScroll: ((event: unknown) => void) | null = null;
 
@@ -45,6 +46,9 @@ jest.mock('expo-router', () => ({
   Stack: {
     Screen: () => null,
   },
+  useRouter: () => ({
+    push: jest.fn(),
+  }),
 }));
 
 jest.mock('@shopify/flash-list', () => {
@@ -117,7 +121,10 @@ jest.mock('expo-clipboard', () => ({
 
 jest.mock('../components/sheets/TextFieldEditSheet', () => () => null);
 jest.mock('../components/ui/StickerIcon', () => () => null);
-jest.mock('../components/notes/StickerLibraryPreview', () => () => null);
+jest.mock('../components/notes/StickerLibraryPreview', () => (props: any) => {
+  mockLatestStickerPreviewItem = props.item;
+  return null;
+});
 
 jest.mock('../hooks/useNotes', () => ({
   useNotes: () => ({ notes: mockNotes }),
@@ -227,6 +234,7 @@ describe('SharedPostChatScreen', () => {
     mockScrollToIndex.mockClear();
     mockLatestThreadOnStartReached = null;
     mockLatestThreadOnScroll = null;
+    mockLatestStickerPreviewItem = null;
     mockNotes = [];
     mockCreateSharedPostResponse.mockResolvedValue({
       id: 'response-2',
@@ -434,6 +442,45 @@ describe('SharedPostChatScreen', () => {
       });
     });
     expect(getByLabelText('Message').props.value).toBe('keep this draft');
+  });
+
+  it('renders a confirmed sticker from the local library when hydration has no local uri', async () => {
+    mockNotes = [createStickerNote()];
+    mockGetSharedPostResponsesPage.mockResolvedValueOnce([
+      {
+        id: 'response-sticker-1',
+        postId: directPost.id,
+        authorUid: 'me',
+        authorDisplayName: 'Me',
+        authorPhotoURLSnapshot: null,
+        emoji: null,
+        text: '',
+        sticker: {
+          assetId: 'asset-1',
+          localUri: null,
+          remotePath: 'me/stickers/asset-1.png',
+          mimeType: 'image/png',
+          width: 200,
+          height: 200,
+          renderMode: 'default',
+          stampStyle: null,
+        },
+        replyToResponseId: null,
+        reactions: [],
+        createdAt: '2026-05-20T01:02:00.000Z',
+      },
+    ]);
+
+    render(
+      <SharedPostChatScreen
+        directFriendUid="friend-1"
+        postId="direct-chat-1"
+      />
+    );
+
+    await waitFor(() => {
+      expect(mockLatestStickerPreviewItem?.asset?.localUri).toBe('file:///asset-1.png');
+    });
   });
 
   it('does not load older messages until the user scrolls upward', async () => {

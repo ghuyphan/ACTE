@@ -625,6 +625,18 @@ async function registerRemoteStickerAsset(
   }
 }
 
+export async function ensureStickerAssetRegistered(
+  ownerUserId: string,
+  asset: StickerAsset
+): Promise<StickerAsset> {
+  const registered = await registerRemoteStickerAsset(ownerUserId, asset);
+  if (!registered) {
+    throw new Error('This sticker could not be prepared for sharing.');
+  }
+  await upsertStickerAsset(registered);
+  return registered;
+}
+
 function getRemoteStickerAssetIdsFromPlacementsJson(
   placementsJson: string | null | undefined
 ) {
@@ -1348,19 +1360,28 @@ export async function clearNoteStickers(noteId: string): Promise<void> {
 export async function uploadStickerAssetToStorage(
   bucket: string,
   ownerUid: string,
-  asset: StickerAsset
+  asset: StickerAsset,
+  options: {
+    forceTargetPath?: boolean;
+    persistAsset?: boolean;
+  } = {}
 ): Promise<StickerAsset> {
   const localUri = typeof asset.localUri === 'string' ? asset.localUri.trim() : '';
   if (!localUri) {
     return asset;
   }
 
-  const remotePath =
-    asset.remotePath?.trim() || `${ownerUid}/${NOTE_STICKER_MEDIA_PREFIX}/${asset.id}.${getStickerFileExtension(asset.mimeType)}`;
+  const targetPath = `${ownerUid}/${NOTE_STICKER_MEDIA_PREFIX}/${asset.id}.${getStickerFileExtension(asset.mimeType)}`;
+  const remotePath = options.forceTargetPath
+    ? targetPath
+    : asset.remotePath?.trim() || targetPath;
+  const canReuseRemoteAsset =
+    asset.remotePath === remotePath &&
+    (!options.forceTargetPath || asset.storageBucket === bucket);
   const uploadFingerprint = await getStickerUploadFingerprint(localUri);
 
   if (
-    asset.remotePath === remotePath &&
+    canReuseRemoteAsset &&
     asset.contentHash &&
     asset.uploadFingerprint &&
     asset.uploadFingerprint === uploadFingerprint
@@ -1371,14 +1392,16 @@ export async function uploadStickerAssetToStorage(
   const bytes = await readStickerBytes(localUri);
   const contentHash = asset.contentHash ?? (bytes ? await hashStickerBytes(bytes) : null);
 
-  if (asset.remotePath === remotePath && asset.contentHash && asset.contentHash === contentHash) {
+  if (canReuseRemoteAsset && asset.contentHash && asset.contentHash === contentHash) {
     const nextAsset = {
       ...asset,
       uploadFingerprint,
       updatedAt: new Date().toISOString(),
     };
 
-    await upsertStickerAsset(nextAsset);
+    if (options.persistAsset !== false) {
+      await upsertStickerAsset(nextAsset);
+    }
     return nextAsset;
   }
 
@@ -1396,12 +1419,15 @@ export async function uploadStickerAssetToStorage(
   const nextAsset = {
     ...asset,
     remotePath,
+    storageBucket: bucket,
     uploadFingerprint,
     contentHash,
     updatedAt: new Date().toISOString(),
   };
 
-  await upsertStickerAsset(nextAsset);
+  if (options.persistAsset !== false) {
+    await upsertStickerAsset(nextAsset);
+  }
   return nextAsset;
 }
 
@@ -1411,6 +1437,7 @@ export async function downloadStickerAssetFromStorage(
   assetId: string,
   mimeType: string,
   options: {
+    allowRemoteUriFallback?: boolean;
     preferCached?: boolean;
     preferCachedOnly?: boolean;
     sharedCache?: boolean;
@@ -1446,8 +1473,41 @@ export async function downloadStickerAssetFromStorage(
     throw error;
   }
 
-  const result = await FileSystem.downloadAsync(data.signedUrl, destinationPath);
-  return result.uri ?? destinationPath;
+  try {
+    const result = await FileSystem.downloadAsync(data.signedUrl, destinationPath);
+    return result.uri ?? destinationPath;
+  } catch (error) {
+    if (options.allowRemoteUriFallback) {
+      return data.signedUrl;
+    }
+    throw error;
+  }
+}
+
+export async function cacheSharedStickerAsset(asset: StickerAsset): Promise<string | null> {
+  const sourceUri = typeof asset.localUri === 'string' ? asset.localUri.trim() : '';
+  const directory = await ensureSharedStickerCacheDirectory();
+  if (!sourceUri || !directory || !sourceUri.startsWith('file:')) {
+    return sourceUri || null;
+  }
+
+  const destinationPath =
+    `${directory}${asset.id}.${getStickerFileExtension(asset.mimeType)}`;
+  if (sourceUri === destinationPath) {
+    return destinationPath;
+  }
+
+  const sourceInfo = await FileSystem.getInfoAsync(sourceUri).catch(() => null);
+  if (!sourceInfo?.exists || sourceInfo.isDirectory) {
+    return null;
+  }
+
+  const destinationInfo = await FileSystem.getInfoAsync(destinationPath).catch(() => null);
+  if (destinationInfo?.exists) {
+    await FileSystem.deleteAsync(destinationPath, { idempotent: true });
+  }
+  await FileSystem.copyAsync({ from: sourceUri, to: destinationPath });
+  return destinationPath;
 }
 
 export async function hydrateStickerPlacements(

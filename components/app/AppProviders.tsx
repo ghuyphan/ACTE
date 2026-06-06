@@ -19,6 +19,7 @@ import {
 } from '../../hooks';
 import { StartupInteractionProvider } from '../../hooks/app/useHomeStartupReady';
 import { SavedNoteRevealUiProvider } from '../../hooks/ui/useSavedNoteRevealUi';
+import { StickerPacksProvider } from '../../hooks/useStickerPacks';
 import { AppAlertProvider } from '../ui/AppAlertProvider';
 
 type AppProvidersProps = {
@@ -39,6 +40,7 @@ const providerChain: ProviderComponent[] = [
   FeedFocusProvider,
   StartupInteractionProvider,
   NotesProvider,
+  StickerPacksProvider,
   SyncStatusProvider,
   SharedFeedProvider,
   SavedNoteRevealUiProvider,

@@ -3,7 +3,7 @@ import * as Clipboard from 'expo-clipboard';
 import { FlashList, type FlashListRef } from '@shopify/flash-list';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Stack } from 'expo-router';
+import { Stack, useRouter } from 'expo-router';
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
@@ -44,6 +44,7 @@ import {
   type ChatThreadResponse as SharedPostChatThreadResponse,
 } from '../../../hooks/shared/useSharedPostChatThread';
 import { useTheme } from '../../../hooks/useTheme';
+import { useOptionalStickerPacks } from '../../../hooks/useStickerPacks';
 import type {
   Note,
 } from '../../../services/database';
@@ -126,6 +127,7 @@ const COMPOSER_KEYBOARD_GAP = 14;
 const COMPACT_REACTION_TRAY_WIDTH = 196;
 const TYPING_IDLE_HIDE_MS = 1500;
 const TYPING_REFRESH_MS = 900;
+const STICKER_HYDRATION_RETRY_DELAYS_MS = [750, 2500, 7000];
 const THREAD_SCROLL_POSITION_CONFIG = {
   startRenderingFromBottom: true,
   autoscrollToBottomThreshold: 0.25,
@@ -754,6 +756,49 @@ export default function SharedPostChatScreen({
   const [nicknameErrorMessage, setNicknameErrorMessage] = useState<string | null>(null);
   const [isSavingNickname, setIsSavingNickname] = useState(false);
   const [isStickerTrayVisible, setIsStickerTrayVisible] = useState(false);
+  const [stickerHydrationRetryCount, setStickerHydrationRetryCount] = useState(0);
+
+  const router = useRouter();
+  const stickerPacksContext = useOptionalStickerPacks();
+  const installedPacks = useMemo(
+    () => stickerPacksContext?.installedPacks ?? [],
+    [stickerPacksContext?.installedPacks]
+  );
+  const [stickerTrayActiveIndex, setStickerTrayActiveIndex] = useState(0);
+  const stickerTrayTabBarScrollRef = useRef<ScrollView>(null);
+  const stickerTrayPagerRef = useRef<ScrollView>(null);
+
+  useEffect(() => {
+    if (isStickerTrayVisible) {
+      setStickerTrayActiveIndex(0);
+      stickerTrayPagerRef.current?.scrollTo({ x: 0, animated: false });
+    }
+  }, [isStickerTrayVisible]);
+
+  useEffect(() => {
+    const tabWidth = 56;
+    const targetX = Math.max(0, stickerTrayActiveIndex * tabWidth - 100);
+    stickerTrayTabBarScrollRef.current?.scrollTo({ x: targetX, animated: true });
+  }, [stickerTrayActiveIndex]);
+
+  const handleTrayTabPress = useCallback((index: number) => {
+    setStickerTrayActiveIndex(index);
+    stickerTrayPagerRef.current?.scrollTo({ x: index * screenWidth, animated: true });
+  }, [screenWidth]);
+
+  const handleTrayStorePress = useCallback(() => {
+    setIsStickerTrayVisible(false);
+    router.push('/sticker-packs' as any);
+  }, [router]);
+
+  const handleTrayScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const contentOffset = event.nativeEvent.contentOffset.x;
+    const index = Math.round(contentOffset / screenWidth);
+    if (index >= 0 && index < (1 + installedPacks.length) && index !== stickerTrayActiveIndex) {
+      setStickerTrayActiveIndex(index);
+    }
+  }, [screenWidth, installedPacks.length, stickerTrayActiveIndex]);
+
   const [replyTarget, setReplyTarget] = useState<SharedPostResponse | null>(null);
   const [reactionOverlay, setReactionOverlay] = useState<ReactionOverlay>(null);
   const [infoMessage, setInfoMessage] = useState<string | null>(null);
@@ -855,6 +900,24 @@ export default function SharedPostChatScreen({
   );
   const stickerTrayCardSize = Math.max(82, Math.min(104, Math.floor(screenWidth * 0.22)));
   const stickerTrayItems = useMemo(() => stickerLibraryItems.slice(0, 48), [stickerLibraryItems]);
+  const localStickerUriByAssetId = useMemo(() => {
+    const next = new Map<string, string>();
+    for (const item of stickerLibraryItems) {
+      const localUri = item.asset.localUri?.trim();
+      if (localUri) {
+        next.set(item.asset.id, localUri);
+      }
+    }
+    for (const pack of installedPacks) {
+      for (const item of pack.items) {
+        const localUri = item.asset.localUri?.trim();
+        if (localUri) {
+          next.set(item.asset.id, localUri);
+        }
+      }
+    }
+    return next;
+  }, [installedPacks, stickerLibraryItems]);
   const stickerTrayColumns = Math.max(
     3,
     Math.floor((screenWidth - Layout.screenPadding * 2 - 28) / (stickerTrayCardSize + 12))
@@ -933,6 +996,67 @@ export default function SharedPostChatScreen({
     responses,
     chatThreadLabels
   );
+  const unresolvedStickerSignature = useMemo(
+    () =>
+      responses
+        .filter(
+          (response) =>
+            response.sticker &&
+            !response.sticker.localUri &&
+            !localStickerUriByAssetId.has(response.sticker.assetId)
+        )
+        .map((response) => `${response.id}:${response.sticker?.remotePath ?? ''}`)
+        .join('|'),
+    [localStickerUriByAssetId, responses]
+  );
+
+  useEffect(() => {
+    if (!isOnline || !post || !unresolvedStickerSignature) {
+      setStickerHydrationRetryCount(0);
+      return undefined;
+    }
+
+    const retryDelay = STICKER_HYDRATION_RETRY_DELAYS_MS[stickerHydrationRetryCount];
+    if (retryDelay === undefined) {
+      return undefined;
+    }
+
+    let cancelled = false;
+    const timeout = setTimeout(() => {
+      void getSharedPostResponsesPage(activePostId, {
+        limit: Math.max(RESPONSE_PAGE_SIZE, responses.length),
+      })
+        .then((nextResponses) => {
+          if (!cancelled) {
+            updateResponses((current) => mergeChatResponses(current, nextResponses));
+          }
+        })
+        .catch((error) => {
+          if (!cancelled) {
+            console.warn('[shared-chat] Sticker hydration retry failed:', error);
+          }
+        })
+        .finally(() => {
+          if (!cancelled) {
+            setStickerHydrationRetryCount((count) => count + 1);
+          }
+        });
+    }, retryDelay);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timeout);
+    };
+  }, [
+    activePostId,
+    getSharedPostResponsesPage,
+    isOnline,
+    post,
+    responses.length,
+    stickerHydrationRetryCount,
+    unresolvedStickerSignature,
+    updateResponses,
+  ]);
   const shouldShowJumpToLatest =
     !isThreadEndVisible &&
     responses.length > 0 &&
@@ -2221,6 +2345,15 @@ export default function SharedPostChatScreen({
                 const replyPreview = getResponseReplyPreview(response);
                 const hasReplyPreview = Boolean(replyPreview);
                 const hasSticker = Boolean(response.sticker);
+                const renderedSticker = response.sticker
+                  ? {
+                      ...response.sticker,
+                      localUri:
+                        response.sticker.localUri?.trim() ||
+                        localStickerUriByAssetId.get(response.sticker.assetId) ||
+                        null,
+                    }
+                  : null;
                 const reactions = response.reactions ?? [];
                 const isHighlighted = highlightedResponseId === response.id;
                 const isReactionOverlayTarget = reactionOverlay?.response.id === response.id;
@@ -2326,9 +2459,9 @@ export default function SharedPostChatScreen({
                         },
                       ]}
                     >
-                      {response.sticker ? (
+                      {renderedSticker ? (
                         <ChatStickerPreview
-                          sticker={response.sticker}
+                          sticker={renderedSticker}
                           fallbackColor={colors.primary}
                         />
                       ) : (
@@ -2573,6 +2706,7 @@ export default function SharedPostChatScreen({
       getResponseReplyPreview,
       highlightedResponseId,
       isDirectChat,
+      localStickerUriByAssetId,
       openReactionOverlay,
       reactionOverlay?.response.id,
       reactionOverlayProgress,
@@ -3039,21 +3173,6 @@ export default function SharedPostChatScreen({
                 },
               ]}
             >
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={t('shared.chatOpenStickerLibrary', 'Open sticker library')}
-                onPress={handleOpenStickerLibrary}
-                style={({ pressed }) => [
-                  styles.composerIconButton,
-                  {
-                    backgroundColor: isStickerTrayVisible || pressed ? colors.primarySoft : 'transparent',
-                    opacity: isSending ? 0.52 : 1,
-                  },
-                ]}
-                disabled={isSending}
-              >
-                <StickerIcon color={colors.primary} size={20} />
-              </Pressable>
               <TextInput
                 value={draft}
                 onChangeText={handleDraftChange}
@@ -3084,6 +3203,21 @@ export default function SharedPostChatScreen({
                   void sendResponse();
                 }}
               />
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={t('shared.chatOpenStickerLibrary', 'Open sticker library')}
+                onPress={handleOpenStickerLibrary}
+                style={({ pressed }) => [
+                  styles.composerIconButton,
+                  {
+                    backgroundColor: isStickerTrayVisible || pressed ? colors.primarySoft : 'transparent',
+                    opacity: isSending ? 0.52 : 1,
+                  },
+                ]}
+                disabled={isSending}
+              >
+                <StickerIcon color={colors.primary} size={20} />
+              </Pressable>
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel={
@@ -3136,22 +3270,158 @@ export default function SharedPostChatScreen({
                     height: stickerTrayHeight,
                     backgroundColor: colors.surface,
                     borderColor: colors.border,
+                    paddingTop: 0,
+                    paddingBottom: 0,
                   },
                 ]}
               >
+                <View style={[styles.chatTabBarContainer, { borderBottomColor: colors.border }]}>
+                  <ScrollView
+                    ref={stickerTrayTabBarScrollRef}
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={styles.chatTabBarContent}
+                  >
+                    {/* Local Custom Stickers Tab */}
+                    <Pressable
+                      onPress={() => handleTrayTabPress(0)}
+                      style={[
+                        styles.chatTabItem,
+                        stickerTrayActiveIndex === 0 && { backgroundColor: colors.primarySoft },
+                      ]}
+                      testID="chat-sticker-picker-tab-local"
+                    >
+                      <StickerIcon
+                        size={20}
+                        color={stickerTrayActiveIndex === 0 ? colors.primary : colors.secondaryText}
+                      />
+                    </Pressable>
+
+                    {/* Sticker Pack Tabs */}
+                    {installedPacks.map((pack, idx) => {
+                      const tabIndex = idx + 1;
+                      const isSelected = stickerTrayActiveIndex === tabIndex;
+                      return (
+                        <Pressable
+                          key={pack.id}
+                          onPress={() => handleTrayTabPress(tabIndex)}
+                          style={[
+                            styles.chatTabItem,
+                            isSelected && { backgroundColor: colors.primarySoft },
+                          ]}
+                          testID={`chat-sticker-picker-tab-${pack.id}`}
+                        >
+                          {pack.thumbnail.localUri ? (
+                            <Image
+                              source={{ uri: pack.thumbnail.localUri }}
+                              style={styles.chatTabThumbnail}
+                            />
+                          ) : (
+                            <Ionicons
+                              name="image-outline"
+                              size={20}
+                              color={isSelected ? colors.primary : colors.secondaryText}
+                            />
+                          )}
+                        </Pressable>
+                      );
+                    })}
+
+                    {/* Store Tab */}
+                    <Pressable
+                      onPress={handleTrayStorePress}
+                      style={[
+                        styles.chatTabItem,
+                        styles.chatStoreTabItem,
+                        { borderColor: colors.border },
+                      ]}
+                      testID="chat-sticker-picker-tab-store"
+                    >
+                      <Ionicons
+                        name="storefront-outline"
+                        size={20}
+                        color={colors.primary}
+                      />
+                    </Pressable>
+                  </ScrollView>
+                </View>
+
                 <ScrollView
-                  keyboardShouldPersistTaps="handled"
-                  showsVerticalScrollIndicator={false}
-                  contentContainerStyle={styles.stickerTrayContent}
+                  ref={stickerTrayPagerRef}
+                  horizontal
+                  pagingEnabled
+                  showsHorizontalScrollIndicator={false}
+                  onMomentumScrollEnd={handleTrayScroll}
+                  style={{ width: screenWidth, height: stickerTrayHeight - 52 }}
+                  contentContainerStyle={{
+                    width: screenWidth * (1 + installedPacks.length),
+                  }}
                 >
-                  {stickerTrayItems.map((item) => (
-                    <ChatStickerTrayItem
-                      key={item.id}
-                      item={item}
-                      size={stickerTrayCardSize}
-                      onPress={() => handleSelectStickerLibraryItem(item)}
-                    />
-                  ))}
+                  {(() => {
+                    const trayPages = [
+                      { id: 'local', type: 'local' as const },
+                      ...installedPacks.map((pack) => ({ id: pack.id, type: 'pack' as const, pack })),
+                    ];
+                    return trayPages.map((page) => {
+                      if (page.type === 'local') {
+                        return (
+                          <FlashList
+                            key="local-page"
+                            data={stickerTrayItems}
+                            keyExtractor={(item) => item.id}
+                            numColumns={stickerTrayColumns}
+                            renderItem={({ item }) => (
+                              <View style={styles.stickerTrayGridCell}>
+                                <ChatStickerTrayItem
+                                  item={item}
+                                  size={stickerTrayCardSize}
+                                  onPress={() => handleSelectStickerLibraryItem(item)}
+                                />
+                              </View>
+                            )}
+                            keyboardShouldPersistTaps="handled"
+                            showsVerticalScrollIndicator={false}
+                            style={{ width: screenWidth, height: stickerTrayHeight - 52 }}
+                            contentContainerStyle={styles.chatLocalPageContent}
+                          />
+                        );
+                      }
+
+                      const pack = page.pack!;
+                      return (
+                        <FlashList
+                          key={pack.id}
+                          data={pack.items}
+                          keyExtractor={(packItem) => packItem.asset.id}
+                          numColumns={stickerTrayColumns}
+                          renderItem={({ item: packItem }) => {
+                            const compatibleItem: CreatedStickerLibraryItem = {
+                              id: packItem.asset.id,
+                              asset: packItem.asset,
+                              assetId: packItem.asset.id,
+                              renderMode: 'default',
+                              usageCount: 0,
+                              lastUsedAt:
+                                packItem.asset.updatedAt ?? packItem.asset.createdAt,
+                            };
+                            return (
+                              <View style={styles.stickerTrayGridCell}>
+                                <ChatStickerTrayItem
+                                  item={compatibleItem}
+                                  size={stickerTrayCardSize}
+                                  onPress={() => handleSelectStickerLibraryItem(compatibleItem)}
+                                />
+                              </View>
+                            );
+                          }}
+                          keyboardShouldPersistTaps="handled"
+                          showsVerticalScrollIndicator={false}
+                          style={{ width: screenWidth, height: stickerTrayHeight - 52 }}
+                          contentContainerStyle={styles.chatPackPageContent}
+                        />
+                      );
+                    });
+                  })()}
                 </ScrollView>
               </View>
             ) : null}
@@ -3962,8 +4232,6 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
     borderTopWidth: StyleSheet.hairlineWidth,
-    paddingTop: 22,
-    paddingBottom: 22,
     overflow: 'hidden',
   },
   stickerTrayContent: {
@@ -3978,6 +4246,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
+  },
+  stickerTrayGridCell: {
+    alignItems: 'center',
+    paddingBottom: 12,
   },
   composer: {
     minHeight: 44,
@@ -4006,6 +4278,7 @@ const styles = StyleSheet.create({
     maxHeight: 88,
     paddingTop: 7,
     paddingBottom: 7,
+    paddingLeft: 12,
     fontFamily: 'Noto Sans',
   },
   sendButton: {
@@ -4014,5 +4287,42 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  chatTabBarContainer: {
+    paddingVertical: 8,
+    width: '100%',
+  },
+  chatTabBarContent: {
+    paddingHorizontal: Layout.screenPadding,
+    gap: 8,
+    alignItems: 'center',
+  },
+  chatTabItem: {
+    paddingHorizontal: 12,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: 44,
+  },
+  chatTabThumbnail: {
+    width: 22,
+    height: 22,
+    borderRadius: 4,
+  },
+  chatStoreTabItem: {
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    marginLeft: 4,
+  },
+  chatLocalPageContent: {
+    paddingHorizontal: Layout.screenPadding + 18,
+    paddingTop: 12,
+    paddingBottom: 24,
+  },
+  chatPackPageContent: {
+    paddingHorizontal: Layout.screenPadding + 18,
+    paddingTop: 12,
+    paddingBottom: 24,
   },
 });

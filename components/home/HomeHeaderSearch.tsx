@@ -49,6 +49,7 @@ import type { ThemeColors } from "../../hooks/useTheme";
 import { isIOS26OrNewer } from "../../utils/platform";
 import type { NotesRouteTransitionRect } from "../../utils/notesRouteTransition";
 import GlassHeader from "../ui/GlassHeader";
+import StickerIcon from "../ui/StickerIcon";
 import { glassTokens, getGlassSurfacePalette } from "../ui/glassTokens";
 
 const HEADER_BUTTON_HIT_SLOP = {
@@ -77,9 +78,11 @@ interface HomeHeaderSearchProps {
   showMessagesIndicator?: boolean;
   showSharedButton?: boolean;
   showNotesButton?: boolean;
+  showStickerPacksButton?: boolean;
   onOpenMessages?: () => void;
   onOpenShared?: () => void;
   onOpenNotes?: (origin?: NotesRouteTransitionRect) => void;
+  onOpenStickerPacks?: () => void;
   sharedButtonMode?: "manage" | "filter";
   sharedButtonActive?: boolean;
   sharedFilterValue?: "all" | "friends";
@@ -121,9 +124,11 @@ export default function HomeHeaderSearch({
   showMessagesIndicator = false,
   showSharedButton = false,
   showNotesButton = false,
+  showStickerPacksButton = false,
   onOpenMessages,
   onOpenShared,
   onOpenNotes,
+  onOpenStickerPacks,
   sharedButtonMode = "manage",
   sharedButtonActive = false,
   sharedFilterValue = "all",
@@ -779,6 +784,55 @@ export default function HomeHeaderSearch({
     );
   };
 
+  const renderStickerPacksButton = () => {
+    if (!showStickerPacksButton || !onOpenStickerPacks) {
+      return null;
+    }
+
+    const label = t("stickerPacks.title", "Sticker packs");
+
+    if (Platform.OS === "ios") {
+      return (
+        <Host
+          matchContents
+          colorScheme={isDark ? "dark" : "light"}
+          style={styles.swiftHeaderControlHost}
+        >
+          <Button
+            onPress={onOpenStickerPacks}
+            modifiers={getHeaderControlModifiers(label)}
+          >
+            {renderHeaderControlLabel("square.stack.3d.up", label, "regular", {
+              iconOnly: true,
+            })}
+          </Button>
+        </Host>
+      );
+    }
+
+    return (
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={label}
+        hitSlop={HEADER_BUTTON_HIT_SLOP}
+        onPress={onOpenStickerPacks}
+        pressRetentionOffset={HEADER_BUTTON_PRESS_RETENTION_OFFSET}
+        style={({ pressed }) => [
+          styles.iconButton,
+          styles.androidHeaderActionButton,
+          {
+            backgroundColor: androidHeaderControlBackgroundColor,
+            borderColor: androidHeaderControlBorderColor,
+          },
+          pressed ? styles.headerButtonPressed : null,
+        ]}
+        testID="home-sticker-packs-button"
+      >
+        <StickerIcon size={20} color={androidHeaderControlForegroundColor} />
+      </Pressable>
+    );
+  };
+
   return (
     <>
       <GlassHeader
@@ -797,6 +851,7 @@ export default function HomeHeaderSearch({
           <View style={[styles.headerSlot, styles.headerSlotLeft]}>
             <View style={styles.headerSlotGroup}>
               {renderNotesButton()}
+              {renderStickerPacksButton()}
               {showSearchButton ? renderSearchButton() : null}
               {renderMessagesButton()}
             </View>

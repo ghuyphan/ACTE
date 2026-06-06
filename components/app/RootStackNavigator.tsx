@@ -9,6 +9,7 @@ type RootStackNavigatorProps = {
     plus: NativeStackNavigationOptions;
     notesIndex: NativeStackNavigationOptions;
     stickerLibrary: NativeStackNavigationOptions;
+    stickerPacks: NativeStackNavigationOptions;
     sharedChat: NativeStackNavigationOptions;
     sharedChats: NativeStackNavigationOptions;
   };
@@ -54,6 +55,16 @@ export default function RootStackNavigator({
         }}
       />
       <Stack.Screen name="notes/stickers" options={rootScreenOptions.stickerLibrary} />
+      <Stack.Screen name="sticker-packs/index" options={rootScreenOptions.stickerPacks} />
+      <Stack.Screen name="sticker-packs/[id]" options={rootScreenOptions.stickerPacks} />
+      <Stack.Screen name="sticker-packs/create" options={rootScreenOptions.stickerPacks} />
+      <Stack.Screen name="sticker-packs/installed" options={rootScreenOptions.stickerPacks} />
+      <Stack.Screen name="sticker-packs/mine" options={rootScreenOptions.stickerPacks} />
+      <Stack.Screen name="sticker-packs/moderation/index" options={rootScreenOptions.stickerPacks} />
+      <Stack.Screen
+        name="sticker-packs/moderation/[revisionId]"
+        options={rootScreenOptions.stickerPacks}
+      />
       <Stack.Screen name="shared/index" />
       <Stack.Screen name="shared/chats" options={rootScreenOptions.sharedChats} />
       <Stack.Screen

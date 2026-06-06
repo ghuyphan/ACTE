@@ -607,4 +607,10 @@ describe('HomeScreen archive focus', () => {
 
     expect(mockPush).toHaveBeenCalledWith('/search');
   });
+
+  it('does not expose sticker packs directly from the Home header', () => {
+    renderHomeScreen();
+
+    expect(latestHomeHeaderSearchProps.showStickerPacksButton).toBe(false);
+  });
 });
