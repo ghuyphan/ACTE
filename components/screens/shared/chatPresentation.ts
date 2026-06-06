@@ -20,11 +20,37 @@ export type SharedChatTypingUser = {
   userId: string;
 };
 
-export function getVisibleSharedChatTypingUsers(
-  typingUsers: SharedChatTypingUser[],
+function normalizeTypingUserId(userId: string | null | undefined) {
+  return userId?.trim() ?? '';
+}
+
+export function getVisibleSharedChatTypingUsers<T extends SharedChatTypingUser>(
+  typingUsers: T[],
   currentUserUid: string | null | undefined
 ) {
-  return typingUsers.filter((typingUser) => typingUser.userId !== currentUserUid);
+  const normalizedCurrentUserUid = normalizeTypingUserId(currentUserUid);
+  const seenUserIds = new Set<string>();
+  const visibleTypingUsers: T[] = [];
+
+  for (const typingUser of typingUsers) {
+    const normalizedTypingUserId = normalizeTypingUserId(typingUser.userId);
+    if (
+      !normalizedTypingUserId ||
+      normalizedTypingUserId === normalizedCurrentUserUid ||
+      seenUserIds.has(normalizedTypingUserId)
+    ) {
+      continue;
+    }
+
+    seenUserIds.add(normalizedTypingUserId);
+    visibleTypingUsers.push(
+      normalizedTypingUserId === typingUser.userId
+        ? typingUser
+        : { ...typingUser, userId: normalizedTypingUserId }
+    );
+  }
+
+  return visibleTypingUsers;
 }
 
 export function getSharedChatTypingIndicatorLabel({

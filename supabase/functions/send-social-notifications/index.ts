@@ -84,6 +84,13 @@ type ClaimedNotificationEvent = {
   recipient_user_id: string | null;
 };
 
+class NotificationControlUnavailableError extends Error {
+  constructor(control: 'idempotency' | 'rate-limit') {
+    super(`Social notification ${control} control is unavailable.`);
+    this.name = 'NotificationControlUnavailableError';
+  }
+}
+
 const ANDROID_SOCIAL_CHANNEL_ID = 'social-v2';
 const EXPO_PUSH_API_URL = 'https://exp.host/--/api/v2/push/send';
 
@@ -451,11 +458,8 @@ async function reserveNotificationRecipients(
   });
 
   if (error) {
-    console.warn(
-      'Failed to reserve social notification recipients; sending without throttle reservation:',
-      error
-    );
-    return normalizedRecipientUserIds;
+    console.error('Failed to reserve social notification recipients:', error);
+    throw new NotificationControlUnavailableError('rate-limit');
   }
 
   return Array.from(
@@ -516,15 +520,8 @@ async function claimNotificationEvent(
   });
 
   if (error) {
-    console.warn('Failed to claim social notification event; sending without idempotency claim:', error);
-    return {
-      resource_id:
-        options.type === 'friend_accepted'
-          ? options.recipientUserId
-          : options.resourceId,
-      recipient_user_id:
-        options.type === 'friend_accepted' ? options.recipientUserId : null,
-    } satisfies ClaimedNotificationEvent;
+    console.error('Failed to claim social notification event:', error);
+    throw new NotificationControlUnavailableError('idempotency');
   }
 
   const row = Array.isArray(data) ? data[0] : data;
@@ -884,6 +881,16 @@ Deno.serve(async (request) => {
     }
   } catch (error) {
     console.error('send-social-notifications failed:', error);
+    if (error instanceof NotificationControlUnavailableError) {
+      return jsonResponse(
+        {
+          success: false,
+          error: 'Social notification delivery is temporarily unavailable.',
+        },
+        503
+      );
+    }
+
     return jsonResponse(
       {
         success: false,

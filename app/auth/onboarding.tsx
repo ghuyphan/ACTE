@@ -294,13 +294,25 @@ export default function OnboardingScreen() {
                 />
 
                 <View style={styles.skipContainer}>
-                    <Pressable disabled={isCompleting} onPress={() => {
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={
+                        isNotificationStep
+                          ? t('onboarding.notNow', 'Not now')
+                          : t('onboarding.skip', 'Skip')
+                      }
+                      accessibilityState={{ disabled: isCompleting }}
+                      disabled={isCompleting}
+                      hitSlop={8}
+                      onPress={() => {
                         void completeOnboardingWithoutNotifications();
-                    }} style={({ pressed }) => [
+                      }}
+                      style={({ pressed }) => [
                         styles.skipButton,
                         isCompleting && !isSecondaryCompleting && { opacity: 0.5 },
                         pressed && !isCompleting && { opacity: 0.7 }
-                    ]}>
+                      ]}
+                    >
                         {isSecondaryCompleting ? (
                             <NotoLoader variant="inline" color={colors.secondaryText} size="small" />
                         ) : (

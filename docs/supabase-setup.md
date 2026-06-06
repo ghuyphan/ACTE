@@ -36,7 +36,32 @@ In Google Cloud:
 
 ## 3. Database, Storage, And Migrations
 
-The old Supabase migration history has already been applied to the project and is intentionally not kept in this repo. Apply the current follow-up migrations under `supabase/migrations/` in order when updating an existing project.
+The checked-in migration history currently contains follow-up migrations only. It does not yet contain a trustworthy baseline that can create the deployed schema from an empty database. Do not treat `docs/supabase-schema.md` as an executable source of truth, and do not invent a baseline from the app's TypeScript types.
+
+Until the baseline recovery below is completed, apply the existing files under `supabase/migrations/` only to an environment whose schema and migration history have been compared with the authoritative linked project.
+
+### Recovering the authoritative baseline
+
+This work requires a Supabase access token, the production project ref, and the database password. Run it from a clean branch and use a disposable local Supabase database for validation:
+
+```sh
+export SUPABASE_ACCESS_TOKEN="..."
+npx supabase link --project-ref "<project-ref>"
+npx supabase migration list --linked
+npx supabase db dump --linked --schema public,storage \
+  --file /tmp/noto-linked-schema.sql
+```
+
+Then:
+
+1. Review the dump instead of applying it directly to production. Remove Supabase-managed internals while retaining all app-owned tables, functions, triggers, grants, and RLS policies.
+2. Capture app-owned storage bucket configuration separately. Bucket rows are data and may not be represented by a schema-only dump.
+3. Create an initial baseline migration that runs before the existing `202604...` follow-up files.
+4. Start local Supabase and run `npx supabase db reset --local` from an empty database.
+5. Run authorization tests with at least two users. Verify cross-user note/media denial, invite acceptance, friendship access, direct-chat membership, response/reaction ownership, push-token RPC access, and profile visibility.
+6. Compare the rebuilt local schema and policies with the linked project before merging or deploying the baseline.
+
+Never run `supabase db reset --linked` while recovering or testing the baseline.
 
 For a readable snapshot of the app-facing Supabase tables and storage buckets, see `docs/supabase-schema.md`.
 

@@ -22,6 +22,7 @@ const mockReadPairedVideoAsArrayBuffer = jest.fn(
   async (_uri: string) => Uint8Array.from([4, 5, 6]).buffer
 );
 const mockManipulateAsync = jest.fn();
+const mockUploadFileToSupabaseStorage = jest.fn<Promise<boolean>, [unknown]>(async () => false);
 
 jest.mock('../utils/fileSystem', () => ({
   getInfoAsync: (uri: string) => mockGetInfoAsync(uri),
@@ -71,6 +72,11 @@ jest.mock('../utils/supabase', () => ({
   }),
 }));
 
+jest.mock('../services/storageFileUpload', () => ({
+  uploadFileToSupabaseStorage: (options: unknown) =>
+    mockUploadFileToSupabaseStorage(options),
+}));
+
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const {
   downloadPhotoFromStorage,
@@ -97,6 +103,7 @@ describe('remoteMedia uploads', () => {
     });
     mockReadPhotoAsArrayBuffer.mockResolvedValue(Uint8Array.from([1, 2, 3]).buffer);
     mockReadPairedVideoAsArrayBuffer.mockResolvedValue(Uint8Array.from([4, 5, 6]).buffer);
+    mockUploadFileToSupabaseStorage.mockResolvedValue(false);
   });
 
   it('dedupes concurrent shared photo downloads for the same cache key', async () => {
@@ -288,6 +295,29 @@ describe('remoteMedia uploads', () => {
     expect(mockDeleteAsync).toHaveBeenCalledWith('file:///cache/optimized-photo.jpg', {
       idempotent: true,
     });
+  });
+
+  it('streams optimized photos from the native file without reading an ArrayBuffer', async () => {
+    mockUploadFileToSupabaseStorage.mockResolvedValue(true);
+
+    await expect(
+      uploadPhotoToStorage(
+        'note-media',
+        'user-1/note-1.jpg',
+        'file:///media/mock.jpg',
+        { allowOverwrite: true }
+      )
+    ).resolves.toBe('user-1/note-1.jpg');
+
+    expect(mockUploadFileToSupabaseStorage).toHaveBeenCalledWith({
+      bucket: 'note-media',
+      path: 'user-1/note-1.jpg',
+      fileUri: 'file:///cache/optimized-photo.jpg',
+      contentType: 'image/jpeg',
+      allowOverwrite: true,
+    });
+    expect(mockReadPhotoAsArrayBuffer).not.toHaveBeenCalled();
+    expect(mockUpload).not.toHaveBeenCalled();
   });
 
   it('uploads live photo motion clips as raw bytes with the correct content type', async () => {

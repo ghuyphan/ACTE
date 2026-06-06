@@ -363,7 +363,13 @@ export default function NoteDetailSheetContent({
                 <Text style={{ color: colors.secondaryText, fontSize: 17 }}>
                     {t('noteDetail.notFound', 'Note not found')}
                 </Text>
-                <Pressable onPress={onClose} style={{ marginTop: 20 }}>
+                <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={t('common.goBack', 'Go Back')}
+                    hitSlop={8}
+                    onPress={onClose}
+                    style={{ marginTop: 20 }}
+                >
                     <Text style={{ color: colors.primary, fontSize: 17, fontWeight: '600' }}>
                         {t('common.goBack', 'Go Back')}
                     </Text>

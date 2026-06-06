@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Platform, StyleSheet, Text, View } from 'react-native';
 import MapView, { Marker, Polyline, Region, type LongPressEvent } from 'react-native-maps';
 import Reanimated, {
@@ -553,6 +554,7 @@ function MapCanvas({
   preferLiteMarkers = false,
   colors,
 }: MapCanvasProps) {
+  const { t } = useTranslation();
   const isAndroid = Platform.OS === 'android';
   const palette = useMemo(() => getMapPalette(colors, isDark), [colors, isDark]);
   const [androidShouldTrackMarkerViews, setAndroidShouldTrackMarkerViews] = useState(isAndroid);
@@ -879,7 +881,11 @@ function MapCanvas({
               testID={testID}
               coordinate={coordinate}
               pinColor={isSelected ? palette.focus : markerColor}
-              accessibilityLabel={node.isCluster ? `${formatMarkerCount(pointCount)} notes` : 'Map note marker'}
+              accessibilityLabel={
+                node.isCluster
+                  ? t('map.clusterMarkerA11y', '{{count}} notes', { count: pointCount })
+                  : t('map.noteMarkerA11y', 'Map note marker')
+              }
               onPress={(event) => {
                 event.stopPropagation?.();
                 if (noteId) {
@@ -895,7 +901,11 @@ function MapCanvas({
               testID={testID}
               coordinate={coordinate}
               anchor={{ x: 0.5, y: 0.5 }}
-              accessibilityLabel={node.isCluster ? `${formatMarkerCount(pointCount)} notes` : 'Map note marker'}
+              accessibilityLabel={
+                node.isCluster
+                  ? t('map.clusterMarkerA11y', '{{count}} notes', { count: pointCount })
+                  : t('map.noteMarkerA11y', 'Map note marker')
+              }
               zIndex={markerZIndex}
               tracksViewChanges={
                 pulseActive ||
@@ -953,7 +963,7 @@ function MapCanvas({
           coordinate={saveTargetCoordinate}
           anchor={{ x: 0.5, y: 0.5 }}
           tracksViewChanges={reduceMotionEnabled}
-          accessibilityLabel="Selected save location"
+          accessibilityLabel={t('map.selectedSaveLocationA11y', 'Selected save location')}
         >
           <View
             style={[
@@ -990,7 +1000,9 @@ function MapCanvas({
               testID={`friend-marker-${post.id}`}
               coordinate={{ latitude: post.latitude, longitude: post.longitude }}
               pinColor={isSelected ? palette.friend : palette.focus}
-              accessibilityLabel={`${authorLabel}'s shared map marker`}
+              accessibilityLabel={t('map.friendMarkerA11y', "{{name}}'s shared map marker", {
+                name: authorLabel,
+              })}
               onPress={(event) => {
                 event.stopPropagation?.();
                 onFriendPress(post.id);
@@ -1002,7 +1014,9 @@ function MapCanvas({
               testID={`friend-marker-${post.id}`}
               coordinate={{ latitude: post.latitude, longitude: post.longitude }}
               anchor={showSelectedFriendCallout ? selectedCalloutAnchor : { x: 0.5, y: 0.5 }}
-              accessibilityLabel={`${authorLabel}'s shared map marker`}
+              accessibilityLabel={t('map.friendMarkerA11y', "{{name}}'s shared map marker", {
+                name: authorLabel,
+              })}
               tracksViewChanges={
                 reduceMotionEnabled ||
                 (!isAndroid && showSelectedFriendCallout) ||

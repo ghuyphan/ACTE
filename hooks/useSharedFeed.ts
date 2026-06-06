@@ -1,1 +1,6 @@
-export { SharedFeedProvider, useSharedFeedStore } from './useSharedFeedStore';
+export {
+  SharedFeedProvider,
+  useSharedFeedSelector,
+  useSharedFeedStore,
+  type SharedFeedStoreValue,
+} from './useSharedFeedStore';

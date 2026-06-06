@@ -244,6 +244,11 @@ jest.mock('../hooks/useSharedFeed', () => ({
     loading: mockSharedLoading,
     sharedPosts: mockSharedPosts,
   }),
+  useSharedFeedSelector: (selector: (value: unknown) => unknown) =>
+    selector({
+      loading: mockSharedLoading,
+      sharedPosts: mockSharedPosts,
+    }),
 }));
 
 jest.mock('../hooks/useSyncStatus', () => ({

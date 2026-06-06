@@ -385,10 +385,6 @@ type ConsoleMethod = 'warn' | 'error';
 const allowedConsolePatterns: Array<{ method: ConsoleMethod; pattern: RegExp }> = [
   {
     method: 'warn',
-    pattern: /^expo-notifications: Android Push notifications/,
-  },
-  {
-    method: 'warn',
     pattern: /^\[auth\] Failed to /,
   },
   {

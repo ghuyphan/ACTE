@@ -131,6 +131,14 @@ export function isSharedThreadUnread(
     return false;
   }
 
+  if (
+    summary.latestResponseId &&
+    readState?.lastReadResponseId &&
+    summary.latestResponseId === readState.lastReadResponseId
+  ) {
+    return false;
+  }
+
   const lastReadAt = readState?.lastReadAt ? new Date(readState.lastReadAt).getTime() : 0;
   return new Date(summary.latestActivityAt).getTime() > lastReadAt;
 }

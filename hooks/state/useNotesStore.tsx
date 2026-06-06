@@ -56,6 +56,8 @@ export interface NotesStateValue {
   notes: Note[];
   phase: NotesLoadPhase;
   loading: boolean;
+  loadingMore: boolean;
+  hasMoreNotes: boolean;
   initialLoadComplete: boolean;
 }
 
@@ -64,6 +66,7 @@ export interface NotesActionsValue {
     showLoading?: boolean,
     options?: { updateWidget?: boolean; syncGeofences?: boolean }
   ) => Promise<void>;
+  loadMoreNotes: () => Promise<void>;
   createNote: (input: CreateNoteInput) => Promise<Note>;
   updateNote: (id: string, updates: NoteUpdates) => Promise<void>;
   toggleFavorite: (id: string) => Promise<boolean>;
@@ -80,7 +83,6 @@ const NotesActionsContext = createContext<NotesActionsValue | undefined>(undefin
 const INITIAL_NOTES_BOOTSTRAP_LIMIT = 24;
 const INITIAL_NOTES_LOAD_RETRY_DELAY_MS = 900;
 const INITIAL_NOTES_STAGED_LOAD_TIMEOUT_MS = 2500;
-const INITIAL_NOTES_FULL_HYDRATION_TIMEOUT_MS = 4500;
 
 type InitialNotesRefreshOutcome = 'loaded' | 'released' | 'stale';
 
@@ -93,15 +95,15 @@ async function loadInitialNotesForScope({
   isCurrentRefreshRequest,
   markHydrating,
   onHydrationComplete,
-  publishLoadedNotes,
   publishStagedNotes,
+  setHasMoreNotes,
 }: {
   scope: string;
   isCurrentRefreshRequest: () => boolean;
   markHydrating: () => void;
   onHydrationComplete: () => void;
-  publishLoadedNotes: (notes: Note[]) => void;
   publishStagedNotes: (notes: Note[]) => void;
+  setHasMoreNotes: (hasMore: boolean) => void;
 }): Promise<InitialNotesRefreshOutcome> {
   const stagedNotesPromise = getNotesPageForScope(scope, {
     limit: INITIAL_NOTES_BOOTSTRAP_LIMIT,
@@ -119,19 +121,13 @@ async function loadInitialNotesForScope({
       '[notes] Initial staged notes load timed out; releasing startup with current notes.'
     );
     void stagedNotesPromise
-      .then(async (stagedNotes) => {
+      .then((stagedNotes) => {
         if (!isCurrentRefreshRequest()) {
           return;
         }
 
         publishStagedNotes(stagedNotes);
-
-        const allNotes = await getAllNotesForScope(scope);
-        if (!isCurrentRefreshRequest()) {
-          return;
-        }
-
-        publishLoadedNotes(allNotes);
+        setHasMoreNotes(stagedNotes.length >= INITIAL_NOTES_BOOTSTRAP_LIMIT);
         onHydrationComplete();
       })
       .catch((error) => {
@@ -143,37 +139,7 @@ async function loadInitialNotesForScope({
 
   publishStagedNotes(stagedResult.value);
   markHydrating();
-
-  const allNotesPromise = getAllNotesForScope(scope);
-  const hydrationResult = await withTimeoutResult(
-    allNotesPromise,
-    INITIAL_NOTES_FULL_HYDRATION_TIMEOUT_MS
-  );
-  if (!isCurrentRefreshRequest()) {
-    return 'stale';
-  }
-
-  if (hydrationResult.status === 'timed-out') {
-    console.warn(
-      '[notes] Initial full hydration timed out; releasing startup with staged notes.'
-    );
-    void allNotesPromise
-      .then((allNotes) => {
-        if (!isCurrentRefreshRequest()) {
-          return;
-        }
-
-        publishLoadedNotes(allNotes);
-        onHydrationComplete();
-      })
-      .catch((error) => {
-        console.error('Failed to finish background note hydration:', error);
-      });
-
-    return 'released';
-  }
-
-  publishLoadedNotes(hydrationResult.value);
+  setHasMoreNotes(stagedResult.value.length >= INITIAL_NOTES_BOOTSTRAP_LIMIT);
   onHydrationComplete();
   return 'loaded';
 }
@@ -182,7 +148,11 @@ function useNotesStoreValue(): { state: NotesStateValue; actions: NotesActionsVa
   const { user, isReady: authReady } = useAuth();
   const [notes, setNotes] = useState<Note[]>([]);
   const [phase, setPhase] = useState<NotesLoadPhase>('bootstrapping');
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMoreNotes, setHasMoreNotes] = useState(false);
   const notesRef = useRef<Note[]>([]);
+  const hasMoreNotesRef = useRef(false);
+  const loadingMoreRef = useRef(false);
   const phaseRef = useRef<NotesLoadPhase>(phase);
   const activeScopeRef = useRef<string>(LOCAL_NOTES_SCOPE);
   const activeScopeRevisionRef = useRef(0);
@@ -194,6 +164,10 @@ function useNotesStoreValue(): { state: NotesStateValue; actions: NotesActionsVa
   useEffect(() => {
     notesRef.current = notes;
   }, [notes]);
+
+  useEffect(() => {
+    hasMoreNotesRef.current = hasMoreNotes;
+  }, [hasMoreNotes]);
 
   useEffect(() => {
     phaseRef.current = phase;
@@ -317,10 +291,10 @@ function useNotesStoreValue(): { state: NotesStateValue; actions: NotesActionsVa
         notesRef.current = nextNotes;
         setNotes(nextNotes);
         if (options?.updateWidget) {
-          scheduleWidgetUpdate(nextNotes);
+          scheduleWidgetUpdate();
         }
         if (options?.syncGeofences) {
-          syncGeofencesForNotes('note refresh', nextNotes);
+          syncGeofencesForNotes('note refresh');
         }
       };
 
@@ -346,18 +320,26 @@ function useNotesStoreValue(): { state: NotesStateValue; actions: NotesActionsVa
             isCurrentRefreshRequest,
             markHydrating: () => setPhase('hydrating'),
             onHydrationComplete: resetInitialLoadRetryCount,
-            publishLoadedNotes,
             publishStagedNotes,
+            setHasMoreNotes,
           });
           return;
         } else {
-          const allNotes = await getAllNotesForScope(scope);
+          const requestedLimit = Math.max(
+            INITIAL_NOTES_BOOTSTRAP_LIMIT,
+            notesRef.current.length + 1
+          );
+          const refreshedNotes = await getNotesPageForScope(scope, {
+            limit: requestedLimit,
+          });
           if (!isCurrentRefreshRequest()) {
             refreshOutcome = 'stale';
             return;
           }
 
-          publishLoadedNotes(allNotes);
+          const hasMore = refreshedNotes.length >= requestedLimit;
+          publishLoadedNotes(hasMore ? refreshedNotes.slice(0, -1) : refreshedNotes);
+          setHasMoreNotes(hasMore);
         }
 
         if (!isCurrentRefreshRequest()) {
@@ -407,6 +389,42 @@ function useNotesStoreValue(): { state: NotesStateValue; actions: NotesActionsVa
     [clearInitialLoadRetryTimer, scheduleWidgetUpdate, syncGeofencesForNotes]
   );
 
+  const loadMoreNotes = useCallback(async () => {
+    if (loadingMoreRef.current || !hasMoreNotesRef.current) {
+      return;
+    }
+
+    const scope = activeScopeRef.current;
+    const scopeRevision = activeScopeRevisionRef.current;
+    const offset = notesRef.current.length;
+    loadingMoreRef.current = true;
+    setLoadingMore(true);
+    try {
+      const nextPage = await getNotesPageForScope(scope, {
+        limit: INITIAL_NOTES_BOOTSTRAP_LIMIT,
+        offset,
+      });
+      if (!isCurrentScope(scope, scopeRevision)) {
+        return;
+      }
+
+      const seenIds = new Set(notesRef.current.map((note) => note.id));
+      const uniquePage = nextPage.filter((note) => !seenIds.has(note.id));
+      if (uniquePage.length > 0) {
+        notesRef.current = [...notesRef.current, ...uniquePage];
+        setNotes(notesRef.current);
+      }
+      setHasMoreNotes(nextPage.length >= INITIAL_NOTES_BOOTSTRAP_LIMIT);
+    } catch (error) {
+      console.error('Failed to load more notes:', error);
+    } finally {
+      loadingMoreRef.current = false;
+      if (isCurrentScope(scope, scopeRevision)) {
+        setLoadingMore(false);
+      }
+    }
+  }, [isCurrentScope]);
+
   useEffect(() => {
     if (!authReady) {
       return;
@@ -427,6 +445,9 @@ function useNotesStoreValue(): { state: NotesStateValue; actions: NotesActionsVa
     if (scopeChanged && loadedScopeRef.current !== null) {
       notesRef.current = [];
       setNotes([]);
+      setHasMoreNotes(false);
+      loadingMoreRef.current = false;
+      setLoadingMore(false);
       setPhase('bootstrapping');
     }
 
@@ -514,7 +535,7 @@ function useNotesStoreValue(): { state: NotesStateValue; actions: NotesActionsVa
       void skipImmediateReminderForNewNote(note).catch((error) => {
         console.warn('Failed to suppress immediate reminder for new note:', error);
       });
-      syncGeofencesForNotes('note creation', nextNotes);
+      syncGeofencesForNotes('note creation', hasMoreNotesRef.current ? undefined : nextNotes);
 
       return note;
     },
@@ -551,7 +572,7 @@ function useNotesStoreValue(): { state: NotesStateValue; actions: NotesActionsVa
       const nextNotes = updateNoteInCollection(notesRef.current, id, updates);
       commitNotes(nextNotes);
       if (doesNoteUpdateAffectReminderSelection(updates)) {
-        syncGeofencesForNotes('note update', nextNotes);
+        syncGeofencesForNotes('note update', hasMoreNotesRef.current ? undefined : nextNotes);
       }
     },
     [commitNotes, isCurrentScope, syncGeofencesForNotes]
@@ -585,7 +606,7 @@ function useNotesStoreValue(): { state: NotesStateValue; actions: NotesActionsVa
         localRevision: (note.localRevision ?? 0) + 1,
       }));
       commitNotes(nextNotes);
-      syncGeofencesForNotes('favorite change', nextNotes);
+      syncGeofencesForNotes('favorite change', hasMoreNotesRef.current ? undefined : nextNotes);
       return newValue;
     },
     [commitNotes, isCurrentScope, syncGeofencesForNotes]
@@ -668,7 +689,7 @@ function useNotesStoreValue(): { state: NotesStateValue; actions: NotesActionsVa
       });
 
       await deletePhotoFileIfPresent(note);
-      syncGeofencesForNotes('note deletion', nextNotes);
+      syncGeofencesForNotes('note deletion', hasMoreNotesRef.current ? undefined : nextNotes);
     },
     [commitNotes, deletePhotoFileIfPresent, isCurrentScope, syncGeofencesForNotes]
   );
@@ -691,6 +712,7 @@ function useNotesStoreValue(): { state: NotesStateValue; actions: NotesActionsVa
     }
 
     commitNotes([]);
+    setHasMoreNotes(false);
     emitDeletedNotesEvent({
       scope,
       noteIds: allNotes.map((note) => note.id),
@@ -718,14 +740,17 @@ function useNotesStoreValue(): { state: NotesStateValue; actions: NotesActionsVa
       notes,
       phase,
       loading,
+      loadingMore,
+      hasMoreNotes,
       initialLoadComplete,
     }),
-    [initialLoadComplete, loading, notes, phase]
+    [hasMoreNotes, initialLoadComplete, loading, loadingMore, notes, phase]
   );
 
   const actions = useMemo(
     () => ({
       refreshNotes,
+      loadMoreNotes,
       createNote,
       updateNote,
       toggleFavorite,
@@ -739,6 +764,7 @@ function useNotesStoreValue(): { state: NotesStateValue; actions: NotesActionsVa
       deleteAllNotes,
       deleteNote,
       getNoteById,
+      loadMoreNotes,
       refreshNotes,
       searchNotes,
       toggleFavorite,

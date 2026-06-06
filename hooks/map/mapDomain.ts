@@ -5,10 +5,10 @@ import Supercluster from 'supercluster';
 import type { Note } from '../../services/database';
 
 export const DEFAULT_REGION: Region = {
-  latitude: 10.762622,
-  longitude: 106.660172,
-  latitudeDelta: 0.05,
-  longitudeDelta: 0.05,
+  latitude: 0,
+  longitude: 0,
+  latitudeDelta: 90,
+  longitudeDelta: 180,
 };
 
 const GROUP_PRECISION = 5;

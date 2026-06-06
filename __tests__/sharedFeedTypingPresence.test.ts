@@ -1,5 +1,9 @@
 import { getTypingUsersFromPresenceState } from '../services/sharedFeedService';
 
+jest.mock('../services/socialPushService', () => ({
+  sendSocialNotificationEvent: jest.fn(),
+}));
+
 describe('shared feed typing presence', () => {
   it('hides your own typing state and stale typing states', () => {
     const now = new Date();

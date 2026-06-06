@@ -1,4 +1,5 @@
 import { memo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { ScrollView, View } from 'react-native';
 import { CaptureAnimatedPressable } from './CaptureAnimatedPressable';
 import { styles } from './captureCardStyles';
@@ -26,6 +27,8 @@ export const DoodleColorPalette = memo(function DoodleColorPalette({
   swatchBorderColor,
   testIDPrefix,
 }: DoodleColorPaletteProps) {
+  const { t } = useTranslation();
+
   return (
     <View style={styles.doodleColorPalette}>
       <ScrollView
@@ -44,7 +47,9 @@ export const DoodleColorPalette = memo(function DoodleColorPalette({
               testID={`${testIDPrefix}-${index}`}
               accessibilityRole="button"
               accessibilityState={{ selected: isSelected }}
-              accessibilityLabel={`Doodle color ${index + 1}`}
+              accessibilityLabel={t('capture.doodleColorA11y', 'Doodle color {{index}}', {
+                index: index + 1,
+              })}
               onPress={() => onSelectColor(color)}
               active={isSelected}
               activeScale={1.035}

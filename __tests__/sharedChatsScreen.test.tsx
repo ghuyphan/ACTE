@@ -344,6 +344,41 @@ describe('SharedChatsScreen', () => {
     });
   });
 
+  it('shows visible typing previews without self or duplicate presence rows', async () => {
+    const typingHandlersByPostId = new Map<
+      string,
+      { onTypingUsers: (typingUsers: Array<{ userId: string; displayName?: string | null; photoURL?: string | null }>) => void }
+    >();
+    mockSubscribeToSharedPostTyping.mockImplementation((postId, handlers) => {
+      typingHandlersByPostId.set(postId, handlers);
+      return {
+        setTyping: jest.fn(),
+        unsubscribe: jest.fn(),
+      };
+    });
+
+    const { getByText, queryByText } = render(<SharedChatsScreen />);
+
+    await waitFor(() => {
+      expect(getByText('@lan: Old message')).toBeTruthy();
+      expect(typingHandlersByPostId.has(mockDirectPost.id)).toBe(true);
+    });
+
+    await act(async () => {
+      typingHandlersByPostId.get(mockDirectPost.id)?.onTypingUsers([
+        { userId: ' me ', displayName: 'Me' },
+        { userId: ' friend-1 ', displayName: 'Lan' },
+        { userId: 'friend-1', displayName: 'Lan duplicate' },
+      ]);
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(getByText('@lan is typing')).toBeTruthy();
+    });
+    expect(queryByText('2 people are typing')).toBeNull();
+  });
+
   it('renders empty direct chat anchors like starter rows without badge or timestamp', async () => {
     mockSharedFeedState.friends = [mockSharedFeedState.friends[0]];
     mockGetCachedSharedThreadSummaries.mockResolvedValue([]);

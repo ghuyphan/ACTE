@@ -86,6 +86,11 @@ let latestSharedFeedSubscriptionHandlers:
       onError?: (error: unknown) => void;
     }
   | null = null;
+let latestFriendPresenceOptions:
+  | {
+      onPresence?: (presence: Record<string, unknown>) => void;
+    }
+  | null = null;
 let appStateListener: ((state: AppStateStatus) => void) | null = null;
 
 jest.mock('../hooks/useAuth', () => ({
@@ -158,7 +163,11 @@ jest.mock('../services/remoteMedia', () => ({
     mockDownloadPairedVideoFromStorage(...args),
 }));
 
-import { SharedFeedProvider, useSharedFeedStore } from '../hooks/useSharedFeed';
+import {
+  SharedFeedProvider,
+  useSharedFeedSelector,
+  useSharedFeedStore,
+} from '../hooks/useSharedFeed';
 import { emitDeletedNotesEvent } from '../services/noteMutationEvents';
 
 const wrapper = ({ children }: { children: ReactNode }) => (
@@ -277,7 +286,9 @@ describe('useSharedFeedStore', () => {
         options?.preferCachedOnly ? null : 'file:///shared/friend-photo-1.mov'
     );
     latestSharedFeedSubscriptionHandlers = null;
+    latestFriendPresenceOptions = null;
     mockSubscribeToFriendPresence.mockImplementation((_user: unknown, _friendUserIds: unknown, options: any) => {
+      latestFriendPresenceOptions = options;
       options?.onPresence?.({});
       return () => undefined;
     });
@@ -340,6 +351,50 @@ describe('useSharedFeedStore', () => {
         }),
       } as any;
     });
+  });
+
+  it('does not rerender a shared-post selector when only friend presence changes', async () => {
+    mockCachedSnapshot = {
+      friends: [
+        {
+          userId: 'friend-1',
+          displayNameSnapshot: 'Lan',
+          photoURLSnapshot: null,
+          friendedAt: '2026-03-21T00:00:00.000Z',
+          lastSharedAt: null,
+          createdByInviteId: null,
+        },
+      ],
+      sharedPosts: [createSharedPost()],
+      activeInvite: null,
+      lastUpdatedAt: '2026-03-23T00:00:00.000Z',
+    };
+    let renderCount = 0;
+
+    const { result } = renderHook(
+      () => {
+        renderCount += 1;
+        return useSharedFeedSelector((store) => store.sharedPosts);
+      },
+      { wrapper }
+    );
+
+    await waitFor(() => {
+      expect(result.current).toHaveLength(1);
+      expect(latestFriendPresenceOptions).not.toBeNull();
+    });
+    const settledRenderCount = renderCount;
+
+    act(() => {
+      latestFriendPresenceOptions?.onPresence?.({
+        'friend-1': {
+          isOnline: true,
+          lastSeenAt: '2026-06-05T00:00:00.000Z',
+        },
+      });
+    });
+
+    expect(renderCount).toBe(settledRenderCount);
   });
 
   it('hydrates the active invite from cache', async () => {

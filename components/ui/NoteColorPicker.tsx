@@ -1,5 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useTranslation } from 'react-i18next';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useTheme } from '../../hooks/useTheme';
 import {
@@ -33,6 +34,7 @@ export default function NoteColorPicker({
   previewOnlyColorIds = [],
   onLockedColorPress,
 }: NoteColorPickerProps) {
+  const { t } = useTranslation();
   const { appTheme, colors, isDark } = useTheme();
   const lockedColorSet = new Set(lockedColorIds);
   const previewOnlyColorSet = new Set(previewOnlyColorIds);
@@ -61,7 +63,12 @@ export default function NoteColorPicker({
               key={preset.id}
               accessibilityRole="button"
               accessibilityState={{ selected }}
-              accessibilityLabel={`${label ?? 'Color'} ${index + 1}${premium ? ' Plus' : ''}`}
+              accessibilityLabel={t('capture.noteColorOptionA11y', {
+                defaultValue: '{{label}} {{index}}{{premium}}',
+                index: index + 1,
+                label: label ?? t('capture.noteColor', 'Card color'),
+                premium: premium ? `, ${t('plus.badge', 'Plus')}` : '',
+              })}
               onPress={() => {
                 if (locked) {
                   onLockedColorPress?.(preset.id);

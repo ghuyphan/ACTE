@@ -1,13 +1,16 @@
 import React from 'react';
-import { act, render, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import { Keyboard, Platform, StyleSheet } from 'react-native';
 import SharedPostChatScreen from '../components/screens/shared/SharedPostChatScreen';
 
 const mockGetSharedChatThreadPost = jest.fn();
 const mockGetDirectChatThreadPost = jest.fn();
 const mockGetSharedPostResponsesPage = jest.fn();
+const mockCreateSharedPostResponse = jest.fn();
+const mockMarkSharedThreadRead = jest.fn();
 const mockScrollToEnd = jest.fn();
 const mockScrollToIndex = jest.fn();
+let mockNotes: unknown[] = [];
 let mockLatestThreadOnStartReached: (() => void) | null = null;
 let mockLatestThreadOnScroll: ((event: unknown) => void) | null = null;
 
@@ -117,7 +120,7 @@ jest.mock('../components/ui/StickerIcon', () => () => null);
 jest.mock('../components/notes/StickerLibraryPreview', () => () => null);
 
 jest.mock('../hooks/useNotes', () => ({
-  useNotes: () => ({ notes: [] }),
+  useNotes: () => ({ notes: mockNotes }),
 }));
 
 jest.mock('react-i18next', () => ({
@@ -168,6 +171,7 @@ jest.mock('../hooks/useTheme', () => ({
 
 jest.mock('../hooks/useHaptics', () => ({
   impactAsync: jest.fn(),
+  selectionAsync: jest.fn(),
   ImpactFeedbackStyle: {
     Light: 'light',
   },
@@ -211,8 +215,8 @@ jest.mock('../hooks/useSharedFeed', () => ({
     updateFriendNickname: jest.fn(),
     createSharedPostResponseReaction: jest.fn(),
     deleteSharedPostResponseReaction: jest.fn(),
-    markSharedThreadRead: jest.fn().mockResolvedValue(null),
-    createSharedPostResponse: jest.fn(),
+    markSharedThreadRead: mockMarkSharedThreadRead,
+    createSharedPostResponse: mockCreateSharedPostResponse,
   }),
 }));
 
@@ -223,6 +227,20 @@ describe('SharedPostChatScreen', () => {
     mockScrollToIndex.mockClear();
     mockLatestThreadOnStartReached = null;
     mockLatestThreadOnScroll = null;
+    mockNotes = [];
+    mockCreateSharedPostResponse.mockResolvedValue({
+      id: 'response-2',
+      postId: directPost.id,
+      authorUid: 'me',
+      authorDisplayName: 'Me',
+      authorPhotoURLSnapshot: null,
+      emoji: null,
+      text: 'sent from test',
+      replyToResponseId: null,
+      reactions: [],
+      createdAt: '2026-05-20T01:02:00.000Z',
+    });
+    mockMarkSharedThreadRead.mockResolvedValue(null);
     mockGetSharedChatThreadPost.mockResolvedValue(directPost);
     mockGetDirectChatThreadPost.mockResolvedValue(null);
     mockGetSharedPostResponsesPage.mockResolvedValue([
@@ -240,6 +258,62 @@ describe('SharedPostChatScreen', () => {
       },
     ]);
   });
+
+  function createStickerNote() {
+    return {
+      id: 'sticker-note-1',
+      type: 'text',
+      content: '',
+      caption: null,
+      photoLocalUri: null,
+      photoSyncedLocalUri: null,
+      photoRemoteBase64: null,
+      isLivePhoto: false,
+      pairedVideoLocalUri: null,
+      pairedVideoSyncedLocalUri: null,
+      pairedVideoRemotePath: null,
+      locationName: null,
+      promptId: null,
+      promptTextSnapshot: null,
+      promptAnswer: null,
+      moodEmoji: null,
+      noteColor: null,
+      latitude: 0,
+      longitude: 0,
+      radius: 150,
+      isFavorite: false,
+      hasDoodle: false,
+      doodleStrokesJson: null,
+      hasStickers: true,
+      stickerPlacementsJson: JSON.stringify([
+        {
+          id: 'placement-1',
+          assetId: 'asset-1',
+          x: 0.5,
+          y: 0.5,
+          scale: 1,
+          rotation: 0,
+          zIndex: 1,
+          opacity: 1,
+          renderMode: 'default',
+          asset: {
+            id: 'asset-1',
+            ownerUid: '__local__',
+            localUri: 'file:///asset-1.png',
+            remotePath: null,
+            mimeType: 'image/png',
+            width: 200,
+            height: 200,
+            createdAt: '2026-04-01T00:00:00.000Z',
+            updatedAt: null,
+            source: 'import',
+          },
+        },
+      ]),
+      createdAt: '2026-04-01T00:00:00.000Z',
+      updatedAt: null,
+    };
+  }
 
   it('loads a direct chat by post id even when the route also includes friendUid', async () => {
     const { getByText } = render(
@@ -282,6 +356,84 @@ describe('SharedPostChatScreen', () => {
         limit: 24,
       });
     });
+  });
+
+  it('marks the thread read through the persisted response after sending', async () => {
+    const { getByLabelText } = render(
+      <SharedPostChatScreen
+        directFriendUid="friend-1"
+        postId="direct-chat-1"
+      />
+    );
+
+    await waitFor(() => {
+      expect(mockMarkSharedThreadRead).toHaveBeenCalledWith('direct-chat-1', 'response-1');
+    });
+    mockMarkSharedThreadRead.mockClear();
+
+    await act(async () => {
+      fireEvent.changeText(getByLabelText('Message'), 'sent from test');
+      await Promise.resolve();
+    });
+    await act(async () => {
+      fireEvent.press(getByLabelText('Send'));
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(mockCreateSharedPostResponse).toHaveBeenCalledWith('direct-chat-1', {
+        emoji: null,
+        text: 'sent from test',
+        sticker: null,
+        replyToResponseId: null,
+      });
+      expect(mockMarkSharedThreadRead).toHaveBeenCalledWith('direct-chat-1', 'response-2');
+    });
+  });
+
+  it('sends a sticker without clearing unsent composer text', async () => {
+    mockNotes = [createStickerNote()];
+
+    const { getByLabelText, getByTestId } = render(
+      <SharedPostChatScreen
+        directFriendUid="friend-1"
+        postId="direct-chat-1"
+      />
+    );
+
+    await waitFor(() => {
+      expect(getByLabelText('Message')).toBeTruthy();
+    });
+
+    await act(async () => {
+      fireEvent.changeText(getByLabelText('Message'), 'keep this draft');
+      await Promise.resolve();
+    });
+    await act(async () => {
+      fireEvent.press(getByLabelText('Open sticker library'));
+      await Promise.resolve();
+    });
+    await act(async () => {
+      fireEvent.press(getByTestId('chat-sticker-tray-item-asset-1:default'));
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(mockCreateSharedPostResponse).toHaveBeenCalledWith('direct-chat-1', {
+        emoji: null,
+        text: null,
+        sticker: {
+          asset: expect.objectContaining({
+            id: 'asset-1',
+            localUri: 'file:///asset-1.png',
+          }),
+          renderMode: 'default',
+          stampStyle: null,
+        },
+        replyToResponseId: null,
+      });
+    });
+    expect(getByLabelText('Message').props.value).toBe('keep this draft');
   });
 
   it('does not load older messages until the user scrolls upward', async () => {

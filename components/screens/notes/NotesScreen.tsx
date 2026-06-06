@@ -28,8 +28,12 @@ import { DOODLE_ARTBOARD_FRAME } from '../../../constants/doodleLayout';
 import { useAuth } from '../../../hooks/useAuth';
 import { useFeedFocus } from '../../../hooks/useFeedFocus';
 import { useNotesStore } from '../../../hooks/useNotes';
+import { useReducedMotion } from '../../../hooks/useReducedMotion';
 import { usePreparedNotesRecapData } from '../../../hooks/state/useNotesRecapViewModel';
-import { useSharedFeedStore } from '../../../hooks/useSharedFeed';
+import {
+  useSharedFeedSelector,
+  type SharedFeedStoreValue,
+} from '../../../hooks/useSharedFeed';
 import { useSyncStatus } from '../../../hooks/useSyncStatus';
 import { useTheme } from '../../../hooks/useTheme';
 import DynamicStickerCanvas from '../../notes/DynamicStickerCanvas';
@@ -41,6 +45,11 @@ import RecapModeSwitch, {
 import PeekingCatIcon from '../../ui/PeekingCatIcon';
 import StickerIcon from '../../ui/StickerIcon';
 import { SHARED_POST_MEDIA_BUCKET } from '../../../services/remoteMedia';
+import {
+  getAllNotesForScope,
+  LOCAL_NOTES_SCOPE,
+  type Note,
+} from '../../../services/database';
 import {
   buildHomeFeedItems,
   getHomeFeedItemKey,
@@ -59,6 +68,8 @@ const MODE_SWIPE_DISTANCE = 56;
 const MODE_SWIPE_VELOCITY = 460;
 const NOTES_BROWSE_MODE_ORDER: RecapMode[] = ['all', 'recap'];
 const NOTES_GRID_SKELETON_TILE_COUNT = 15;
+const selectSharedPosts = (store: SharedFeedStoreValue) => store.sharedPosts;
+const selectSharedLoading = (store: SharedFeedStoreValue) => store.loading;
 
 function triggerNotesHaptic(style: Haptics.ImpactFeedbackStyle = Haptics.ImpactFeedbackStyle.Light) {
   void Haptics.impactAsync(style);
@@ -269,18 +280,21 @@ function NotesGridSkeleton({
   loadingTitle: string;
   tileSize: number;
 }) {
+  const reduceMotionEnabled = useReducedMotion();
   const opacity = useSharedValue(0.46);
   const pulseStyle = useAnimatedStyle(() => ({
     opacity: opacity.value,
   }));
 
   useEffect(() => {
-    opacity.value = withRepeat(withTiming(0.78, { duration: 760 }), -1, true);
+    opacity.value = reduceMotionEnabled
+      ? 0.62
+      : withRepeat(withTiming(0.78, { duration: 760 }), -1, true);
 
     return () => {
       cancelAnimation(opacity);
     };
-  }, [opacity]);
+  }, [opacity, reduceMotionEnabled]);
 
   return (
     <View
@@ -380,10 +394,18 @@ export default function NotesIndexScreen() {
   const router = useRouter();
   const { user } = useAuth();
   const { requestFeedFocus } = useFeedFocus();
-  const { notes, loading } = useNotesStore();
-  const { sharedPosts, loading: sharedLoading } = useSharedFeedStore();
+  const {
+    notes,
+    loading,
+    hasMoreNotes,
+    loadingMore,
+    loadMoreNotes,
+  } = useNotesStore();
+  const sharedPosts = useSharedFeedSelector(selectSharedPosts);
+  const sharedLoading = useSharedFeedSelector(selectSharedLoading);
   const { isInitialSyncPending, status: syncStatus } = useSyncStatus();
   const [mode, setMode] = useState<RecapMode>('all');
+  const [recapNotes, setRecapNotes] = useState<Note[] | null>(null);
   const [showGridDecorations, setShowGridDecorations] = useState(process.env.NODE_ENV === 'test');
   const [isRecapPhysicsSuspended, setIsRecapPhysicsSuspended] = useState(false);
   const [visibleSharedPhotoIds, setVisibleSharedPhotoIds] = useState<string[]>([]);
@@ -449,13 +471,39 @@ export default function NotesIndexScreen() {
   const gridSize = Math.floor((width - Layout.screenPadding * 2 - gridGap * 2) / 3);
   const isBootstrapSyncing = syncStatus === 'syncing' && isInitialSyncPending && items.length === 0;
   const isLoading = ((loading || sharedLoading) && items.length === 0) || isBootstrapSyncing;
-  const hasRecapNotes = notes.length > 0;
+  const activeRecapNotes = recapNotes ?? notes;
+  const hasRecapNotes = activeRecapNotes.length > 0;
   const shouldRenderRecap = hasRecapNotes && mode === 'recap';
   const preparedRecap = usePreparedNotesRecapData({
-    notes,
+    notes: activeRecapNotes,
     enabled: hasRecapNotes && !isLoading,
     immediate: mode === 'recap',
   });
+  useEffect(() => {
+    if (
+      mode !== 'recap' ||
+      process.env.NODE_ENV === 'test' ||
+      typeof getAllNotesForScope !== 'function'
+    ) {
+      return;
+    }
+
+    let cancelled = false;
+    const scope = user?.uid?.trim() || LOCAL_NOTES_SCOPE;
+    void getAllNotesForScope(scope)
+      .then((allNotes) => {
+        if (!cancelled) {
+          setRecapNotes(allNotes);
+        }
+      })
+      .catch((error) => {
+        console.warn('Failed to load complete recap note set:', error);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [mode, user?.uid]);
   useEffect(() => {
     if (!hasRecapNotes && mode !== 'all') {
       setMode('all');
@@ -695,6 +743,14 @@ export default function NotesIndexScreen() {
                       )}
                       onViewableItemsChanged={handleViewableItemsChanged}
                       viewabilityConfig={gridViewabilityConfig}
+                      onEndReached={
+                        hasMoreNotes && !loadingMore
+                          ? () => {
+                              void loadMoreNotes();
+                            }
+                          : undefined
+                      }
+                      onEndReachedThreshold={0.5}
                       numColumns={3}
                       showsVerticalScrollIndicator={false}
                       contentContainerStyle={{
@@ -708,7 +764,7 @@ export default function NotesIndexScreen() {
 
                 {mode === 'recap' && shouldRenderRecap ? (
                   <NotesRecapView
-                    notes={notes}
+                    notes={activeRecapNotes}
                     bottomInset={insets.bottom}
                     isVisible
                     suspendPhysics={isRecapPhysicsSuspended}

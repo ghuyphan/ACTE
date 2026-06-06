@@ -2,7 +2,11 @@ import * as Crypto from 'expo-crypto';
 import Constants from 'expo-constants';
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
-import { getPersistentItem, removePersistentItem, setPersistentItem } from '../utils/appStorage';
+import {
+  getSensitiveItem,
+  removeSensitiveItem,
+  setSensitiveItem,
+} from '../utils/sensitiveStorage';
 import { AppUser } from '../utils/appUser';
 import {
   getSupabaseAnonKey,
@@ -160,7 +164,7 @@ function getExpoProjectId() {
 
 async function readPersistedRegistration(): Promise<PersistedPushRegistration | null> {
   try {
-    const rawValue = await getPersistentItem(PUSH_REGISTRATION_STORAGE_KEY);
+    const rawValue = await getSensitiveItem(PUSH_REGISTRATION_STORAGE_KEY);
     if (!rawValue) {
       return null;
     }
@@ -185,11 +189,11 @@ async function readPersistedRegistration(): Promise<PersistedPushRegistration | 
 }
 
 async function writePersistedRegistration(value: PersistedPushRegistration) {
-  await setPersistentItem(PUSH_REGISTRATION_STORAGE_KEY, JSON.stringify(value));
+  await setSensitiveItem(PUSH_REGISTRATION_STORAGE_KEY, JSON.stringify(value));
 }
 
 async function getPushInstallationId() {
-  const existingInstallationId = (await getPersistentItem(PUSH_INSTALLATION_ID_STORAGE_KEY))?.trim() ?? '';
+  const existingInstallationId = (await getSensitiveItem(PUSH_INSTALLATION_ID_STORAGE_KEY))?.trim() ?? '';
   if (existingInstallationId) {
     return existingInstallationId;
   }
@@ -199,7 +203,7 @@ async function getPushInstallationId() {
       ? Crypto.randomUUID()
       : `push-install-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 
-  await setPersistentItem(PUSH_INSTALLATION_ID_STORAGE_KEY, nextInstallationId);
+  await setSensitiveItem(PUSH_INSTALLATION_ID_STORAGE_KEY, nextInstallationId);
   return nextInstallationId;
 }
 
@@ -275,7 +279,7 @@ async function unregisterPushToken(token: string) {
 
 async function clearPersistedRegistrationAfterSuccessfulUnregister(token: string) {
   await unregisterPushToken(token);
-  await removePersistentItem(PUSH_REGISTRATION_STORAGE_KEY);
+  await removeSensitiveItem(PUSH_REGISTRATION_STORAGE_KEY);
 }
 
 async function registerPushTokenWithCompatibilityFallback(

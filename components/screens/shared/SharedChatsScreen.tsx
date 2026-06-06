@@ -32,6 +32,10 @@ import {
   isSharedThreadUnread,
 } from '../../../utils/sharedChatPresentation';
 import { showAppAlert } from '../../../utils/alert';
+import {
+  getSharedChatTypingIndicatorLabel,
+  getVisibleSharedChatTypingUsers,
+} from './chatPresentation';
 
 const CHAT_LIST_SKELETON_ROWS = [
   { key: 'first', titleWidth: '46%', previewWidth: '68%' },
@@ -491,9 +495,7 @@ export default function SharedChatsScreen() {
       subscribeToSharedPostTyping(postId, {
         onTypingUsers: (typingUsers) => {
           setTypingUsersByPostId((current) => {
-            const visibleTypingUsers = typingUsers.filter(
-              (typingUser) => typingUser.userId !== user.uid
-            );
+            const visibleTypingUsers = getVisibleSharedChatTypingUsers(typingUsers, user.uid);
             if (visibleTypingUsers.length === 0) {
               if (!current[postId]) {
                 return current;
@@ -668,22 +670,18 @@ export default function SharedChatsScreen() {
       const isDirectChat = isDirectChatPost(post);
       const starterPreview = t('shared.directChatStarter', 'Message');
       const summaryBody = summary ? getSharedThreadSummaryBody(summary) : '';
-      const typingUsers = typingUsersByPostId[post.id] ?? [];
-      const typingPreview =
-        typingUsers.length === 0
-          ? null
-          : typingUsers.length === 1
-            ? t('shared.chatTypingOne', '{{name}} is typing', {
-                name: getThreadParticipant({
-                  ...post,
-                  authorUid: typingUsers[0].userId,
-                  authorDisplayName: typingUsers[0].displayName,
-                  authorPhotoURLSnapshot: typingUsers[0].photoURL,
-                }).label,
-              })
-            : t('shared.chatTypingMany', '{{count}} people are typing', {
-                count: typingUsers.length,
-              });
+      const visibleTypingUsers = typingUsersByPostId[post.id] ?? [];
+      const typingPreview = getSharedChatTypingIndicatorLabel({
+        getAuthorLabel: (userId, displayName, photoURL) =>
+          getThreadParticipant({
+            ...post,
+            authorUid: userId,
+            authorDisplayName: displayName ?? null,
+            authorPhotoURLSnapshot: photoURL ?? null,
+          }).label,
+        t,
+        visibleTypingUsers,
+      });
       const latestPreview = summary?.latestActivityAt
         ? latestAuthor
           ? t('shared.chatThreadLatestBy', '{{name}}: {{message}}', {

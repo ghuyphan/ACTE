@@ -22,6 +22,7 @@ import {
 } from '../utils/supabase';
 import { getFileExtension } from './mediaTypeUtils';
 import { isUserOwnedRemoteMediaPath } from './remoteMediaPaths';
+import { uploadFileToSupabaseStorage } from './storageFileUpload';
 
 export const NOTE_MEDIA_BUCKET = 'note-media';
 export const SHARED_POST_MEDIA_BUCKET = 'shared-post-media';
@@ -251,6 +252,17 @@ async function uploadPreparedFileToStorage(
   }
 
   try {
+    const uploadedFromFile = await uploadFileToSupabaseStorage({
+      bucket,
+      path,
+      fileUri: preparedFile.uri,
+      contentType: preparedFile.contentType,
+      allowOverwrite: options.allowOverwrite,
+    });
+    if (uploadedFromFile) {
+      return path;
+    }
+
     const payload = await readPayload(preparedFile.uri);
     if (!payload) {
       return null;

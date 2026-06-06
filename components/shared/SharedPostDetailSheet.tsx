@@ -114,7 +114,13 @@ export default function SharedPostDetailSheet({
           <Text style={[styles.emptyTitle, { color: colors.text }]}>
             {t('shared.detailNotFound', 'Shared moment not found')}
           </Text>
-          <Pressable onPress={handleDismiss} style={styles.backButton}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={t('common.goBack', 'Go Back')}
+            hitSlop={8}
+            onPress={handleDismiss}
+            style={styles.backButton}
+          >
             <Text style={[styles.backButtonText, { color: colors.primary }]}>
               {t('common.goBack', 'Go Back')}
             </Text>

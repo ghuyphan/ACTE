@@ -248,6 +248,11 @@ jest.mock('../hooks/useSharedFeed', () => ({
     enabled: true,
     sharedPosts: mockSharedPosts,
   }),
+  useSharedFeedSelector: (selector: (value: unknown) => unknown) =>
+    selector({
+      enabled: true,
+      sharedPosts: mockSharedPosts,
+    }),
 }));
 
 jest.mock('../hooks/useGeofence', () => ({

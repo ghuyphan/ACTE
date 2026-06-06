@@ -122,7 +122,12 @@ import {
 } from '../../services/sharedFeedService';
 import type { NotesRouteTransitionRect } from '../../utils/notesRouteTransition';
 import { setPendingNotesRouteTransition } from '../../utils/notesRouteTransition';
-import { getPersistentItem, removePersistentItem, setPersistentItem } from '../../utils/appStorage';
+import { getPersistentItem, setPersistentItem } from '../../utils/appStorage';
+import {
+  getSensitiveItem,
+  removeSensitiveItem,
+  setSensitiveItem,
+} from '../../utils/sensitiveStorage';
 import { setAndroidSoftInputMode } from '../../utils/androidSoftInputMode';
 import { isIOS26OrNewer } from '../../utils/platform';
 import {
@@ -136,6 +141,7 @@ import { useUnreadSharedChatCount } from './home/useUnreadSharedChatCount';
 import { CaptureChrome } from '../../constants/theme';
 
 const REMINDER_RECOVERY_PROMPT_KEY_PREFIX = 'noto.home.reminder-recovery-prompt.v1.';
+const CAPTURE_DRAFT_PERSIST_DELAY_MS = 800;
 const CAPTURE_MODE_MORPH_OPEN_SWITCH_DELAY_MS = 320;
 const CAPTURE_MODE_MORPH_CLOSE_SWITCH_DELAY_MS = 48;
 type SaveButtonState = 'idle' | 'saving' | 'success';
@@ -163,6 +169,9 @@ export default function HomeScreen() {
     notes,
     phase: notesPhaseFromStore,
     loading,
+    hasMoreNotes,
+    loadingMore,
+    loadMoreNotes,
     refreshNotes,
     createNote,
     initialLoadComplete: notesInitialLoadComplete,
@@ -654,7 +663,7 @@ export default function HomeScreen() {
       persistCaptureDraftTimeoutRef.current = null;
     }
 
-    await removePersistentItem(CAPTURE_DRAFT_STORAGE_KEY).catch(() => undefined);
+    await removeSensitiveItem(CAPTURE_DRAFT_STORAGE_KEY).catch(() => undefined);
   }, []);
 
   const applyRestoredCaptureStickers = useCallback((placements: NoteStickerPlacement[]) => {
@@ -717,7 +726,7 @@ export default function HomeScreen() {
 
     captureDraftRestoreStartedRef.current = true;
 
-    void getPersistentItem(CAPTURE_DRAFT_STORAGE_KEY).then(async (storedValue) => {
+    void getSensitiveItem(CAPTURE_DRAFT_STORAGE_KEY).then(async (storedValue) => {
       const persistedDraft = parsePersistedCaptureDraft(storedValue);
       if (!persistedDraft) {
         if (captureDraftMountedRef.current) {
@@ -844,11 +853,11 @@ export default function HomeScreen() {
     const nextDraft = buildPersistedCaptureDraft();
 
     if (!isPersistableCaptureDraft(nextDraft)) {
-      await removePersistentItem(CAPTURE_DRAFT_STORAGE_KEY).catch(() => undefined);
+      await removeSensitiveItem(CAPTURE_DRAFT_STORAGE_KEY).catch(() => undefined);
       return;
     }
 
-    await setPersistentItem(CAPTURE_DRAFT_STORAGE_KEY, JSON.stringify(nextDraft)).catch(() => undefined);
+    await setSensitiveItem(CAPTURE_DRAFT_STORAGE_KEY, JSON.stringify(nextDraft)).catch(() => undefined);
   }, [buildPersistedCaptureDraft, captureDraftReady]);
 
   const schedulePersistCaptureDraft = useCallback(() => {
@@ -863,7 +872,7 @@ export default function HomeScreen() {
     persistCaptureDraftTimeoutRef.current = setTimeout(() => {
       persistCaptureDraftTimeoutRef.current = null;
       void persistCaptureDraftNow();
-    }, 240);
+    }, CAPTURE_DRAFT_PERSIST_DELAY_MS);
   }, [captureDraftReady, persistCaptureDraftNow]);
 
   useEffect(() => {
@@ -875,6 +884,18 @@ export default function HomeScreen() {
       }
     };
   }, [schedulePersistCaptureDraft]);
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextState) => {
+      if (nextState !== 'active') {
+        void persistCaptureDraftNow();
+      }
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, [persistCaptureDraftNow]);
 
   const composeDualCapturePhoto = useCallback(
     async (capture: DualCameraStillCapture) => {
@@ -3129,6 +3150,12 @@ export default function HomeScreen() {
       ownedSharedNoteIds,
       refreshing: feedRefreshing,
       onRefresh: handleRefreshHome,
+      onEndReached:
+        hasMoreNotes && !loadingMore
+          ? () => {
+              void loadMoreNotes();
+            }
+          : undefined,
       topInset: insets.top,
       snapHeight,
       onOpenNote: openNote,
@@ -3152,11 +3179,14 @@ export default function HomeScreen() {
       colors,
       feedRefreshing,
       handleRefreshHome,
+      hasMoreNotes,
       handleSettledArchiveItemChange,
       homeFeedEmptyState,
       insets.top,
       isLivePhotoCaptureInProgress,
       isScreenFocused,
+      loadMoreNotes,
+      loadingMore,
       markHomeFeedReady,
       createSharedPostResponse,
       openNote,

@@ -18,6 +18,10 @@ jest.mock('../services/legalLinks', () => ({
   buildPublicSiteUrl: (...args: unknown[]) => mockBuildPublicSiteUrl(...args),
 }));
 
+jest.mock('../services/socialPushService', () => ({
+  sendSocialNotificationEvent: jest.fn(),
+}));
+
 jest.mock('expo-haptics', () => ({
   impactAsync: jest.fn(),
   notificationAsync: jest.fn(),

@@ -1,4 +1,8 @@
 import { Directory, File, Paths } from 'expo-file-system';
+import {
+  FileSystemUploadType,
+  uploadAsync as legacyUploadAsync,
+} from 'expo-file-system/legacy';
 
 function ensureTrailingSlash(uri: string | null | undefined) {
   if (!uri) {
@@ -155,6 +159,12 @@ export type FileSystemDownloadResult = {
   md5?: string | null;
 };
 
+export type FileSystemUploadResult = {
+  body: string;
+  headers: Record<string, string>;
+  status: number;
+};
+
 export async function getInfoAsync(fileUri: string, options?: InfoOptions): Promise<FileInfo> {
   const pathInfo = getPathInfo(fileUri);
   if (!pathInfo.exists) {
@@ -305,4 +315,19 @@ export async function downloadAsync(
     mimeType: null,
     md5: info.md5 ?? null,
   };
+}
+
+export async function uploadAsync(
+  uri: string,
+  fileUri: string,
+  options: {
+    headers?: Record<string, string>;
+    httpMethod?: 'POST' | 'PUT' | 'PATCH';
+  } = {}
+): Promise<FileSystemUploadResult> {
+  return legacyUploadAsync(uri, fileUri, {
+    headers: options.headers,
+    httpMethod: options.httpMethod ?? 'POST',
+    uploadType: FileSystemUploadType.BINARY_CONTENT,
+  });
 }

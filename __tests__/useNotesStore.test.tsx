@@ -139,8 +139,11 @@ beforeEach(() => {
     isReady: true,
   });
   mockGetAllNotesForScope.mockImplementation(async () => [...mockNotesDb]);
-  mockGetNotesPageForScope.mockImplementation(async (_scope: string, options: { limit: number }) =>
-    mockNotesDb.slice(0, options.limit)
+  mockGetNotesPageForScope.mockImplementation(
+    async (_scope: string, options: { limit: number; offset?: number }) => {
+      const offset = options.offset ?? 0;
+      return mockNotesDb.slice(offset, offset + options.limit);
+    }
   );
   mockGetPersistedActiveNotesScopeSync.mockReturnValue(null);
   mockGetActiveNotesScope.mockReturnValue('__local__');
@@ -316,7 +319,7 @@ describe('useNotesStore', () => {
     await expect(searchPromise).resolves.toEqual([]);
   });
 
-  it('surfaces the newest notes first, then hydrates the full archive in the background', async () => {
+  it('surfaces the newest page first, then appends the next archive page on demand', async () => {
     mockNotesDb = Array.from({ length: 30 }, (_, index) => ({
       id: `note-${index + 1}`,
       type: 'text' as const,
@@ -330,12 +333,6 @@ describe('useNotesStore', () => {
       updatedAt: null,
     }));
 
-    const deferredAllNotes = createDeferred<Note[]>();
-    mockGetNotesPageForScope.mockImplementation(async (_scope: string, options: { limit: number }) =>
-      mockNotesDb.slice(0, options.limit)
-    );
-    mockGetAllNotesForScope.mockImplementation(() => deferredAllNotes.promise);
-
     const { result } = renderHook(() => useNotesStore(), { wrapper: TestWrapper });
 
     expect(result.current.initialLoadComplete).toBe(false);
@@ -343,20 +340,20 @@ describe('useNotesStore', () => {
     await waitFor(() => {
       expect(result.current.initialLoadComplete).toBe(true);
       expect(result.current.notes).toHaveLength(24);
-      expect(result.current.loading).toBe(true);
+      expect(result.current.loading).toBe(false);
+      expect(result.current.hasMoreNotes).toBe(true);
     });
 
     await act(async () => {
-      deferredAllNotes.resolve([...mockNotesDb]);
+      await result.current.loadMoreNotes();
     });
 
-    await waitFor(() => {
-      expect(result.current.loading).toBe(false);
-      expect(result.current.notes).toHaveLength(30);
-    });
+    expect(result.current.notes).toHaveLength(30);
+    expect(result.current.hasMoreNotes).toBe(false);
+    expect(mockGetAllNotesForScope).not.toHaveBeenCalled();
   });
 
-  it('retries the initial note hydration after a transient load failure instead of marking ready early', async () => {
+  it('retries the initial note page after a transient load failure instead of marking ready early', async () => {
     jest.useFakeTimers();
     const loadError = new Error('sqlite busy');
     mockNotesDb = [
@@ -373,7 +370,7 @@ describe('useNotesStore', () => {
         updatedAt: null,
       },
     ];
-    mockGetAllNotesForScope
+    mockGetNotesPageForScope
       .mockRejectedValueOnce(loadError)
       .mockResolvedValueOnce([...mockNotesDb]);
 
@@ -402,68 +399,9 @@ describe('useNotesStore', () => {
     jest.useRealTimers();
   });
 
-  it('releases startup when full initial hydration stalls and applies the archive later', async () => {
-    jest.useFakeTimers();
-    const deferredAllNotes = createDeferred<Note[]>();
-    const recoveredNotes: Note[] = [
-      {
-        id: 'note-1',
-        type: 'text',
-        content: 'Recovered after slow hydration',
-        locationName: 'District 1',
-        latitude: 10.7,
-        longitude: 106.6,
-        radius: 150,
-        isFavorite: false,
-        createdAt: '2026-04-01T00:00:00.000Z',
-        updatedAt: null,
-      },
-    ];
-    mockGetNotesPageForScope.mockResolvedValue([]);
-    mockGetAllNotesForScope.mockReturnValue(deferredAllNotes.promise);
-
-    const { result, unmount } = renderHook(() => useNotesStore(), { wrapper: TestWrapper });
-
-    await act(async () => {
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-
-    expect(result.current.loading).toBe(true);
-    expect(result.current.initialLoadComplete).toBe(true);
-    expect(result.current.notes).toHaveLength(0);
-
-    await act(async () => {
-      jest.advanceTimersByTime(4500);
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-
-    await waitFor(() => {
-      expect(result.current.loading).toBe(false);
-      expect(result.current.initialLoadComplete).toBe(true);
-      expect(result.current.notes).toHaveLength(0);
-    });
-
-    await act(async () => {
-      deferredAllNotes.resolve(recoveredNotes);
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-
-    await waitFor(() => {
-      expect(result.current.notes).toHaveLength(1);
-      expect(result.current.notes[0]?.content).toBe('Recovered after slow hydration');
-    });
-
-    unmount();
-    jest.useRealTimers();
-  });
-
-  it('releases startup when the staged initial notes page stalls and still hydrates the archive later', async () => {
+  it('releases startup when the staged initial notes page stalls and applies that page later', async () => {
     jest.useFakeTimers();
     const deferredPage = createDeferred<Note[]>();
-    const deferredAllNotes = createDeferred<Note[]>();
     const recoveredNotes: Note[] = [
       {
         id: 'note-1',
@@ -479,7 +417,6 @@ describe('useNotesStore', () => {
       },
     ];
     mockGetNotesPageForScope.mockReturnValue(deferredPage.promise);
-    mockGetAllNotesForScope.mockReturnValue(deferredAllNotes.promise);
 
     const { result, unmount } = renderHook(() => useNotesStore(), { wrapper: TestWrapper });
 
@@ -502,15 +439,7 @@ describe('useNotesStore', () => {
     });
 
     await act(async () => {
-      deferredPage.resolve([]);
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-
-    expect(mockGetAllNotesForScope).toHaveBeenCalledWith('__local__');
-
-    await act(async () => {
-      deferredAllNotes.resolve(recoveredNotes);
+      deferredPage.resolve(recoveredNotes);
       await Promise.resolve();
       await Promise.resolve();
     });
@@ -527,7 +456,7 @@ describe('useNotesStore', () => {
   it('releases startup after the initial load retry is exhausted', async () => {
     jest.useFakeTimers();
     const loadError = new Error('sqlite unavailable');
-    mockGetAllNotesForScope.mockRejectedValue(loadError);
+    mockGetNotesPageForScope.mockRejectedValue(loadError);
 
     const { result, unmount } = renderHook(() => useNotesStore(), { wrapper: TestWrapper });
 
@@ -642,7 +571,7 @@ describe('useNotesStore', () => {
       createdAt: '2026-03-24T00:00:00.000Z',
       updatedAt: null,
     };
-    mockGetAllNotesForScope.mockImplementation(async (scope: string) =>
+    mockGetNotesPageForScope.mockImplementation(async (scope: string) =>
       scope === 'user-2' ? [userTwoNote] : []
     );
 
@@ -701,7 +630,7 @@ describe('useNotesStore', () => {
 
     const { result, rerender } = renderHook(() => useNotesStore(), { wrapper: TestWrapper });
 
-    expect(mockGetAllNotesForScope).not.toHaveBeenCalled();
+    expect(mockGetNotesPageForScope).not.toHaveBeenCalled();
 
     mockUseAuth.mockReturnValue({
       user: { uid: 'user-42' } as any,
@@ -714,7 +643,7 @@ describe('useNotesStore', () => {
       expect(result.current.loading).toBe(false);
     });
 
-    expect(mockGetAllNotesForScope).toHaveBeenCalledWith('user-42');
+    expect(mockGetNotesPageForScope).toHaveBeenCalledWith('user-42', { limit: 24 });
   });
 
   it('does not hydrate a previously persisted account scope before auth is ready', async () => {
@@ -726,7 +655,7 @@ describe('useNotesStore', () => {
 
     const { result, rerender } = renderHook(() => useNotesStore(), { wrapper: TestWrapper });
 
-    expect(mockGetAllNotesForScope).not.toHaveBeenCalled();
+    expect(mockGetNotesPageForScope).not.toHaveBeenCalled();
     expect(result.current.initialLoadComplete).toBe(false);
 
     mockUseAuth.mockReturnValue({
@@ -740,8 +669,8 @@ describe('useNotesStore', () => {
       expect(result.current.loading).toBe(false);
     });
 
-    expect(mockGetAllNotesForScope).toHaveBeenCalledWith('__local__');
-    expect(mockGetAllNotesForScope).not.toHaveBeenCalledWith('user-42');
+    expect(mockGetNotesPageForScope).toHaveBeenCalledWith('__local__', { limit: 24 });
+    expect(mockGetNotesPageForScope).not.toHaveBeenCalledWith('user-42', expect.anything());
   });
 
   it('loads the local scope when auth is ready but the user session is unavailable', async () => {
@@ -757,7 +686,7 @@ describe('useNotesStore', () => {
       expect(result.current.loading).toBe(false);
     });
 
-    expect(mockGetAllNotesForScope).toHaveBeenCalledWith('__local__');
+    expect(mockGetNotesPageForScope).toHaveBeenCalledWith('__local__', { limit: 24 });
   });
 
   it('updates and favorites a note', async () => {

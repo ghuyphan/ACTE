@@ -38,6 +38,8 @@ import { formatDate } from '../../../utils/dateUtils';
 import { withAlpha } from '../../../utils/colors';
 import NotoLoader from '../../ui/NotoLoader';
 
+const SEARCH_QUERY_DEBOUNCE_MS = 180;
+
 function getPreviewText(note: Note, photoLabel: string, emptyLabel: string) {
   return getNotePreviewText(note, {
     photoLabel,
@@ -175,23 +177,26 @@ export default function SearchScreen() {
 
     let cancelled = false;
     const searchQuery = trimmedDeferredQuery;
-    dispatchSearch({ type: 'searchStarted', query: searchQuery });
+    const timeout = setTimeout(() => {
+      dispatchSearch({ type: 'searchStarted', query: searchQuery });
 
-    void searchNotes(searchQuery)
-      .then((results) => {
-        if (!cancelled) {
-          dispatchSearch({ type: 'searchSucceeded', query: searchQuery, results });
-        }
-      })
-      .catch((error) => {
-        if (!cancelled) {
-          console.warn('Search query failed:', error);
-          dispatchSearch({ type: 'searchFailed', query: searchQuery });
-        }
-      });
+      void searchNotes(searchQuery)
+        .then((results) => {
+          if (!cancelled) {
+            dispatchSearch({ type: 'searchSucceeded', query: searchQuery, results });
+          }
+        })
+        .catch((error) => {
+          if (!cancelled) {
+            console.warn('Search query failed:', error);
+            dispatchSearch({ type: 'searchFailed', query: searchQuery });
+          }
+        });
+    }, SEARCH_QUERY_DEBOUNCE_MS);
 
     return () => {
       cancelled = true;
+      clearTimeout(timeout);
     };
   }, [hasDeferredQuery, searchNotes, trimmedDeferredQuery]);
 
@@ -443,6 +448,7 @@ export default function SearchScreen() {
               <Pressable
                 key={option.id}
                 accessibilityRole="button"
+                accessibilityLabel={t(option.labelKey, option.fallbackLabel)}
                 accessibilityState={{ selected }}
                 onPress={() => toggleFilter(option.id)}
                 style={({ pressed }) => [

@@ -1296,11 +1296,18 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
 
   useEffect(() => {
     if (isModeMorphing) {
-      setShouldRenderModeMorphBlackout(true);
+      if (!shouldRenderModeMorphBlackout) {
+        setShouldRenderModeMorphBlackout(true);
+      }
       modeMorphBlackoutOpacity.value = withTiming(1, {
         duration: scaleCaptureDuration(90, reduceMotionEnabled),
         easing: Easing.out(Easing.cubic),
       });
+      return;
+    }
+
+    if (!shouldRenderModeMorphBlackout) {
+      modeMorphBlackoutOpacity.value = 0;
       return;
     }
 
@@ -1316,7 +1323,12 @@ const CaptureCard = forwardRef<CaptureCardHandle, CaptureCardProps>(function Cap
         }
       }
     );
-  }, [isModeMorphing, modeMorphBlackoutOpacity, reduceMotionEnabled]);
+  }, [
+    isModeMorphing,
+    modeMorphBlackoutOpacity,
+    reduceMotionEnabled,
+    shouldRenderModeMorphBlackout,
+  ]);
 
   const noteColorSheetBody = onChangeNoteColor ? (
     <AppSheetScaffold

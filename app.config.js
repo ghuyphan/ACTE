@@ -182,11 +182,15 @@ const config = {
     bundleIdentifier: 'com.acte.app',
     icon: './assets/images/icon/icon-default.png',
     googleServicesFile: iosGoogleServicesFile,
+    entitlements: {
+      'com.apple.developer.default-data-protection': 'NSFileProtectionComplete',
+    },
   },
   android: {
     package: 'com.acte.app',
     icon: './assets/images/icon/icon-small-default.png',
     googleServicesFile: androidGoogleServicesFile,
+    allowBackup: false,
     permissions: [
       'android.permission.ACCESS_COARSE_LOCATION',
       'android.permission.ACCESS_FINE_LOCATION',
@@ -250,7 +254,12 @@ const config = {
         },
       },
     ],
-    'expo-sqlite',
+    [
+      'expo-sqlite',
+      {
+        useSQLCipher: true,
+      },
+    ],
     googleIosUrlScheme
       ? [
           '@react-native-google-signin/google-signin',

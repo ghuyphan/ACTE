@@ -198,7 +198,9 @@ export function useCaptureCardCameraController({
   onShutterPressOut,
   onStartLivePhotoCapture,
 }: UseCaptureCardCameraControllerOptions) {
-  const [isCameraReady, setIsCameraReady] = useState(false);
+  const [isCameraReady, setIsCameraReady] = useState(
+    () => !(captureMode === 'camera' && !capturedPhoto && permissionGranted && cameraDevice)
+  );
   const [cameraUnavailable, setCameraUnavailable] = useState(false);
   const [livePhotoCountdownSeconds, setLivePhotoCountdownSeconds] = useState(
     LIVE_PHOTO_MAX_DURATION_SECONDS
@@ -555,9 +557,15 @@ export function useCaptureCardCameraController({
 
   useEffect(() => {
     if (!shouldRenderCameraPreview) {
-      setIsCameraReady(true);
-      setCameraUnavailable(false);
-      setCameraIssueDetail(null);
+      if (!isCameraReady) {
+        setIsCameraReady(true);
+      }
+      if (cameraUnavailable) {
+        setCameraUnavailable(false);
+      }
+      if (cameraIssueDetail !== null) {
+        setCameraIssueDetail(null);
+      }
       cameraSwitchInFlightRef.current = false;
       cameraTransitionMaskOpacity.value = withTiming(0, { duration: 0 });
       return;

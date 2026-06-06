@@ -41,10 +41,18 @@ import { useGeofence } from '../../hooks/useGeofence';
 import { useNoteDetailSheet } from '../../hooks/useNoteDetailSheet';
 import { useNotesStore } from '../../hooks/useNotes';
 import { useReducedMotion } from '../../hooks/useReducedMotion';
-import { useSharedFeedStore } from '../../hooks/useSharedFeed';
+import {
+  useSharedFeedSelector,
+  type SharedFeedStoreValue,
+} from '../../hooks/useSharedFeed';
 import { useTheme } from '../../hooks/useTheme';
 import { useAndroidBottomTabOverlayInset } from '../../hooks/useAndroidBottomTabOverlayInset';
 import type { SharedPost } from '../../services/sharedFeedService';
+import {
+  getAllNotesForScope,
+  LOCAL_NOTES_SCOPE,
+  type Note,
+} from '../../services/database';
 import { showAppAlert } from '../../utils/alert';
 import { isOlderIOS } from '../../utils/platform';
 import { scheduleOnIdle } from '../../utils/scheduleOnIdle';
@@ -56,6 +64,7 @@ const MARKER_FIRST_TAP_DELTA = 0.025;
 const MARKER_SECOND_TAP_DELTA = 0.012;
 const PROGRAMMATIC_REGION_TOLERANCE = 0.0005;
 const HEAVY_MAP_WARMUP_DATASET_SIZE = 24;
+const selectSharedPosts = (store: SharedFeedStoreValue) => store.sharedPosts;
 const ANDROID_LITE_MARKER_THRESHOLD = 120;
 const IOS_LITE_MARKER_THRESHOLD = 180;
 const NOTE_PREVIEW_REST_HEIGHT = 168;
@@ -104,8 +113,10 @@ export default function MapScreenIOS() {
   const bottomTabOverlayInset = useAndroidBottomTabOverlayInset();
   const reduceMotionEnabled = useReducedMotion();
   const { user } = useAuth();
-  const { notes, loading } = useNotesStore();
-  const { sharedPosts } = useSharedFeedStore();
+  const { notes: pagedNotes, loading } = useNotesStore();
+  const [mapNotes, setMapNotes] = useState<Note[] | null>(null);
+  const notes = mapNotes ?? pagedNotes;
+  const sharedPosts = useSharedFeedSelector(selectSharedPosts);
   const shouldDeferMapWarmup =
     isAndroid || notes.length + sharedPosts.length >= HEAVY_MAP_WARMUP_DATASET_SIZE;
   const { location, requestForegroundLocation, openAppSettings } = useGeofence();
@@ -123,6 +134,30 @@ export default function MapScreenIOS() {
   const startedWithoutLocationRef = useRef(location == null);
   const markerPulseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const openFriendsPreviewTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const scope = user?.uid?.trim() || LOCAL_NOTES_SCOPE;
+    if (process.env.NODE_ENV === 'test' || typeof getAllNotesForScope !== 'function') {
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    void getAllNotesForScope(scope)
+      .then((allNotes) => {
+        if (!cancelled) {
+          setMapNotes(allNotes);
+        }
+      })
+      .catch((error) => {
+        console.warn('Failed to load complete map note set:', error);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.uid, pagedNotes]);
 
   useEffect(() => {
     if (!shouldDeferMapWarmup || mapUiReady) {

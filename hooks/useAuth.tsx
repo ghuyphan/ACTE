@@ -25,7 +25,11 @@ import {
 import { clearSharedFeedCache } from '../services/sharedFeedCache';
 import { unregisterCurrentSocialPushToken } from '../services/socialPushService';
 import { AppUser, deriveUsernameCandidate, mapSupabaseUser } from '../utils/appUser';
-import { getPersistentItem, removePersistentItem, setPersistentItem } from '../utils/appStorage';
+import {
+  getSensitiveItem,
+  removeSensitiveItem,
+  setSensitiveItem,
+} from '../utils/sensitiveStorage';
 import { getSupabase, getSupabaseErrorMessage, hasSupabaseConfig } from '../utils/supabase';
 
 export interface AuthActionResult {
@@ -502,7 +506,7 @@ function isValidCachedUser(value: unknown): value is AppUser {
 
 async function getCachedAuthUser() {
   try {
-    const rawValue = await getPersistentItem(AUTH_USER_SNAPSHOT_KEY);
+    const rawValue = await getSensitiveItem(AUTH_USER_SNAPSHOT_KEY);
     if (!rawValue) {
       return null;
     }
@@ -517,11 +521,11 @@ async function getCachedAuthUser() {
 async function setCachedAuthUser(user: AppUser | null) {
   try {
     if (!user) {
-      await removePersistentItem(AUTH_USER_SNAPSHOT_KEY);
+      await removeSensitiveItem(AUTH_USER_SNAPSHOT_KEY);
       return;
     }
 
-    await setPersistentItem(
+    await setSensitiveItem(
       AUTH_USER_SNAPSHOT_KEY,
       JSON.stringify({
         user: {

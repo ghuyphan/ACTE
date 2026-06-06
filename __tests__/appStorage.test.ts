@@ -26,10 +26,10 @@ describe('appStorage', () => {
       },
     }));
     jest.doMock('react-native-mmkv', () => ({
-      MMKV: jest.fn(() => ({
+      createMMKV: jest.fn(() => ({
         getString: mmkvGetString,
         set: mmkvSet,
-        delete: jest.fn(),
+        remove: jest.fn(),
       })),
     }));
 
@@ -62,5 +62,36 @@ describe('appStorage', () => {
       ({ getPersistentItemSync } = require('../utils/appStorage'));
     });
     expect(getPersistentItemSync('missing.key')).toBeUndefined();
+  });
+
+  it('removes MMKV values with the v4 remove API', async () => {
+    const mmkvRemove = jest.fn(() => true);
+    const asyncRemoveItem = jest.fn(async () => undefined);
+
+    jest.doMock('@react-native-async-storage/async-storage', () => ({
+      __esModule: true,
+      default: {
+        getItem: jest.fn(),
+        setItem: jest.fn(),
+        removeItem: asyncRemoveItem,
+      },
+    }));
+    jest.doMock('react-native-mmkv', () => ({
+      createMMKV: jest.fn(() => ({
+        getString: jest.fn(),
+        set: jest.fn(),
+        remove: mmkvRemove,
+      })),
+    }));
+
+    let removePersistentItem!: typeof import('../utils/appStorage').removePersistentItem;
+    jest.isolateModules(() => {
+      ({ removePersistentItem } = require('../utils/appStorage'));
+    });
+
+    await removePersistentItem('removed.key');
+
+    expect(mmkvRemove).toHaveBeenCalledWith('removed.key');
+    expect(asyncRemoveItem).toHaveBeenCalledWith('removed.key');
   });
 });

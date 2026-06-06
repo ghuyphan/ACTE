@@ -16,22 +16,25 @@ const { width } = Dimensions.get('window');
 const CARD_SIZE = width - Layout.screenPadding * 2;
 
 export function SkeletonCard({ colors }: { colors: { card: string } }) {
+    const reduceMotionEnabled = useReducedMotion();
     const opacity = useSharedValue(0.3);
     const animatedOpacityStyle = useAnimatedStyle(() => ({
         opacity: opacity.value,
     }));
 
     useEffect(() => {
-        opacity.value = withRepeat(
-            withTiming(0.7, { duration: 800 }),
-            -1,
-            true
-        );
+        opacity.value = reduceMotionEnabled
+            ? 0.5
+            : withRepeat(
+                withTiming(0.7, { duration: 800 }),
+                -1,
+                true
+            );
 
         return () => {
             cancelAnimation(opacity);
         };
-    }, [opacity]);
+    }, [opacity, reduceMotionEnabled]);
 
     return (
         <View style={styles.scrollContent}>

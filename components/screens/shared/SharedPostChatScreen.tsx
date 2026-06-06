@@ -1354,18 +1354,22 @@ export default function SharedPostChatScreen({
     shouldResolveChatPost,
   ]);
 
-  const markThreadReadThroughLatest = useCallback(() => {
-    const lastResponse = responses[responses.length - 1] ?? null;
-    const nextSignature = `${activePostId}:${lastResponse?.id ?? 'empty'}`;
+  const markThreadRead = useCallback((lastReadResponseId: string | null) => {
+    const nextSignature = `${activePostId}:${lastReadResponseId ?? 'empty'}`;
     if (lastMarkedReadSignatureRef.current === nextSignature) {
       return;
     }
 
     lastMarkedReadSignatureRef.current = nextSignature;
-    void markSharedThreadRead(activePostId, lastResponse?.id ?? null).catch(() => {
+    void markSharedThreadRead(activePostId, lastReadResponseId).catch(() => {
       lastMarkedReadSignatureRef.current = null;
     });
-  }, [activePostId, markSharedThreadRead, responses]);
+  }, [activePostId, markSharedThreadRead]);
+
+  const markThreadReadThroughLatest = useCallback(() => {
+    const lastResponse = responses[responses.length - 1] ?? null;
+    markThreadRead(lastResponse?.id ?? null);
+  }, [markThreadRead, responses]);
 
   useEffect(() => {
     if (isLoadingResponses || !isThreadEndVisibleRef.current) {
@@ -1543,6 +1547,8 @@ export default function SharedPostChatScreen({
         return;
       }
 
+      const shouldClearTextComposer = Boolean(!retryResponse && !responseEmoji && !responseSticker);
+
       if (responseSticker && !isOnline) {
         setErrorMessage(t('shared.chatStickerOfflineMessage', 'Go online to send stickers.'));
         return;
@@ -1571,7 +1577,7 @@ export default function SharedPostChatScreen({
           rememberSharedPostResponses(nextPost.id, [response]);
           rememberSharedChatThreadPost(nextPost);
           setLoadedChatPost(nextPost);
-          if (!retryResponse && !responseEmoji) {
+          if (shouldClearTextComposer) {
             setDraft('');
             clearTypingIdleTimer();
             publishTypingState(false, { force: true });
@@ -1579,6 +1585,7 @@ export default function SharedPostChatScreen({
           if (!retryResponse && !explicitReplyToResponseId) {
             setReplyTarget(null);
           }
+          markThreadRead(response.id);
         } catch (error) {
           const failureMessage =
             error instanceof Error
@@ -1623,7 +1630,7 @@ export default function SharedPostChatScreen({
           : current;
         return mergeChatResponses(withoutRetry, [optimisticResponse]);
       });
-      if (!retryResponse && !responseEmoji) {
+      if (shouldClearTextComposer) {
         setDraft('');
         clearTypingIdleTimer();
         publishTypingState(false, { force: true });
@@ -1631,7 +1638,9 @@ export default function SharedPostChatScreen({
       if (!retryResponse && !explicitReplyToResponseId) {
         setReplyTarget(null);
       }
-      markThreadReadThroughLatest();
+      if (isThreadEndVisibleRef.current) {
+        markThreadReadThroughLatest();
+      }
 
       if (!isOnline) {
         pendingResponsesRef.current.delete(optimisticId);
@@ -1656,7 +1665,7 @@ export default function SharedPostChatScreen({
             [response]
           )
         );
-        markThreadReadThroughLatest();
+        markThreadRead(response.id);
       } catch (error) {
         pendingResponsesRef.current.delete(optimisticId);
         const failureMessage =
@@ -1688,6 +1697,8 @@ export default function SharedPostChatScreen({
       getOrCreateDirectChatPost,
       isSending,
       isOnline,
+      isThreadEndVisibleRef,
+      markThreadRead,
       markThreadReadThroughLatest,
       normalizedDirectFriendUid,
       pendingResponsesRef,
@@ -2063,10 +2074,14 @@ export default function SharedPostChatScreen({
     0,
     isKeyboardVisible ? keyboardHeight + COMPOSER_KEYBOARD_GAP : 0
   );
+  const visibleTypingUsers = useMemo(
+    () => getVisibleSharedChatTypingUsers(typingUsers, user?.uid),
+    [typingUsers, user?.uid]
+  );
   const contentBottomPadding =
     composerHeight +
     composerKeyboardOffset +
-    (typingUsers.some((typingUser) => typingUser.userId !== user?.uid) ? 32 : 18);
+    (visibleTypingUsers.length > 0 ? 32 : 18);
   const threadVerticalPaddingStyle = useMemo(
     () => ({
       paddingBottom: contentBottomPadding,
@@ -2571,10 +2586,6 @@ export default function SharedPostChatScreen({
       t,
       user?.uid,
     ]
-  );
-  const visibleTypingUsers = useMemo(
-    () => getVisibleSharedChatTypingUsers(typingUsers, user?.uid),
-    [typingUsers, user?.uid]
   );
   const typingIndicatorLabel = useMemo(
     () =>

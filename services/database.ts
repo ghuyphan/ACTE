@@ -9,6 +9,7 @@ import { isNoteCurrencyOlder, normalizeLocalRevision } from './noteCurrency';
 import { resolveSavedTextNoteColor } from './noteAppearance';
 import { resolveStoredPhotoUri } from './photoStorage';
 import { resolveStoredPairedVideoUri } from './livePhotoStorage';
+import { deleteProtectedDatabase, openProtectedDatabase } from './databaseEncryption';
 import {
     buildMonthlyRecapDigest,
     buildMonthlyRecapFromScopedNotes,
@@ -639,7 +640,7 @@ export async function resetLocalDatabase(): Promise<void> {
         }
     }
 
-    await SQLite.deleteDatabaseAsync(DATABASE_NAME);
+    await deleteProtectedDatabase(DATABASE_NAME);
 }
 
 export async function getDB(): Promise<SQLite.SQLiteDatabase> {
@@ -650,7 +651,7 @@ export async function getDB(): Promise<SQLite.SQLiteDatabase> {
     if (!dbInitPromise) {
         const initGeneration = dbGeneration;
         dbInitPromise = (async () => {
-            const database = await SQLite.openDatabaseAsync(
+            const database = await openProtectedDatabase(
                 DATABASE_NAME,
                 Platform.OS === 'android'
                     ? {

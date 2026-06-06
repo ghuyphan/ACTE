@@ -3,7 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 type MMKVInstance = {
   getString: (key: string) => string | undefined;
   set: (key: string, value: string) => void;
-  delete: (key: string) => void;
+  remove: (key: string) => boolean;
 };
 
 let storageInstance: MMKVInstance | null | undefined;
@@ -19,10 +19,10 @@ function getStorageInstance(): MMKVInstance | null {
   }
 
   try {
-    const { MMKV } = require('react-native-mmkv') as {
-      MMKV: new (config?: { id?: string }) => MMKVInstance;
+    const { createMMKV } = require('react-native-mmkv') as {
+      createMMKV: (config?: { id?: string }) => MMKVInstance;
     };
-    storageInstance = new MMKV({ id: 'noto-app-storage' });
+    storageInstance = createMMKV({ id: 'noto-app-storage' });
   } catch {
     storageInstance = null;
   }
@@ -83,7 +83,7 @@ export async function removePersistentItem(key: string): Promise<void> {
     return;
   }
 
-  storage.delete(key);
+  storage.remove(key);
   await AsyncStorage.removeItem(key).catch(() => undefined);
 }
 

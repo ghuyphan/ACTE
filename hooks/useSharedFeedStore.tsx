@@ -1,4 +1,15 @@
-import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useReducer, useRef, useState } from 'react';
+import {
+  createContext,
+  ReactNode,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useReducer,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from 'react';
 import { AppState } from 'react-native';
 import i18n from '../constants/i18n';
 import { Note } from '../services/database';
@@ -105,7 +116,7 @@ import type { AppUser } from '../utils/appUser';
 
 export type SharedFeedLoadPhase = 'bootstrapping' | 'cache-ready' | 'ready' | 'refreshing';
 
-interface SharedFeedStoreValue {
+export interface SharedFeedStoreValue {
   enabled: boolean;
   phase: SharedFeedLoadPhase;
   loading: boolean;
@@ -190,7 +201,35 @@ interface SharedFeedStoreValue {
   deleteSharedPostById: (postId: string) => Promise<void>;
 }
 
-const SharedFeedStoreContext = createContext<SharedFeedStoreValue | undefined>(undefined);
+type SharedFeedExternalStore = {
+  getSnapshot: () => SharedFeedStoreValue;
+  setSnapshot: (value: SharedFeedStoreValue) => void;
+  subscribe: (listener: () => void) => () => void;
+  emit: () => void;
+};
+
+function createSharedFeedExternalStore(initialValue: SharedFeedStoreValue): SharedFeedExternalStore {
+  let currentValue = initialValue;
+  const listeners = new Set<() => void>();
+
+  return {
+    getSnapshot: () => currentValue,
+    setSnapshot: (value) => {
+      currentValue = value;
+    },
+    subscribe: (listener) => {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
+    },
+    emit: () => {
+      listeners.forEach((listener) => listener());
+    },
+  };
+}
+
+const SharedFeedStoreContext = createContext<SharedFeedExternalStore | undefined>(undefined);
 const INITIAL_SHARED_MEDIA_HYDRATION_LIMIT = 12;
 const SHARED_MEDIA_HYDRATION_CONCURRENCY = 3;
 
@@ -2321,14 +2360,43 @@ function useSharedFeedStoreValue(): SharedFeedStoreValue {
 
 export function SharedFeedProvider({ children }: { children: ReactNode }) {
   const value = useSharedFeedStoreValue();
-  return <SharedFeedStoreContext.Provider value={value}>{children}</SharedFeedStoreContext.Provider>;
+  const storeRef = useRef<SharedFeedExternalStore | null>(null);
+  if (!storeRef.current) {
+    storeRef.current = createSharedFeedExternalStore(value);
+  } else {
+    storeRef.current.setSnapshot(value);
+  }
+
+  useEffect(() => {
+    storeRef.current?.emit();
+  }, [value]);
+
+  return (
+    <SharedFeedStoreContext.Provider value={storeRef.current}>
+      {children}
+    </SharedFeedStoreContext.Provider>
+  );
 }
 
 export function useSharedFeedStore() {
-  const context = useContext(SharedFeedStoreContext);
-  if (!context) {
+  const store = useContext(SharedFeedStoreContext);
+  if (!store) {
     throw new Error('useSharedFeedStore must be used within a SharedFeedProvider');
   }
 
-  return context;
+  return useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
+}
+
+export function useSharedFeedSelector<T>(selector: (value: SharedFeedStoreValue) => T) {
+  const store = useContext(SharedFeedStoreContext);
+  if (!store) {
+    throw new Error('useSharedFeedSelector must be used within a SharedFeedProvider');
+  }
+
+  const getSelectedSnapshot = useCallback(
+    () => selector(store.getSnapshot()),
+    [selector, store]
+  );
+
+  return useSyncExternalStore(store.subscribe, getSelectedSnapshot, getSelectedSnapshot);
 }

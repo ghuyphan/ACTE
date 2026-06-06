@@ -304,6 +304,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
     const [note, setNote] = useState<Note | null>(null);
     const [loading, setLoading] = useState(true);
     const [richDecorationsReady, setRichDecorationsReady] = useState(false);
+    const richDecorationsReadyRef = useRef(false);
     const [isEditing, setIsEditing] = useState(false);
     const [isDeleting, setIsDeleting] = useState(false);
     const [isSavingEdit, setIsSavingEdit] = useState(false);
@@ -326,6 +327,14 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
     const [polaroidExportState, setPolaroidExportState] = useState<PolaroidExportState>(
         initialPolaroidExportState
     );
+    const updateRichDecorationsReady = useCallback((ready: boolean) => {
+        if (richDecorationsReadyRef.current === ready) {
+            return;
+        }
+
+        richDecorationsReadyRef.current = ready;
+        setRichDecorationsReady(ready);
+    }, []);
     const isSharedByMe = useMemo(
         () => (
             Boolean(
@@ -724,7 +733,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
         setStickerModeEnabled(false);
         setSelectedStickerId(null);
         setLocationSelection(undefined);
-        setRichDecorationsReady(false);
+        updateRichDecorationsReady(false);
         resetPolaroidCaptureState();
         favoriteFillProgress.value = 0;
         cardScale.value = 0.97;
@@ -805,6 +814,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
         noteId,
         reduceMotionEnabled,
         resetPolaroidCaptureState,
+        updateRichDecorationsReady,
         visible,
     ]);
 
@@ -834,22 +844,22 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
 
     useEffect(() => {
         if (!visible || loading || !note) {
-            setRichDecorationsReady(false);
+            updateRichDecorationsReady(false);
             return;
         }
 
         if (isEditing) {
-            setRichDecorationsReady(true);
+            updateRichDecorationsReady(true);
             return;
         }
 
-        setRichDecorationsReady(false);
+        updateRichDecorationsReady(false);
         const timer = setTimeout(() => {
-            setRichDecorationsReady(true);
+            updateRichDecorationsReady(true);
         }, reduceMotionEnabled ? 40 : 180);
 
         return () => clearTimeout(timer);
-    }, [isEditing, loading, note, reduceMotionEnabled, visible]);
+    }, [isEditing, loading, note, reduceMotionEnabled, updateRichDecorationsReady, visible]);
 
     useEffect(() => {
         cancelAnimation(favoriteFillProgress);
@@ -867,9 +877,15 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
 
     useEffect(() => {
         if (!isEditing) {
-            setDoodleModeEnabled(false);
-            setStickerModeEnabled(false);
-            setLocationSelection(undefined);
+            if (doodleModeEnabled) {
+                setDoodleModeEnabled(false);
+            }
+            if (stickerModeEnabled) {
+                setStickerModeEnabled(false);
+            }
+            if (locationSelection !== undefined) {
+                setLocationSelection(undefined);
+            }
             return;
         }
 
@@ -883,7 +899,7 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
         }, 70);
 
         return () => clearTimeout(focusTimer);
-    }, [isEditing, note?.type]);
+    }, [doodleModeEnabled, isEditing, locationSelection, note?.type, stickerModeEnabled]);
 
     const blurEditorInputs = useCallback(() => {
         contentInputRef.current?.blur?.();
@@ -1353,10 +1369,21 @@ export default function NoteDetailSheet({ noteId, visible, onClose, onClosed }: 
 
     useEffect(() => {
         if (!isEditing || !note || importingSticker) {
-            hideStickerSourceSheet();
-            setShowStickerLibraryPicker(false);
+            if (showStickerSourceSheet) {
+                hideStickerSourceSheet();
+            }
+            if (showStickerLibraryPicker) {
+                setShowStickerLibraryPicker(false);
+            }
         }
-    }, [hideStickerSourceSheet, importingSticker, isEditing, note]);
+    }, [
+        hideStickerSourceSheet,
+        importingSticker,
+        isEditing,
+        note,
+        showStickerLibraryPicker,
+        showStickerSourceSheet,
+    ]);
 
     const handleToggleStickerMode = useCallback(() => {
         if (!ENABLE_PHOTO_STICKERS || !isEditing || !note) {
